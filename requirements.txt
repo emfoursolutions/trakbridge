@@ -1,0 +1,15 @@
+# =============================================================================
+# requirements.txt
+# =============================================================================
+
+Flask
+Flask-SQLAlchemy
+Flask-Migrate
+PyMySQL
+psycopg2-binary
+aiohttp
+pytak
+fastkml
+lxml
+python-dotenv
+cryptography

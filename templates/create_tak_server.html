@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}Create TAK Server - GPS to TAK Server{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Create TAK Server</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <a href="{{ url_for('tak_servers.list_tak_servers') }}" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Servers
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-server"></i> Server Configuration
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="createServerForm" method="POST" novalidate>
+                    <!-- Basic Configuration -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="name" class="form-label">Server Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="name" name="name" required
+                                   placeholder="e.g., Main TAK Server">
+                            <div class="invalid-feedback">
+                                Please provide a unique server name.
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="protocol" class="form-label">Protocol</label>
+                            <select class="form-select" id="protocol" name="protocol">
+                                <option value="tls" selected>TLS (Secure)</option>
+                                <option value="tcp">TCP (Plain)</option>
+                                <option value="udp">UDP</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <label for="host" class="form-label">Host Address <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="host" name="host" required
+                                   placeholder="e.g., tak.example.com or 192.168.1.100">
+                            <div class="invalid-feedback">
+                                Please provide a valid host address.
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="port" class="form-label">Port <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="port" name="port" required
+                                   min="1" max="65535" value="8089">
+                            <div class="invalid-feedback">
+                                Please provide a valid port number (1-65535).
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SSL/TLS Configuration -->
+                    <div class="card mb-3" id="tlsConfig">
+                        <div class="card-header">
+                            <h6 class="card-title mb-0">
+                                <i class="fas fa-shield-alt"></i> TLS/SSL Configuration
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="verify_ssl" name="verify_ssl" checked>
+                                    <label class="form-check-label" for="verify_ssl">
+                                        Verify SSL Certificate
+                                        <small class="text-muted d-block">Uncheck only for self-signed certificates</small>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="cert_pem" class="form-label">Client Certificate (PEM)</label>
+                                <textarea class="form-control font-monospace" id="cert_pem" name="cert_pem" rows="6"
+                                          placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+                                <div class="form-text">
+                                    <i class="fas fa-info-circle"></i> Optional: Client certificate for mutual TLS authentication
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="cert_key" class="form-label">Client Private Key (PEM)</label>
+                                <textarea class="form-control font-monospace" id="cert_key" name="cert_key" rows="6"
+                                          placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
+                                <div class="form-text">
+                                    <i class="fas fa-info-circle"></i> Optional: Private key for client certificate
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="client_password" class="form-label">Client Certificate Password</label>
+                                <input type="password" class="form-control" id="client_password" name="client_password"
+                                       placeholder="Optional password for encrypted private key">
+                                <div class="form-text">
+                                    <i class="fas fa-info-circle"></i> Only required if your private key is encrypted
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-info" id="testConnectionBtn">
+                            <i class="fas fa-network-wired"></i> Test Connection
+                        </button>
+                        <div>
+                            <a href="{{ url_for('tak_servers.list_tak_servers') }}" class="btn btn-secondary me-2">
+                                <i class="fas fa-times"></i> Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary" id="submitBtn">
+                                <i class="fas fa-save"></i> Create Server
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-info-circle"></i> Configuration Help
+                </h6>
+            </div>
+            <div class="card-body">
+                <h6>Common Ports:</h6>
+                <ul class="small">
+                    <li><strong>8089:</strong> TAK Server TLS (default)</li>
+                    <li><strong>8087:</strong> TAK Server TCP</li>
+                    <li><strong>4242:</strong> FreeTAK Server</li>
+                    <li><strong>8080:</strong> Alternative HTTP</li>
+                </ul>
+
+                <h6 class="mt-3">Protocol Notes:</h6>
+                <ul class="small">
+                    <li><strong>TLS:</strong> Encrypted, recommended for production</li>
+                    <li><strong>TCP:</strong> Plain text, use for testing only</li>
+                    <li><strong>UDP:</strong> Connectionless, for specific use cases</li>
+                </ul>
+
+                <h6 class="mt-3">Certificate Requirements:</h6>
+                <p class="small text-muted">
+                    Client certificates are only required if your TAK server is configured for mutual TLS authentication. 
+                    Most servers only require the CA certificate to be trusted.
+                </p>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-lightbulb"></i> Quick Setup
+                </h6>
+            </div>
+            <div class="card-body">
+                <p class="small">For a quick test setup:</p>
+                <ol class="small">
+                    <li>Enter server name and host</li>
+                    <li>Use default port 8089</li>
+                    <li>Select TLS protocol</li>
+                    <li>Uncheck SSL verification if using self-signed certs</li>
+                    <li>Click "Test Connection" to verify</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('createServerForm');
+    const protocolSelect = document.getElementById('protocol');
+    const tlsConfig = document.getElementById('tlsConfig');
+    const testBtn = document.getElementById('testConnectionBtn');
+    const submitBtn = document.getElementById('submitBtn');
+
+    // Show/hide TLS configuration based on protocol
+    function toggleTlsConfig() {
+        if (protocolSelect.value === 'tls') {
+            tlsConfig.style.display = 'block';
+        } else {
+            tlsConfig.style.display = 'none';
+        }
+    }
+
+    protocolSelect.addEventListener('change', toggleTlsConfig);
+    toggleTlsConfig(); // Initial setup
+
+    // Test Connection
+    testBtn.addEventListener('click', function() {
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        
+        // Basic validation
+        if (!data.name || !data.host || !data.port) {
+            showAlert('warning', 'Please fill in required fields before testing connection.');
+            return;
+        }
+
+        const originalContent = testBtn.innerHTML;
+        testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+        testBtn.disabled = true;
+
+        // Create a temporary server for testing
+        fetch('/tak-servers/create', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                ...data,
+                name: `temp_test_${Date.now()}`, // Temporary name
+                verify_ssl: data.verify_ssl === 'on'
+            })
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                // Test the connection
+                return fetch(`/tak-servers/${result.server_id}/test`, {
+                    method: 'POST'
+                }).then(response => response.json())
+                .then(testResult => {
+                    // Delete the temporary server
+                    fetch(`/tak-servers/${result.server_id}/delete`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (testResult.success) {
+                        showAlert('success', 'Connection test successful!');
+                        testBtn.innerHTML = '<i class="fas fa-check text-success"></i> Connection OK';
+                    } else {
+                        showAlert('danger', 'Connection test failed: ' + testResult.error);
+                        testBtn.innerHTML = '<i class="fas fa-times text-danger"></i> Connection Failed';
+                    }
+                });
+            } else {
+                throw new Error(result.error);
+            }
+        })
+        .catch(error => {
+            console.error('Test error:', error);
+            showAlert('danger', 'Test failed: ' + error.message);
+            testBtn.innerHTML = '<i class="fas fa-times text-danger"></i> Test Failed';
+        })
+        .finally(() => {
+            setTimeout(() => {
+                testBtn.innerHTML = originalContent;
+                testBtn.disabled = false;
+            }, 3000);
+        });
+    });
+
+    // Form submission
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        if (!form.checkValidity()) {
+            form.classList.add('was-validated');
+            return;
+        }
+
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        
+        // Convert checkbox to boolean
+        data.verify_ssl = data.verify_ssl === 'on' ? true : false;
+        
+        const originalContent = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+        submitBtn.disabled = true;
+
+        fetch('/tak-servers/create', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('success', 'TAK Server created successfully!');
+                setTimeout(() => {
+                    window.location.href = '/tak-servers';
+                }, 1500);
+            } else {
+                throw new Error(result.error);
+            }
+        })
+        .catch(error => {
+            console.error('Creation error:', error);
+            showAlert('danger', 'Error creating server: ' + error.message);
+            submitBtn.innerHTML = originalContent;
+            submitBtn.disabled = false;
+        });
+    });
+
+    // Helper function to show alerts
+    function showAlert(type, message) {
+        // Remove existing alerts
+        const existingAlerts = document.querySelectorAll('.alert');
+        existingAlerts.forEach(alert => alert.remove());
+
+        // Create new alert
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.setAttribute('role', 'alert');
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+        
+        // Insert at top of content
+        const contentDiv = document.querySelector('[role="main"]') || document.querySelector('.container-fluid');
+        contentDiv.insertBefore(alertDiv, contentDiv.firstChild);
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            if (alertDiv && alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }
+
+    // Auto-fill port based on protocol
+    protocolSelect.addEventListener('change', function() {
+        const portInput = document.getElementById('port');
+        if (!portInput.value || portInput.value === '8089' || portInput.value === '8087') {
+            switch(this.value) {
+                case 'tls':
+                    portInput.value = '8089';
+                    break;
+                case 'tcp':
+                    portInput.value = '8087';
+                    break;
+                case 'udp':
+                    portInput.value = '4242';
+                    break;
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - GPS to TAK Server{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Dashboard</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshStatus()">
+                <i class="fas fa-refresh"></i> Refresh
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Metrics Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card card-metric">
+            <div class="card-body text-center">
+                <h2 class="card-title">{{ active_streams }}</h2>
+                <p class="card-text">Active Streams</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-metric">
+            <div class="card-body text-center">
+                <h2 class="card-title">{{ total_streams }}</h2>
+                <p class="card-text">Total Streams</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-metric">
+            <div class="card-body text-center">
+                <h2 class="card-title">{{ tak_servers|length }}</h2>
+                <p class="card-text">TAK Servers</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-metric">
+            <div class="card-body text-center">
+                <h2 class="card-title" id="running-workers">-</h2>
+                <p class="card-text">Running Workers</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Streams -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Recent Streams</h5>
+            </div>
+            <div class="card-body">
+                {% if streams %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Last Poll</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stream in streams[:5] %}
+                                <tr>
+                                    <td>{{ stream.name }}</td>
+                                    <td>{{ stream.plugin_type }}</td>
+                                    <td>
+                                        <i class="fas fa-circle {% if stream.is_active %}status-active{% else %}status-inactive{% endif %}"></i>
+                                        {% if stream.is_active %}Active{% else %}Inactive{% endif %}
+                                    </td>
+                                    <td>
+                                        {% if stream.last_poll %}
+                                            {{ stream.last_poll.strftime('%H:%M:%S') }}
+                                        {% else %}
+                                            Never
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted">No streams configured yet.</p>
+                    <a href="{{ url_for('streams.create_stream') }}" class="btn btn-primary">Create First Stream</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>TAK Servers</h5>
+            </div>
+            <div class="card-body">
+                {% if tak_servers %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Host</th>
+                                    <th>Protocol</th>
+                                    <th>Streams</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for server in tak_servers %}
+                                <tr>
+                                    <td>{{ server.name }}</td>
+                                    <td>{{ server.host }}:{{ server.port }}</td>
+                                    <td>{{ server.protocol.upper() }}</td>
+                                    <td>{{ server.streams|length }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted">No TAK servers configured yet.</p>
+                    <a href="{{ url_for('tak_servers.create_tak_server') }}" class="btn btn-primary">Add TAK Server</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function refreshStatus() {
+    fetch('/api/status')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('running-workers').textContent = data.running_workers;
+        })
+        .catch(error => console.error('Error:', error));
+}
+
+// Refresh status every 30 seconds
+setInterval(refreshStatus, 30000);
+refreshStatus(); // Initial load
+</script>
+{% endblock %}

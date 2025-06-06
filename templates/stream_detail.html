@@ -1,0 +1,487 @@
+{% extends "base.html" %}
+
+{% block title %}{{ stream.name }} - GPS to TAK Server{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">{{ stream.name }}</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            {% if stream.is_active %}
+                <button class="btn btn-sm btn-outline-danger" onclick="controlStream({{ stream.id }}, 'stop')">
+                    <i class="fas fa-stop"></i> Stop Stream
+                </button>
+            {% else %}
+                <button class="btn btn-sm btn-outline-success" onclick="controlStream({{ stream.id }}, 'start')">
+                    <i class="fas fa-play"></i> Start Stream
+                </button>
+            {% endif %}
+            <a href="{{ url_for('streams.edit_stream', stream_id=stream.id) }}" class="btn btn-sm btn-outline-primary">
+                <i class="fas fa-edit"></i> Edit
+            </a>
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteStream({{ stream.id }})">
+                <i class="fas fa-trash"></i> Delete
+            </button>
+        </div>
+        <a href="{{ url_for('streams.list_streams') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Streams
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <!-- Stream Status Card -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-info-circle"></i> Stream Status</h5>
+                <span class="badge {% if stream.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                    {% if stream.is_active %}Active{% else %}Inactive{% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <dl class="row">
+                            <dt class="col-sm-4">Name:</dt>
+                            <dd class="col-sm-8">{{ stream.name }}</dd>
+                            
+                            <dt class="col-sm-4">Provider:</dt>
+                            <dd class="col-sm-8">{{ stream.plugin_type|title }}</dd>
+                            
+                            <dt class="col-sm-4">TAK Server:</dt>
+                            <dd class="col-sm-8">
+                                {% if stream.tak_server %}
+                                    {{ stream.tak_server.name }} ({{ stream.tak_server.host }}:{{ stream.tak_server.port }})
+                                {% else %}
+                                    Not configured
+                                {% endif %}
+                            </dd>
+                            
+                            <dt class="col-sm-4">Poll Interval:</dt>
+                            <dd class="col-sm-8">{{ stream.poll_interval }} seconds</dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-6">
+                        <dl class="row">
+                            <dt class="col-sm-4">COT Type:</dt>
+                            <dd class="col-sm-8">{{ stream.cot_type }}</dd>
+                            
+                            <dt class="col-sm-4">Stale Time:</dt>
+                            <dd class="col-sm-8">{{ stream.cot_stale_time }} seconds</dd>
+                            
+                            <dt class="col-sm-4">Last Poll:</dt>
+                            <dd class="col-sm-8">
+                                {% if stream.last_poll %}
+                                    {{ stream.last_poll.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+                                {% else %}
+                                    Never
+                                {% endif %}
+                            </dd>
+                            
+                            <dt class="col-sm-4">Messages Sent:</dt>
+                            <dd class="col-sm-8">{{ stream.total_messages_sent }}</dd>
+                        </dl>
+                    </div>
+                </div>
+                
+                {% if stream.last_error %}
+                <div class="alert alert-danger mt-3">
+                    <h6><i class="fas fa-exclamation-triangle"></i> Last Error:</h6>
+                    <p class="mb-0">{{ stream.last_error }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Configuration Card -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5><i class="fas fa-cog"></i> Configuration</h5>
+            </div>
+            <div class="card-body">
+                <h6>{{ stream.plugin_type|title }} Settings:</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <tbody>
+                            {% set config = stream.get_plugin_config() %}
+                            {% if config %}
+                                {% for key, value in config.items() %}
+                                <tr>
+                                    <td><strong>{{ key|title|replace('_', ' ') }}:</strong></td>
+                                    <td>
+                                        {% if key in ['password', 'feed_password'] %}
+                                            ••••••••
+                                        {% else %}
+                                            {{ value }}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="2" class="text-muted">No configuration available</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Log Card -->
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-history"></i> Activity</h5>
+            </div>
+            <div class="card-body">
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <div class="timeline-marker bg-primary"></div>
+                        <div class="timeline-content">
+                            <h6 class="timeline-title">Stream Created</h6>
+                            <p class="timeline-text">{{ stream.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</p>
+                        </div>
+                    </div>
+                    
+                    {% if stream.updated_at != stream.created_at %}
+                    <div class="timeline-item">
+                        <div class="timeline-marker bg-info"></div>
+                        <div class="timeline-content">
+                            <h6 class="timeline-title">Last Updated</h6>
+                            <p class="timeline-text">{{ stream.updated_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</p>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if stream.last_poll %}
+                    <div class="timeline-item">
+                        <div class="timeline-marker {% if stream.last_error %}bg-danger{% else %}bg-success{% endif %}"></div>
+                        <div class="timeline-content">
+                            <h6 class="timeline-title">Last Poll</h6>
+                            <p class="timeline-text">
+                                {{ stream.last_poll.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+                                {% if stream.last_error %}
+                                    <br><small class="text-danger">Error: {{ stream.last_error }}</small>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Quick Actions Card -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5><i class="fas fa-bolt"></i> Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-info" onclick="testConnection()">
+                        <i class="fas fa-link"></i> Test Connection
+                    </button>
+                    <button class="btn btn-outline-warning" onclick="restartStream()">
+                        <i class="fas fa-redo"></i> Restart Stream
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="refreshStatus()">
+                        <i class="fas fa-sync"></i> Refresh Status
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Card -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-line"></i> Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6">
+                        <h4 class="text-primary">{{ stream.total_messages_sent }}</h4>
+                        <small class="text-muted">Messages Sent</small>
+                    </div>
+                    <div class="col-6">
+                        <h4 class="{% if stream.is_active %}text-success{% else %}text-secondary{% endif %}">
+                            {% if stream.is_active %}ON{% else %}OFF{% endif %}
+                        </h4>
+                        <small class="text-muted">Current Status</small>
+                    </div>
+                </div>
+                
+                {% if stream.last_poll %}
+                <hr>
+                <div class="text-center">
+                    <small class="text-muted">
+                        Last activity: {{ stream.last_poll.strftime('%H:%M:%S UTC') }}
+                    </small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Help Card -->
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-question-circle"></i> Help</h5>
+            </div>
+            <div class="card-body">
+                <h6>Stream Controls:</h6>
+                <ul class="list-unstyled">
+                    <li><strong>Start/Stop:</strong> Control stream execution</li>
+                    <li><strong>Edit:</strong> Modify stream configuration</li>
+                    <li><strong>Test:</strong> Verify connection to GPS provider</li>
+                    <li><strong>Restart:</strong> Stop and start the stream</li>
+                </ul>
+                
+                <hr>
+                
+                <h6>Troubleshooting:</h6>
+                <ul class="list-unstyled">
+                    <li>• Check GPS provider credentials</li>
+                    <li>• Verify TAK server connectivity</li>
+                    <li>• Review error messages above</li>
+                    <li>• Test connection before starting</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function controlStream(streamId, action) {
+    const actionBtn = document.querySelector(`button[onclick="controlStream(${streamId}, '${action}')"]`);
+    const originalText = actionBtn.innerHTML;
+    
+    actionBtn.disabled = true;
+    actionBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${action === 'start' ? 'Starting' : 'Stopping'}...`;
+    
+    fetch(`/streams/${streamId}/${action}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Network error occurred');
+    })
+    .finally(() => {
+        actionBtn.disabled = false;
+        actionBtn.innerHTML = originalText;
+    });
+}
+
+function deleteStream(streamId) {
+    if (confirm('Are you sure you want to delete this stream? This action cannot be undone.')) {
+        fetch(`/streams/${streamId}/delete`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = '/streams/';
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Network error occurred');
+        });
+    }
+}
+
+function testConnection() {
+    const testBtn = document.querySelector('button[onclick="testConnection()"]');
+    const originalText = testBtn.innerHTML;
+    
+    testBtn.disabled = true;
+    testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+    
+    // Get stream configuration
+    const streamData = {
+        plugin_type: '{{ stream.plugin_type }}',
+        {% set config = stream.get_plugin_config() %}
+        {% if config %}
+            {% for key, value in config.items() %}
+                plugin_{{ key }}: '{{ value }}',
+            {% endfor %}
+        {% endif %}
+    };
+    
+    fetch('/streams/test-connection', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(streamData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Connection successful! Found ${data.device_count || 0} devices.`);
+        } else {
+            alert('Connection failed: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Network error occurred while testing connection');
+    })
+    .finally(() => {
+        testBtn.disabled = false;
+        testBtn.innerHTML = originalText;
+    });
+}
+
+function restartStream() {
+    const restartBtn = document.querySelector('button[onclick="restartStream()"]');
+    const originalText = restartBtn.innerHTML;
+    
+    restartBtn.disabled = true;
+    restartBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Restarting...';
+    
+    // First stop, then start
+    fetch(`/streams/{{ stream.id }}/stop`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Wait a moment, then start
+            setTimeout(() => {
+                fetch(`/streams/{{ stream.id }}/start`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Error starting stream: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Network error occurred while starting stream');
+                })
+                .finally(() => {
+                    restartBtn.disabled = false;
+                    restartBtn.innerHTML = originalText;
+                });
+            }, 1000);
+        } else {
+            alert('Error stopping stream: ' + data.error);
+            restartBtn.disabled = false;
+            restartBtn.innerHTML = originalText;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Network error occurred while stopping stream');
+        restartBtn.disabled = false;
+        restartBtn.innerHTML = originalText;
+    });
+}
+
+function refreshStatus() {
+    location.reload();
+}
+
+// Auto-refresh every 30 seconds if stream is active
+{% if stream.is_active %}
+setInterval(function() {
+    // Only refresh if no modals are open and user hasn't interacted recently
+    if (!document.querySelector('.modal.show') && 
+        Date.now() - (window.lastUserInteraction || 0) > 10000) {
+        location.reload();
+    }
+}, 30000);
+
+// Track user interactions
+document.addEventListener('click', function() {
+    window.lastUserInteraction = Date.now();
+});
+{% endif %}
+</script>
+
+<style>
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #dee2e6;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -25px;
+    top: 0;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+}
+
+.timeline-content {
+    padding-left: 15px;
+}
+
+.timeline-title {
+    margin-bottom: 5px;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.timeline-text {
+    margin-bottom: 0;
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.status-active {
+    color: #28a745 !important;
+}
+
+.status-inactive {
+    color: #6c757d !important;
+}
+</style>
+{% endblock %}
