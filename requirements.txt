@@ -13,3 +13,4 @@ fastkml
 lxml
 python-dotenv
 cryptography
+certifi

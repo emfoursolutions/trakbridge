@@ -30,9 +30,10 @@
                         <label for="plugin_type" class="form-label">GPS Provider</label>
                         <select class="form-select" id="plugin_type" name="plugin_type" required onchange="updatePluginConfig()">
                             <option value="">Select GPS Provider</option>
-                            {% for plugin in plugins %}
-                            <option value="{{ plugin }}" {% if plugin == stream.plugin_type %}selected{% endif %}>
-                                {{ plugin|title }}
+                            {% for plugin_name, plugin_meta in plugin_metadata.items() %}
+                            <option value="{{ plugin_name }}" data-category="{{ plugin_meta.category }}"
+                                    {% if plugin_name == stream.plugin_type %}selected{% endif %}>
+                                <i class="{{ plugin_meta.icon }}"></i> {{ plugin_meta.display_name }}
                             </option>
                             {% endfor %}
                         </select>
@@ -55,7 +56,7 @@
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="poll_interval" class="form-label">Poll Interval (seconds)</label>
-                                <input type="number" class="form-control" id="poll_interval" name="poll_interval" 
+                                <input type="number" class="form-control" id="poll_interval" name="poll_interval"
                                        value="{{ stream.poll_interval }}" min="30" max="3600">
                                 <div class="form-text">How often to check for new GPS data</div>
                             </div>
@@ -63,7 +64,7 @@
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="cot_stale_time" class="form-label">COT Stale Time (seconds)</label>
-                                <input type="number" class="form-control" id="cot_stale_time" name="cot_stale_time" 
+                                <input type="number" class="form-control" id="cot_stale_time" name="cot_stale_time"
                                        value="{{ stream.cot_stale_time }}" min="60">
                                 <div class="form-text">When to consider position data stale</div>
                             </div>
@@ -90,7 +91,7 @@
                     </div>
 
                     <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="is_active" name="is_active" 
+                        <input class="form-check-input" type="checkbox" id="is_active" name="is_active"
                                {% if stream.is_active %}checked{% endif %}>
                         <label class="form-check-label" for="is_active">
                             Stream Active
@@ -103,7 +104,10 @@
             <!-- Plugin-specific configuration will be inserted here -->
             <div id="plugin-config-section" class="card mt-3">
                 <div class="card-header">
-                    <h5 id="plugin-config-title">Provider Configuration</h5>
+                    <h5 id="plugin-config-title">
+                        <i id="plugin-config-icon" class="fas fa-cog"></i>
+                        <span id="plugin-config-name">Provider Configuration</span>
+                    </h5>
                 </div>
                 <div class="card-body" id="plugin-config-body">
                 </div>
@@ -148,7 +152,7 @@
                         {% endif %}
                     </small>
                 </div>
-                
+
                 {% if stream.last_error %}
                 <div class="alert alert-danger alert-sm mt-2">
                     <small><strong>Last Error:</strong> {{ stream.last_error }}</small>
@@ -164,149 +168,192 @@
             </div>
             <div class="card-body">
                 <div id="help-content">
-                    <p>Modify the stream configuration and click "Update Stream" to save changes.</p>
+                    <p class="text-muted">Select a GPS provider to see configuration instructions.</p>
                 </div>
+            </div>
+        </div>
+
+        <!-- Connection test results -->
+        <div id="test-results" class="card mt-3" style="display: none;">
+            <div class="card-header">
+                <h5><i class="fas fa-flask"></i> Connection Test</h5>
+            </div>
+            <div class="card-body" id="test-results-body">
             </div>
         </div>
     </div>
 </div>
+
+<!-- Store plugin metadata and current config for JavaScript -->
+<script type="application/json" id="plugin-metadata">
+{{ plugin_metadata | tojson }}
+</script>
+<script type="application/json" id="current-config">
+{{ stream.get_plugin_config() | tojson }}
+</script>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Store current configuration for comparison
-const currentConfig = {{ stream.get_plugin_config() | tojson }};
+// Load plugin metadata and current configuration from embedded JSON
+const pluginMetadata = JSON.parse(document.getElementById('plugin-metadata').textContent);
+const currentConfig = JSON.parse(document.getElementById('current-config').textContent);
 
 function updatePluginConfig() {
     const pluginType = document.getElementById('plugin_type').value;
     const configSection = document.getElementById('plugin-config-section');
-    const configBody = document.getElementById('plugin-config-body');
-    const configTitle = document.getElementById('plugin-config-title');
-    const testBtn = document.getElementById('test-btn');
     const helpContent = document.getElementById('help-content');
+    const testBtn = document.getElementById('test-btn');
 
     if (!pluginType) {
         configSection.style.display = 'none';
-        helpContent.innerHTML = '<p>Select a GPS provider to see configuration instructions.</p>';
+        testBtn.style.display = 'none';
+        helpContent.innerHTML = '<p class="text-muted">Select a GPS provider to see configuration instructions.</p>';
         return;
     }
 
-    // Show plugin-specific configuration fields
+    // Get plugin metadata
+    const pluginMeta = pluginMetadata[pluginType];
+    if (!pluginMeta) {
+        console.error('Plugin metadata not found for:', pluginType);
+        return;
+    }
+
+    // Update config section
+    renderPluginConfig(pluginMeta);
+
+    // Update help content
+    renderHelpContent(pluginMeta);
+
+    // Show test button and config section
+    testBtn.style.display = 'inline-block';
     configSection.style.display = 'block';
+}
 
-    // Clear existing fields
-    configBody.innerHTML = '';
+function renderPluginConfig(pluginMeta) {
+    const configTitle = document.getElementById('plugin-config-title');
+    const configIcon = document.getElementById('plugin-config-icon');
+    const configName = document.getElementById('plugin-config-name');
+    const configBody = document.getElementById('plugin-config-body');
 
-    // Add plugin-specific fields based on type
-    if (pluginType === 'garmin') {
-        configTitle.textContent = 'Garmin InReach Configuration';
-        configBody.innerHTML = `
-            <div class="mb-3">
-                <label for="plugin_url" class="form-label">
-                    <i class="fas fa-link"></i> Garmin InReach KML Feed URL
-                </label>
-                <input type="url" class="form-control" id="plugin_url" name="plugin_url" required
-                       value="${currentConfig.url || ''}"
-                       placeholder="https://share.garmin.com/Feed/Share/...">
-                <div class="form-text">Complete URL to your Garmin InReach KML feed from MapShare</div>
-            </div>
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="mb-3">
-                        <label for="plugin_username" class="form-label">
-                            <i class="fas fa-user"></i> Username
-                        </label>
-                        <input type="text" class="form-control" id="plugin_username" name="plugin_username" required
-                               value="${currentConfig.username || ''}">
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="mb-3">
-                        <label for="plugin_password" class="form-label">
-                            <i class="fas fa-lock"></i> Password
-                        </label>
-                        <input type="password" class="form-control" id="plugin_password" name="plugin_password" required
-                               value="${currentConfig.password || ''}" placeholder="Enter new password">
-                        <div class="form-text">Leave blank to keep current password</div>
-                    </div>
-                </div>
-            </div>
-            <div class="mb-3">
-                <label for="plugin_retry_delay" class="form-label">Retry Delay (seconds)</label>
-                <input type="number" class="form-control" id="plugin_retry_delay" name="plugin_retry_delay"
-                       value="${currentConfig.retry_delay || 60}" min="30" max="300">
-                <div class="form-text">Delay between retry attempts on connection failure</div>
-            </div>
-        `;
+    // Update header
+    configIcon.className = pluginMeta.icon || 'fas fa-cog';
+    configName.textContent = `${pluginMeta.display_name} Configuration`;
 
-        helpContent.innerHTML = `
-            <h6><i class="fas fa-satellite-dish"></i> Garmin InReach Setup</h6>
-            <ol>
-                <li>Log in to your Garmin account</li>
-                <li>Go to MapShare settings</li>
-                <li>Enable MapShare and create a shareable link</li>
-                <li>Copy the KML feed URL</li>
-                <li>Use your Garmin account credentials</li>
-            </ol>
-            <div class="alert alert-info mt-2">
-                <small><i class="fas fa-info-circle"></i> Password field will only update if you enter a new password.</small>
-            </div>
-        `;
-    } else if (pluginType === 'spot') {
-        configTitle.textContent = 'SPOT Satellite Configuration';
-        configBody.innerHTML = `
-            <div class="mb-3">
-                <label for="plugin_feed_id" class="form-label">
-                    <i class="fas fa-rss"></i> SPOT Feed ID
-                </label>
-                <input type="text" class="form-control" id="plugin_feed_id" name="plugin_feed_id" required
-                       value="${currentConfig.feed_id || ''}"
-                       placeholder="0abcdef1234567890abcdef123456789">
-                <div class="form-text">Your SPOT device feed ID from your SPOT account</div>
-            </div>
-            <div class="mb-3">
-                <label for="plugin_feed_password" class="form-label">Feed Password (optional)</label>
-                <input type="password" class="form-control" id="plugin_feed_password" name="plugin_feed_password"
-                       value="${currentConfig.feed_password || ''}" placeholder="Enter password if changed">
-                <div class="form-text">Password if your SPOT feed is password protected</div>
-            </div>
-        `;
+    // Generate form fields with current values
+    const fields = pluginMeta.config_fields || [];
+    configBody.innerHTML = fields.map(field => generateFormField(field, currentConfig)).join('');
+}
 
-        helpContent.innerHTML = `
-            <h6><i class="fas fa-satellite"></i> SPOT Setup</h6>
-            <ol>
-                <li>Log in to your SPOT account</li>
-                <li>Go to Shared Page settings</li>
-                <li>Enable the shared page</li>
-                <li>Copy the Feed ID from the URL</li>
-                <li>Set password if needed</li>
-            </ol>
-        `;
-    } else if (pluginType === 'inreach') {
-        // Legacy support - redirect to garmin
-        document.getElementById('plugin_type').value = 'garmin';
-        updatePluginConfig();
-        return;
+function generateFormField(field, currentConfig) {
+    const fieldId = `plugin_${field.name}`;
+    const isRequired = field.required ? 'required' : '';
+    const placeholder = field.placeholder ? `placeholder="${field.placeholder}"` : '';
+    const currentValue = currentConfig[field.name] || field.default || '';
+
+    let inputHtml = '';
+
+    switch (field.type) {
+        case 'password':
+            // For password fields, show placeholder text instead of current value
+            const passwordPlaceholder = currentValue ? 'Leave blank to keep current password' : field.placeholder || '';
+            inputHtml = `<input type="password" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} placeholder="${passwordPlaceholder}">`;
+            break;
+        case 'url':
+            inputHtml = `<input type="url" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} value="${currentValue}">`;
+            break;
+        case 'email':
+            inputHtml = `<input type="email" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} value="${currentValue}">`;
+            break;
+        case 'number':
+            const min = field.min ? `min="${field.min}"` : '';
+            const max = field.max ? `max="${field.max}"` : '';
+            inputHtml = `<input type="number" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${min} ${max} value="${currentValue}">`;
+            break;
+        case 'select':
+            const options = field.options || [];
+            const optionsHtml = options.map(opt =>
+                `<option value="${opt.value}" ${opt.value === currentValue ? 'selected' : ''}>${opt.label}</option>`
+            ).join('');
+            inputHtml = `<select class="form-select" id="${fieldId}" name="${fieldId}" ${isRequired}>
+                <option value="">Select ${field.label}</option>
+                ${optionsHtml}
+            </select>`;
+            break;
+        default:
+            inputHtml = `<input type="text" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} value="${currentValue}">`;
     }
+
+    const requiredBadge = field.required ? '<span class="badge bg-danger ms-1">Required</span>' : '';
+    let helpText = '';
+    if (field.help) {
+        helpText = `<div class="form-text">${field.help}</div>`;
+    }
+    if (field.type === 'password' && currentValue) {
+        helpText += `<div class="form-text text-muted">Leave blank to keep current password</div>`;
+    }
+
+    return `
+        <div class="mb-3">
+            <label for="${fieldId}" class="form-label">
+                ${field.label}${requiredBadge}
+            </label>
+            ${inputHtml}
+            ${helpText}
+        </div>
+    `;
+}
+
+function renderHelpContent(pluginMeta) {
+    const helpContent = document.getElementById('help-content');
+
+    let html = `
+        <div class="mb-3">
+            <h6><i class="${pluginMeta.icon}"></i> ${pluginMeta.display_name}</h6>
+            <p class="text-muted">${pluginMeta.description}</p>
+        </div>
+    `;
+
+    if (pluginMeta.help_sections && pluginMeta.help_sections.length > 0) {
+        pluginMeta.help_sections.forEach(section => {
+            html += `
+                <div class="mb-3">
+                    <h6>${section.title}</h6>
+                    <ul class="list-unstyled">
+                        ${section.content.map(item => `<li><small>• ${item}</small></li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        });
+    }
+
+    helpContent.innerHTML = html;
 }
 
 function testConnection() {
     const form = document.getElementById('streamForm');
     const formData = new FormData(form);
     const testBtn = document.getElementById('test-btn');
+    const testResults = document.getElementById('test-results');
+    const testResultsBody = document.getElementById('test-results-body');
     const originalText = testBtn.innerHTML;
 
     // Validate required fields first
     const pluginType = formData.get('plugin_type');
     if (!pluginType) {
-        alert('Please select a GPS provider first');
+        showAlert('Please select a GPS provider first', 'warning');
         return;
     }
 
-    // Check required plugin fields
-    if (pluginType === 'garmin') {
-        if (!formData.get('plugin_url') || !formData.get('plugin_username')) {
-            alert('Please fill in all required Garmin configuration fields');
+    // Check if required plugin fields are filled
+    const pluginMeta = pluginMetadata[pluginType];
+    const requiredFields = pluginMeta.config_fields.filter(field => field.required);
+
+    for (const field of requiredFields) {
+        const fieldValue = formData.get(`plugin_${field.name}`);
+        // For password fields, allow empty if current value exists
+        if (!fieldValue && (field.type !== 'password' || !currentConfig[field.name])) {
+            showAlert(`Please fill in the required field: ${field.label}`, 'warning');
             return;
         }
     }
@@ -320,12 +367,17 @@ function testConnection() {
         data[key] = value;
     }
 
-    // If password is empty, use the current password
-    if (pluginType === 'garmin' && !data.plugin_password) {
-        data.plugin_password = currentConfig.password;
-    }
+    // For password fields, if empty, use current password
+    pluginMeta.config_fields.forEach(field => {
+        if (field.type === 'password') {
+            const fieldName = `plugin_${field.name}`;
+            if (!data[fieldName] && currentConfig[field.name]) {
+                data[fieldName] = currentConfig[field.name];
+            }
+        }
+    });
 
-    fetch('/streams/test-connection', {
+    fetch('/test-connection', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -334,15 +386,34 @@ function testConnection() {
     })
     .then(response => response.json())
     .then(data => {
+        testResults.style.display = 'block';
+
         if (data.success) {
-            alert(`Connection successful! Found ${data.device_count || 0} devices.`);
+            testResultsBody.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle"></i> Connection successful!
+                    <br><small>Found ${data.device_count || 0} device(s)</small>
+                    ${data.devices && data.devices.length > 0 ?
+                        `<br><small>Devices: ${data.devices.join(', ')}</small>` : ''}
+                </div>
+            `;
         } else {
-            alert('Connection failed: ' + data.error);
+            testResultsBody.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> Connection failed
+                    <br><small>${data.error || 'Unknown error'}</small>
+                </div>
+            `;
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Network error occurred while testing connection');
+        testResults.style.display = 'block';
+        testResultsBody.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle"></i> Network error occurred
+            </div>
+        `;
     })
     .finally(() => {
         testBtn.disabled = false;
@@ -350,28 +421,51 @@ function testConnection() {
     });
 }
 
+function showAlert(message, type = 'info') {
+    // Create a simple alert
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    // Insert at the top of the form
+    const form = document.getElementById('streamForm');
+    form.insertBefore(alertDiv, form.firstChild);
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
+
 // Handle form submission to preserve passwords
 document.getElementById('streamForm').addEventListener('submit', function(e) {
     const pluginType = document.getElementById('plugin_type').value;
-    
-    if (pluginType === 'garmin') {
-        const passwordField = document.getElementById('plugin_password');
-        if (!passwordField.value) {
-            // Remove the password field if empty to keep current password
-            passwordField.remove();
-        }
-    } else if (pluginType === 'spot') {
-        const passwordField = document.getElementById('plugin_feed_password');
-        if (!passwordField.value) {
-            // Remove the password field if empty to keep current password
-            passwordField.remove();
-        }
+    const pluginMeta = pluginMetadata[pluginType];
+
+    if (pluginMeta) {
+        // Handle password fields - remove empty ones to preserve current values
+        pluginMeta.config_fields.forEach(field => {
+            if (field.type === 'password') {
+                const fieldElement = document.getElementById(`plugin_${field.name}`);
+                if (fieldElement && !fieldElement.value && currentConfig[field.name]) {
+                    fieldElement.remove();
+                }
+            }
+        });
     }
 });
 
 // Auto-update plugin config on page load
 document.addEventListener('DOMContentLoaded', function() {
-    updatePluginConfig();
+    const pluginType = document.getElementById('plugin_type').value;
+    if (pluginType) {
+        updatePluginConfig();
+    }
 });
 </script>
 {% endblock %}

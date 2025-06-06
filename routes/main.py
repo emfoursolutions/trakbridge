@@ -48,3 +48,4 @@ def api_status():
         'tak_servers': TakServer.query.count(),
         'running_workers': running_workers
     })
+

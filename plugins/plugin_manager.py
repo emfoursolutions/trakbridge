@@ -1,18 +1,20 @@
 # =============================================================================
-# plugins/plugin_manager.py - Plugin Management
+# plugins/plugin_manager.py - Enhanced Plugin Management with API Support
 # =============================================================================
 
-from typing import Dict, Type, Optional, List
+from typing import Dict, Type, Optional, List, Any
 from plugins.base_plugin import BaseGPSPlugin
 import importlib
 import logging
 import os
 import inspect
 import pkgutil
+import asyncio
+import aiohttp
 
 
 class PluginManager:
-    """Manages GPS tracking plugins"""
+    """Enhanced manager for GPS tracking plugins with metadata support"""
 
     def __init__(self):
         self.plugins: Dict[str, Type[BaseGPSPlugin]] = {}
@@ -58,8 +60,134 @@ class PluginManager:
             return None
 
     def list_plugins(self) -> List[str]:
-        """List all registered plugins"""
+        """List all registered plugin names"""
         return list(self.plugins.keys())
+
+    def get_plugin_metadata(self, plugin_name: str) -> Optional[Dict[str, Any]]:
+        """Get metadata for a specific plugin"""
+        if plugin_name not in self.plugins:
+            return None
+
+        plugin_class = self.plugins[plugin_name]
+        try:
+            # Create temporary instance to get metadata
+            temp_instance = plugin_class({})
+            return temp_instance.plugin_metadata
+        except Exception as e:
+            self.logger.error(f"Failed to get metadata for plugin {plugin_name}: {e}")
+            return None
+
+    def get_all_plugin_metadata(self) -> Dict[str, Dict[str, Any]]:
+        """Get metadata for all registered plugins"""
+        metadata = {}
+        for plugin_name in self.plugins:
+            plugin_metadata = self.get_plugin_metadata(plugin_name)
+            if plugin_metadata:
+                metadata[plugin_name] = plugin_metadata
+        return metadata
+
+    def get_plugin_config_schema(self, plugin_name: str) -> Optional[List[Dict[str, Any]]]:
+        """Get configuration schema for a specific plugin"""
+        if plugin_name not in self.plugins:
+            return None
+
+        plugin_class = self.plugins[plugin_name]
+        try:
+            temp_instance = plugin_class({})
+            config_fields = temp_instance.get_config_fields()
+            return [field.to_dict() for field in config_fields]
+        except Exception as e:
+            self.logger.error(f"Failed to get config schema for plugin {plugin_name}: {e}")
+            return None
+
+    def validate_plugin_config(self, plugin_name: str, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate configuration for a specific plugin
+
+        Returns:
+            Dictionary with validation results:
+            - valid: bool
+            - errors: List[str]
+            - warnings: List[str]
+        """
+        if plugin_name not in self.plugins:
+            return {
+                "valid": False,
+                "errors": [f"Plugin '{plugin_name}' not found"],
+                "warnings": []
+            }
+
+        plugin_class = self.plugins[plugin_name]
+        try:
+            plugin_instance = plugin_class(config)
+            is_valid = plugin_instance.validate_config()
+
+            return {
+                "valid": is_valid,
+                "errors": [] if is_valid else ["Configuration validation failed"],
+                "warnings": []
+            }
+        except Exception as e:
+            return {
+                "valid": False,
+                "errors": [f"Validation error: {str(e)}"],
+                "warnings": []
+            }
+
+    async def test_plugin_connection(self, plugin_name: str, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Test connection for a specific plugin configuration
+
+        Returns:
+            Dictionary with connection test results from plugin's test_connection method
+        """
+        if plugin_name not in self.plugins:
+            return {
+                "success": False,
+                "error": f"Plugin '{plugin_name}' not found",
+                "message": "Plugin not found"
+            }
+
+        plugin_class = self.plugins[plugin_name]
+        try:
+            plugin_instance = plugin_class(config)
+
+            # Validate config first
+            if not plugin_instance.validate_config():
+                return {
+                    "success": False,
+                    "error": "Configuration validation failed",
+                    "message": "Invalid configuration"
+                }
+
+            # Test connection
+            return await plugin_instance.test_connection()
+
+        except Exception as e:
+            self.logger.error(f"Connection test failed for plugin {plugin_name}: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Connection test error"
+            }
+
+    def get_plugins_by_category(self, category: str) -> List[str]:
+        """Get plugins filtered by category"""
+        matching_plugins = []
+        for plugin_name in self.plugins:
+            metadata = self.get_plugin_metadata(plugin_name)
+            if metadata and metadata.get("category") == category:
+                matching_plugins.append(plugin_name)
+        return matching_plugins
+
+    def get_plugin_categories(self) -> List[str]:
+        """Get all available plugin categories"""
+        categories = set()
+        for plugin_name in self.plugins:
+            metadata = self.get_plugin_metadata(plugin_name)
+            if metadata and metadata.get("category"):
+                categories.add(metadata["category"])
+        return sorted(list(categories))
 
     def load_plugins_from_directory(self, directory: str = 'plugins'):
         """
@@ -96,22 +224,7 @@ class PluginManager:
                         # Check if it's a subclass of BaseGPSPlugin but not BaseGPSPlugin itself
                         if (issubclass(obj, BaseGPSPlugin) and
                                 obj is not BaseGPSPlugin):
-                            # Try class method first, then instance method
-                            if hasattr(obj, 'get_plugin_name'):
-                                try:
-                                    plugin_name = obj.get_plugin_name()
-                                    self.register_plugin(obj)
-                                    continue
-                                except Exception:
-                                    pass
-
-                            # Fall back to instance method
-                            try:
-                                temp_instance = obj({})
-                                if hasattr(temp_instance, 'plugin_name'):
-                                    self.register_plugin(obj)
-                            except Exception as e:
-                                self.logger.warning(f"Skipping invalid plugin class {name}: {e}")
+                            self.register_plugin(obj)
 
                 except Exception as e:
                     self.logger.error(f"Failed to load plugin module {modname}: {e}")
@@ -148,28 +261,65 @@ class PluginManager:
                         for name, obj in inspect.getmembers(module, inspect.isclass):
                             if (issubclass(obj, BaseGPSPlugin) and
                                     obj is not BaseGPSPlugin):
-                                # Try class method first, then instance method
-                                if hasattr(obj, 'get_plugin_name'):
-                                    try:
-                                        plugin_name = obj.get_plugin_name()
-                                        self.register_plugin(obj)
-                                        continue
-                                    except Exception:
-                                        pass
-
-                                # Fall back to instance method
-                                try:
-                                    temp_instance = obj({})
-                                    if hasattr(temp_instance, 'plugin_name'):
-                                        self.register_plugin(obj)
-                                except Exception as e:
-                                    self.logger.warning(f"Skipping invalid plugin class {name}: {e}")
+                                self.register_plugin(obj)
 
                     except Exception as e:
                         self.logger.error(f"Failed to load plugin file {filename}: {e}")
 
         except Exception as e:
             self.logger.error(f"Failed to discover plugins in directory {directory}: {e}")
+
+    def reload_plugin(self, plugin_name: str) -> bool:
+        """Reload a specific plugin (useful for development)"""
+        if plugin_name not in self.plugins:
+            self.logger.error(f"Cannot reload plugin '{plugin_name}': not found")
+            return False
+
+        try:
+            plugin_class = self.plugins[plugin_name]
+            module = inspect.getmodule(plugin_class)
+
+            if module:
+                importlib.reload(module)
+                # Re-register the plugin
+                for name, obj in inspect.getmembers(module, inspect.isclass):
+                    if (issubclass(obj, BaseGPSPlugin) and
+                            obj is not BaseGPSPlugin):
+                        # Check if this is the plugin we want to reload
+                        try:
+                            temp_instance = obj({})
+                            if temp_instance.plugin_name == plugin_name:
+                                self.plugins[plugin_name] = obj
+                                self.logger.info(f"Successfully reloaded plugin: {plugin_name}")
+                                return True
+                        except Exception:
+                            continue
+
+        except Exception as e:
+            self.logger.error(f"Failed to reload plugin {plugin_name}: {e}")
+            return False
+
+        return False
+
+    def get_plugin_summary(self) -> Dict[str, Any]:
+        """Get a summary of all loaded plugins"""
+        summary = {
+            "total_plugins": len(self.plugins),
+            "plugins": {},
+            "categories": self.get_plugin_categories()
+        }
+
+        for plugin_name in self.plugins:
+            metadata = self.get_plugin_metadata(plugin_name)
+            if metadata:
+                summary["plugins"][plugin_name] = {
+                    "display_name": metadata.get("display_name", plugin_name),
+                    "description": metadata.get("description", "No description"),
+                    "category": metadata.get("category", "uncategorized"),
+                    "config_fields_count": len(metadata.get("config_fields", []))
+                }
+
+        return summary
 
 
 # Global plugin manager instance
