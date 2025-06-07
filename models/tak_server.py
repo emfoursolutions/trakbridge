@@ -2,7 +2,7 @@
 # models/tak_server.py - TAK Server Model
 # =============================================================================
 
-from database import db, TimestampMixin
+from database import db, TimestampMixin  # Import both from database.py
 
 
 class TakServer(db.Model, TimestampMixin):

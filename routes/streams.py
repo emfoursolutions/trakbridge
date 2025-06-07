@@ -385,3 +385,153 @@ def test_stream(stream_id):
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+class StreamManager:
+    def __init__(self):
+        self.workers = {}
+        self.shutdown_event = asyncio.Event()
+
+    def get_stream_data(self, stream_id):
+        """Get stream data in a session-safe way"""
+        from app import app, db
+        from models.stream import Stream
+
+        with app.app_context():
+            stream = db.session.get(Stream, stream_id)
+            if not stream:
+                return None
+
+            # Convert to dict to avoid session binding issues
+            return {
+                'id': stream.id,
+                'name': stream.name,
+                'plugin_type': stream.plugin_type,
+                'plugin_config': stream.get_plugin_config(),
+                'poll_interval': stream.poll_interval,
+                'cot_type': stream.cot_type,
+                'cot_stale_time': stream.cot_stale_time,
+                'tak_server_id': stream.tak_server_id
+            }
+
+    def update_stream_status(self, stream_id, is_active=None, last_error=None, messages_sent=None):
+        """Update stream status in a session-safe way"""
+        from app import app, db
+        from models.stream import Stream
+
+        with app.app_context():
+            stream = db.session.get(Stream, stream_id)
+            if stream:
+                if is_active is not None:
+                    stream.is_active = is_active
+                if last_error is not None:
+                    stream.last_error = last_error
+                if messages_sent is not None:
+                    stream.total_messages_sent = (stream.total_messages_sent or 0) + messages_sent
+
+                try:
+                    db.session.commit()
+                except Exception as e:
+                    db.session.rollback()
+                    print(f"Error updating stream status: {e}")
+
+    async def start_stream(self, stream_id):
+        """Start a stream with proper session handling"""
+        try:
+            # Get stream data in a session-safe way
+            stream_data = self.get_stream_data(stream_id)
+            if not stream_data:
+                return False
+
+            if stream_id in self.workers:
+                return True  # Already running
+
+            # Create and start worker
+            worker = StreamWorker(stream_data, self)
+            self.workers[stream_id] = worker
+
+            # Start the worker task
+            task = asyncio.create_task(worker.run())
+            worker.task = task
+
+            # Update status
+            self.update_stream_status(stream_id, is_active=True, last_error=None)
+
+            return True
+
+        except Exception as e:
+            print(f"Error starting stream {stream_id}: {e}")
+            self.update_stream_status(stream_id, is_active=False, last_error=str(e))
+            return False
+
+    async def stop_stream(self, stream_id):
+        """Stop a stream with proper session handling"""
+        try:
+            if stream_id not in self.workers:
+                return True  # Not running
+
+            worker = self.workers[stream_id]
+            await worker.stop()
+
+            # Remove from workers
+            del self.workers[stream_id]
+
+            # Update status
+            self.update_stream_status(stream_id, is_active=False)
+
+            return True
+
+        except Exception as e:
+            print(f"Error stopping stream {stream_id}: {e}")
+            return False
+
+
+class StreamWorker:
+    def __init__(self, stream_data, manager):
+        self.stream_data = stream_data
+        self.manager = manager
+        self.running = False
+        self.task = None
+
+    async def run(self):
+        """Main worker loop"""
+        self.running = True
+
+        try:
+            while self.running:
+                try:
+                    # Your streaming logic here
+                    # Use self.stream_data instead of accessing database objects
+                    await self.fetch_and_send_data()
+
+                    # Sleep for poll interval
+                    await asyncio.sleep(self.stream_data['poll_interval'])
+
+                except Exception as e:
+                    print(f"Error in stream worker {self.stream_data['id']}: {e}")
+                    self.manager.update_stream_status(
+                        self.stream_data['id'],
+                        last_error=str(e)
+                    )
+                    await asyncio.sleep(30)  # Wait before retry
+
+        except asyncio.CancelledError:
+            print(f"Stream worker {self.stream_data['id']} cancelled")
+        finally:
+            self.running = False
+
+    async def stop(self):
+        """Stop the worker"""
+        self.running = False
+        if self.task and not self.task.done():
+            self.task.cancel()
+            try:
+                await self.task
+            except asyncio.CancelledError:
+                pass
+
+    async def fetch_and_send_data(self):
+        """Fetch data and send to TAK server"""
+        # Your existing logic here, but use self.stream_data
+        # instead of accessing database objects directly
+        pass

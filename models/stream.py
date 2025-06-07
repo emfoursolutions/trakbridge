@@ -2,8 +2,7 @@
 # models/stream.py - Stream Model
 # =============================================================================
 
-from app import db
-from database import TimestampMixin
+from database import db, TimestampMixin  # Import both from database.py
 import json
 
 

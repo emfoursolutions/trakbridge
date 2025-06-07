@@ -1,18 +1,16 @@
 # =============================================================================
-# models/database.py - Database Setup
+# database.py - Database configuration and mixins
 # =============================================================================
 
 from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
 from datetime import datetime
 
-# Create database instance
+# Create the SQLAlchemy instance here
 db = SQLAlchemy()
-migrate = Migrate()
 
 
 class TimestampMixin:
     """Mixin to add created_at and updated_at timestamps to models"""
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

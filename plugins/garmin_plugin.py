@@ -10,6 +10,7 @@ import ssl
 import certifi
 from datetime import datetime
 from fastkml import kml
+
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
 
 
@@ -149,7 +150,12 @@ class GarminPlugin(BaseGPSPlugin):
         """
         try:
             # Try to parse timestamp from description
-            description = placemark.get("description", "")
+            description = placemark.get("description", "") or ""  # Handle None case
+
+            # Ensure description is a string
+            if not isinstance(description, str):
+                self.logger.debug(f"Description is not a string: {type(description)}")
+                return None
 
             # Common Garmin timestamp patterns
             import re
@@ -165,6 +171,13 @@ class GarminPlugin(BaseGPSPlugin):
             if iso_match:
                 time_str = iso_match.group(1)
                 return datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%S")
+
+            # Pattern: Alternative formats that might appear in Garmin feeds
+            # "06/07/2025 10:55:34"
+            date_match = re.search(r'([0-9]{1,2}/[0-9]{1,2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})', description)
+            if date_match:
+                time_str = date_match.group(1)
+                return datetime.strptime(time_str, "%m/%d/%Y %H:%M:%S")
 
         except Exception as e:
             self.logger.debug(f"Could not parse timestamp from placemark: {e}")
@@ -243,12 +256,12 @@ class GarminPlugin(BaseGPSPlugin):
         self.logger.error("Failed to fetch KML feed after multiple attempts")
         return None
 
-    def _parse_kml(self, kml_data: str) -> List[Dict[str, Any]]:
+    def _parse_kml(self, kml_data):
         """
-        Parse KML data and extract placemarks
+        Parse KML data and extract placemarks (Points only, excluding LineStrings)
 
         Args:
-            kml_data: Raw KML content
+            kml_data: Raw KML content as string
 
         Returns:
             List of placemark dictionaries
@@ -256,40 +269,238 @@ class GarminPlugin(BaseGPSPlugin):
         try:
             k = kml.KML()
             k.from_string(kml_data.encode())
+            self.logger.info(f"KML object created: {k}")
+
+            # Debug the KML structure
+            self.logger.debug(f"KML features: {k.features}")
+            self.logger.debug(f"KML features length: {len(k.features) if k.features else 'None'}")
 
             placemarks = []
 
-            # Parse through the KML to find placemarks
-            for document in k.features():
-                for folder in document.features():
-                    for placemark in folder.features():
-                        if isinstance(placemark, kml.Placemark):
-                            try:
-                                coords = placemark.geometry.coords[0]
-                                name = placemark.name or "Unknown Device"
+            def extract_placemarks(feature):
+                """Recursively extract Point placemarks from any KML feature"""
+                self.logger.debug(f"Feature type: {type(feature)}, has features: {hasattr(feature, 'features')}")
 
-                                placemark_data = {
-                                    "name": name,
-                                    "lat": coords[1],
-                                    "lon": coords[0],
-                                    "description": (
-                                        placemark.description
-                                        if placemark.description
-                                        else "No description"
-                                    ),
-                                }
-                                placemarks.append(placemark_data)
+                if hasattr(feature, 'features') and feature.features:
+                    # If it has sub-features, recurse into them
+                    self.logger.debug(f"Feature has {len(feature.features)} sub-features")
+                    for sub_feature in feature.features:
+                        extract_placemarks(sub_feature)
+                elif hasattr(feature, 'geometry') and feature.geometry:
+                    # This is a placemark with geometry
+                    geometry_type = type(feature.geometry).__name__
+                    self.logger.debug(f"Found placemark with geometry: {geometry_type}")
 
-                            except (IndexError, AttributeError) as e:
-                                self.logger.warning(f"Error parsing placemark {placemark.name}: {e}")
+                    # Only process Point geometries, skip LineString and other geometry types
+                    if 'Point' not in geometry_type:
+                        self.logger.debug(f"Skipping non-Point geometry: {geometry_type}")
+                        return
+
+                    try:
+                        # Get coordinates
+                        coords = None
+                        if hasattr(feature.geometry, 'coords'):
+                            coords = feature.geometry.coords
+                            self.logger.debug(f"Coords from .coords: {coords}")
+                        elif hasattr(feature.geometry, 'coordinates'):
+                            coords = feature.geometry.coordinates
+                            self.logger.debug(f"Coords from .coordinates: {coords}")
+
+                        if coords:
+                            # Handle different coordinate formats
+                            if isinstance(coords, list) and len(coords) > 0:
+                                if isinstance(coords[0], (list, tuple)):
+                                    # Nested list/tuple format
+                                    lon, lat = coords[0][0], coords[0][1]
+                                else:
+                                    # Direct list format
+                                    lon, lat = coords[0], coords[1]
+                            else:
+                                self.logger.warning(f"Unexpected coordinate format: {coords}")
+                                return
+
+                            # Extract timestamp from ExtendedData if available
+                            timestamp = self._extract_timestamp_from_extended_data(feature)
+
+                            placemark_data = {
+                                "name": getattr(feature, 'name', 'Unknown'),
+                                "lat": lat,
+                                "lon": lon,
+                                "description": getattr(feature, 'description', 'No description') or 'No description',
+                                "timestamp": timestamp,
+                                "extended_data": self._extract_extended_data(feature)
+                            }
+                            placemarks.append(placemark_data)
+                            self.logger.debug(f"Added Point placemark: {placemark_data}")
+
+                    except (IndexError, AttributeError, TypeError) as e:
+                        self.logger.warning(f"Error parsing placemark {getattr(feature, 'name', 'Unknown')}: {e}")
+                else:
+                    self.logger.debug(f"Feature has no geometry or sub-features: {getattr(feature, 'name', 'Unknown')}")
+
+            # Start extraction from root features
+            self.logger.debug(f"KML features type: {type(k.features)}")
+            if k.features:
+                self.logger.debug(f"Number of root features: {len(k.features)}")
+                for feature in k.features:
+                    self.logger.debug(
+                        f"Processing feature type: {type(feature)}, name: {getattr(feature, 'name', 'Unknown')}")
+                    extract_placemarks(feature)
+            else:
+                self.logger.warning("No features found in KML")
+
+                # Try alternative parsing - direct XML approach (Points only)
+                try:
+                    import xml.etree.ElementTree as ET
+                    root = ET.fromstring(kml_data)
+
+                    # Look for Placemark elements with Point geometry
+                    namespaces = {'kml': 'http://www.opengis.net/kml/2.2'}
+                    placemarks_xml = root.findall('.//kml:Placemark', namespaces)
+
+                    self.logger.debug(f"Found {len(placemarks_xml)} Placemark elements via XML")
+
+                    for placemark_xml in placemarks_xml:
+                        try:
+                            # Check if this placemark has a Point (not LineString)
+                            point_elem = placemark_xml.find('.//kml:Point', namespaces)
+                            if point_elem is None:
+                                self.logger.debug("Skipping non-Point placemark")
                                 continue
 
-            self.logger.info(f"Parsed {len(placemarks)} placemarks from KML")
+                            # Get name
+                            name_elem = placemark_xml.find('kml:name', namespaces)
+                            name = name_elem.text if name_elem is not None else 'Unknown'
+
+                            # Get coordinates from Point
+                            coords_elem = point_elem.find('kml:coordinates', namespaces)
+                            if coords_elem is not None:
+                                coords_text = coords_elem.text.strip()
+                                # KML coordinates are "lon,lat,elevation"
+                                coord_parts = coords_text.split(',')
+                                if len(coord_parts) >= 2:
+                                    lon = float(coord_parts[0])
+                                    lat = float(coord_parts[1])
+
+                                    # Get description
+                                    desc_elem = placemark_xml.find('kml:description', namespaces)
+                                    description = desc_elem.text if desc_elem is not None else 'No description'
+
+                                    # Extract timestamp from TimeStamp or ExtendedData
+                                    timestamp = self._extract_timestamp_from_xml(placemark_xml, namespaces)
+
+                                    placemark_data = {
+                                        "name": name,
+                                        "lat": lat,
+                                        "lon": lon,
+                                        "description": description,
+                                        "timestamp": timestamp,
+                                        "extended_data": self._extract_extended_data_from_xml(placemark_xml, namespaces)
+                                    }
+                                    placemarks.append(placemark_data)
+                                    self.logger.debug(f"Added Point placemark via XML: {placemark_data}")
+
+                        except (ValueError, IndexError) as e:
+                            self.logger.warning(f"Error parsing XML placemark: {e}")
+
+                except Exception as xml_e:
+                    self.logger.error(f"Alternative XML parsing failed: {xml_e}")
+
+            self.logger.info(f"Parsed {len(placemarks)} Point placemarks from KML")
             return placemarks
 
         except Exception as e:
             self.logger.error(f"Error parsing KML data: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             return []
+
+    def _extract_timestamp_from_extended_data(self, feature):
+        """Extract timestamp from ExtendedData or TimeStamp element"""
+        try:
+            # Check for TimeStamp element first
+            if hasattr(feature, 'timestamp') and feature.timestamp:
+                return datetime.fromisoformat(feature.timestamp.replace('Z', '+00:00'))
+
+            # Check ExtendedData
+            if hasattr(feature, 'extended_data') and feature.extended_data:
+                for data in feature.extended_data:
+                    if hasattr(data, 'name') and data.name in ['Time UTC', 'Time']:
+                        try:
+                            time_str = data.value
+                            # Parse different time formats
+                            for fmt in ['%m/%d/%Y %I:%M:%S %p', '%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%SZ']:
+                                try:
+                                    return datetime.strptime(time_str, fmt)
+                                except ValueError:
+                                    continue
+                        except Exception:
+                            continue
+
+            return None
+        except Exception as e:
+            self.logger.debug(f"Error extracting timestamp from extended data: {e}")
+            return None
+
+    def _extract_timestamp_from_xml(self, placemark_xml, namespaces):
+        """Extract timestamp from XML TimeStamp or ExtendedData"""
+        try:
+            # Check for TimeStamp element
+            timestamp_elem = placemark_xml.find('.//kml:TimeStamp/kml:when', namespaces)
+            if timestamp_elem is not None:
+                time_str = timestamp_elem.text
+                # Parse ISO format: 2024-09-17T09:47:00Z
+                return datetime.fromisoformat(time_str.replace('Z', '+00:00')).replace(tzinfo=None)
+
+            # Check ExtendedData
+            extended_data = placemark_xml.find('kml:ExtendedData', namespaces)
+            if extended_data is not None:
+                for data_elem in extended_data.findall('kml:Data', namespaces):
+                    name_attr = data_elem.get('name')
+                    if name_attr in ['Time UTC', 'Time']:
+                        value_elem = data_elem.find('kml:value', namespaces)
+                        if value_elem is not None:
+                            time_str = value_elem.text
+                            # Parse format: 9/17/2024 9:47:00 AM
+                            try:
+                                return datetime.strptime(time_str, '%m/%d/%Y %I:%M:%S %p')
+                            except ValueError:
+                                try:
+                                    return datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+                                except ValueError:
+                                    continue
+
+            return None
+        except Exception as e:
+            self.logger.debug(f"Error extracting timestamp from XML: {e}")
+            return None
+
+    def _extract_extended_data(self, feature):
+        """Extract extended data from feature"""
+        extended_data = {}
+        try:
+            if hasattr(feature, 'extended_data') and feature.extended_data:
+                for data in feature.extended_data:
+                    if hasattr(data, 'name') and hasattr(data, 'value'):
+                        extended_data[data.name] = data.value
+        except Exception as e:
+            self.logger.debug(f"Error extracting extended data: {e}")
+        return extended_data
+
+    def _extract_extended_data_from_xml(self, placemark_xml, namespaces):
+        """Extract extended data from XML"""
+        extended_data = {}
+        try:
+            extended_data_elem = placemark_xml.find('kml:ExtendedData', namespaces)
+            if extended_data_elem is not None:
+                for data_elem in extended_data_elem.findall('kml:Data', namespaces):
+                    name_attr = data_elem.get('name')
+                    value_elem = data_elem.find('kml:value', namespaces)
+                    if name_attr and value_elem is not None:
+                        extended_data[name_attr] = value_elem.text
+        except Exception as e:
+            self.logger.debug(f"Error extracting extended data from XML: {e}")
+        return extended_data
 
     def validate_config(self) -> bool:
         """

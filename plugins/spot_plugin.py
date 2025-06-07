@@ -8,7 +8,9 @@ import asyncio
 import logging
 from datetime import datetime
 import json
-from plugins.base_plugin import BaseGPSPlugin
+import ssl
+import certifi
+from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
 
 
 class SpotPlugin(BaseGPSPlugin):
@@ -33,46 +35,57 @@ class SpotPlugin(BaseGPSPlugin):
             "display_name": "SPOT Satellite",
             "description": "Connect to SPOT satellite trackers via their web API",
             "icon": "fas fa-satellite",
-            "help_url": "https://www.findmespot.com/en-us/support",
-            "setup_instructions": [
-                "Log in to your SPOT account at findmespot.com",
-                "Go to 'Shared Page' settings in your account",
-                "Enable the shared page for your SPOT device",
-                "Copy the Feed ID from the shared page URL",
-                "Set a password if you want to protect your feed (optional)"
+            "category": "satellite",
+            "help_sections": [
+                {
+                    "title": "Setup Instructions",
+                    "content": [
+                        "Log in to your SPOT account at findmespot.com",
+                        "Go to 'Shared Page' settings in your account",
+                        "Enable the shared page for your SPOT device",
+                        "Copy the Feed ID from the shared page URL",
+                        "Set a password if you want to protect your feed (optional)"
+                    ]
+                },
+                {
+                    "title": "Important Notes",
+                    "content": [
+                        "Feed updates depend on your SPOT device tracking settings",
+                        "Connection may take 15-30 seconds to establish",
+                        "Maximum 200 location points can be fetched per request",
+                        "Feed password is only required if you've set one in your SPOT account"
+                    ]
+                }
             ],
             "config_fields": [
-                {
-                    "name": "feed_id",
-                    "label": "SPOT Feed ID",
-                    "type": "text",
-                    "required": True,
-                    "placeholder": "0abcdef1234567890abcdef123456789",
-                    "help": "Your SPOT device feed ID from your SPOT account shared page"
-                },
-                {
-                    "name": "feed_password",
-                    "label": "Feed Password",
-                    "type": "password",
-                    "required": False,
-                    "help": "Password if your SPOT feed is password protected (leave blank if not protected)"
-                },
-                {
-                    "name": "max_results",
-                    "label": "Maximum Results",
-                    "type": "number",
-                    "required": False,
-                    "default": 50,
-                    "min": 1,
-                    "max": 200,
-                    "help": "Maximum number of location points to fetch per request"
-                }
+                PluginConfigField(
+                    name="feed_id",
+                    label="SPOT Feed ID",
+                    field_type="text",
+                    required=True,
+                    placeholder="0abcdef1234567890abcdef123456789",
+                    help_text="Your SPOT device feed ID from your SPOT account shared page"
+                ),
+                PluginConfigField(
+                    name="feed_password",
+                    label="Feed Password",
+                    field_type="password",
+                    required=False,
+                    sensitive=True,
+                    help_text="Password if your SPOT feed is password protected (leave blank if not protected)"
+                ),
+                PluginConfigField(
+                    name="max_results",
+                    label="Maximum Results",
+                    field_type="number",
+                    required=False,
+                    default_value=50,
+                    min_value=1,
+                    max_value=200,
+                    help_text="Maximum number of location points to fetch per request"
+                )
             ]
         }
-
-    @property
-    def required_config_fields(self) -> List[str]:
-        return ["feed_id"]
 
     async def fetch_locations(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
         """
@@ -86,6 +99,9 @@ class SpotPlugin(BaseGPSPlugin):
             feed_password = self.config.get("feed_password", "")
             max_results = self.config.get("max_results", 50)
 
+            # Create SSL context for certificate verification
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+
             # Build SPOT API URL
             url = f"https://api.findmespot.com/spot-main-web/consumer/rest-api/2.0/public/feed/{feed_id}/message.json"
 
@@ -97,7 +113,7 @@ class SpotPlugin(BaseGPSPlugin):
 
             self.logger.info(f"Fetching SPOT data from feed ID: {feed_id}")
 
-            async with session.get(url, params=params) as response:
+            async with session.get(url, params=params, ssl=ssl_context) as response:
                 if response.status == 200:
                     data = await response.json()
                     messages = self._parse_spot_response(data)
@@ -208,12 +224,8 @@ class SpotPlugin(BaseGPSPlugin):
         """
         Enhanced validation for SPOT-specific configuration
         """
-        # Use the new metadata-based validation
-        validation_result = self.validate_config_with_metadata()
-
-        if not validation_result["valid"]:
-            for error in validation_result["errors"]:
-                self.logger.error(f"Configuration error: {error['message']}")
+        # Use the standard base class validation
+        if not super().validate_config():
             return False
 
         # Additional SPOT-specific validation
@@ -221,9 +233,19 @@ class SpotPlugin(BaseGPSPlugin):
         if len(feed_id) < 32:  # SPOT feed IDs are typically 32+ characters
             self.logger.warning("SPOT feed ID seems unusually short")
 
-        # Log any warnings
-        for warning in validation_result["warnings"]:
-            self.logger.warning(f"Configuration warning: {warning['message']}")
+        # Validate max_results if provided
+        max_results = self.config.get("max_results")
+        if max_results is not None:
+            try:
+                max_results = int(max_results)
+                if max_results < 1 or max_results > 200:
+                    self.logger.error("max_results must be between 1 and 200")
+                    return False
+                # Update config with validated integer value
+                self.config["max_results"] = max_results
+            except (ValueError, TypeError):
+                self.logger.error("max_results must be a valid integer")
+                return False
 
         return True
 
@@ -239,7 +261,8 @@ class SpotPlugin(BaseGPSPlugin):
                 if not locations:
                     return {
                         "success": False,
-                        "error": "No location data received from SPOT API"
+                        "error": "No location data received from SPOT API",
+                        "message": "Connection test failed - no data received"
                     }
 
                 devices = [{"name": loc["name"], "status": "active"} for loc in locations]
@@ -256,5 +279,6 @@ class SpotPlugin(BaseGPSPlugin):
             self.logger.error(f"Connection test failed: {e}")
             return {
                 "success": False,
-                "error": str(e)
+                "error": str(e),
+                "message": "Connection test failed"
             }
