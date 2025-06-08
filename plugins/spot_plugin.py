@@ -118,26 +118,33 @@ class SpotPlugin(BaseGPSPlugin):
                     data = await response.json()
                     messages = self._parse_spot_response(data)
 
-                    # Convert to standardized location format
-                    locations = []
-                    for message in messages:
-                        location = {
-                            "name": message.get("messengerName", f"SPOT-{feed_id[:8]}"),
-                            "lat": float(message["latitude"]),
-                            "lon": float(message["longitude"]),
-                            "timestamp": datetime.fromisoformat(message["dateTime"].replace('Z', '+00:00')),
-                            "description": self._build_description(message),
-                            "additional_data": {
-                                "source": "spot",
-                                "message_type": message.get("messageType"),
-                                "battery_state": message.get("batteryState"),
-                                "raw_message": message
-                            }
-                        }
-                        locations.append(location)
+                    if not messages:
+                        self.logger.info("No messages found from SPOT")
+                        return []
 
-                    self.logger.info(f"Successfully fetched {len(locations)} locations from SPOT")
-                    return locations
+                    # Find the newest message by timestamp
+                    newest_message = max(messages,
+                                         key=lambda msg: datetime.fromisoformat(msg["dateTime"].replace('Z', '+00:00')))
+
+                    # Convert to standardized location format
+                    location = {
+                        "uid": f"{newest_message.get('messengerName', f'SPOT-{feed_id[:8]}')}-{newest_message['id']}",
+                        "name": newest_message.get("messengerName", f"SPOT-{feed_id[:8]}"),
+                        "lat": float(newest_message["latitude"]),
+                        "lon": float(newest_message["longitude"]),
+                        "timestamp": datetime.fromisoformat(newest_message["dateTime"].replace('Z', '+00:00')),
+                        "description": self._build_description(newest_message),
+                        "additional_data": {
+                            "source": "spot",
+                            "message_type": newest_message.get("messageType"),
+                            "battery_state": newest_message.get("batteryState"),
+                            "raw_message": newest_message
+                        }
+                    }
+
+                    self.logger.info(
+                        f"Successfully fetched newest location from SPOT (timestamp: {location['timestamp']})")
+                    return [location]
 
                 elif response.status == 401:
                     self.logger.error("Unauthorized access to SPOT feed. Check feed password.")

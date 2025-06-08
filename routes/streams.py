@@ -1,8 +1,8 @@
 # =============================================================================
-# routes/streams.py - Stream Management Routes
+# routes/streams.py - Stream Management Routes with Async Support
 # =============================================================================
 
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, current_app
 from models.stream import Stream
 from models.tak_server import TakServer
 from services.stream_manager import stream_manager
@@ -11,8 +11,37 @@ from app import db
 import asyncio
 import json
 import aiohttp
+import logging
+from concurrent.futures import ThreadPoolExecutor
+import functools
 
 bp = Blueprint('streams', __name__)
+logger = logging.getLogger(__name__)
+
+# Thread pool for handling async operations
+executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="StreamRoute")
+
+
+def cleanup_executor():
+    """Clean up the executor"""
+    executor.shutdown(wait=True)
+
+
+def run_async_in_loop(coro):
+    """Helper to run async function in the app's event loop"""
+    loop = current_app.config.get('ASYNC_LOOP')
+    if loop and not loop.is_closed():
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+        return future.result(timeout=30)  # 30 second timeout
+    else:
+        # Fallback to creating new event loop if none available
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
 
 def serialize_plugin_metadata(metadata):
     """Convert plugin metadata to JSON-serializable format"""
@@ -44,9 +73,43 @@ def serialize_plugin_metadata(metadata):
 
 @bp.route('/')
 def list_streams():
-    """List all streams"""
-    streams = Stream.query.all()
-    return render_template('streams.html', streams=streams)
+    """Display list of all streams"""
+    try:
+        streams = Stream.query.all()
+
+        # Add plugin metadata for display
+        for stream in streams:
+            try:
+                plugin_class = plugin_manager.plugins.get(stream.plugin_type)
+                if plugin_class:
+                    temp_instance = plugin_class({})
+                    stream.plugin_metadata = serialize_plugin_metadata(temp_instance.plugin_metadata)
+                else:
+                    stream.plugin_metadata = None
+            except Exception as e:
+                logger.warning(f"Could not load metadata for plugin {stream.plugin_type}: {e}")
+                stream.plugin_metadata = None
+
+        # Calculate plugin statistics
+        plugin_stats = {}
+        plugin_metadata = {}
+
+        for stream in streams:
+            plugin_type = stream.plugin_type
+            plugin_stats[plugin_type] = plugin_stats.get(plugin_type, 0) + 1
+
+            if stream.plugin_metadata:
+                plugin_metadata[plugin_type] = stream.plugin_metadata
+
+        return render_template('streams.html',
+                               streams=streams,
+                               plugin_stats=plugin_stats,
+                               plugin_metadata=plugin_metadata)
+
+    except Exception as e:
+        logger.error(f"Error loading streams: {e}")
+        flash('Error loading streams', 'error')
+        return render_template('streams.html', streams=[])
 
 
 @bp.route('/create', methods=['GET', 'POST'])
@@ -96,14 +159,29 @@ def create_stream():
         db.session.add(stream)
         db.session.commit()
 
-        if request.is_json:
-            return jsonify({'success': True, 'stream_id': stream.id})
+        # Auto-start if requested
+        if data.get('auto_start'):
+            try:
+                success = run_async_in_loop(stream_manager.start_stream(stream.id))
+                if success:
+                    message = 'Stream created and started successfully'
+                else:
+                    message = 'Stream created but failed to start automatically'
+            except Exception as e:
+                logger.error(f"Error auto-starting stream: {e}")
+                message = 'Stream created but failed to start automatically'
         else:
-            flash('Stream created successfully', 'success')
-            return redirect(url_for('streams.list_streams'))
+            message = 'Stream created successfully'
+
+        if request.is_json:
+            return jsonify({'success': True, 'stream_id': stream.id, 'message': message})
+        else:
+            flash(message, 'success')
+            return redirect(url_for('streams.view_stream', stream_id=stream.id))
 
     except Exception as e:
         db.session.rollback()
+        logger.error(f"Error creating stream: {e}")
         if request.is_json:
             return jsonify({'success': False, 'error': str(e)}), 400
         else:
@@ -136,78 +214,185 @@ def test_connection():
         async def test_async():
             return await plugin_instance.test_connection()
 
-        # Run the async test
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            success = loop.run_until_complete(test_async())
+        # Test connection and fetch sample data
+        async def fetch_sample():
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                return await plugin_instance.fetch_locations(session)
 
-            if success:
-                # Try to fetch a sample of locations to count devices
-                async def fetch_sample():
-                    timeout = aiohttp.ClientTimeout(total=30)
-                    async with aiohttp.ClientSession(timeout=timeout) as session:
-                        return await plugin_instance.fetch_locations(session)
+        success = run_async_in_loop(test_async())
 
-                locations = loop.run_until_complete(fetch_sample())
-                device_count = len(locations) if locations else 0
+        if success:
+            locations = run_async_in_loop(fetch_sample())
+            device_count = len(locations) if locations else 0
 
-                return jsonify({
-                    'success': True,
-                    'message': 'Connection successful',
-                    'device_count': device_count
-                })
-            else:
-                return jsonify({'success': False, 'error': 'Connection test failed'}), 400
+            return jsonify({
+                'success': True,
+                'message': 'Connection successful',
+                'device_count': device_count
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Connection test failed'}), 400
 
-        finally:
-            loop.close()
-
+    except asyncio.TimeoutError:
+        return jsonify({'success': False, 'error': 'Connection test timed out'}), 408
     except Exception as e:
+        logger.error(f"Error testing connection: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @bp.route('/<int:stream_id>')
 def view_stream(stream_id):
     """View stream details"""
-    stream = Stream.query.get_or_404(stream_id)
-    return render_template('stream_detail.html', stream=stream)
+    try:
+        stream = Stream.query.get_or_404(stream_id)
+
+        # Add plugin metadata
+        try:
+            plugin_class = plugin_manager.plugins.get(stream.plugin_type)
+            if plugin_class:
+                temp_instance = plugin_class({})
+                stream.plugin_metadata = serialize_plugin_metadata(temp_instance.plugin_metadata)
+            else:
+                stream.plugin_metadata = None
+        except Exception as e:
+            logger.warning(f"Could not load metadata for plugin {stream.plugin_type}: {e}")
+            stream.plugin_metadata = None
+
+        return render_template('stream_detail.html', stream=stream)
+
+    except Exception as e:
+        logger.error(f"Error viewing stream {stream_id}: {e}")
+        flash('Error loading stream details', 'error')
+        return redirect(url_for('streams.list_streams'))
 
 
 @bp.route('/<int:stream_id>/start', methods=['POST'])
 def start_stream(stream_id):
-    """Start a stream"""
+    """Start a stream - enables it if disabled, then starts it"""
     try:
-        # Run async function in event loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        success = loop.run_until_complete(stream_manager.start_stream(stream_id))
-        loop.close()
+        # First, ensure the stream is enabled in the database
+        stream = Stream.query.get_or_404(stream_id)
+
+        # Enable the stream if it's not already enabled
+        if not stream.is_active:
+            stream.is_active = True
+            db.session.commit()
+            logger.info(f"Enabled stream {stream_id} ({stream.name})")
+
+        # Now start the stream through StreamManager
+        success = run_async_in_loop(stream_manager.start_stream(stream_id))
 
         if success:
-            return jsonify({'success': True, 'message': 'Stream started'})
+            logger.info(f"Stream {stream_id} started successfully")
+            return jsonify({'success': True, 'message': 'Stream started successfully'})
         else:
-            return jsonify({'success': False, 'error': 'Failed to start stream'}), 500
+            logger.error(f"Failed to start stream {stream_id}")
+            return jsonify({'success': False, 'error': 'Failed to start stream'}), 400
 
+    except asyncio.TimeoutError:
+        logger.error(f"Timeout starting stream {stream_id}")
+        return jsonify({'success': False, 'error': 'Operation timed out'}), 408
     except Exception as e:
+        logger.error(f"Error starting stream {stream_id}: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @bp.route('/<int:stream_id>/stop', methods=['POST'])
 def stop_stream(stream_id):
-    """Stop a stream"""
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        success = loop.run_until_complete(stream_manager.stop_stream(stream_id))
-        loop.close()
+        # First, ensure the stream is enabled in the database
+        stream = Stream.query.get_or_404(stream_id)
+
+        # Enable the stream if it's not already enabled
+        if not stream.is_active:
+            stream.is_active = False
+            db.session.commit()
+            logger.info(f"Disabled stream {stream_id} ({stream.name})")
+
+        # Run the async operation
+        success = run_async_in_loop(stream_manager.stop_stream(stream_id))
 
         if success:
-            return jsonify({'success': True, 'message': 'Stream stopped'})
+            logger.info(f"Stream {stream_id} stopped successfully")
+            return jsonify({'success': True, 'message': 'Stream stopped successfully'})
         else:
-            return jsonify({'success': False, 'error': 'Failed to stop stream'}), 500
+            logger.error(f"Failed to stop stream {stream_id}")
+            return jsonify({'success': False, 'error': 'Failed to stop stream'}), 400
 
+    except asyncio.TimeoutError:
+        logger.error(f"Timeout stopping stream {stream_id}")
+        return jsonify({'success': False, 'error': 'Operation timed out'}), 408
     except Exception as e:
+        logger.error(f"Error stopping stream {stream_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@bp.route('/<int:stream_id>/restart', methods=['POST'])
+def restart_stream(stream_id):
+    """Restart a stream"""
+    try:
+        # Run the async operation
+        success = run_async_in_loop(stream_manager.restart_stream(stream_id))
+
+        if success:
+            logger.info(f"Stream {stream_id} restarted successfully")
+            return jsonify({'success': True, 'message': 'Stream restarted successfully'})
+        else:
+            logger.error(f"Failed to restart stream {stream_id}")
+            return jsonify({'success': False, 'error': 'Failed to restart stream'}), 400
+
+    except asyncio.TimeoutError:
+        logger.error(f"Timeout restarting stream {stream_id}")
+        return jsonify({'success': False, 'error': 'Operation timed out'}), 408
+    except Exception as e:
+        logger.error(f"Error restarting stream {stream_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@bp.route('/<int:stream_id>/test', methods=['POST'])
+def test_stream(stream_id):
+    """Test an existing stream's connection"""
+    try:
+        stream = Stream.query.get_or_404(stream_id)
+
+        # Get plugin configuration from the stream
+        plugin_config = stream.get_plugin_config()
+        plugin_type = stream.plugin_type
+
+        # Get plugin instance
+        plugin_instance = plugin_manager.get_plugin(plugin_type, plugin_config)
+        if not plugin_instance:
+            return jsonify({'success': False, 'error': 'Failed to create plugin instance'}), 400
+
+        # Test connection asynchronously
+        async def test_async():
+            return await plugin_instance.test_connection()
+
+        # Try to fetch a sample of locations to count devices
+        async def fetch_sample():
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                return await plugin_instance.fetch_locations(session)
+
+        success = run_async_in_loop(test_async())
+
+        if success:
+            locations = run_async_in_loop(fetch_sample())
+            device_count = len(locations) if locations else 0
+
+            return jsonify({
+                'success': True,
+                'message': 'Connection successful',
+                'device_count': device_count
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Connection test failed'}), 400
+
+    except asyncio.TimeoutError:
+        return jsonify({'success': False, 'error': 'Connection test timed out'}), 408
+    except Exception as e:
+        logger.error(f"Error testing stream {stream_id}: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -215,20 +400,24 @@ def stop_stream(stream_id):
 def delete_stream(stream_id):
     """Delete a stream"""
     try:
-        # Stop stream first if running
-        if stream_id in stream_manager.workers:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(stream_manager.stop_stream(stream_id))
-            loop.close()
-
         stream = Stream.query.get_or_404(stream_id)
+
+        # Stop the stream if it's running
+        if stream.is_active:
+            try:
+                run_async_in_loop(stream_manager.stop_stream(stream_id))
+            except Exception as e:
+                logger.warning(f"Error stopping stream before deletion: {e}")
+
+        # Delete from database
         db.session.delete(stream)
         db.session.commit()
 
-        return jsonify({'success': True, 'message': 'Stream deleted'})
+        logger.info(f"Stream {stream_id} deleted successfully")
+        return jsonify({'success': True, 'message': 'Stream deleted successfully'})
 
     except Exception as e:
+        logger.error(f"Error deleting stream {stream_id}: {e}")
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -259,7 +448,7 @@ def edit_stream(stream_id):
                                tak_servers=tak_servers,
                                plugin_metadata=plugin_metadata)
 
-    # Handle POST request - rest of the method stays the same
+    # Handle POST request
     data = request.get_json() if request.is_json else request.form
 
     try:
@@ -289,6 +478,7 @@ def edit_stream(stream_id):
 
     except Exception as e:
         db.session.rollback()
+        logger.error(f"Error updating stream {stream_id}: {e}")
         if request.is_json:
             return jsonify({'success': False, 'error': str(e)}), 400
         else:
@@ -299,94 +489,54 @@ def edit_stream(stream_id):
 @bp.route('/api/stats')
 def api_stats():
     """Get statistics for all streams"""
-    streams = Stream.query.all()
-    stats = {
-        'total_streams': len(streams),
-        'active_streams': len([s for s in streams if s.is_active]),
-        'error_streams': len([s for s in streams if s.last_error]),
-        'total_messages': sum(s.total_messages_sent for s in streams),
-        'by_plugin': {}
-    }
+    try:
+        streams = Stream.query.all()
+        stats = {
+            'total_streams': len(streams),
+            'active_streams': len([s for s in streams if s.is_active]),
+            'error_streams': len([s for s in streams if s.last_error]),
+            'total_messages': sum(s.total_messages_sent for s in streams),
+            'by_plugin': {}
+        }
 
-    # Group by plugin type
-    for stream in streams:
-        plugin_type = stream.plugin_type
-        if plugin_type not in stats['by_plugin']:
-            stats['by_plugin'][plugin_type] = {
-                'count': 0,
-                'active': 0,
-                'messages': 0
-            }
-        stats['by_plugin'][plugin_type]['count'] += 1
-        if stream.is_active:
-            stats['by_plugin'][plugin_type]['active'] += 1
-        stats['by_plugin'][plugin_type]['messages'] += stream.total_messages_sent
+        # Group by plugin type
+        for stream in streams:
+            plugin_type = stream.plugin_type
+            if plugin_type not in stats['by_plugin']:
+                stats['by_plugin'][plugin_type] = {
+                    'count': 0,
+                    'active': 0,
+                    'messages': 0
+                }
+            stats['by_plugin'][plugin_type]['count'] += 1
+            if stream.is_active:
+                stats['by_plugin'][plugin_type]['active'] += 1
+            stats['by_plugin'][plugin_type]['messages'] += stream.total_messages_sent
 
-    return jsonify(stats)
+        return jsonify(stats)
+
+    except Exception as e:
+        logger.error(f"Error getting stats: {e}")
+        return jsonify({'error': 'Failed to get statistics'}), 500
 
 
 @bp.route('/api/plugins/<plugin_name>/config')
 def get_plugin_config(plugin_name):
-    plugin_class = plugin_manager.plugins.get(plugin_name)
-    if plugin_class:
-        # Create temporary instance to get metadata
-        temp_instance = plugin_class({})
-        return jsonify(temp_instance.plugin_metadata)
-    return jsonify({"error": "Plugin not found"}), 404
-
-
-# Add this route to your streams.py file, after the existing routes
-
-@bp.route('/<int:stream_id>/test', methods=['POST'])
-def test_stream(stream_id):
-    """Test an existing stream's connection"""
+    """Get plugin configuration metadata"""
     try:
-        stream = Stream.query.get_or_404(stream_id)
-
-        # Get plugin configuration from the stream
-        plugin_config = stream.get_plugin_config()
-        plugin_type = stream.plugin_type
-
-        # Get plugin instance
-        plugin_instance = plugin_manager.get_plugin(plugin_type, plugin_config)
-        if not plugin_instance:
-            return jsonify({'success': False, 'error': 'Failed to create plugin instance'}), 400
-
-        # Test connection asynchronously
-        async def test_async():
-            return await plugin_instance.test_connection()
-
-        # Run the async test
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            success = loop.run_until_complete(test_async())
-
-            if success:
-                # Try to fetch a sample of locations to count devices
-                async def fetch_sample():
-                    timeout = aiohttp.ClientTimeout(total=30)
-                    async with aiohttp.ClientSession(timeout=timeout) as session:
-                        return await plugin_instance.fetch_locations(session)
-
-                locations = loop.run_until_complete(fetch_sample())
-                device_count = len(locations) if locations else 0
-
-                return jsonify({
-                    'success': True,
-                    'message': 'Connection successful',
-                    'device_count': device_count
-                })
-            else:
-                return jsonify({'success': False, 'error': 'Connection test failed'}), 400
-
-        finally:
-            loop.close()
+        plugin_class = plugin_manager.plugins.get(plugin_name)
+        if plugin_class:
+            # Create temporary instance to get metadata
+            temp_instance = plugin_class({})
+            return jsonify(serialize_plugin_metadata(temp_instance.plugin_metadata))
+        return jsonify({"error": "Plugin not found"}), 404
 
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.error(f"Error getting plugin config for {plugin_name}: {e}")
+        return jsonify({"error": "Failed to get plugin configuration"}), 500
 
 
+# Keep your existing StreamManager and StreamWorker classes at the bottom
 class StreamManager:
     def __init__(self):
         self.workers = {}
@@ -483,6 +633,19 @@ class StreamManager:
 
         except Exception as e:
             print(f"Error stopping stream {stream_id}: {e}")
+            return False
+
+    async def restart_stream(self, stream_id):
+        """Restart a stream"""
+        try:
+            # Stop first
+            await self.stop_stream(stream_id)
+            # Small delay to ensure cleanup
+            await asyncio.sleep(1)
+            # Start again
+            return await self.start_stream(stream_id)
+        except Exception as e:
+            logger.error(f"Error restarting stream {stream_id}: {e}")
             return False
 
 

@@ -124,6 +124,7 @@ class GarminPlugin(BaseGPSPlugin):
                     "lon": float(placemark["lon"]),
                     "timestamp": self._parse_timestamp(placemark) or datetime.utcnow(),
                     "description": placemark.get("description", ""),
+                    "uid": placemark.get("uid"),
                     "additional_data": {
                         "source": "garmin",
                         "raw_placemark": placemark
@@ -322,13 +323,18 @@ class GarminPlugin(BaseGPSPlugin):
                             # Extract timestamp from ExtendedData if available
                             timestamp = self._extract_timestamp_from_extended_data(feature)
 
+                            # Extract extended data and get ID
+                            extended_data = self._extract_extended_data(feature)
+                            placemark_id = extended_data.get('Id', 'Unknown')
+
                             placemark_data = {
+                                "uid": f"{getattr(feature, 'name', 'Unknown')}-{placemark_id}",
                                 "name": getattr(feature, 'name', 'Unknown'),
                                 "lat": lat,
                                 "lon": lon,
                                 "description": getattr(feature, 'description', 'No description') or 'No description',
                                 "timestamp": timestamp,
-                                "extended_data": self._extract_extended_data(feature)
+                                "extended_data": extended_data
                             }
                             placemarks.append(placemark_data)
                             self.logger.debug(f"Added Point placemark: {placemark_data}")
@@ -389,13 +395,18 @@ class GarminPlugin(BaseGPSPlugin):
                                     # Extract timestamp from TimeStamp or ExtendedData
                                     timestamp = self._extract_timestamp_from_xml(placemark_xml, namespaces)
 
+                                    # Extract extended data and get ID
+                                    extended_data = self._extract_extended_data_from_xml(placemark_xml, namespaces)
+                                    placemark_id = extended_data.get('Id', 'Unknown')
+
                                     placemark_data = {
+                                        "uid": f"{name}-{placemark_id}",
                                         "name": name,
                                         "lat": lat,
                                         "lon": lon,
                                         "description": description,
                                         "timestamp": timestamp,
-                                        "extended_data": self._extract_extended_data_from_xml(placemark_xml, namespaces)
+                                        "extended_data": extended_data
                                     }
                                     placemarks.append(placemark_data)
                                     self.logger.debug(f"Added Point placemark via XML: {placemark_data}")

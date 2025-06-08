@@ -8,6 +8,8 @@ from flask_migrate import Migrate
 import os
 import logging
 import atexit
+import asyncio
+import threading
 from sqlalchemy.orm import scoped_session
 from sqlalchemy import event
 from sqlalchemy.pool import Pool
@@ -54,6 +56,9 @@ def create_app(config_name=None):
     # Set up logging
     setup_logging(app)
 
+    # Set up async event loop and stream manager
+    setup_async_services(app)
+
     # Register cleanup handlers
     setup_cleanup_handlers()
 
@@ -71,6 +76,71 @@ def create_app(config_name=None):
     setup_error_handlers(app)
 
     return app
+
+
+def setup_async_services(app):
+    """Set up async services including StreamManager"""
+
+    def run_event_loop():
+        """Run the async event loop in a separate thread"""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # Store loop reference for cleanup
+        app.config['ASYNC_LOOP'] = loop
+
+        try:
+            loop.run_forever()
+        except Exception as e:
+            logging.error(f"Event loop error: {e}")
+        finally:
+            loop.close()
+
+    # Start event loop in a separate daemon thread
+    loop_thread = threading.Thread(target=run_event_loop, daemon=True)
+    loop_thread.start()
+
+    # Give the loop time to start
+    import time
+    time.sleep(0.1)
+
+    # Store thread reference for cleanup
+    app.config['ASYNC_THREAD'] = loop_thread
+
+    # Schedule startup of active streams
+    def startup_streams():
+        """Start all active streams on application startup"""
+        try:
+            with app.app_context():
+                from models.stream import Stream
+                from services.stream_manager import stream_manager
+
+                # Get all streams that were active when app shut down
+                active_streams = Stream.query.filter_by(is_active=True).all()
+
+                if active_streams:
+                    logging.info(f"Found {len(active_streams)} active streams to restart")
+
+                    # Schedule startup in the event loop
+                    loop = app.config.get('ASYNC_LOOP')
+                    if loop and not loop.is_closed():
+                        for stream in active_streams:
+                            asyncio.run_coroutine_threadsafe(
+                                stream_manager.start_stream(stream.id),
+                                loop
+                            )
+                        logging.info("Scheduled all active streams for startup")
+                    else:
+                        logging.error("Event loop not available for stream startup")
+                else:
+                    logging.info("No active streams found to restart")
+
+        except Exception as e:
+            logging.error(f"Error during stream startup: {e}")
+
+    # Schedule startup after a brief delay to ensure everything is initialized
+    startup_timer = threading.Timer(2.0, startup_streams)
+    startup_timer.start()
 
 
 def setup_database_events():
@@ -133,6 +203,27 @@ def setup_cleanup_handlers():
 
     def cleanup():
         """Clean up resources on shutdown"""
+        try:
+            # Clean up stream manager
+            from services.stream_manager import stream_manager
+            loop = app.config.get('ASYNC_LOOP')
+            if loop and not loop.is_closed():
+                # Stop all streams
+                future = asyncio.run_coroutine_threadsafe(
+                    stream_manager.stop_all(),
+                    loop
+                )
+                try:
+                    future.result(timeout=10)  # Wait up to 10 seconds
+                except asyncio.TimeoutError:
+                    logging.warning("Stream cleanup timed out")
+
+                # Stop the event loop
+                loop.call_soon_threadsafe(loop.stop)
+
+        except Exception as e:
+            logging.error(f"Error during stream cleanup: {e}")
+
         try:
             # Clean up thread pool from streams module
             from routes.streams import cleanup_executor
