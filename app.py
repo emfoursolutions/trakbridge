@@ -1,5 +1,5 @@
 # =============================================================================
-# app.py - Enhanced Flask Application with Production Features
+# app.py - Enhanced Flask Application with Fixed Startup
 # =============================================================================
 
 from flask import Flask, render_template
@@ -14,6 +14,8 @@ from sqlalchemy.orm import scoped_session
 from sqlalchemy import event
 from sqlalchemy.pool import Pool
 import signal
+import time
+from dotenv import load_dotenv
 
 # Import your config
 from config import Config
@@ -22,8 +24,18 @@ from database import db  # Import db from database.py
 # Initialize extensions
 migrate = Migrate()
 
+load_dotenv()
+
+# Set up logger
+logger = logging.getLogger(__name__)
+
+# Global stream manager instance (will be initialized after app creation)
+stream_manager = None
+
 
 def create_app(config_name=None):
+    global stream_manager
+
     app = Flask(__name__)
 
     # Determine config - you can extend this to support multiple environments
@@ -50,14 +62,16 @@ def create_app(config_name=None):
         # Register models with SQLAlchemy
         db.Model.metadata.create_all(bind=db.engine)
 
+        # Initialize stream manager after models are loaded
+        if stream_manager is None:
+            from services.stream_manager import get_stream_manager
+            stream_manager = get_stream_manager()
+
     # Set up database event listeners
     setup_database_events()
 
     # Set up logging
     setup_logging(app)
-
-    # Set up async event loop and stream manager
-    setup_async_services(app)
 
     # Register cleanup handlers
     setup_cleanup_handlers()
@@ -78,69 +92,129 @@ def create_app(config_name=None):
     return app
 
 
-def setup_async_services(app):
-    """Set up async services including StreamManager"""
+def start_active_streams():
+    """Start all active streams with proper error handling and timing"""
+    global stream_manager
 
-    def run_event_loop():
-        """Run the async event loop in a separate thread"""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    if stream_manager is None:
+        logger.error("Stream manager not initialized")
+        return
 
-        # Store loop reference for cleanup
-        app.config['ASYNC_LOOP'] = loop
+    from models.stream import Stream
 
+    try:
+        # Wait for stream manager to be fully ready with longer timeout
+        logger.info("Waiting for stream manager to be ready...")
+        max_wait = 200  # 20 seconds - increased timeout
+        wait_count = 0
+
+        while wait_count < max_wait:
+            if (hasattr(stream_manager, '_loop') and
+                    stream_manager._loop and
+                    stream_manager._loop.is_running() and
+                    hasattr(stream_manager, '_session_manager') and
+                    stream_manager._session_manager and
+                    stream_manager._session_manager.session):
+                break
+            time.sleep(0.1)
+            wait_count += 1
+
+        if wait_count >= max_wait:
+            logger.error("Stream manager not ready after extended wait")
+            return
+
+        logger.info("Stream manager ready, fetching active streams")
+
+        # Fetch active streams with proper error handling
         try:
-            loop.run_forever()
-        except Exception as e:
-            logging.error(f"Event loop error: {e}")
-        finally:
-            loop.close()
+            active_streams = Stream.query.filter_by(is_active=True).all()
+            logger.info(f"Found {len(active_streams)} active streams to start")
+        except Exception as db_e:
+            logger.error(f"Failed to fetch active streams from database: {db_e}")
+            return
 
-    # Start event loop in a separate daemon thread
-    loop_thread = threading.Thread(target=run_event_loop, daemon=True)
-    loop_thread.start()
+        if not active_streams:
+            logger.info("No active streams found to start")
+            return
 
-    # Give the loop time to start
-    import time
-    time.sleep(0.1)
+        # Start streams with longer delays and better error handling
+        started_count = 0
+        for stream in active_streams:
+            try:
+                logger.info(f"Starting stream {stream.id} ({stream.name})...")
 
-    # Store thread reference for cleanup
-    app.config['ASYNC_THREAD'] = loop_thread
+                # Add longer timeout for startup and retry logic
+                max_retries = 3
+                retry_count = 0
+                success = False
 
-    # Schedule startup of active streams
-    def startup_streams():
-        """Start all active streams on application startup"""
-        try:
-            with app.app_context():
-                from models.stream import Stream
-                from services.stream_manager import stream_manager
+                while retry_count < max_retries and not success:
+                    try:
+                        success = stream_manager.start_stream_sync(stream.id)
+                        if success:
+                            logger.info(f"Successfully started stream {stream.id} ({stream.name})")
+                            started_count += 1
+                            break
+                        else:
+                            retry_count += 1
+                            if retry_count < max_retries:
+                                logger.warning(
+                                    f"Failed to start stream {stream.id}, retrying ({retry_count}/{max_retries})")
+                                time.sleep(2)  # Wait before retry
+                            else:
+                                logger.error(f"Failed to start stream {stream.id} after {max_retries} attempts")
 
-                # Get all streams that were active when app shut down
-                active_streams = Stream.query.filter_by(is_active=True).all()
+                    except Exception as start_e:
+                        retry_count += 1
+                        if retry_count < max_retries:
+                            logger.warning(
+                                f"Exception starting stream {stream.id}, retrying ({retry_count}/{max_retries}): {start_e}")
+                            time.sleep(2)
+                        else:
+                            logger.error(
+                                f"Exception starting stream {stream.id} after {max_retries} attempts: {start_e}")
+                            success = False
 
-                if active_streams:
-                    logging.info(f"Found {len(active_streams)} active streams to restart")
+                # Update stream status if failed
+                if not success:
+                    try:
+                        # Refresh the stream object to avoid session issues
+                        fresh_stream = Stream.query.get(stream.id)
+                        if fresh_stream:
+                            fresh_stream.is_active = False
+                            fresh_stream.last_error = "Failed to start during app startup"
+                            db.session.commit()
+                            logger.info(f"Marked stream {stream.id} as inactive due to startup failure")
+                    except Exception as db_e:
+                        logger.error(f"Failed to update stream {stream.id} status: {db_e}")
+                        try:
+                            db.session.rollback()
+                        except:
+                            pass
 
-                    # Schedule startup in the event loop
-                    loop = app.config.get('ASYNC_LOOP')
-                    if loop and not loop.is_closed():
-                        for stream in active_streams:
-                            asyncio.run_coroutine_threadsafe(
-                                stream_manager.start_stream(stream.id),
-                                loop
-                            )
-                        logging.info("Scheduled all active streams for startup")
-                    else:
-                        logging.error("Event loop not available for stream startup")
-                else:
-                    logging.info("No active streams found to restart")
+                # Longer delay between starts to prevent overwhelming
+                time.sleep(3)
 
-        except Exception as e:
-            logging.error(f"Error during stream startup: {e}")
+            except Exception as e:
+                logger.error(f"Unexpected error starting stream {stream.id}: {e}", exc_info=True)
+                # Mark stream as inactive
+                try:
+                    fresh_stream = Stream.query.get(stream.id)
+                    if fresh_stream:
+                        fresh_stream.is_active = False
+                        fresh_stream.last_error = f"Startup error: {str(e)}"
+                        db.session.commit()
+                except Exception as db_e:
+                    logger.error(f"Failed to update stream {stream.id} status: {db_e}")
+                    try:
+                        db.session.rollback()
+                    except:
+                        pass
 
-    # Schedule startup after a brief delay to ensure everything is initialized
-    startup_timer = threading.Timer(2.0, startup_streams)
-    startup_timer.start()
+        logger.info(f"Startup complete: {started_count}/{len(active_streams)} streams started successfully")
+
+    except Exception as e:
+        logger.error(f"Error in start_active_streams: {e}", exc_info=True)
 
 
 def setup_database_events():
@@ -153,10 +227,12 @@ def setup_database_events():
             cursor = dbapi_conn.cursor()
             # Enable WAL mode for better concurrency
             cursor.execute("PRAGMA journal_mode=WAL")
-            # Set busy timeout
+            # Set busy timeout to 30 seconds
             cursor.execute("PRAGMA busy_timeout=30000")
             # Enable foreign keys
             cursor.execute("PRAGMA foreign_keys=ON")
+            # Set synchronous mode for better performance
+            cursor.execute("PRAGMA synchronous=NORMAL")
             cursor.close()
 
     @event.listens_for(Pool, "checkout")
@@ -203,26 +279,16 @@ def setup_cleanup_handlers():
 
     def cleanup():
         """Clean up resources on shutdown"""
-        try:
-            # Clean up stream manager
-            from services.stream_manager import stream_manager
-            loop = app.config.get('ASYNC_LOOP')
-            if loop and not loop.is_closed():
-                # Stop all streams
-                future = asyncio.run_coroutine_threadsafe(
-                    stream_manager.stop_all(),
-                    loop
-                )
-                try:
-                    future.result(timeout=10)  # Wait up to 10 seconds
-                except asyncio.TimeoutError:
-                    logging.warning("Stream cleanup timed out")
+        global stream_manager
 
-                # Stop the event loop
-                loop.call_soon_threadsafe(loop.stop)
+        try:
+            # Clean up stream manager using the singleton's shutdown method
+            if stream_manager is not None:
+                stream_manager.shutdown()
+                logger.info("Stream manager shutdown completed")
 
         except Exception as e:
-            logging.error(f"Error during stream cleanup: {e}")
+            logger.error(f"Error during stream cleanup: {e}")
 
         try:
             # Clean up thread pool from streams module
@@ -238,10 +304,18 @@ def setup_cleanup_handlers():
         except:
             pass
 
-        logging.info("Application cleanup completed")
+        logger.info("Application cleanup completed")
 
     # Register cleanup for various shutdown scenarios
     atexit.register(cleanup)
+
+    # Also register the stream manager's shutdown directly (with safety check)
+    def safe_stream_manager_shutdown():
+        global stream_manager
+        if stream_manager is not None:
+            stream_manager.shutdown()
+
+    atexit.register(safe_stream_manager_shutdown)
 
     # For WSGI servers
     def cleanup_handler(signum, frame):
@@ -291,6 +365,26 @@ def setup_error_handlers(app):
 
 # Create the application instance
 app = create_app()
+
+
+# Delayed startup function that runs in a separate thread
+def delayed_startup():
+    """Run startup tasks after Flask is fully initialized"""
+    # Wait a bit for Flask to fully initialize
+    time.sleep(5)
+
+    with app.app_context():
+        logger.info("Running delayed startup tasks...")
+        start_active_streams()
+
+
+# Call start_active_streams ONCE during application startup
+if __name__ == "__main__" or not hasattr(start_active_streams, '_called'):
+    start_active_streams._called = True
+
+    # Run startup in a separate thread to avoid blocking Flask initialization
+    startup_thread = threading.Thread(target=delayed_startup, daemon=True, name="StartupThread")
+    startup_thread.start()
 
 if __name__ == '__main__':
     # Create tables within app context

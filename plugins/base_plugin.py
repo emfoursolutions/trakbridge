@@ -1,5 +1,5 @@
 # =============================================================================
-# plugins/base_plugin.py - Enhanced Base Plugin Class with Metadata System
+# plugins/base_plugin.py - Enhanced Base Plugin Class with Encryption Support
 # =============================================================================
 
 from abc import ABC, abstractmethod
@@ -8,6 +8,7 @@ import asyncio
 import aiohttp
 import logging
 from datetime import datetime
+from services.encryption_service import EncryptionService
 
 
 class PluginConfigField:
@@ -29,7 +30,7 @@ class PluginConfigField:
         self.options = options or []  # For select fields
         self.min_value = min_value
         self.max_value = max_value
-        self.sensitive = sensitive  # For password fields
+        self.sensitive = sensitive  # For password fields and other sensitive data
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
@@ -49,11 +50,12 @@ class PluginConfigField:
 
 
 class BaseGPSPlugin(ABC):
-    """Enhanced base class for GPS tracking plugins with metadata system"""
+    """Enhanced base class for GPS tracking plugins with encryption support"""
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.logger = logging.getLogger(f'{self.__class__.__name__}')
+        self.encryption_service = EncryptionService()
 
     @property
     @abstractmethod
@@ -72,6 +74,7 @@ class BaseGPSPlugin(ABC):
             - display_name: Human-readable plugin name
             - description: Plugin description
             - icon: FontAwesome icon class
+            - category: Plugin category
             - help_sections: List of help content sections
             - config_fields: List of PluginConfigField objects
         """
@@ -96,6 +99,101 @@ class BaseGPSPlugin(ABC):
 
         return fields
 
+    def get_sensitive_fields(self) -> List[str]:
+        """Get list of sensitive field names from plugin metadata"""
+        sensitive_fields = []
+        config_fields = self.get_config_fields()
+
+        for field in config_fields:
+            if field.sensitive:
+                sensitive_fields.append(field.name)
+
+        return sensitive_fields
+
+    def get_decrypted_config(self) -> Dict[str, Any]:
+        """Get plugin configuration with sensitive fields decrypted for use"""
+        sensitive_fields = self.get_sensitive_fields()
+        if not sensitive_fields:
+            return self.config.copy()
+
+        decrypted_config = self.config.copy()
+
+        for field_name in sensitive_fields:
+            if field_name in decrypted_config:
+                value = decrypted_config[field_name]
+                if value:
+                    try:
+                        decrypted_config[field_name] = self.encryption_service.decrypt_value(str(value))
+                    except Exception as e:
+                        self.logger.error(f"Failed to decrypt field '{field_name}': {e}")
+                        # Keep original value if decryption fails
+
+        return decrypted_config
+
+    @staticmethod
+    def encrypt_config_for_storage(plugin_type: str, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Encrypt sensitive fields in configuration before storing in database
+
+        Args:
+            plugin_type: The plugin type name
+            config: Configuration dictionary
+
+        Returns:
+            Configuration with sensitive fields encrypted
+        """
+        from plugins.plugin_manager import plugin_manager
+
+        # Get plugin metadata to identify sensitive fields
+        metadata = plugin_manager.get_plugin_metadata(plugin_type)
+        if not metadata:
+            return config
+
+        sensitive_fields = []
+        for field_data in metadata.get("config_fields", []):
+            if isinstance(field_data, dict) and field_data.get("sensitive"):
+                sensitive_fields.append(field_data["name"])
+            elif hasattr(field_data, 'sensitive') and field_data.sensitive:
+                sensitive_fields.append(field_data.name)
+
+        if sensitive_fields:
+            encryption_service = EncryptionService()
+            return encryption_service.encrypt_config(config, sensitive_fields)
+
+        return config
+
+    @staticmethod
+    def decrypt_config_from_storage(plugin_type: str, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Decrypt sensitive fields in configuration after loading from database
+
+        Args:
+            plugin_type: The plugin type name
+            config: Configuration dictionary with encrypted fields
+
+        Returns:
+            Configuration with sensitive fields decrypted
+        """
+        from plugins.plugin_manager import plugin_manager
+
+        # Get plugin metadata to identify sensitive fields
+        metadata = plugin_manager.get_plugin_metadata(plugin_type)
+        if not metadata:
+            return config
+
+        sensitive_fields = []
+        for field_data in metadata.get("config_fields", []):
+            if isinstance(field_data, dict) and field_data.get("sensitive"):
+                sensitive_fields.append(field_data["name"])
+            elif hasattr(field_data, 'sensitive') and field_data.sensitive:
+                sensitive_fields.append(field_data.name)
+
+        if sensitive_fields:
+            encryption_service = EncryptionService()
+            return encryption_service.decrypt_config(config, sensitive_fields)
+
+        return config
+
     @abstractmethod
     async def fetch_locations(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
         """
@@ -116,9 +214,12 @@ class BaseGPSPlugin(ABC):
         """Enhanced validation using plugin metadata"""
         config_fields = self.get_config_fields()
 
+        # Use decrypted config for validation
+        config_to_validate = self.get_decrypted_config()
+
         for field in config_fields:
             field_name = field.name
-            field_value = self.config.get(field_name)
+            field_value = config_to_validate.get(field_name)
 
             # Check required fields
             if field.required and (field_value is None or field_value == ""):

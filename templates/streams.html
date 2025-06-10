@@ -65,7 +65,7 @@
                     {% if stream.tak_server %}
                         <div class="d-flex align-items-center">
                             <i class="fas fa-server me-2 text-muted"></i>
-                            {{ stream.tak_server.name }}
+                            {{ stream.tak_server.name if stream.tak_server.name else 'N/A' }}
                         </div>
                     {% else %}
                         <span class="text-muted">N/A</span>
@@ -83,12 +83,12 @@
                     </div>
                 </td>
                 <td>
-                    {% if stream.last_poll %}
+                    {% if stream.last_poll_date %}
                         <div class="d-flex align-items-center">
                             <i class="fas fa-clock me-2 text-muted"></i>
                             <div>
-                                <div>{{ stream.last_poll.strftime('%Y-%m-%d') }}</div>
-                                <small class="text-muted">{{ stream.last_poll.strftime('%H:%M:%S') }}</small>
+                                <div>{{ stream.last_poll_date }}</div>
+                                <small class="text-muted">{{ stream.last_poll_time }}</small>
                             </div>
                         </div>
                     {% else %}

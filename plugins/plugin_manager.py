@@ -2,7 +2,7 @@
 # plugins/plugin_manager.py - Enhanced Plugin Management with API Support
 # =============================================================================
 
-from typing import Dict, Type, Optional, List, Any
+from typing import Dict, Type, Optional, List, Any, Union
 from plugins.base_plugin import BaseGPSPlugin
 import importlib
 import logging
@@ -43,20 +43,68 @@ class PluginManager:
         self.plugins[plugin_name] = plugin_class
         self.logger.info(f"Registered plugin: {plugin_name}")
 
-    def get_plugin(self, plugin_name: str, config: Dict) -> Optional[BaseGPSPlugin]:
-        """Create an instance of a plugin with the given configuration"""
+    def _validate_and_normalize_config(self, config: Union[Dict, str, None]) -> Dict:
+        """
+        Validate and normalize configuration input
+
+        Args:
+            config: Configuration input (can be dict, string, or None)
+
+        Returns:
+            Normalized dictionary configuration
+        """
+        if config is None:
+            return {}
+
+        if isinstance(config, str):
+            # Handle string configuration - could be JSON, config name, or empty
+            if not config or config.strip() == "":
+                return {}
+
+            # Try to parse as JSON
+            try:
+                import json
+                return json.loads(config)
+            except (json.JSONDecodeError, ValueError):
+                # If not JSON, treat as a configuration name or identifier
+                self.logger.warning(f"String config '{config}' could not be parsed as JSON, using empty config")
+                return {}
+
+        if isinstance(config, dict):
+            return config.copy()
+
+        # For any other type, log warning and return empty dict
+        self.logger.warning(f"Unexpected config type {type(config)}, using empty config")
+        return {}
+
+    def get_plugin(self, plugin_name: str, config: Union[Dict, str, None] = None) -> Optional[BaseGPSPlugin]:
+        """
+        Create an instance of a plugin with the given configuration
+
+        Args:
+            plugin_name: Name of the plugin to instantiate
+            config: Configuration (can be dict, string, or None)
+
+        Returns:
+            Plugin instance or None if creation fails
+        """
         if plugin_name not in self.plugins:
             self.logger.error(f"Plugin not found: {plugin_name}")
             return None
 
+        # Normalize configuration input
+        normalized_config = self._validate_and_normalize_config(config)
+
         plugin_class = self.plugins[plugin_name]
         try:
-            plugin_instance = plugin_class(config)
+            plugin_instance = plugin_class(normalized_config)
             if not plugin_instance.validate_config():
+                self.logger.error(f"Plugin {plugin_name} configuration validation failed")
                 return None
             return plugin_instance
         except Exception as e:
-            self.logger.error(f"Failed to create plugin instance: {e}")
+            self.logger.error(f"Failed to create plugin instance for '{plugin_name}': {e}")
+            self.logger.debug(f"Config type: {type(config)}, Config value: {config}")
             return None
 
     def list_plugins(self) -> List[str]:
@@ -100,9 +148,13 @@ class PluginManager:
             self.logger.error(f"Failed to get config schema for plugin {plugin_name}: {e}")
             return None
 
-    def validate_plugin_config(self, plugin_name: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    def validate_plugin_config(self, plugin_name: str, config: Union[Dict[str, Any], str, None]) -> Dict[str, Any]:
         """
         Validate configuration for a specific plugin
+
+        Args:
+            plugin_name: Name of the plugin
+            config: Configuration to validate (dict, string, or None)
 
         Returns:
             Dictionary with validation results:
@@ -117,15 +169,22 @@ class PluginManager:
                 "warnings": []
             }
 
+        # Normalize configuration
+        normalized_config = self._validate_and_normalize_config(config)
+
         plugin_class = self.plugins[plugin_name]
         try:
-            plugin_instance = plugin_class(config)
+            plugin_instance = plugin_class(normalized_config)
             is_valid = plugin_instance.validate_config()
+
+            warnings = []
+            if isinstance(config, str) and config.strip():
+                warnings.append("String configuration was converted to dictionary")
 
             return {
                 "valid": is_valid,
                 "errors": [] if is_valid else ["Configuration validation failed"],
-                "warnings": []
+                "warnings": warnings
             }
         except Exception as e:
             return {
@@ -134,9 +193,14 @@ class PluginManager:
                 "warnings": []
             }
 
-    async def test_plugin_connection(self, plugin_name: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    async def test_plugin_connection(self, plugin_name: str, config: Union[Dict[str, Any], str, None]) -> Dict[
+        str, Any]:
         """
         Test connection for a specific plugin configuration
+
+        Args:
+            plugin_name: Name of the plugin
+            config: Configuration to test (dict, string, or None)
 
         Returns:
             Dictionary with connection test results from plugin's test_connection method
@@ -148,9 +212,12 @@ class PluginManager:
                 "message": "Plugin not found"
             }
 
+        # Normalize configuration
+        normalized_config = self._validate_and_normalize_config(config)
+
         plugin_class = self.plugins[plugin_name]
         try:
-            plugin_instance = plugin_class(config)
+            plugin_instance = plugin_class(normalized_config)
 
             # Validate config first
             if not plugin_instance.validate_config():
@@ -320,6 +387,31 @@ class PluginManager:
                 }
 
         return summary
+
+    def safe_get_plugin(self, plugin_name: str, config: Union[Dict, str, None] = None,
+                        default_config: Optional[Dict] = None) -> Optional[BaseGPSPlugin]:
+        """
+        Safely get a plugin with fallback configuration
+
+        Args:
+            plugin_name: Name of the plugin
+            config: Primary configuration
+            default_config: Fallback configuration if primary fails
+
+        Returns:
+            Plugin instance or None
+        """
+        # Try with primary config
+        plugin = self.get_plugin(plugin_name, config)
+        if plugin is not None:
+            return plugin
+
+        # Try with default config if provided
+        if default_config is not None:
+            self.logger.info(f"Falling back to default config for plugin {plugin_name}")
+            return self.get_plugin(plugin_name, default_config)
+
+        return None
 
 
 # Global plugin manager instance

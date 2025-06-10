@@ -1,9 +1,10 @@
 # =============================================================================
-# models/stream.py - Stream Model
+# models/stream.py - Enhanced Stream Model with Encryption Support
 # =============================================================================
 
-from database import db, TimestampMixin  # Import both from database.py
+from database import db, TimestampMixin
 import json
+from plugins.base_plugin import BaseGPSPlugin
 
 
 class Stream(db.Model, TimestampMixin):
@@ -22,14 +23,34 @@ class Stream(db.Model, TimestampMixin):
     last_error = db.Column(db.Text)  # Last error message
     total_messages_sent = db.Column(db.Integer, default=0)  # Statistics
 
-    # Relationship to TAK server - using back_populates instead of backref
+    # Relationship to TAK server
     tak_server = db.relationship('TakServer', back_populates='streams')
 
     def __repr__(self):
         return f'<Stream {self.name}>'
 
     def get_plugin_config(self):
-        """Parse plugin configuration from JSON"""
+        """Parse plugin configuration from JSON with decryption for sensitive fields"""
+        if not self.plugin_config:
+            return {}
+        try:
+            config = json.loads(self.plugin_config)
+            # Decrypt sensitive fields for use
+            return BaseGPSPlugin.decrypt_config_from_storage(self.plugin_type, config)
+        except json.JSONDecodeError:
+            return {}
+
+    def set_plugin_config(self, config_dict):
+        """Store plugin configuration as JSON with encryption for sensitive fields"""
+        if config_dict:
+            # Encrypt sensitive fields before storage
+            encrypted_config = BaseGPSPlugin.encrypt_config_for_storage(self.plugin_type, config_dict)
+            self.plugin_config = json.dumps(encrypted_config)
+        else:
+            self.plugin_config = None
+
+    def get_raw_plugin_config(self):
+        """Get raw plugin configuration without decryption (for display purposes)"""
         if not self.plugin_config:
             return {}
         try:
@@ -37,9 +58,11 @@ class Stream(db.Model, TimestampMixin):
         except json.JSONDecodeError:
             return {}
 
-    def set_plugin_config(self, config_dict):
-        """Store plugin configuration as JSON"""
-        self.plugin_config = json.dumps(config_dict) if config_dict else None
+    def is_field_encrypted(self, field_name):
+        """Check if a specific field is encrypted in storage"""
+        raw_config = self.get_raw_plugin_config()
+        value = raw_config.get(field_name, '')
+        return isinstance(value, str) and value.startswith('ENC:')
 
     def update_stats(self, messages_sent=0, error=None):
         """Update stream statistics and error state"""
@@ -51,13 +74,26 @@ class Stream(db.Model, TimestampMixin):
             self.last_error = None
         self.last_poll = db.func.now()
 
-    def to_dict(self):
-        """Convert stream to dictionary for JSON serialization"""
+    def to_dict(self, include_sensitive=False):
+        """
+        Convert stream to dictionary for JSON serialization
+
+        Args:
+            include_sensitive: If True, includes decrypted sensitive data
+                              If False, masks sensitive fields for display
+        """
+        if include_sensitive:
+            # For internal use - include decrypted sensitive data
+            plugin_config = self.get_plugin_config()
+        else:
+            # For API/display - mask sensitive fields
+            plugin_config = self._get_masked_plugin_config()
+
         return {
             'id': self.id,
             'name': self.name,
             'plugin_type': self.plugin_type,
-            'plugin_config': self.get_plugin_config(),
+            'plugin_config': plugin_config,
             'poll_interval': self.poll_interval,
             'cot_type': self.cot_type,
             'cot_stale_time': self.cot_stale_time,
@@ -70,6 +106,35 @@ class Stream(db.Model, TimestampMixin):
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }
+
+    def _get_masked_plugin_config(self):
+        """Get plugin configuration with sensitive fields masked for display"""
+        from plugins.plugin_manager import plugin_manager
+
+        raw_config = self.get_raw_plugin_config()
+        metadata = plugin_manager.get_plugin_metadata(self.plugin_type)
+
+        if not metadata:
+            return raw_config
+
+        # Get list of sensitive fields
+        sensitive_fields = []
+        for field_data in metadata.get("config_fields", []):
+            if isinstance(field_data, dict) and field_data.get("sensitive"):
+                sensitive_fields.append(field_data["name"])
+            elif hasattr(field_data, 'sensitive') and field_data.sensitive:
+                sensitive_fields.append(field_data.name)
+
+        # Mask sensitive fields
+        masked_config = raw_config.copy()
+        for field_name in sensitive_fields:
+            if field_name in masked_config and masked_config[field_name]:
+                if self.is_field_encrypted(field_name):
+                    masked_config[field_name] = "••••••••"  # Show encrypted
+                else:
+                    masked_config[field_name] = "••••••••"  # Show masked
+
+        return masked_config
 
     @property
     def status(self):
