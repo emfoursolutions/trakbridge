@@ -269,7 +269,7 @@ class SecretManager:
         Raises:
             ValueError: If required secret is not found
         """
-        # Check cache first
+        # First: Check cache
         if self.enable_caching and key in self._cache:
             cached_value, metadata = self._cache[key]
             if not metadata.is_expired():
@@ -280,7 +280,7 @@ class SecretManager:
                 del self._cache[key]
                 logger.debug(f"Cache entry for '{key}' expired, refreshing")
 
-        # Try each provider in priority order
+        # Second: Try each provider in priority order
         for provider in self.providers:
             try:
                 value = provider.get_secret(key, None)
@@ -299,6 +299,24 @@ class SecretManager:
                 logger.warning(f"Provider '{provider.name}' failed for key '{key}': {e}")
                 continue
 
+        # Third: check _FILE secret convention (Docker/Kubernetes)
+        file_env_key = f"{key}_FILE"
+        file_path = os.getenv(file_env_key)
+        if file_path and os.path.isfile(file_path):
+            try:
+                with open(file_path, "r") as f:
+                    value = f.read().strip()
+                    if self.enable_caching:
+                        metadata = SecretMetadata(
+                            provider="FileEnv",
+                            retrieved_at=time.time(),
+                            ttl=ttl
+                        )
+                        self._cache[key] = (value, metadata)
+                    logger.debug(f"Loaded secret '{key}' from file '{file_path}'")
+                    return value
+            except Exception as e:
+                logger.warning(f"Failed to read secret file '{file_path}' for key '{key}': {e}")
         if required and default is None:
             available_providers = [p.name for p in self.providers]
             raise ValueError(
