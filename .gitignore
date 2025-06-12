@@ -5,3 +5,4 @@ __pycache__/
 app.db*
 .env
 config.py
+utils/
