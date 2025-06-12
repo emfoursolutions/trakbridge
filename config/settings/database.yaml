@@ -1,0 +1,94 @@
+# =============================================================================
+# Database Configuration Settings
+# Non-sensitive database configuration options
+# =============================================================================
+
+# Default database settings
+default:
+  type: sqlite
+  track_modifications: false
+  record_queries: false
+
+  # Session options for thread safety
+  session_options:
+    autoflush: true
+    autocommit: false
+    expire_on_commit: true
+
+# Database type specific engine options
+engine_options:
+  sqlite:
+    pool_pre_ping: true
+    pool_recycle: 300
+    connect_args:
+      check_same_thread: false
+      timeout: 20
+
+  mysql:
+    pool_pre_ping: true
+    pool_recycle: 3600
+    pool_size: 20
+    max_overflow: 30
+    pool_timeout: 30
+    connect_args:
+      connect_timeout: 60
+      read_timeout: 30
+      write_timeout: 30
+      charset: utf8mb4
+
+  postgresql:
+    pool_pre_ping: true
+    pool_recycle: 3600
+    pool_size: 20
+    max_overflow: 30
+    pool_timeout: 30
+    connect_args:
+      connect_timeout: 10
+      application_name: GPS_TAK_App
+
+# Environment specific overrides
+environments:
+  development:
+    record_queries: true
+    engine_options:
+      sqlite:
+        connect_args:
+          check_same_thread: false
+          timeout: 10
+
+  production:
+    engine_options:
+      mysql:
+        pool_size: 50
+        max_overflow: 100
+        pool_timeout: 60
+      postgresql:
+        pool_size: 50
+        max_overflow: 100
+        pool_timeout: 60
+
+  testing:
+    type: sqlite
+    database_uri: "sqlite:///:memory:"
+    engine_options:
+      sqlite:
+        pool_pre_ping: false
+        connect_args:
+          check_same_thread: false
+
+# Default database credentials (will be overridden by secrets)
+defaults:
+  mysql:
+    user: root
+    host: localhost
+    port: 3306
+    name: gps_tak_app
+
+  postgresql:
+    user: postgres
+    host: localhost
+    port: 5432
+    name: gps_tak_app
+
+  sqlite:
+    name: app.db

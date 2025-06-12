@@ -1,0 +1,75 @@
+# =============================================================================
+# Application Configuration Settings
+# General application settings (non-sensitive)
+# =============================================================================
+
+# Default application settings
+default:
+  # Stream management
+  default_poll_interval: 120
+  max_concurrent_streams: 50
+
+  # HTTP client settings
+  http_timeout: 30
+  http_max_connections: 100
+  http_max_connections_per_host: 10
+
+  # General settings
+  async_timeout: 60
+
+# Environment specific overrides
+environments:
+  development:
+    default_poll_interval: 60
+    max_concurrent_streams: 10
+    http_timeout: 15
+
+  production:
+    max_concurrent_streams: 200
+    http_timeout: 45
+    http_max_connections: 200
+    http_max_connections_per_host: 20
+
+  testing:
+    default_poll_interval: 5
+    max_concurrent_streams: 5
+    http_timeout: 5
+    async_timeout: 10
+
+# Feature flags
+features:
+  enable_metrics: true
+  enable_health_checks: true
+  enable_debug_endpoints: false
+
+  # Environment specific feature overrides
+  environments:
+    development:
+      enable_debug_endpoints: true
+
+    production:
+      enable_debug_endpoints: false
+
+    testing:
+      enable_metrics: false
+
+# API settings
+api:
+  rate_limiting:
+    enabled: true
+    default_rate: "100/hour"
+    burst_rate: "10/minute"
+
+  pagination:
+    default_page_size: 20
+    max_page_size: 100
+
+  environments:
+    development:
+      rate_limiting:
+        enabled: false
+
+    testing:
+      pagination:
+        default_page_size: 5
+        max_page_size: 10

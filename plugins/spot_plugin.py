@@ -94,10 +94,12 @@ class SpotPlugin(BaseGPSPlugin):
         Returns:
             List of location dictionaries with standardized format
         """
+        decrypted_config = self.get_decrypted_config()
         try:
-            feed_id = self.config["feed_id"]
-            feed_password = self.config.get("feed_password", "")
-            max_results = self.config.get("max_results", 50)
+
+            feed_id = decrypted_config["feed_id"]
+            feed_password = decrypted_config["feed_password"]
+            max_results = decrypted_config["max_results"]
 
             # Create SSL context for certificate verification
             ssl_context = ssl.create_default_context(cafile=certifi.where())

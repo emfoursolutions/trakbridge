@@ -101,12 +101,15 @@ class GarminPlugin(BaseGPSPlugin):
         Returns:
             List of location dictionaries with standardized format
         """
+        # Get decrypted configuration using the base class method
+        decrypted_config = self.get_decrypted_config()
+
         try:
             kml_data = await self._fetch_kml_feed(
                 session,
-                self.config["url"],
-                self.config["username"],
-                self.config["password"]
+                decrypted_config["url"],  # Use decrypted config
+                decrypted_config["username"],  # Use decrypted config
+                decrypted_config["password"]  # Use decrypted config - this was the main issue
             )
 
             if kml_data is None:
@@ -270,7 +273,7 @@ class GarminPlugin(BaseGPSPlugin):
         try:
             k = kml.KML()
             k.from_string(kml_data.encode())
-            self.logger.info(f"KML object created: {k}")
+            self.logger.debug(f"KML object created: {k}")
 
             # Debug the KML structure
             self.logger.debug(f"KML features: {k.features}")
@@ -347,13 +350,13 @@ class GarminPlugin(BaseGPSPlugin):
             # Start extraction from root features
             self.logger.debug(f"KML features type: {type(k.features)}")
             if k.features:
-                self.logger.debug(f"Number of root features: {len(k.features)}")
+                # self.logger.debug(f"Number of root features: {len(k.features)}")
                 for feature in k.features:
                     self.logger.debug(
                         f"Processing feature type: {type(feature)}, name: {getattr(feature, 'name', 'Unknown')}")
                     extract_placemarks(feature)
             else:
-                self.logger.warning("No features found in KML")
+                # self.logger.warning("No features found in KML")
 
                 # Try alternative parsing - direct XML approach (Points only)
                 try:

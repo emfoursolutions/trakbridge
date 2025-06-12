@@ -1,0 +1,145 @@
+# =============================================================================
+# Logging Configuration
+# Application logging settings
+# =============================================================================
+
+# Default logging configuration
+default:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
+
+  # File logging
+  file_logging:
+    enabled: true
+    directory: logs
+    filename: app.log
+    max_size: 10485760  # 10MB
+    backup_count: 5
+    rotate_on_startup: false
+
+  # Console logging
+  console_logging:
+    enabled: true
+    colored: true
+
+# Logger specific settings
+loggers:
+  # Application loggers
+  app:
+    level: INFO
+    handlers: [file, console]
+
+  # Database logging
+  sqlalchemy:
+    level: WARNING
+    handlers: [file]
+
+  sqlalchemy.engine:
+    level: WARNING
+    handlers: [file]
+
+  # HTTP client logging
+  urllib3:
+    level: WARNING
+    handlers: [file]
+
+  requests:
+    level: WARNING
+    handlers: [file]
+
+  # Worker thread logging
+  workers:
+    level: INFO
+    handlers: [file, console]
+
+  # Security logging
+  security:
+    level: INFO
+    handlers: [file, security_file]
+    separate_file: security.log
+
+# Environment specific overrides
+environments:
+  development:
+    level: DEBUG
+    console_logging:
+      colored: true
+
+    loggers:
+      app:
+        level: DEBUG
+      sqlalchemy.engine:
+        level: INFO  # Show SQL queries in development
+      workers:
+        level: DEBUG
+
+  production:
+    level: INFO
+    console_logging:
+      enabled: false
+
+    file_logging:
+      max_size: 52428800  # 50MB
+      backup_count: 10
+      rotate_on_startup: true
+
+    # Additional production logging
+    structured_logging:
+      enabled: true
+      format: json
+
+    # Error tracking
+    error_tracking:
+      enabled: true
+      sample_rate: 1.0
+
+    loggers:
+      sqlalchemy.engine:
+        level: ERROR  # Only log SQL errors in production
+      security:
+        level: WARNING
+
+  testing:
+    level: ERROR
+    console_logging:
+      enabled: false
+    file_logging:
+      enabled: false
+
+    loggers:
+      app:
+        level: ERROR
+      sqlalchemy:
+        level: ERROR
+
+# Log retention and cleanup
+retention:
+  max_age_days: 30
+  cleanup_interval_hours: 24
+  compress_old_logs: true
+
+  environments:
+    development:
+      max_age_days: 7
+      cleanup_interval_hours: 168  # Weekly
+
+    production:
+      max_age_days: 90
+      cleanup_interval_hours: 24  # Daily
+      compress_old_logs: true
+
+    testing:
+      max_age_days: 1
+
+# Security logging
+security_events:
+  failed_logins: true
+  unauthorized_access: true
+  configuration_changes: true
+  secret_access_attempts: true
+
+  # Sensitive data filtering
+  filter_secrets: true
+  filter_passwords: true
+  filter_tokens: true

@@ -10,7 +10,7 @@ from models.stream import Stream
 from models.tak_server import TakServer
 from services.stream_manager import stream_manager
 from plugins.plugin_manager import plugin_manager
-from app import db
+from database import db
 import asyncio
 import json
 import aiohttp

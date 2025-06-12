@@ -81,7 +81,7 @@ class Config:
     }
 
     # Logging
-    LOG_LEVEL = os.environ.get('LOG_LEVEL', 'DEBUG')
+    LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
     LOG_DIR = os.environ.get('LOG_DIR', 'logs')
 
     # Thread pool configuration

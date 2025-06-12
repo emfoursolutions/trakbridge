@@ -16,9 +16,11 @@ from sqlalchemy.pool import Pool
 import signal
 import time
 from dotenv import load_dotenv
+import sys
+import subprocess
 
-# Import your config
-from config import Config
+# Import config system
+from config.environments import get_config
 from database import db  # Import db from database.py
 
 # Initialize extensions
@@ -38,12 +40,14 @@ def create_app(config_name=None):
 
     app = Flask(__name__)
 
-    # Determine config - you can extend this to support multiple environments
-    if config_name:
-        # If you have multiple config classes, handle them here
-        app.config.from_object(Config)
-    else:
-        app.config.from_object(Config)
+    # Determine environment and get configuration
+    flask_env = config_name or os.environ.get('FLASK_ENV', 'production')
+
+    # Get configuration instance using the new system
+    config_instance = get_config(flask_env)
+
+    # Configure Flask app with the new configuration system
+    configure_flask_app(app, config_instance)
 
     # Initialize extensions with app
     db.init_app(app)
@@ -90,6 +94,48 @@ def create_app(config_name=None):
     setup_error_handlers(app)
 
     return app
+
+
+def configure_flask_app(app, config_instance):
+    """Configure Flask app with the new configuration system."""
+
+    # Core Flask settings
+    app.config['SECRET_KEY'] = config_instance.SECRET_KEY
+    app.config['DEBUG'] = config_instance.DEBUG
+    app.config['TESTING'] = config_instance.TESTING
+
+    # SQLAlchemy settings
+    app.config['SQLALCHEMY_DATABASE_URI'] = config_instance.SQLALCHEMY_DATABASE_URI
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = config_instance.SQLALCHEMY_TRACK_MODIFICATIONS
+    app.config['SQLALCHEMY_RECORD_QUERIES'] = config_instance.SQLALCHEMY_RECORD_QUERIES
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = config_instance.SQLALCHEMY_ENGINE_OPTIONS
+    app.config['SQLALCHEMY_SESSION_OPTIONS'] = config_instance.SQLALCHEMY_SESSION_OPTIONS
+
+    # Application-specific settings
+    app.config['MAX_WORKER_THREADS'] = config_instance.MAX_WORKER_THREADS
+    app.config['DEFAULT_POLL_INTERVAL'] = config_instance.DEFAULT_POLL_INTERVAL
+    app.config['MAX_CONCURRENT_STREAMS'] = config_instance.MAX_CONCURRENT_STREAMS
+    app.config['HTTP_TIMEOUT'] = config_instance.HTTP_TIMEOUT
+    app.config['HTTP_MAX_CONNECTIONS'] = config_instance.HTTP_MAX_CONNECTIONS
+    app.config['HTTP_MAX_CONNECTIONS_PER_HOST'] = config_instance.HTTP_MAX_CONNECTIONS_PER_HOST
+    app.config['ASYNC_TIMEOUT'] = config_instance.ASYNC_TIMEOUT
+
+    # Logging settings
+    app.config['LOG_LEVEL'] = config_instance.LOG_LEVEL
+    app.config['LOG_DIR'] = config_instance.LOG_DIR
+
+    # Store the config instance for later use
+    app.config_instance = config_instance
+
+    # Log configuration info
+    logger.info(f"Configured Flask app for environment: {config_instance.environment}")
+
+    # Validate configuration
+    issues = config_instance.validate_config()
+    if issues:
+        logger.warning(f"Configuration issues found: {issues}")
+        if config_instance.environment == 'production':
+            raise ValueError(f"Configuration validation failed: {issues}")
 
 
 def start_active_streams():
@@ -153,6 +199,10 @@ def start_active_streams():
                         success = stream_manager.start_stream_sync(stream.id)
                         if success:
                             logger.info(f"Successfully started stream {stream.id} ({stream.name})")
+                            # Clear any previous error on successful start
+                            fresh_stream = Stream.query.get(stream.id)
+                            fresh_stream.last_error = None  # or "" if you prefer empty string
+                            db.session.commit()
                             started_count += 1
                             break
                         else:

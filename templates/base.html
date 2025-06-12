@@ -29,7 +29,9 @@
             <!-- Sidebar -->
             <nav class="col-md-2 d-md-block sidebar collapse">
                 <div class="position-sticky pt-3">
-                    <h5 class="text-center mb-4">GPS to TAK</h5>
+                    <div class="text-center mb-3">
+                        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="height: 100px;">
+                    </div>
                     <ul class="nav flex-column">
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}"

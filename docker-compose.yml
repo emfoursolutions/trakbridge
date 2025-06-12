@@ -1,0 +1,205 @@
+# =============================================================================
+# Docker Compose Configuration for GPS TAK Application
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # Main application service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-production}
+      args:
+        BUILD_ENV: ${FLASK_ENV:-production}
+    image: trakbridge:${APP_VERSION:-latest}
+    container_name: trakbridge
+    restart: unless-stopped
+
+    # Environment configuration
+    environment:
+      # Flask environment
+      FLASK_ENV: ${FLASK_ENV:-production}
+      FLASK_APP: ${FLASK_APP:-app.py}
+
+      # Database configuration (matches your BaseConfig)
+      DB_TYPE: ${DB_TYPE:-postgresql}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-gps_tak_app}
+      DB_USER: ${DB_USER:-postgres}
+      # DB_PASSWORD comes from secrets
+
+      # Application settings (from your YAML configs)
+      DEBUG: ${DEBUG:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: ${LOG_DIR:-logs}
+
+      # Threading and performance (from threading.yaml)
+      MAX_WORKER_THREADS: ${MAX_WORKER_THREADS:-8}
+      MAX_CONCURRENT_STREAMS: ${MAX_CONCURRENT_STREAMS:-200}
+      DEFAULT_POLL_INTERVAL: ${DEFAULT_POLL_INTERVAL:-120}
+      HTTP_TIMEOUT: ${HTTP_TIMEOUT:-30}
+      HTTP_MAX_CONNECTIONS: ${HTTP_MAX_CONNECTIONS:-100}
+      HTTP_MAX_CONNECTIONS_PER_HOST: ${HTTP_MAX_CONNECTIONS_PER_HOST:-10}
+      ASYNC_TIMEOUT: ${ASYNC_TIMEOUT:-60}
+
+      # Feature flags
+      ENABLE_SQL_ECHO: ${ENABLE_SQL_ECHO:-false}
+      SQLALCHEMY_RECORD_QUERIES: ${SQLALCHEMY_RECORD_QUERIES:-false}
+
+    # Secrets (for production)
+    secrets:
+      - db_password
+      - secret_key
+
+    # Ports
+    ports:
+      - "${APP_PORT:-5000}:5000"
+
+    # Volumes
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ${CONFIG_DIR:-./config}:/app/config:ro
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Dependencies
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+      mysql:
+        condition: service_healthy
+        required: false
+
+    # Networks
+    networks:
+      - app-network
+
+  # PostgreSQL database (optional)
+  postgres:
+    image: postgres:15-alpine
+    container_name: gps-tak-postgres
+    restart: unless-stopped
+    profiles:
+      - postgres
+      - db
+
+    environment:
+      POSTGRES_DB: ${DB_NAME:-trakbridge}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+
+    secrets:
+      - db_password
+
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-scripts:/docker-entrypoint-initdb.d:ro
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-trakbridge}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - app-network
+
+  # MySQL database (optional)
+  mysql:
+    image: mysql:8.0
+    container_name: takbridge-mysql
+    restart: unless-stopped
+    profiles:
+      - mysql
+      - db
+
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-takbridge}
+      MYSQL_USER: ${DB_USER:-mysql}
+      MYSQL_PASSWORD_FILE: /run/secrets/db_password
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_password
+
+    secrets:
+      - db_password
+
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/init-scripts:/docker-entrypoint-initdb.d:ro
+
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - app-network
+
+  # Redis (optional, for caching/sessions)
+  redis:
+    image: redis:7-alpine
+    container_name: takbridge-redis
+    restart: unless-stopped
+    profiles:
+      - redis
+      - cache
+
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+    volumes:
+      - redis_data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - app-network
+
+# Networks
+networks:
+  app-network:
+    driver: bridge
+    name: trakbridge-network
+
+# Volumes
+volumes:
+  postgres_data:
+    driver: local
+    name: trakbridge-postgres-data
+
+  mysql_data:
+    driver: local
+    name: trakbridge-mysql-data
+
+  redis_data:
+    driver: local
+    name: trakbridge-redis-data
+
+# Secrets
+secrets:
+  db_password:
+    file: ${DB_PASSWORD_FILE:-./secrets/db_password.txt}
+
+  secret_key:
+    file: ${SECRET_KEY_FILE:-./secrets/secret_key.txt}
