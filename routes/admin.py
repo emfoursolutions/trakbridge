@@ -50,20 +50,6 @@ def admin_dashboard():
     )
 
 
-@bp.route('/admin/config')
-def admin_config():
-    config_summary = {
-        "Environment": os.getenv("FLASK_ENV", "production"),
-        "App Port": os.getenv("APP_PORT", "5000"),
-        "Max Worker Threads": os.getenv("MAX_WORKER_THREADS", "unknown"),
-        "Max Streams": os.getenv("MAX_CONCURRENT_STREAMS", "unknown"),
-        "HTTP Timeout": os.getenv("HTTP_TIMEOUT", "unknown"),
-        "Database Host": os.getenv("DB_HOST", "unknown"),
-        "Secrets Loaded": "Yes (validated)"
-    }
-    return render_template('admin/config.html', config=config_summary)
-
-
 @bp.route('/admin/health')
 def admin_health_check():
     """Basic system health check (suitable for docker / kubernetes liveness probes)"""
