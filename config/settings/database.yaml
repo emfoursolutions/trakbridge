@@ -44,7 +44,7 @@ engine_options:
     pool_timeout: 30
     connect_args:
       connect_timeout: 10
-      application_name: GPS_TAK_App
+      application_name: TrakBridge
 
 # Environment specific overrides
 environments:
@@ -82,13 +82,13 @@ defaults:
     user: root
     host: localhost
     port: 3306
-    name: gps_tak_app
+    name: trakbridge
 
   postgresql:
     user: postgres
     host: localhost
     port: 5432
-    name: gps_tak_app
+    name: trakbridge
 
   sqlite:
     name: app.db
