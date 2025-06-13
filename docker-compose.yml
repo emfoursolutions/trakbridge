@@ -53,6 +53,7 @@ services:
     secrets:
       - db_password
       - secret_key
+      - tb_master_key
 
     # Ports
     ports:
@@ -155,7 +156,7 @@ services:
   # Redis (optional, for caching/sessions)
   redis:
     image: redis:7-alpine
-    container_name: takbridge-redis
+    container_name: trakbridge-redis
     restart: unless-stopped
     profiles:
       - redis
@@ -203,3 +204,6 @@ secrets:
 
   secret_key:
     file: ${SECRET_KEY_FILE:-./secrets/secret_key.txt}
+
+  tb_master_key:
+    file: ${MASTER_KEY_FILE:-./secrets/master_key.txt}

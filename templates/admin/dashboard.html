@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <h1 class="mb-4">Admin Dashboard</h1>
+    
+    <div class="row g-3">
+        <div class="col-md-3">
+            <div class="card shadow-sm">
+                <div class="card-body text-center">
+                    <h5>Uptime</h5>
+                    <p class="display-6">{{ uptime }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm">
+                <div class="card-body text-center">
+                    <h5>Streams</h5>
+                    <p class="display-6">{{ streams_count }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm">
+                <div class="card-body text-center">
+                    <h5>Running</h5>
+                    <p class="display-6">{{ running_streams }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm">
+                <div class="card-body text-center">
+                    <h5>TAK Servers</h5>
+                    <p class="display-6">{{ servers_count }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-5">
+        <h5>System Info</h5>
+        <ul class="list-group">
+            <li class="list-group-item">TakBridge Version: {{ version }}</li>
+            <li class="list-group-item">Python Version: {{ python_version }}</li>
+            <li class="list-group-item">System: {{ system }} {{ release }}</li>
+        </ul>
+    </div>
+
+</div>
+{% endblock %}

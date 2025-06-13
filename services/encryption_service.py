@@ -27,13 +27,14 @@ class EncryptionService:
         # Priority order: ENV variable -> config file -> generate new
 
         # Try environment variable first
-        master_key = os.environ.get('GPS_TRACKER_MASTER_KEY')
+        master_key = os.environ.get('TB_MASTER_KEY')
         if master_key:
             self.logger.debug("Master key loaded from environment variable")
             return master_key
 
         # Try config file
         config_paths = [
+            'secrets/master_key.txt',
             '/etc/gps-tracker/config.json',
             os.path.expanduser('~/.gps-tracker/config.json'),
             'config/encryption.json'
@@ -59,7 +60,7 @@ class EncryptionService:
             "⚠️  ENCRYPTION KEY WARNING ⚠️\n"
             "No master key found. Generated temporary key for this session.\n"
             "🔧 TO FIX THIS:\n"
-            "1. Set environment variable: export GPS_TRACKER_MASTER_KEY='your_key_here'\n"
+            "1. Set environment variable: export TB_MASTER_KEY='your_key_here'\n"
             "2. Or create config file with your key\n"
             "3. Use this generated key if starting fresh: (key logged below)\n"
             "⚠️  Data encrypted with this key will be LOST if app restarts without setting the key!"
@@ -77,7 +78,7 @@ class EncryptionService:
         """Get or create the cipher suite for encryption/decryption"""
         if self._cipher_suite is None:
             # Use dynamic salt based on application context
-            app_context = os.environ.get('GPS_TRACKER_APP_ID', 'gps_tracker_default')
+            app_context = os.environ.get('TB_ID', 'tb_default')
             salt = hashlib.sha256(f"{app_context}_salt_2024".encode()).digest()[:16]
 
             master_key_bytes = self._master_key.encode()
@@ -281,10 +282,11 @@ class EncryptionService:
 
     def _get_key_source(self) -> str:
         """Identify where the master key came from"""
-        if os.environ.get('GPS_TRACKER_MASTER_KEY'):
+        if os.environ.get('TB_MASTER_KEY'):
             return "environment_variable"
 
         config_paths = [
+            'secrets/master_key.txt',
             '/etc/gps-tracker/config.json',
             os.path.expanduser('~/.gps-tracker/config.json'),
             'config/encryption.json'

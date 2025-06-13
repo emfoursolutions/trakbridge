@@ -84,10 +84,12 @@ def create_app(config_name=None):
     from routes.main import bp as main_bp
     from routes.streams import bp as streams_bp
     from routes.tak_servers import bp as tak_servers_bp
+    from routes.admin import bp as admin_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(streams_bp, url_prefix='/streams')
     app.register_blueprint(tak_servers_bp, url_prefix='/tak-servers')
+    app.register_blueprint(admin_bp, url_prefox='/admin')
 
     # Add context processors and error handlers
     setup_template_helpers(app)
@@ -200,7 +202,7 @@ def start_active_streams():
                         if success:
                             logger.info(f"Successfully started stream {stream.id} ({stream.name})")
                             # Clear any previous error on successful start
-                            fresh_stream = Stream.query.get(stream.id)
+                            fresh_stream = db.session.get(Stream, stream.id)
                             fresh_stream.last_error = None  # or "" if you prefer empty string
                             db.session.commit()
                             started_count += 1
@@ -441,4 +443,4 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
 
-    app.run(debug=True, port=8080, threaded=True)
+    app.run(debug=False, port=8080, threaded=True)

@@ -1,0 +1,97 @@
+# routes/admin.py
+
+from flask import Blueprint, render_template, jsonify, current_app, abort
+from app import db, stream_manager
+from models.stream import Stream
+from models.tak_server import TakServer
+import platform
+import os
+import time
+import datetime
+import pkg_resources
+
+bp = Blueprint('admin', __name__)
+
+# Capture app start time for uptime display
+start_time = time.time()
+
+
+# Optional: simple decorator for future admin access control
+def admin_required(func):
+    def wrapper(*args, **kwargs):
+        # Replace with real auth check if needed
+        if not current_app.debug:  # Allow unrestricted access only in debug mode
+            abort(403)
+        return func(*args, **kwargs)
+
+    wrapper.__name__ = func.__name__
+    return wrapper
+
+
+@bp.route('/admin')
+def admin_dashboard():
+    uptime = datetime.timedelta(seconds=int(time.time() - start_time))
+    streams_count = db.session.query(Stream).count()
+    servers_count = db.session.query(TakServer).count()
+    running_streams = sum(
+        1 for status in stream_manager.get_all_stream_status().values() if status.get("running")
+    )
+
+    return render_template(
+        'admin/dashboard.html',
+        uptime=uptime,
+        streams_count=streams_count,
+        servers_count=servers_count,
+        running_streams=running_streams,
+        python_version=platform.python_version(),
+        system=platform.system(),
+        release=platform.release(),
+        version=get_app_version()
+    )
+
+
+@bp.route('/admin/config')
+def admin_config():
+    config_summary = {
+        "Environment": os.getenv("FLASK_ENV", "production"),
+        "App Port": os.getenv("APP_PORT", "5000"),
+        "Max Worker Threads": os.getenv("MAX_WORKER_THREADS", "unknown"),
+        "Max Streams": os.getenv("MAX_CONCURRENT_STREAMS", "unknown"),
+        "HTTP Timeout": os.getenv("HTTP_TIMEOUT", "unknown"),
+        "Database Host": os.getenv("DB_HOST", "unknown"),
+        "Secrets Loaded": "Yes (validated)"
+    }
+    return render_template('admin/config.html', config=config_summary)
+
+
+@bp.route('/admin/health')
+def admin_health_check():
+    """Basic system health check (suitable for docker / kubernetes liveness probes)"""
+    try:
+        db.session.execute('SELECT 1')  # Quick DB ping
+        return jsonify(status='healthy', uptime=str(get_uptime())), 200
+    except Exception as e:
+        return jsonify(status='unhealthy', error=str(e)), 500
+
+
+@bp.route('/admin/version')
+def admin_version():
+    version = get_app_version()
+    return jsonify(app_version=version, uptime=str(get_uptime()))
+
+@bp.route('/admin/about')
+def admin_about():
+    return render_template('admin/about.html')
+
+
+def get_uptime():
+    return datetime.timedelta(seconds=int(time.time() - start_time))
+
+
+def get_app_version():
+    try:
+        # Optional: if using setuptools package versioning
+        version = pkg_resources.get_distribution("takbridge").version
+    except:
+        version = os.getenv("TAKBRIDGE_VERSION", "dev")
+    return version

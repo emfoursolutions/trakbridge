@@ -16,3 +16,4 @@ cryptography
 certifi
 sqlalchemy
 pyyaml
+setuptools

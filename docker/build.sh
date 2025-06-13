@@ -84,6 +84,11 @@ setup_secrets() {
             echo "dev-secret-key-change-in-production-$(date +%s)" > secrets/secret_key.txt
             log_info "Created development secret key"
         fi
+
+        if [[ ! -f "secrets/master_key.txt" ]] || [[ "$FORCE_RECREATE" == true ]]; then
+            echo "dev-secret-key-change-in-production-$(date +%s)" > secrets/master_key.txt
+            log_info "Created development master key"
+        fi
     else
         # Production secrets (secure)
         if [[ ! -f "secrets/db_password.txt" ]] || [[ "$FORCE_RECREATE" == true ]]; then
@@ -94,6 +99,11 @@ setup_secrets() {
         if [[ ! -f "secrets/secret_key.txt" ]] || [[ "$FORCE_RECREATE" == true ]]; then
             python3 -c "import secrets; print(secrets.token_urlsafe(64))" > secrets/secret_key.txt
             log_info "Generated secure secret key"
+        fi
+
+        if [[ ! -f "secrets/master_key.txt" ]] || [[ "$FORCE_RECREATE" == true ]]; then
+            python3 -c "import secrets; print(secrets.token_urlsafe(64))" > secrets/master_key.txt
+            log_info "Generated secure master key"
         fi
     fi
 
@@ -139,6 +149,7 @@ DEFAULT_POLL_INTERVAL=60
 # Secret files
 DB_PASSWORD_FILE=./secrets/db_password.txt
 SECRET_KEY_FILE=./secrets/secret_key.txt
+TB_MASTER_KEY=./secrets/master_key.txt
 EOF
                 ;;
             "production")
@@ -173,6 +184,7 @@ SQLALCHEMY_RECORD_QUERIES=false
 # Secret files
 DB_PASSWORD_FILE=./secrets/db_password.txt
 SECRET_KEY_FILE=./secrets/secret_key.txt
+TB_MASTER_KEY=./secrets/master_key.txt
 EOF
                 ;;
             "staging")
@@ -202,6 +214,7 @@ DEFAULT_POLL_INTERVAL=120
 # Secret files
 DB_PASSWORD_FILE=./secrets/db_password.txt
 SECRET_KEY_FILE=./secrets/secret_key.txt
+TB_MASTER_KEY=./secrets/master_key.txt
 EOF
                 ;;
         esac

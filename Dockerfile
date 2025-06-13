@@ -2,8 +2,10 @@
 # Multi-stage Dockerfile for TrakBridge
 # =============================================================================
 
-# Build stage
-FROM python:3.11-slim-bullseye AS builder
+# ===============================
+# Stage 1 — Builder Stage
+# ===============================
+FROM python:3.12-slim AS builder
 
 # Set build arguments
 ARG BUILD_ENV=production
@@ -25,8 +27,10 @@ COPY requirements.txt /tmp/
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r /tmp/requirements.txt
 
-# Production stage
-FROM python:3.11-slim-bullseye AS production
+# ===============================
+# Stage 2 — Final Production Image
+# ===============================
+FROM python:3.12-slim AS production
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -77,7 +81,9 @@ EXPOSE 5000
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=5000"]
 
-# Development stage
+# ===============================
+# Stage 3 — Development Image
+# ===============================
 FROM production AS development
 
 ENV FLASK_ENV=development

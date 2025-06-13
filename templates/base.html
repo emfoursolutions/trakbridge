@@ -42,7 +42,7 @@
                         <li class="nav-item">
                             <a class="nav-link {% if request.blueprint == 'streams' %}active{% endif %}"
                                href="{{ url_for('streams.list_streams') }}">
-                                <i class="fas fa-stream me-2"></i>Streams
+                                <i class="fas fa-server me-2"></i>Streams
                             </a>
                         </li>
                         <li class="nav-item">
@@ -51,6 +51,15 @@
                                 <i class="fas fa-server me-2"></i>TAK Servers
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('admin.admin_about') }}">
+                                <i class="fas fa-server me-2"></i>About</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('admin.admin_dashboard') }}">
+                                <i class="fas fa-server me-2"></i>System Info</a>
+                        </li>
+
                     </ul>
                 </div>
             </nav>

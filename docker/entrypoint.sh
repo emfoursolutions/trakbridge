@@ -144,7 +144,13 @@ validate_config() {
             log_error "Database password is required for $DB_TYPE in production"
             return 1
         fi
+
+        if [[ -z "$TB_MASTER_KEY" ]] && [[ ! -f "/run/secrets/master_key" ]]; then
+            log_error "Master Key is required for $DB_TYPE in production"
+            return 1
+        fi
     fi
+
 
     log_info "Configuration validation passed"
     return 0
@@ -181,7 +187,7 @@ trap cleanup SIGTERM SIGINT
 
 # Main execution
 main() {
-    log_info "=== GPS TAK Application Startup ==="
+    log_info "=== TrakBridge Startup ==="
 
     # Create necessary directories
     create_directories

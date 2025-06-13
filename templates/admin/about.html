@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}About TakBridge{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="text-center mb-5">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="height: 200px;">
+        <p class="lead text-muted">Secure. Reliable. Mission-Critical Data Streaming for TAK Ecosystems.</p>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <h3 class="card-title">What is TakBridge?</h3>
+                    <p class="card-text">
+                        <strong>TakBridge</strong> is a secure, scalable, and extensible data ingestion platform
+                        designed to bridge external GPS and location data sources directly into
+                        <strong>Team Awareness Kit (TAK) Servers</strong>. TakBridge allows organizations to easily manage multiple data streams, apply plugin-based integrations, and ensure reliable real-time data transfer to enhance situational awareness.
+                    </p>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <h3 class="card-title">Key Features</h3>
+                    <ul class="list-unstyled">
+                        <li><i class="fas fa-check-circle text-success me-2"></i> Flexible plugin system for multiple data providers</li>
+                        <li><i class="fas fa-check-circle text-success me-2"></i> Secure secret management with Docker Secrets integration</li>
+                        <li><i class="fas fa-check-circle text-success me-2"></i> Production-ready asynchronous streaming engine</li>
+                        <li><i class="fas fa-check-circle text-success me-2"></i> Scalable to hundreds of concurrent data streams</li>
+                        <li><i class="fas fa-check-circle text-success me-2"></i> Full web-based management interface</li>
+                        <li><i class="fas fa-check-circle text-success me-2"></i> Designed for enterprise and field deployments</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-body text-center">
+                    <img src="{{ url_for('static', filename='es_logo.png') }}" alt="Logo" style="height: 50px;">
+                    <p>&nbsp;</p>
+                    <p class="card-text">
+                        <strong>Emfour Solutions</strong> is dedicated to building highly reliable, mission-critical software platforms
+                        that empower organizations with advanced situational awareness, secure data management,
+                        and scalable infrastructure solutions. Our engineering team brings years of experience in secure system design,
+                        real-time data processing, and defense-grade software delivery.
+                    </p>
+                </div>
+            </div>
+
+            <div class="text-center">
+                <a href="mailto:support@emfoursolutions.com.au" class="btn btn-primary btn-lg">
+                    Contact Emfour Solutions
+                </a>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
