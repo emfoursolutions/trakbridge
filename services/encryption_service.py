@@ -40,25 +40,20 @@ class EncryptionService:
             # Fallback to calculating from current file
             app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-        # Try config file
-        config_paths = [
+        # Try plain text key file first (most common)
+        key_file_paths = [
             os.path.join(app_root, 'secrets', 'master_key.txt'),
-            '/etc/gps-tracker/config.json',
-            os.path.expanduser('~/.gps-tracker/config.json'),
-            'config/encryption.json'
         ]
-
-        for config_path in config_paths:
-            if os.path.exists(config_path):
+        for key_file_path in key_file_paths:
+            if os.path.exists(key_file_path):
                 try:
-                    with open(config_path, 'r') as f:
-                        config = json.load(f)
-                        master_key = config.get('master_key')
+                    with open(key_file_path, 'r') as f:
+                        master_key = f.read().strip()
                         if master_key:
-                            self.logger.debug(f"Master key loaded from {config_path}")
+                            self.logger.debug(f"Master key loaded from {key_file_path}")
                             return master_key
                 except Exception as e:
-                    self.logger.warning(f"Failed to read config from {config_path}: {e}")
+                    self.logger.warning(f"Failed to read key file {key_file_path}: {e}")
 
         # Generate new key as last resort
         master_key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
@@ -301,17 +296,20 @@ class EncryptionService:
             # Fallback to calculating from current file
             app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-        # Try config file
-        config_paths = [
+        # Try plain text key file first (most common)
+        key_file_paths = [
             os.path.join(app_root, 'secrets', 'master_key.txt'),
-            '/etc/gps-tracker/config.json',
-            os.path.expanduser('~/.gps-tracker/config.json'),
-            'config/encryption.json'
         ]
-
-        for config_path in config_paths:
-            if os.path.exists(config_path):
-                return f"config_file:{config_path}"
+        for key_file_path in key_file_paths:
+            if os.path.exists(key_file_path):
+                try:
+                    with open(key_file_path, 'r') as f:
+                        master_key = f.read().strip()
+                        if master_key:
+                            self.logger.debug(f"Master key loaded from {key_file_path}")
+                            return master_key
+                except Exception as e:
+                    self.logger.warning(f"Failed to read key file {key_file_path}: {e}")
 
         return "generated"
 
