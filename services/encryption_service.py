@@ -32,9 +32,17 @@ class EncryptionService:
             self.logger.debug("Master key loaded from environment variable")
             return master_key
 
+        # Try to get Flask app root path if available
+        try:
+            from flask import current_app
+            app_root = current_app.root_path
+        except (ImportError, RuntimeError):
+            # Fallback to calculating from current file
+            app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
         # Try config file
         config_paths = [
-            'secrets/master_key.txt',
+            os.path.join(app_root, 'secrets', 'master_key.txt'),
             '/etc/gps-tracker/config.json',
             os.path.expanduser('~/.gps-tracker/config.json'),
             'config/encryption.json'
@@ -285,8 +293,17 @@ class EncryptionService:
         if os.environ.get('TB_MASTER_KEY'):
             return "environment_variable"
 
+        # Try to get Flask app root path if available
+        try:
+            from flask import current_app
+            app_root = current_app.root_path
+        except (ImportError, RuntimeError):
+            # Fallback to calculating from current file
+            app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+        # Try config file
         config_paths = [
-            'secrets/master_key.txt',
+            os.path.join(app_root, 'secrets', 'master_key.txt'),
             '/etc/gps-tracker/config.json',
             os.path.expanduser('~/.gps-tracker/config.json'),
             'config/encryption.json'
