@@ -1,8 +1,8 @@
 # Ignore Python virtual environments
 venv/
 __pycache__/
+utils/
 *.pyc
 app.db*
 .env*
 config.py
-utils/

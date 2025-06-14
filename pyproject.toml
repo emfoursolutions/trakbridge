@@ -1,0 +1,61 @@
+[project]
+name = "takbridge"
+version = "0.1.0"
+description = "TakBridge External Feed Streaming Platform"
+authors = [{ name = "Emfour Solutions", email = "support@emfoursolutions.com.au" }]
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+    "aiohappyeyeballs",
+    "aiohttp",
+    "aiosignal",
+    "alembic",
+    "arrow",
+    "attrs",
+    "blinker",
+    "certifi",
+    "cffi",
+    "click",
+    "cryptography",
+    "fastkml",
+    "Flask",
+    "Flask-Migrate",
+    "Flask-SQLAlchemy",
+    "frozenlist",
+    "idna",
+    "itsdangerous",
+    "Jinja2",
+    "lxml",
+    "Mako",
+    "MarkupSafe",
+    "multidict",
+    "propcache",
+    "psutil",
+    "psycopg2-binary",
+    "pycparser",
+    "pygeoif",
+    "PyMySQL",
+    "pytak",
+    "python-dateutil",
+    "python-dotenv",
+    "PyYAML",
+    "SQLAlchemy",
+    "types-python-dateutil",
+    "Werkzeug",
+    "yarl"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "coverage",
+    "black",
+    "flake8",
+    "bump2version",
+    "pre-commit"
+]
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"

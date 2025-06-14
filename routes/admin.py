@@ -8,7 +8,7 @@ import platform
 import os
 import time
 import datetime
-import pkg_resources
+import importlib.metadata
 
 bp = Blueprint('admin', __name__)
 
@@ -76,8 +76,6 @@ def get_uptime():
 
 def get_app_version():
     try:
-        # Optional: if using setuptools package versioning
-        version = pkg_resources.get_distribution("takbridge").version
-    except:
-        version = os.getenv("TAKBRIDGE_VERSION", "dev")
-    return version
+        return importlib.metadata.version("takbridge")
+    except importlib.metadata.PackageNotFoundError:
+        return os.getenv("TAKBRIDGE_VERSION", "0.1.0")
