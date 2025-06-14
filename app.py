@@ -41,7 +41,7 @@ def create_app(config_name=None):
     app = Flask(__name__)
 
     # Determine environment and get configuration
-    flask_env = config_name or os.environ.get('FLASK_ENV', 'production')
+    flask_env = config_name or os.environ.get('FLASK_ENV', 'development')
 
     # Get configuration instance using the new system
     config_instance = get_config(flask_env)
