@@ -18,6 +18,8 @@ Flask
 Flask-Migrate
 Flask-SQLAlchemy
 frozenlist
+gunicorn
+gevent
 idna
 itsdangerous
 Jinja2

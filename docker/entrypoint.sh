@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Docker Entrypoint Script for TrakBridge
+# Docker Entrypoint Script for TrakBridge with Production WSGI Support
 # =============================================================================
 
 set -e
@@ -115,8 +115,8 @@ validate_config() {
     log_info "Validating configuration..."
 
     # Check if Python can import the app
-    if ! python -c "from config import Config; print('Configuration loaded successfully')" 2>/dev/null; then
-        log_error "Failed to load application configuration"
+    if ! python -c "from app import app; print('Application loaded successfully')" 2>/dev/null; then
+        log_error "Failed to load Flask application"
         return 1
     fi
 
@@ -146,11 +146,10 @@ validate_config() {
         fi
 
         if [[ -z "$TB_MASTER_KEY" ]] && [[ ! -f "/run/secrets/master_key" ]]; then
-            log_error "Master Key is required for $DB_TYPE in production"
+            log_error "Master Key is required in production"
             return 1
         fi
     fi
-
 
     log_info "Configuration validation passed"
     return 0
@@ -166,6 +165,8 @@ setup_logging() {
     # Create log files if they don't exist
     touch /app/logs/app.log
     touch /app/logs/error.log
+    touch /app/logs/gunicorn-access.log
+    touch /app/logs/gunicorn-error.log
 
     # Set appropriate permissions
     chmod 644 /app/logs/*.log
@@ -184,6 +185,22 @@ cleanup() {
 
 # Set up signal handlers
 trap cleanup SIGTERM SIGINT
+
+# Function to determine the appropriate server command
+get_server_command() {
+    case "$FLASK_ENV" in
+        "development")
+            echo "python -m flask run --host=0.0.0.0 --port=5000 --debug"
+            ;;
+        "production"|"staging")
+            echo "gunicorn --config gunicorn.conf.py app:app"
+            ;;
+        *)
+            # Default to production settings
+            echo "gunicorn --config gunicorn.conf.py app:app"
+            ;;
+    esac
+}
 
 # Main execution
 main() {
@@ -216,8 +233,16 @@ main() {
 
     log_info "=== Starting Application ==="
 
-    # Execute the provided command
-    exec "$@"
+    # Execute the provided command or determine the appropriate server
+    if [[ $# -eq 0 ]]; then
+        # No command provided, use the appropriate server for the environment
+        server_cmd=$(get_server_command)
+        log_info "Starting server: $server_cmd"
+        exec $server_cmd
+    else
+        # Command provided, execute it
+        exec "$@"
+    fi
 }
 
 # Handle special commands
@@ -232,6 +257,11 @@ case "${1:-}" in
         ;;
     "flask")
         log_info "Starting Flask command: ${*:2}"
+        exec "$@"
+        ;;
+    "gunicorn")
+        log_info "Starting Gunicorn with args: ${*:2}"
+        main # Run setup first
         exec "$@"
         ;;
     "test")
@@ -254,15 +284,20 @@ case "${1:-}" in
         log_info "Checking configuration"
         validate_config
         python -c "
-from config import Config
-import json
-print('Configuration Summary:')
-print(json.dumps(Config.to_dict(), indent=2, default=str))
+from app import app
+print('Flask app loaded successfully')
+print(f'Environment: {app.config.get(\"FLASK_ENV\", \"unknown\")}')
+print(f'Debug mode: {app.config.get(\"DEBUG\", False)}')
+print(f'Database URI: {app.config.get(\"SQLALCHEMY_DATABASE_URI\", \"not set\")[:50]}...')
 "
         exit 0
         ;;
+    "")
+        # No command provided - run main startup sequence
+        main
+        ;;
     *)
-        # Default behavior - run main startup sequence
+        # Custom command provided - run main startup then execute command
         main "$@"
         ;;
 esac
