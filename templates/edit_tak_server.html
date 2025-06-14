@@ -17,6 +17,47 @@
     </div>
 </div>
 
+<style>
+    .alert {
+        margin-bottom: 1rem;
+    }
+    .card {
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    }
+    .form-control:focus, .form-select:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    }
+    .btn-outline-info:hover {
+        color: #fff;
+        background-color: #0dcaf0;
+        border-color: #0dcaf0;
+    }
+    .text-danger {
+        color: #dc3545 !important;
+    }
+    .cert-validation-status {
+        padding: 0.5rem;
+        border-radius: 0.375rem;
+        margin-top: 0.5rem;
+    }
+    .cert-valid {
+        background-color: #d1edff;
+        border: 1px solid #0dcaf0;
+        color: #055160;
+    }
+    .cert-invalid {
+        background-color: #f8d7da;
+        border: 1px solid #dc3545;
+        color: #721c24;
+    }
+    .cert-validating {
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        color: #664d03;
+    }
+</style>
+
 <div class="row">
     <div class="col-md-8">
         <div class="card">
@@ -26,7 +67,7 @@
                 </h5>
             </div>
             <div class="card-body">
-                <form id="editServerForm" method="POST" novalidate>
+                <form id="editServerForm" method="POST" enctype="multipart/form-data" novalidate>
                     <!-- Basic Configuration -->
                     <div class="row mb-3">
                         <div class="col-md-6">
@@ -76,7 +117,9 @@
                         <div class="card-body">
                             <div class="mb-3">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="verify_ssl" name="verify_ssl" 
+                                    <!-- Hidden input to ensure verify_ssl is always sent -->
+                                    <input type="hidden" name="verify_ssl" value="false">
+                                    <input class="form-check-input" type="checkbox" id="verify_ssl" name="verify_ssl"
                                            {% if server.verify_ssl %}checked{% endif %}>
                                     <label class="form-check-label" for="verify_ssl">
                                         Verify SSL Certificate
@@ -85,30 +128,61 @@
                                 </div>
                             </div>
 
+                            {% if server.cert_p12_data %}
+                            <div class="alert alert-info mb-3">
+                                <h6><i class="fas fa-certificate"></i> Current Certificate</h6>
+                                <p class="mb-0">A P12 certificate is currently configured for this server.</p>
+                                <small class="text-muted">Upload a new certificate below to replace the current one.</small>
+                            </div>
+                            {% endif %}
+
                             <div class="mb-3">
-                                <label for="cert_pem" class="form-label">Client Certificate (PEM)</label>
-                                <textarea class="form-control font-monospace" id="cert_pem" name="cert_pem" rows="6"
-                                          placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----">{{ server.cert_pem or '' }}</textarea>
+                                <label for="cert_p12_file" class="form-label">
+                                    <i class="fas fa-certificate"></i> Client Certificate (P12/PKCS#12)
+                                </label>
+                                <input type="file" class="form-control" id="cert_p12_file" name="cert_p12_file"
+                                       accept=".p12,.pfx,.pkcs12">
                                 <div class="form-text">
-                                    <i class="fas fa-info-circle"></i> Optional: Client certificate for mutual TLS authentication
+                                    <i class="fas fa-info-circle"></i> Optional: Upload P12/PFX certificate file for mutual TLS authentication
                                 </div>
+                                <div id="cert_file_info" class="small text-success mt-1" style="display: none;">
+                                    <i class="fas fa-check-circle"></i> <span id="cert_filename"></span>
+                                </div>
+
+                                <!-- Certificate Validation Status -->
+                                <div id="cert_validation_status" style="display: none;"></div>
+                            </div>
+
+                            <div class="mb-3" id="cert_password_group" style="display: none;">
+                                <label for="cert_password" class="form-label">Certificate Password</label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="cert_password" name="cert_password"
+                                           placeholder="Enter P12 certificate password">
+                                    <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                                <div class="form-text">
+                                    <i class="fas fa-info-circle"></i> Password for the P12 certificate file
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="validateCertBtn" style="display: none;">
+                                    <i class="fas fa-check-circle"></i> Validate Certificate
+                                </button>
+                            </div>
+
+                            <!-- Certificate Info Display -->
+                            <div id="cert_info" class="alert alert-info" style="display: none;">
+                                <h6><i class="fas fa-info-circle"></i> Certificate Information</h6>
+                                <div id="cert_details"></div>
                             </div>
 
                             <div class="mb-3">
-                                <label for="cert_key" class="form-label">Client Private Key (PEM)</label>
-                                <textarea class="form-control font-monospace" id="cert_key" name="cert_key" rows="6"
-                                          placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----">{{ server.cert_key or '' }}</textarea>
-                                <div class="form-text">
-                                    <i class="fas fa-info-circle"></i> Optional: Private key for client certificate
-                                </div>
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="client_password" class="form-label">Client Certificate Password</label>
-                                <input type="password" class="form-control" id="client_password" name="client_password"
-                                       value="{{ server.client_password or '' }}" placeholder="Optional password for encrypted private key">
-                                <div class="form-text">
-                                    <i class="fas fa-info-circle"></i> Only required if your private key is encrypted
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="remove_certificate" name="remove_certificate">
+                                    <label class="form-check-label" for="remove_certificate">
+                                        Remove current certificate
+                                        <small class="text-muted d-block">Check this box to remove the existing certificate from this server</small>
+                                    </label>
                                 </div>
                             </div>
                         </div>
@@ -116,7 +190,7 @@
 
                     <!-- Action Buttons -->
                     <div class="d-flex justify-content-between">
-                        <button type="button" class="btn btn-outline-info" id="testConnectionBtn">
+                        <button type="button" class="btn btn-outline-info" id="testBtn" onclick="testServer({{ server.id }})">
                             <i class="fas fa-network-wired"></i> Test Connection
                         </button>
                         <div>
@@ -129,6 +203,18 @@
                         </div>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <!-- Connection Status Card -->
+        <div class="card mt-3" id="connectionStatus" style="display: none;">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-network-wired"></i> Connection Test Results
+                </h6>
+            </div>
+            <div class="card-body" id="connectionResults">
+                <!-- Results will be populated by JavaScript -->
             </div>
         </div>
     </div>
@@ -186,9 +272,39 @@
                     <li><strong>UDP:</strong> Connectionless, for specific use cases</li>
                 </ul>
 
+                <h6 class="mt-3">Certificate Requirements:</h6>
+                <div class="small text-muted">
+                    <p><strong>P12/PKCS#12 Format:</strong></p>
+                    <ul>
+                        <li>Contains both certificate and private key</li>
+                        <li>Usually has .p12, .pfx, or .pkcs12 extension</li>
+                        <li>May be password protected</li>
+                        <li>Preferred format for TAK servers</li>
+                    </ul>
+                </div>
+
                 <div class="alert alert-warning small mt-3" role="alert">
                     <i class="fas fa-exclamation-triangle"></i>
                     <strong>Warning:</strong> Changes will affect all streams using this server configuration.
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-shield-alt"></i> Security Notes
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="small">
+                    <p><strong>Certificate Security:</strong></p>
+                    <ul>
+                        <li>P12 files are stored securely in the database</li>
+                        <li>Passwords are encrypted at rest</li>
+                        <li>Certificates are only used for TAK connections</li>
+                        <li>Remove unused certificates to minimize risk</li>
+                    </ul>
                 </div>
             </div>
         </div>
@@ -198,13 +314,124 @@
 
 {% block scripts %}
 <script>
+// Improved test server function with better visual feedback
+function testServer(serverId) {
+    const testBtn = document.getElementById('testBtn');
+    const originalContent = testBtn.innerHTML;
+    const connectionStatus = document.getElementById('connectionStatus');
+    const connectionResults = document.getElementById('connectionResults');
+
+    // Show loading state
+    testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+    testBtn.disabled = true;
+
+    // Show connection status card
+    connectionStatus.style.display = 'block';
+    connectionResults.innerHTML = `
+        <div class="d-flex align-items-center">
+            <div class="spinner-border spinner-border-sm text-primary me-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <div>
+                <h6 class="mb-1">Testing Connection</h6>
+                <small class="text-muted">Connecting to {{ server.host }}:{{ server.port }}...</small>
+            </div>
+        </div>
+    `;
+
+    fetch(`/tak-servers/${serverId}/test`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success feedback
+            testBtn.innerHTML = '<i class="fas fa-check text-success"></i> Connected';
+            connectionResults.innerHTML = `
+                <div class="alert alert-success border-0 shadow-sm mb-0">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-check-circle fa-2x text-success me-3"></i>
+                        <div>
+                            <h6 class="alert-heading mb-1">Connection Successful!</h6>
+                            <p class="mb-0 small">Successfully connected to {{ server.host }}:{{ server.port }}</p>
+                            ${data.response_time ? `<small class="text-muted">Response time: ${data.response_time}ms</small>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            setTimeout(() => {
+                testBtn.innerHTML = originalContent;
+                testBtn.disabled = false;
+            }, 3000);
+        } else {
+            // Show error feedback
+            testBtn.innerHTML = '<i class="fas fa-times text-danger"></i> Failed';
+            connectionResults.innerHTML = `
+                <div class="alert alert-danger border-0 shadow-sm mb-0">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-exclamation-circle fa-2x text-danger me-3"></i>
+                        <div>
+                            <h6 class="alert-heading mb-1">Connection Failed</h6>
+                            <p class="mb-0 small">${data.error || 'Unable to connect to server'}</p>
+                            <small class="text-muted">Check server configuration and network connectivity</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            setTimeout(() => {
+                testBtn.innerHTML = originalContent;
+                testBtn.disabled = false;
+            }, 5000);
+        }
+    })
+    .catch(error => {
+        console.error('Error testing server:', error);
+        testBtn.innerHTML = '<i class="fas fa-times text-danger"></i> Error';
+        connectionResults.innerHTML = `
+            <div class="alert alert-danger border-0 shadow-sm mb-0">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-exclamation-triangle fa-2x text-danger me-3"></i>
+                    <div>
+                        <h6 class="alert-heading mb-1">Test Error</h6>
+                        <p class="mb-0 small">An error occurred while testing the connection</p>
+                        <small class="text-muted">Please try again or check the console for details</small>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        setTimeout(() => {
+            testBtn.innerHTML = originalContent;
+            testBtn.disabled = false;
+        }, 5000);
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('editServerForm');
     const protocolSelect = document.getElementById('protocol');
     const tlsConfig = document.getElementById('tlsConfig');
-    const testBtn = document.getElementById('testConnectionBtn');
     const submitBtn = document.getElementById('submitBtn');
+    const certFileInput = document.getElementById('cert_p12_file');
+    const certPasswordGroup = document.getElementById('cert_password_group');
+    const certFileInfo = document.getElementById('cert_file_info');
+    const certFilename = document.getElementById('cert_filename');
+    const togglePasswordBtn = document.getElementById('togglePassword');
+    const certPasswordInput = document.getElementById('cert_password');
+    const validateCertBtn = document.getElementById('validateCertBtn');
+    const certValidationStatus = document.getElementById('cert_validation_status');
+    const certInfo = document.getElementById('cert_info');
+    const certDetails = document.getElementById('cert_details');
+    const removeCertCheckbox = document.getElementById('remove_certificate');
     const serverId = {{ server.id }};
+
+    let currentCertFile = null;
+    let certValidated = false;
 
     // Show/hide TLS configuration based on protocol
     function toggleTlsConfig() {
@@ -218,116 +445,227 @@ document.addEventListener('DOMContentLoaded', function() {
     protocolSelect.addEventListener('change', toggleTlsConfig);
     toggleTlsConfig(); // Initial setup
 
-    // Test Connection
-    testBtn.addEventListener('click', function() {
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-        
-        // Basic validation
-        if (!data.name || !data.host || !data.port) {
-            showAlert('warning', 'Please fill in required fields before testing connection.');
+    // Handle certificate file upload
+    certFileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            currentCertFile = file;
+            certValidated = false;
+            certFilename.textContent = file.name;
+            certFileInfo.style.display = 'block';
+            certPasswordGroup.style.display = 'block';
+            validateCertBtn.style.display = 'inline-block';
+            certInfo.style.display = 'none';
+            updateValidationStatus('none');
+            removeCertCheckbox.checked = false; // Uncheck remove certificate if new file selected
+
+            // Validate file type
+            const validExtensions = ['.p12', '.pfx', '.pkcs12'];
+            const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+
+            if (!validExtensions.includes(fileExtension)) {
+                showAlert('warning', 'Please select a valid P12/PFX certificate file (.p12, .pfx, .pkcs12)');
+                resetCertificateState();
+                return;
+            }
+
+            // Check file size (max 5MB)
+            if (file.size > 5 * 1024 * 1024) {
+                showAlert('warning', 'Certificate file is too large. Maximum size is 5MB.');
+                resetCertificateState();
+                return;
+            }
+        } else {
+            resetCertificateState();
+        }
+    });
+
+    function resetCertificateState() {
+        currentCertFile = null;
+        certValidated = false;
+        certFileInfo.style.display = 'none';
+        certPasswordGroup.style.display = 'none';
+        validateCertBtn.style.display = 'none';
+        certInfo.style.display = 'none';
+        updateValidationStatus('none');
+        certFileInput.value = '';
+    }
+
+    function updateValidationStatus(status, message = '') {
+        certValidationStatus.style.display = status === 'none' ? 'none' : 'block';
+        certValidationStatus.className = 'cert-validation-status';
+
+        switch(status) {
+            case 'validating':
+                certValidationStatus.classList.add('cert-validating');
+                certValidationStatus.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Validating certificate...';
+                break;
+            case 'valid':
+                certValidationStatus.classList.add('cert-valid');
+                certValidationStatus.innerHTML = '<i class="fas fa-check-circle"></i> Certificate is valid and ready to use';
+                break;
+            case 'invalid':
+                certValidationStatus.classList.add('cert-invalid');
+                certValidationStatus.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message || 'Certificate validation failed'}`;
+                break;
+        }
+    }
+
+    // Toggle password visibility
+    togglePasswordBtn.addEventListener('click', function() {
+        const type = certPasswordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+        certPasswordInput.setAttribute('type', type);
+
+        const icon = togglePasswordBtn.querySelector('i');
+        if (type === 'password') {
+            icon.className = 'fas fa-eye';
+        } else {
+            icon.className = 'fas fa-eye-slash';
+        }
+    });
+
+    // Validate certificate
+    validateCertBtn.addEventListener('click', function() {
+        if (!currentCertFile) {
+            showAlert('warning', 'Please select a certificate file first.');
             return;
         }
 
-        const originalContent = testBtn.innerHTML;
-        testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
-        testBtn.disabled = true;
-
-        // Update server temporarily for testing
-        const tempData = {
-            ...data,
-            verify_ssl: data.verify_ssl === 'on' ? true : false
-        };
-
-        fetch(`/tak-servers/${serverId}/edit`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(tempData)
-        })
-        .then(response => response.json())
-        .then(result => {
-            if (result.success) {
-                // Test the connection
-                return fetch(`/tak-servers/${serverId}/test`, {
-                    method: 'POST'
-                }).then(response => response.json());
-            } else {
-                throw new Error(result.error);
-            }
-        })
-        .then(testResult => {
-            if (testResult.success) {
-                showAlert('success', 'Connection test successful!');
-                testBtn.innerHTML = '<i class="fas fa-check text-success"></i> Connection OK';
-            } else {
-                showAlert('danger', 'Connection test failed: ' + testResult.error);
-                testBtn.innerHTML = '<i class="fas fa-times text-danger"></i> Connection Failed';
-            }
-        })
-        .catch(error => {
-            console.error('Test error:', error);
-            showAlert('danger', 'Test failed: ' + error.message);
-            testBtn.innerHTML = '<i class="fas fa-times text-danger"></i> Test Failed';
-        })
-        .finally(() => {
-            setTimeout(() => {
-                testBtn.innerHTML = originalContent;
-                testBtn.disabled = false;
-            }, 3000);
-        });
+        const password = certPasswordInput.value;
+        validateCertificate(currentCertFile, password);
     });
 
-    // Form submission
-    form.addEventListener('submit', function(e) {
+    // Auto-validate when password is entered
+    certPasswordInput.addEventListener('blur', function() {
+        if (currentCertFile && this.value && !certValidated) {
+            validateCertificate(currentCertFile, this.value);
+        }
+    });
+
+    async function validateCertificate(file, password) {
+        updateValidationStatus('validating');
+
+        const formData = new FormData();
+        formData.append('cert_file', file);
+        formData.append('password', password);
+
+        try {
+            const response = await fetch('/tak-servers/validate-certificate', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                certValidated = true;
+                updateValidationStatus('valid');
+
+                if (result.cert_info) {
+                    displayCertificateInfo(result.cert_info);
+                }
+            } else {
+                certValidated = false;
+                updateValidationStatus('invalid', result.error);
+                certInfo.style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Certificate validation error:', error);
+            certValidated = false;
+            updateValidationStatus('invalid', 'Validation request failed');
+            certInfo.style.display = 'none';
+        }
+    }
+
+    function displayCertificateInfo(certInfo) {
+        const details = `
+            <table class="table table-sm">
+                <tr><td><strong>Subject:</strong></td><td>${certInfo.subject}</td></tr>
+                <tr><td><strong>Issuer:</strong></td><td>${certInfo.issuer}</td></tr>
+                <tr><td><strong>Valid From:</strong></td><td>${new Date(certInfo.not_valid_before).toLocaleDateString()}</td></tr>
+                <tr><td><strong>Valid Until:</strong></td><td>${new Date(certInfo.not_valid_after).toLocaleDateString()}</td></tr>
+                <tr><td><strong>Serial Number:</strong></td><td>${certInfo.serial_number}</td></tr>
+            </table>
+        `;
+        certDetails.innerHTML = details;
+        document.getElementById('cert_info').style.display = 'block';
+    }
+
+    // Handle remove certificate checkbox
+    removeCertCheckbox.addEventListener('change', function() {
+        if (this.checked) {
+            // If remove certificate is checked, reset file input
+            resetCertificateState();
+        }
+    });
+
+    // Enhanced form submission
+    form.addEventListener('submit', async function(e) {
         e.preventDefault();
-        
+
         if (!form.checkValidity()) {
             form.classList.add('was-validated');
             return;
         }
 
+        // Check certificate validation for TLS with certificate
+        const protocol = protocolSelect.value;
+        if (protocol === 'tls' && currentCertFile && !certValidated) {
+            showAlert('warning', 'Please validate the certificate before updating the server.');
+            return;
+        }
+
         const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-        
-        // Convert checkbox to boolean
-        data.verify_ssl = data.verify_ssl === 'on' ? true : false;
-        
         const originalContent = submitBtn.innerHTML;
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
         submitBtn.disabled = true;
 
-        fetch(`/tak-servers/${serverId}/edit`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data)
-        })
-        .then(response => response.json())
-        .then(result => {
-            if (result.success) {
+        try {
+            const response = await fetch(`/tak-servers/${serverId}/edit`, {
+                method: 'POST',
+                body: formData
+            });
+
+            // Handle different response types
+            let result;
+            const contentType = response.headers.get('content-type');
+
+            if (contentType && contentType.includes('application/json')) {
+                result = await response.json();
+            } else {
+                // Handle redirect responses
+                if (response.redirected || response.status === 302) {
+                    showAlert('success', 'TAK Server updated successfully!');
+                    setTimeout(() => {
+                        window.location.href = `/tak-servers/${serverId}`;
+                    }, 1500);
+                    return;
+                } else {
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
+            }
+
+            if (result && result.success) {
                 showAlert('success', 'TAK Server updated successfully!');
                 setTimeout(() => {
                     window.location.href = `/tak-servers/${serverId}`;
                 }, 1500);
             } else {
-                throw new Error(result.error);
+                throw new Error(result ? result.error : 'Unknown error occurred');
             }
-        })
-        .catch(error => {
+        } catch (error) {
             console.error('Update error:', error);
             showAlert('danger', 'Error updating server: ' + error.message);
+        } finally {
             submitBtn.innerHTML = originalContent;
             submitBtn.disabled = false;
-        });
+        }
     });
 
     // Helper function to show alerts
     function showAlert(type, message) {
         // Remove existing alerts
-        const existingAlerts = document.querySelectorAll('.alert:not(.alert-warning)');
+        const existingAlerts = document.querySelectorAll('.alert:not(.alert-warning):not(#cert_info)');
         existingAlerts.forEach(alert => {
             if (!alert.classList.contains('alert-warning') || !alert.innerHTML.includes('Warning:')) {
                 alert.remove();
@@ -342,17 +680,20 @@ document.addEventListener('DOMContentLoaded', function() {
             ${message}
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         `;
-        
+
         // Insert at top of content
-        const contentDiv = document.querySelector('[role="main"]') || document.querySelector('.container-fluid');
-        contentDiv.insertBefore(alertDiv, contentDiv.firstChild);
-        
-        // Auto-dismiss after 5 seconds
-        setTimeout(() => {
-            if (alertDiv && alertDiv.parentNode) {
-                alertDiv.remove();
-            }
-        }, 5000);
+        const container = document.querySelector('.container-fluid') || document.querySelector('[role="main"]');
+        const firstCard = container.querySelector('.card');
+        container.insertBefore(alertDiv, firstCard);
+
+        // Auto-dismiss after 5 seconds for non-error messages
+        if (type !== 'danger') {
+            setTimeout(() => {
+                if (alertDiv && alertDiv.parentNode) {
+                    alertDiv.remove();
+                }
+            }, 5000);
+        }
     }
 
     // Auto-fill port based on protocol (only if default ports)

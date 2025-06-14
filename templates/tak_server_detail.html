@@ -3,285 +3,497 @@
 {% block title %}{{ server.name }} - TAK Server Details{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">
-        <i class="fas fa-server"></i> {{ server.name }}
-        <span class="badge bg-{% if server.protocol == 'tls' %}success{% else %}info{% endif %} ms-2">
-            {{ server.protocol.upper() }}
-        </span>
-    </h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <div class="btn-group me-2">
-            <a href="{{ url_for('tak_servers.list_tak_servers') }}" class="btn btn-sm btn-outline-secondary">
-                <i class="fas fa-arrow-left"></i> Back to Servers
-            </a>
-            <button class="btn btn-sm btn-outline-info" onclick="testServer({{ server.id }})" id="testBtn">
-                <i class="fas fa-network-wired"></i> Test Connection
-            </button>
-            <a href="{{ url_for('tak_servers.edit_tak_server', server_id=server.id) }}" class="btn btn-sm btn-warning">
-                <i class="fas fa-edit"></i> Edit Server
-            </a>
-            <button class="btn btn-sm btn-outline-danger" onclick="deleteServer({{ server.id }})" {% if server.streams %}disabled{% endif %}>
-                <i class="fas fa-trash"></i> Delete
-            </button>
-        </div>
-    </div>
-</div>
-
-<div class="row">
-    <!-- Server Configuration -->
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-cog"></i> Server Configuration
-                </h5>
-            </div>
-            <div class="card-body">
-                <dl class="row">
-                    <dt class="col-sm-4">Name:</dt>
-                    <dd class="col-sm-8">{{ server.name }}</dd>
-                    
-                    <dt class="col-sm-4">Host:</dt>
-                    <dd class="col-sm-8">
-                        <code>{{ server.host }}</code>
-                        <button class="btn btn-sm btn-outline-secondary ms-2" onclick="copyToClipboard('{{ server.host }}')" title="Copy to clipboard">
-                            <i class="fas fa-copy"></i>
-                        </button>
-                    </dd>
-                    
-                    <dt class="col-sm-4">Port:</dt>
-                    <dd class="col-sm-8"><code>{{ server.port }}</code></dd>
-                    
-                    <dt class="col-sm-4">Protocol:</dt>
-                    <dd class="col-sm-8">
-                        <span class="badge bg-{% if server.protocol == 'tls' %}success{% else %}info{% endif %}">
-                            {{ server.protocol.upper() }}
-                        </span>
-                    </dd>
-                    
-                    <dt class="col-sm-4">Full URL:</dt>
-                    <dd class="col-sm-8">
-                        <code>{{ server.protocol }}://{{ server.host }}:{{ server.port }}</code>
-                        <button class="btn btn-sm btn-outline-secondary ms-2" onclick="copyToClipboard('{{ server.protocol }}://{{ server.host }}:{{ server.port }}')" title="Copy to clipboard">
-                            <i class="fas fa-copy"></i>
-                        </button>
-                    </dd>
-                </dl>
-            </div>
-        </div>
-
-        <!-- TLS Configuration -->
-        {% if server.protocol == 'tls' %}
-        <div class="card mt-3">
-            <div class="card-header">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-shield-alt"></i> TLS/SSL Configuration
-                </h5>
-            </div>
-            <div class="card-body">
-                <dl class="row">
-                    <dt class="col-sm-4">SSL Verify:</dt>
-                    <dd class="col-sm-8">
-                        <i class="fas fa-{% if server.verify_ssl %}shield-alt text-success{% else %}shield text-warning{% endif %}"></i>
-                        {% if server.verify_ssl %}
-                            <span class="text-success">Enabled</span>
-                            <small class="text-muted d-block">Certificate validation is enabled</small>
-                        {% else %}
-                            <span class="text-warning">Disabled</span>
-                            <small class="text-muted d-block">Certificate validation is disabled</small>
-                        {% endif %}
-                    </dd>
-                    
-                    <dt class="col-sm-4">Client Certificate:</dt>
-                    <dd class="col-sm-8">
-                        {% if server.cert_pem %}
-                            <span class="text-success">
-                                <i class="fas fa-check-circle"></i> Configured
-                            </span>
-                            <small class="text-muted d-block">Client certificate is configured</small>
-                        {% else %}
-                            <span class="text-muted">
-                                <i class="fas fa-minus-circle"></i> Not configured
-                            </span>
-                        {% endif %}
-                    </dd>
-                    
-                    <dt class="col-sm-4">Private Key:</dt>
-                    <dd class="col-sm-8">
-                        {% if server.cert_key %}
-                            <span class="text-success">
-                                <i class="fas fa-check-circle"></i> Configured
-                            </span>
-                            <small class="text-muted d-block">Private key is configured</small>
-                        {% else %}
-                            <span class="text-muted">
-                                <i class="fas fa-minus-circle"></i> Not configured
-                            </span>
-                        {% endif %}
-                    </dd>
-                    
-                    <dt class="col-sm-4">Key Password:</dt>
-                    <dd class="col-sm-8">
-                        {% if server.client_password %}
-                            <span class="text-success">
-                                <i class="fas fa-check-circle"></i> Protected
-                            </span>
-                            <small class="text-muted d-block">Private key is password protected</small>
-                        {% else %}
-                            <span class="text-muted">
-                                <i class="fas fa-minus-circle"></i> No password
-                            </span>
-                        {% endif %}
-                    </dd>
-                </dl>
-            </div>
-        </div>
-        {% endif %}
-    </div>
-
-    <!-- Server Status and Metadata -->
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-info-circle"></i> Server Information
-                </h5>
-            </div>
-            <div class="card-body">
-                <dl class="row">
-                    <dt class="col-sm-4">Created:</dt>
-                    <dd class="col-sm-8">
-                        {{ server.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
-                        <small class="text-muted d-block">{{ server.created_at.strftime('%A, %B %d, %Y') }}</small>
-                    </dd>
-                    
-                    <dt class="col-sm-4">Last Updated:</dt>
-                    <dd class="col-sm-8">
-                        {{ server.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}
-                        <small class="text-muted d-block">{{ server.updated_at.strftime('%A, %B %d, %Y') }}</small>
-                    </dd>
-                    
-                    <dt class="col-sm-4">Server ID:</dt>
-                    <dd class="col-sm-8"><code>#{{ server.id }}</code></dd>
-                    
-                    <dt class="col-sm-4">Associated Streams:</dt>
-                    <dd class="col-sm-8">
-                        <span class="badge bg-{% if server.streams %}primary{% else %}secondary{% endif %} fs-6">
-                            {{ server.streams|length }}
-                        </span>
-                        {% if server.streams %}
-                            <small class="text-muted d-block">Click below to view stream details</small>
-                        {% else %}
-                            <small class="text-muted d-block">No streams are using this server</small>
-                        {% endif %}
-                    </dd>
-                </dl>
-            </div>
-        </div>
-
-        <!-- Connection Test Results -->
-        <div class="card mt-3" id="connectionStatus" style="display: none;">
-            <div class="card-header">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-network-wired"></i> Connection Status
-                </h5>
-            </div>
-            <div class="card-body" id="connectionResults">
-                <!-- Connection test results will be displayed here -->
+<div class="container-fluid px-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">
+            <i class="fas fa-server text-primary"></i> {{ server.name }}
+            <span class="badge bg-{% if server.protocol == 'tls' %}success{% else %}info{% endif %} ms-2">
+                {{ server.protocol.upper() }}
+            </span>
+            {% if server.is_active %}
+                <span class="badge bg-success ms-1">
+                    <i class="fas fa-circle me-1" style="font-size: 0.6em;"></i>Online
+                </span>
+            {% else %}
+                <span class="badge bg-secondary ms-1">
+                    <i class="fas fa-circle me-1" style="font-size: 0.6em;"></i>Offline
+                </span>
+            {% endif %}
+        </h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <div class="btn-group me-2">
+                <a href="{{ url_for('tak_servers.list_tak_servers') }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Servers
+                </a>
+                <button class="btn btn-sm btn-outline-info" onclick="testServer({{ server.id }})" id="testBtn">
+                    <i class="fas fa-network-wired"></i> Test Connection
+                </button>
+                <a href="{{ url_for('tak_servers.edit_tak_server', server_id=server.id) }}" class="btn btn-sm btn-warning">
+                    <i class="fas fa-edit"></i> Edit Server
+                </a>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteServer({{ server.id }})" {% if server.streams %}disabled{% endif %}>
+                    <i class="fas fa-trash"></i> Delete
+                </button>
             </div>
         </div>
     </div>
-</div>
 
-<!-- Associated Streams -->
-{% if server.streams %}
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-stream"></i> Associated Streams ({{ server.streams|length }})
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Stream Name</th>
-                                <th>Status</th>
-                                <th>Source</th>
-                                <th>Created</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for stream in server.streams %}
-                            <tr>
-                                <td>
-                                    <a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}">
-                                        {{ stream.name }}
-                                    </a>
-                                </td>
-                                <td>
-                                    {% if stream.is_active %}
-                                        <span class="badge bg-success">Active</span>
+    <div class="row g-4">
+        <!-- Server Configuration Card -->
+        <div class="col-xl-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-light">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-cog text-primary me-2"></i>
+                        <h5 class="card-title mb-0">Server Configuration</h5>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label text-muted small">Server Name</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">
+                                    <i class="fas fa-server text-muted"></i>
+                                </span>
+                                <input type="text" class="form-control" value="{{ server.name }}" readonly>
+                            </div>
+                        </div>
+
+                        <div class="col-md-8">
+                            <label class="form-label text-muted small">Host Address</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">
+                                    <i class="fas fa-globe text-muted"></i>
+                                </span>
+                                <input type="text" class="form-control font-monospace" value="{{ server.host }}" readonly>
+                                <button class="btn btn-outline-secondary" type="button" onclick="copyToClipboard('{{ server.host }}')" title="Copy to clipboard">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label text-muted small">Port</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">
+                                    <i class="fas fa-ethernet text-muted"></i>
+                                </span>
+                                <input type="text" class="form-control font-monospace" value="{{ server.port }}" readonly>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">Protocol</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">
+                                    <i class="fas fa-shield-alt text-muted"></i>
+                                </span>
+                                <input type="text" class="form-control" value="{{ server.protocol.upper() }}" readonly>
+                                <span class="input-group-text bg-{% if server.protocol == 'tls' %}success{% else %}info{% endif %}">
+                                    {% if server.protocol == 'tls' %}
+                                        <i class="fas fa-lock"></i>
                                     {% else %}
-                                        <span class="badge bg-secondary">Inactive</span>
+                                        <i class="fas fa-unlock"></i>
                                     {% endif %}
-                                </td>
-                                <td>
-                                    <small class="text-muted">
-                                        {{ stream.source_type|title }}
-                                        {% if stream.source_config %}
-                                            - {{ stream.source_config.get('host', 'N/A') }}
-                                        {% endif %}
-                                    </small>
-                                </td>
-                                <td>
-                                    <small class="text-muted">{{ stream.created_at.strftime('%Y-%m-%d') }}</small>
-                                </td>
-                                <td>
-                                    <div class="btn-group btn-group-sm">
-                                        <a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}" class="btn btn-outline-primary btn-sm">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                        <a href="{{ url_for('streams.edit_stream', stream_id=stream.id) }}" class="btn btn-outline-warning btn-sm">
-                                            <i class="fas fa-edit"></i>
-                                        </a>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">Server ID</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">
+                                    <i class="fas fa-hashtag text-muted"></i>
+                                </span>
+                                <input type="text" class="form-control font-monospace" value="{{ server.id }}" readonly>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label text-muted small">Full Connection URL</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">
+                                    <i class="fas fa-link text-muted"></i>
+                                </span>
+                                <input type="text" class="form-control font-monospace" value="{{ server.protocol }}://{{ server.host }}:{{ server.port }}" readonly>
+                                <button class="btn btn-outline-secondary" type="button" onclick="copyToClipboard('{{ server.protocol }}://{{ server.host }}:{{ server.port }}')" title="Copy to clipboard">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Server Information Card -->
+        <div class="col-xl-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-light">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-info-circle text-primary me-2"></i>
+                        <h5 class="card-title mb-0">Server Information</h5>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">Created Date</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">
+                                    <i class="fas fa-calendar-plus text-muted"></i>
+                                </span>
+                                <input type="text" class="form-control" value="{{ server.created_at.strftime('%Y-%m-%d %H:%M') }}" readonly>
+                            </div>
+                            <small class="text-muted">{{ server.created_at.strftime('%A, %B %d, %Y') }}</small>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">Last Updated</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">
+                                    <i class="fas fa-clock text-muted"></i>
+                                </span>
+                                <input type="text" class="form-control" value="{{ server.updated_at.strftime('%Y-%m-%d %H:%M') }}" readonly>
+                            </div>
+                            <small class="text-muted">{{ server.updated_at.strftime('%A, %B %d, %Y') }}</small>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label text-muted small">Associated Streams</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">
+                                    <i class="fas fa-stream text-muted"></i>
+                                </span>
+                                <input type="text" class="form-control" value="{{ server.streams|length }} streams" readonly>
+                                <span class="input-group-text bg-{% if server.streams %}primary{% else %}secondary{% endif %}">
+                                    <i class="fas fa-{% if server.streams %}check{% else %}times{% endif %}"></i>
+                                </span>
+                            </div>
+                            {% if server.streams %}
+                                <small class="text-muted">Click the "Associated Streams" section below for details</small>
+                            {% else %}
+                                <small class="text-muted">No streams are currently using this server</small>
+                            {% endif %}
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
-{% endif %}
 
-<!-- PyTAK Configuration -->
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-code"></i> PyTAK Configuration
-                </h5>
-                <button class="btn btn-sm btn-outline-secondary" onclick="copyPytakConfig()">
-                    <i class="fas fa-copy"></i> Copy Config
-                </button>
+    <!-- TLS/SSL Configuration -->
+    {% if server.protocol == 'tls' %}
+    <div class="row g-4 mt-2">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-shield-alt text-success me-2"></i>
+                        <h5 class="card-title mb-0">TLS/SSL Security Configuration</h5>
+                    </div>
+                </div>
+                <div class="card-body">
+                                        <!-- Certificate Details -->
+                    {% if server.cert_p12 or server.cert_pem %}
+                    <div class="row g-4">
+                        <div class="col-12">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <h6 class="text-muted mb-0">
+                                    <i class="fas fa-certificate me-2"></i>Certificate Details
+                                </h6>
+                                {% if server.cert_p12 %}
+                                <button class="btn btn-sm btn-outline-info" onclick="validateStoredCertificate({{ server.id }})" id="loadCertBtn">
+                                    <i class="fas fa-info-circle me-1"></i>View Certificate Info
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if server.cert_p12 %}
+                        <!-- P12 Certificate Section -->
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">P12 Certificate File</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">
+                                    <i class="fas fa-file-certificate text-muted"></i>
+                                </span>
+                                <input type="text" class="form-control" value="{{ server.p12_filename or 'client.p12' }}" readonly>
+                                <span class="input-group-text bg-success text-white">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                            </div>
+                            <small class="text-muted">PKCS#12 certificate bundle uploaded</small>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">P12 Certificate Password</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">
+                                    <i class="fas fa-key text-muted"></i>
+                                </span>
+                                <input type="password" class="form-control" value="{% if server.p12_password %}••••••••{% endif %}" readonly>
+                                <span class="input-group-text bg-{% if server.p12_password %}success{% else %}secondary{% endif %}">
+                                    <i class="fas fa-{% if server.p12_password %}lock{% else %}unlock{% endif %}"></i>
+                                </span>
+                            </div>
+                            <small class="text-muted">
+                                {% if server.cert_password %}Password protected P12 file{% else %}No password set{% endif %}
+                            </small>
+                        </div>
+                        {% endif %}
+
+                        {% if server.cert_pem %}
+                        <!-- PEM Certificate Section -->
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">PEM Certificate</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">
+                                    <i class="fas fa-file-certificate text-muted"></i>
+                                </span>
+                                <input type="text" class="form-control" value="Client Certificate (PEM)" readonly>
+                                <span class="input-group-text bg-success text-white">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                            </div>
+                            <small class="text-muted">X.509 certificate in PEM format</small>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">Private Key</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">
+                                    <i class="fas fa-key text-muted"></i>
+                                </span>
+                                <input type="text" class="form-control" value="{% if server.cert_key %}Private Key (PEM){% else %}Not configured{% endif %}" readonly>
+                                <span class="input-group-text bg-{% if server.cert_key %}success{% else %}secondary{% endif %}">
+                                    <i class="fas fa-{% if server.cert_key %}check{% else %}times{% endif %}"></i>
+                                </span>
+                            </div>
+                            <small class="text-muted">
+                                {% if server.cert_key %}
+                                    {% if server.client_password %}Password protected private key{% else %}Unprotected private key{% endif %}
+                                {% else %}
+                                    No private key configured
+                                {% endif %}
+                            </small>
+                        </div>
+                        {% endif %}
+
+                         <!-- P12 Certificate Information Display -->
+                        <div class="col-12" id="cert_info" style="display: none;">
+                            <div class="alert alert-info">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="alert-heading mb-0">
+                                        <i class="fas fa-info-circle me-2"></i>Certificate Information
+                                    </h6>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="hideCertificateInfo()" type="button">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                <div id="certDetails">
+                                    <!-- Certificate details will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Static Certificate Information Display (for existing cert_info) -->
+                        {% if server.cert_info %}
+                        <div class="col-12">
+                            <div class="alert alert-info">
+                                <h6 class="alert-heading">
+                                    <i class="fas fa-info-circle me-2"></i>Certificate Information
+                                </h6>
+                                <div class="row">
+                                    {% if server.cert_info.subject %}
+                                    <div class="col-md-6">
+                                        <strong>Subject:</strong><br>
+                                        <code class="small">{{ server.cert_info.subject }}</code>
+                                    </div>
+                                    {% endif %}
+                                    {% if server.cert_info.issuer %}
+                                    <div class="col-md-6">
+                                        <strong>Issuer:</strong><br>
+                                        <code class="small">{{ server.cert_info.issuer }}</code>
+                                    </div>
+                                    {% endif %}
+                                    {% if server.cert_info.valid_from and server.cert_info.valid_to %}
+                                    <div class="col-md-6 mt-2">
+                                        <strong>Valid From:</strong> {{ server.cert_info.valid_from }}<br>
+                                        <strong>Valid Until:</strong>
+                                        <span class="{% if server.cert_info.is_expired %}text-danger{% elif server.cert_info.expires_soon %}text-warning{% else %}text-success{% endif %}">
+                                            {{ server.cert_info.valid_to }}
+                                        </span>
+                                    </div>
+                                    {% endif %}
+                                    {% if server.cert_info.serial_number %}
+                                    <div class="col-md-6 mt-2">
+                                        <strong>Serial Number:</strong><br>
+                                        <code class="small">{{ server.cert_info.serial_number }}</code>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
             </div>
-            <div class="card-body">
-                <p class="text-muted mb-3">Use this configuration with PyTAK applications:</p>
-                <pre id="pytakConfig" class="bg-light p-3 rounded"><code>COT_URL={{ server.protocol }}://{{ server.host }}:{{ server.port }}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Connection Test Results -->
+    <div class="row g-4 mt-2" id="connectionStatus" style="display: none;">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-network-wired text-primary me-2"></i>
+                        <h5 class="card-title mb-0">Connection Test Results</h5>
+                    </div>
+                </div>
+                <div class="card-body" id="connectionResults">
+                    <!-- Connection test results will be displayed here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Associated Streams -->
+    {% if server.streams %}
+    <div class="row g-4 mt-2">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-stream text-primary me-2"></i>
+                            <h5 class="card-title mb-0">Associated Streams</h5>
+                            <span class="badge bg-primary ms-2">{{ server.streams|length }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th scope="col">
+                                        <i class="fas fa-stream me-1"></i>Stream Name
+                                    </th>
+                                    <th scope="col">
+                                        <i class="fas fa-circle me-1"></i>Status
+                                    </th>
+                                    <th scope="col">
+                                        <i class="fas fa-source me-1"></i>Source
+                                    </th>
+                                    <th scope="col">
+                                        <i class="fas fa-calendar me-1"></i>Created
+                                    </th>
+                                    <th scope="col" class="text-end">
+                                        <i class="fas fa-cogs me-1"></i>Actions
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stream in server.streams %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-stream text-muted me-2"></i>
+                                            <a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}" class="text-decoration-none fw-medium">
+                                                {{ stream.name }}
+                                            </a>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if stream.is_active %}
+                                            <span class="badge bg-success">
+                                                <i class="fas fa-play me-1"></i>Active
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">
+                                                <i class="fas fa-pause me-1"></i>Inactive
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="small">
+                                            <div class="fw-medium">{{ stream.source_type|title }}</div>
+                                            {% if stream.source_config %}
+                                                <div class="text-muted">{{ stream.source_config.get('host', 'N/A') }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">{{ stream.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}" class="btn btn-outline-primary" title="View Stream">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <a href="{{ url_for('streams.edit_stream', stream_id=stream.id) }}" class="btn btn-outline-warning" title="Edit Stream">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- PyTAK Configuration -->
+    <div class="row g-4 mt-2">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-code text-primary me-2"></i>
+                            <h5 class="card-title mb-0">PyTAK Configuration</h5>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="copyPytakConfig()">
+                            <i class="fas fa-copy me-1"></i>Copy Config
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">Use this configuration with PyTAK applications and tools:</p>
+                    <div class="position-relative">
+                        <pre id="pytakConfig" class="bg-light p-3 rounded border"><code>COT_URL={{ server.protocol }}://{{ server.host }}:{{ server.port }}
 PYTAK_TLS_DONT_VERIFY={{ 'true' if not server.verify_ssl else 'false' }}{% if server.cert_pem %}
 PYTAK_TLS_CLIENT_CERT=[path-to-cert.pem]{% endif %}{% if server.cert_key %}
 PYTAK_TLS_CLIENT_KEY=[path-to-key.pem]{% endif %}{% if server.client_password %}
-PYTAK_TLS_CLIENT_PASSWORD={{ server.client_password }}{% endif %}</code></pre>
+PYTAK_TLS_CLIENT_PASSWORD={{ server.client_password }}{% endif %}{% if server.p12_cert %}
+PYTAK_TLS_CLIENT_P12=[path-to-cert.p12]{% endif %}{% if server.p12_password %}
+PYTAK_TLS_CLIENT_P12_PASSWORD={{ server.p12_password }}{% endif %}</code></pre>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Replace bracketed paths with actual file locations
+                            </small>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <small class="text-muted">
+                                <i class="fas fa-external-link-alt me-1"></i>
+                                <a href="https://pytak.readthedocs.io/" target="_blank" class="text-decoration-none">PyTAK Documentation</a>
+                            </small>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -295,20 +507,25 @@ function testServer(serverId) {
     const originalContent = testBtn.innerHTML;
     const connectionStatus = document.getElementById('connectionStatus');
     const connectionResults = document.getElementById('connectionResults');
-    
+
     // Show loading state
     testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
     testBtn.disabled = true;
-    
+
     // Show connection status card
     connectionStatus.style.display = 'block';
     connectionResults.innerHTML = `
         <div class="d-flex align-items-center">
-            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
-            <span>Testing connection to {{ server.host }}:{{ server.port }}...</span>
+            <div class="spinner-border spinner-border-sm text-primary me-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <div>
+                <h6 class="mb-1">Testing Connection</h6>
+                <small class="text-muted">Connecting to {{ server.host }}:{{ server.port }}...</small>
+            </div>
         </div>
     `;
-    
+
     fetch(`/tak-servers/${serverId}/test`, {
         method: 'POST',
         headers: {
@@ -319,62 +536,72 @@ function testServer(serverId) {
     .then(data => {
         if (data.success) {
             // Show success feedback
-            testBtn.innerHTML = '<i class="fas fa-check text-success"></i> Connection OK';
+            testBtn.innerHTML = '<i class="fas fa-check text-success"></i> Connected';
             connectionResults.innerHTML = `
-                <div class="alert alert-success mb-0">
-                    <i class="fas fa-check-circle"></i>
-                    <strong>Connection Successful!</strong><br>
-                    Successfully connected to {{ server.host }}:{{ server.port }}
+                <div class="alert alert-success border-0 shadow-sm mb-0">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-check-circle fa-2x text-success me-3"></i>
+                        <div>
+                            <h6 class="alert-heading mb-1">Connection Successful!</h6>
+                            <p class="mb-0 small">Successfully connected to {{ server.host }}:{{ server.port }}</p>
+                            ${data.response_time ? `<small class="text-muted">Response time: ${data.response_time}ms</small>` : ''}
+                        </div>
+                    </div>
                 </div>
             `;
-            
+
             setTimeout(() => {
                 testBtn.innerHTML = originalContent;
                 testBtn.disabled = false;
             }, 3000);
         } else {
             // Show error feedback
-            testBtn.innerHTML = '<i class="fas fa-times text-danger"></i> Connection Failed';
+            testBtn.innerHTML = '<i class="fas fa-times text-danger"></i> Failed';
             connectionResults.innerHTML = `
-                <div class="alert alert-danger mb-0">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <strong>Connection Failed!</strong><br>
-                    ${data.error}
+                <div class="alert alert-danger border-0 shadow-sm mb-0">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-exclamation-circle fa-2x text-danger me-3"></i>
+                        <div>
+                            <h6 class="alert-heading mb-1">Connection Failed</h6>
+                            <p class="mb-0 small">${data.error || 'Unable to connect to server'}</p>
+                            <small class="text-muted">Check server configuration and network connectivity</small>
+                        </div>
+                    </div>
                 </div>
             `;
-            
+
             setTimeout(() => {
                 testBtn.innerHTML = originalContent;
                 testBtn.disabled = false;
-            }, 3000);
+            }, 5000);
         }
     })
     .catch(error => {
-        console.error('Error:', error);
-        testBtn.innerHTML = '<i class="fas fa-times text-danger"></i> Test Error';
+        console.error('Error testing server:', error);
+        testBtn.innerHTML = '<i class="fas fa-times text-danger"></i> Error';
         connectionResults.innerHTML = `
-            <div class="alert alert-danger mb-0">
-                <i class="fas fa-exclamation-triangle"></i>
-                <strong>Test Error!</strong><br>
-                Network error occurred during connection test
+            <div class="alert alert-danger border-0 shadow-sm mb-0">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-exclamation-triangle fa-2x text-danger me-3"></i>
+                    <div>
+                        <h6 class="alert-heading mb-1">Test Error</h6>
+                        <p class="mb-0 small">An error occurred while testing the connection</p>
+                        <small class="text-muted">Please try again or check the console for details</small>
+                    </div>
+                </div>
             </div>
         `;
-        
+
         setTimeout(() => {
             testBtn.innerHTML = originalContent;
             testBtn.disabled = false;
-        }, 3000);
+        }, 5000);
     });
 }
 
 function deleteServer(serverId) {
-    {% if server.streams %}
-    showAlert('warning', 'Cannot delete server with associated streams. Please remove or reassign streams first.');
-    return;
-    {% endif %}
-    
-    if (confirm('Are you sure you want to delete this TAK server?\n\nServer: {{ server.name }}\nThis action cannot be undone.')) {
-        fetch(`/tak-servers/${serverId}/delete`, {
+    if (confirm('Are you sure you want to delete this server? This action cannot be undone.')) {
+        fetch(`/tak-servers/${serverId}`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json',
@@ -383,64 +610,163 @@ function deleteServer(serverId) {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                showAlert('success', 'TAK Server deleted successfully');
-                setTimeout(() => {
-                    window.location.href = '/tak-servers';
-                }, 1000);
+                // Redirect to servers list
+                window.location.href = "{{ url_for('tak_servers.list_tak_servers') }}";
             } else {
-                showAlert('danger', 'Error: ' + data.error);
+                alert('Error deleting server: ' + (data.error || 'Unknown error'));
             }
         })
         .catch(error => {
-            console.error('Error:', error);
-            showAlert('danger', 'Network error occurred');
+            console.error('Error deleting server:', error);
+            alert('An error occurred while deleting the server');
         });
     }
 }
 
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(function() {
-        showAlert('success', 'Copied to clipboard: ' + text);
+        // Show temporary success feedback
+        const event = window.event;
+        const button = event.target.closest('button');
+        const originalContent = button.innerHTML;
+
+        button.innerHTML = '<i class="fas fa-check text-success"></i>';
+
+        setTimeout(() => {
+            button.innerHTML = originalContent;
+        }, 2000);
     }).catch(function(err) {
-        console.error('Could not copy text: ', err);
-        showAlert('danger', 'Failed to copy to clipboard');
+        console.error('Failed to copy text: ', err);
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
     });
 }
 
 function copyPytakConfig() {
-    const config = document.getElementById('pytakConfig').textContent;
-    navigator.clipboard.writeText(config).then(function() {
-        showAlert('success', 'PyTAK configuration copied to clipboard');
-    }).catch(function(err) {
-        console.error('Could not copy config: ', err);
-        showAlert('danger', 'Failed to copy configuration');
-    });
+    const configText = document.getElementById('pytakConfig').textContent;
+    copyToClipboard(configText);
 }
 
-function showAlert(type, message) {
-    // Remove existing alerts
-    const existingAlerts = document.querySelectorAll('.alert-dismissible');
-    existingAlerts.forEach(alert => alert.remove());
+async function validateStoredCertificate(serverId) {
+    const loadCertBtn = document.getElementById('loadCertBtn');
+    const originalContent = loadCertBtn.innerHTML;
+    const certInfo = document.getElementById('cert_info');
+    const certDetails = document.getElementById('certDetails');
 
-    // Create alert element
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-    alertDiv.setAttribute('role', 'alert');
-    alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    // Show loading state
+    loadCertBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+    loadCertBtn.disabled = true;
+
+    // Show the certificate info box with loading state
+    certDetails.innerHTML = `
+        <div class="d-flex align-items-center">
+            <div class="spinner-border spinner-border-sm text-primary me-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <div>Validating certificate...</div>
+        </div>
     `;
-    
-    // Insert at top of content
-    const contentDiv = document.querySelector('[role="main"]') || document.querySelector('.container-fluid');
-    contentDiv.insertBefore(alertDiv, contentDiv.firstChild);
-    
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-        if (alertDiv && alertDiv.parentNode) {
-            alertDiv.remove();
+    certInfo.style.display = 'block';
+
+    try {
+        const response = await fetch(`/tak-servers/${serverId}/validate-certificate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        const result = await response.json();
+
+        if (result.success && result.cert_info) {
+            // Display certificate information
+            displayCertificateInfo(result.cert_info);
+        } else {
+            // Show error message
+            certDetails.innerHTML = `
+                <div class="text-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Unable to load certificate information: ${result.error || 'Unknown error'}
+                </div>
+            `;
+            // Keep the box visible to show the error
         }
-    }, 5000);
+    } catch (error) {
+        console.error('Certificate validation error:', error);
+        certDetails.innerHTML = `
+            <div class="text-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                An error occurred while loading certificate information
+            </div>
+        `;
+        // Keep the box visible to show the error
+    }
+
+    // Restore button state
+    loadCertBtn.innerHTML = originalContent;
+    loadCertBtn.disabled = false;
 }
+
+function displayCertificateInfo(certInfo) {
+    const certDetails = document.getElementById('certDetails');
+    const certInfoDiv = document.getElementById('cert_info');
+
+    const details = `
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <tr>
+                    <td class="fw-medium" style="width: 120px;">Subject:</td>
+                    <td><code class="small">${certInfo.subject}</code></td>
+                </tr>
+                <tr>
+                    <td class="fw-medium">Issuer:</td>
+                    <td><code class="small">${certInfo.issuer}</code></td>
+                </tr>
+                <tr>
+                    <td class="fw-medium">Valid From:</td>
+                    <td>${new Date(certInfo.not_before).toLocaleDateString()}</td>
+                </tr>
+                <tr>
+                    <td class="fw-medium">Valid Until:</td>
+                    <td>${new Date(certInfo.not_after).toLocaleDateString()}</td>
+                </tr>
+                <tr>
+                    <td class="fw-medium">Serial Number:</td>
+                    <td><code class="small">${certInfo.serial_number}</code></td>
+                </tr>
+            </table>
+        </div>
+    `;
+
+    certDetails.innerHTML = details;
+    certInfoDiv.style.display = 'block';
+
+    // Ensure the div stays visible by scrolling to it
+    certInfoDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function hideCertificateInfo() {
+    const certInfo = document.getElementById('cert_info');
+    certInfo.style.display = 'none';
+}
+
+function hideCertificateInfo() {
+    const certInfo = document.getElementById('cert_info');
+    certInfo.style.display = 'none';
+}
+
+function hideCertificateInfo() {
+    document.getElementById('cert_info').style.display = 'none';
+}
+
+// Auto-hide connection status after some time if successful
+document.addEventListener('DOMContentLoaded', function() {
+    // Add any initialization code here if needed
+});
 </script>
 {% endblock %}

@@ -20,7 +20,7 @@ import traceback
 from models.stream import Stream
 from models.tak_server import TakServer
 from plugins.plugin_manager import plugin_manager
-from services.cot_service import COTService
+
 from database import db
 
 
@@ -128,9 +128,8 @@ class DatabaseManager:
             tak_copy.port = stream.tak_server.port
             tak_copy.protocol = stream.tak_server.protocol
             tak_copy.verify_ssl = stream.tak_server.verify_ssl
-            tak_copy.cert_pem = stream.tak_server.cert_pem
-            tak_copy.cert_key = stream.tak_server.cert_key
-            tak_copy.client_password = stream.tak_server.client_password
+            tak_copy.cert_p12 = stream.tak_server.cert_p12
+            tak_copy.cert_password = stream.tak_server.cert_password
             stream_copy.tak_server = tak_copy
         else:
             stream_copy.tak_server = None
@@ -253,7 +252,7 @@ class StreamWorker:
         self._consecutive_errors = 0
 
     async def start(self):
-        """Start the stream worker with proper locking and duplicate prevention"""
+        """Start the stream worker with proper locking and duplicate prevention + PyTAK integration"""
         async with self._start_lock:
             if self.running and self._startup_complete:
                 self.logger.warning(f"Stream {self.stream.name} is already running and startup complete")
@@ -286,11 +285,11 @@ class StreamWorker:
                     self.running = False
                     return False
 
-                # Initialize TAK server connection if configured
+                # Initialize TAK server connection with PyTAK if configured
                 if self.stream.tak_server:
                     success = await self._initialize_tak_connection()
                     if not success:
-                        self.logger.error("Failed to initialize TAK server connection")
+                        self.logger.error("Failed to initialize PyTAK TAK server connection")
                         self.running = False
                         return False
 
@@ -319,7 +318,7 @@ class StreamWorker:
                 return False
 
     async def stop(self, skip_db_update=False):
-        """Stop the stream worker"""
+        """Stop the stream worker and cleanup PyTAK resources"""
         async with self._start_lock:
             if not self.running:
                 self.logger.info(f"Stream '{self.stream.name}' is not running, nothing to stop")
@@ -341,14 +340,14 @@ class StreamWorker:
                 except (asyncio.CancelledError, asyncio.TimeoutError):
                     self.logger.info(f"Task for stream '{self.stream.name}' was cancelled or timed out")
 
-            # Clean up resources
+            # Clean up PyTAK resources
             await self._cleanup_tak_connection()
 
             # Update database only if not during shutdown
             if not skip_db_update:
                 await self._update_stream_status_async(is_active=False)
 
-            self.logger.info(f"Stream '{self.stream.name}' stopped")
+            self.logger.info(f"Stream '{self.stream.name}' stopped successfully")
 
     async def _update_stream_status_async(self, **kwargs):
         """Update stream status asynchronously"""
@@ -370,75 +369,59 @@ class StreamWorker:
             return False
 
     async def _initialize_tak_connection(self) -> bool:
-        """Initialize persistent connection to TAK server"""
+        """Initialize PyTAK client for TAK server connection"""
         try:
             tak_server = self.stream.tak_server
-            self.logger.info(f"Initializing connection to TAK server {tak_server.name}")
+            self.logger.debug(f"Initializing connection to TAK server {tak_server.name}")
 
-            # Create SSL context if using TLS
-            ssl_context = None
-            if tak_server.protocol.lower() in ['tls', 'ssl']:
-                ssl_context = ssl.create_default_context()
+            # Initialize the COT service with PyTAK enabled
+            if not hasattr(self, 'cot_service'):
+                from services.cot_service import EnhancedCOTService
+                self.cot_service = EnhancedCOTService(use_pytak=True)
 
-                # Configure SSL verification
-                if not tak_server.verify_ssl:
-                    ssl_context.check_hostname = False
-                    ssl_context.verify_mode = ssl.CERT_NONE
+            # Test connection by creating a simple test event
+            test_locations = [{
+                'uid': f'test-{tak_server.name}',
+                'lat': 0.0,
+                'lon': 0.0,
+                'name': 'Connection Test',
+                'timestamp': datetime.utcnow()
+            }]
 
-                # Load client certificates if provided
-                if tak_server.cert_pem and tak_server.cert_key:
-                    try:
-                        ssl_context.load_cert_chain(
-                            certfile=tak_server.cert_pem,
-                            keyfile=tak_server.cert_key,
-                            password=tak_server.client_password
-                        )
-                    except Exception as e:
-                        self.logger.error(f"Failed to load SSL certificates: {e}")
-                        return False
+            # Try to create events to validate PyTAK availability
+            test_events = await self.cot_service.create_cot_events(
+                test_locations,
+                self.stream.cot_type or "a-f-G-U-C",
+                30  # Short stale time for test
+            )
 
-            # Establish connection with timeout
-            try:
-                if ssl_context:
-                    self.reader, self.writer = await asyncio.wait_for(
-                        asyncio.open_connection(tak_server.host, tak_server.port, ssl=ssl_context),
-                        timeout=30.0
-                    )
-                else:
-                    self.reader, self.writer = await asyncio.wait_for(
-                        asyncio.open_connection(tak_server.host, tak_server.port),
-                        timeout=30.0
-                    )
-            except asyncio.TimeoutError:
-                self.logger.error(f"Timeout connecting to TAK server {tak_server.host}:{tak_server.port}")
+            if not test_events:
+                self.logger.error("Failed to create test COT events")
                 return False
 
-            self.logger.info(f"Connected to TAK server {tak_server.name} at {tak_server.host}:{tak_server.port}")
+            self.logger.info(f"Connection initialized for TAK server {tak_server.name}")
             return True
 
         except Exception as e:
-            self.logger.error(f"Failed to connect to TAK server: {e}", exc_info=True)
+            self.logger.error(f"Failed to initialize TAK Server connection: {e}", exc_info=True)
             return False
 
     async def _cleanup_tak_connection(self):
-        """Clean up TAK server connection"""
-        if self.writer:
+        """Clean up PyTAK connection resources"""
+        if hasattr(self, 'cot_service'):
             try:
-                self.writer.close()
-                await asyncio.wait_for(self.writer.wait_closed(), timeout=5.0)
+                await self.cot_service.cleanup()
+                self.logger.info("TAK Server connection resources cleaned up")
             except Exception as e:
-                self.logger.error(f"Error closing TAK connection: {e}")
-            finally:
-                self.writer = None
-                self.reader = None
+                self.logger.error(f"Error cleaning up TAK Server connection: {e}")
 
     async def _run_loop(self):
-        """Main processing loop for the stream"""
+        """Main processing loop for the stream with PyTAK integration"""
         max_consecutive_errors = 5
         backoff_multiplier = 2
         max_backoff = 300  # 5 minutes
 
-        self.logger.info(f"Starting main loop for stream '{self.stream.name}' (ID: {self.stream.id})")
+        self.logger.debug(f"Starting main loop for stream '{self.stream.name}' (ID: {self.stream.id})")
 
         while self.running:
             try:
@@ -460,19 +443,19 @@ class StreamWorker:
                     self.logger.info(f"Retrieved {len(locations)} locations from {self.stream.plugin_type} plugin")
 
                     # Send to TAK server if configured
-                    if self.stream.tak_server and self.writer:
-                        success = await self._send_locations_to_tak(locations)
+                    if self.stream.tak_server and hasattr(self, 'cot_service'):
+                        success = await self._send_locations_to_tak_pytak(locations)
                         if success:
-                            self.logger.info(f"Successfully sent {len(locations)} locations to TAK server")
+                            self.logger.info(f"Successfully sent {len(locations)} locations to TAK server via PyTAK")
                         else:
-                            self.logger.error("Failed to send locations to TAK server")
-                            # Try to reconnect
+                            self.logger.error("Failed to send locations to TAK server via PyTAK")
+                            # Try to reinitialize connection
                             await self._cleanup_tak_connection()
                             reconnect_success = await self._initialize_tak_connection()
                             if not reconnect_success:
-                                raise Exception("Failed to reconnect to TAK server")
+                                raise Exception("Failed to reinitialize PyTAK connection")
                     else:
-                        self.logger.warning("No TAK server configured or connection lost")
+                        self.logger.warning("No TAK server configured or COT service not initialized")
 
                     # Update stream status with success
                     await self._update_stream_status_async(
@@ -537,10 +520,41 @@ class StreamWorker:
 
         self.logger.info(f"Main loop for stream '{self.stream.name}' has ended")
 
-    async def _send_locations_to_tak(self, locations: List[Dict]) -> bool:
-        """Send locations to TAK server with improved error handling"""
+    async def _send_locations_to_tak_pytak(self, locations: List[Dict]) -> bool:
+        """Send locations to TAK server using PyTAK with improved error handling"""
         try:
-            # Convert locations to COT events
+            if not hasattr(self, 'cot_service'):
+                self.logger.error("COT service not initialized")
+                return False
+
+            # Use the enhanced COT service to process and send locations
+            success = await self.cot_service.process_and_send_locations(
+                locations=locations,
+                tak_server=self.stream.tak_server,
+                cot_type=self.stream.cot_type or "a-f-G-U-C",
+                stale_time=self.stream.cot_stale_time or 300
+            )
+
+            if success:
+                # Update total_messages_sent in database
+                await self._update_stream_status_async(messages_sent=len(locations))
+                self.logger.info(f"Successfully processed and sent {len(locations)} locations via PyTAK")
+            else:
+                self.logger.error("Failed to process and send locations via PyTAK")
+
+            return success
+
+        except Exception as e:
+            self.logger.error(f"Failed to send locations to TAK server via PyTAK: {e}", exc_info=True)
+            return False
+
+    async def _send_locations_to_tak_fallback(self, locations: List[Dict]) -> bool:
+        """Fallback method using direct connection (for compatibility)"""
+        try:
+            # This is your original implementation as fallback
+            from services.cot_service import COTService
+
+            # Convert locations to COT events using the original method
             cot_events = COTService.create_cot_events(
                 locations,
                 self.stream.cot_type,
@@ -585,8 +599,9 @@ class StreamWorker:
             return messages_sent > 0
 
         except Exception as e:
-            self.logger.error(f"Failed to send locations to TAK server: {e}", exc_info=True)
+            self.logger.error(f"Failed to send locations to TAK server (fallback): {e}", exc_info=True)
             return False
+
 
     def get_health_status(self) -> Dict:
         """Get detailed health status of this worker"""
@@ -837,7 +852,7 @@ class StreamManager:
                     del self.workers[stream_id]
 
             # Get fresh stream data from database
-            self.logger.info(f"Fetching stream {stream_id} from database")
+            self.logger.debug(f"Fetching stream {stream_id} from database")
             try:
                 stream = await asyncio.wait_for(
                     asyncio.get_event_loop().run_in_executor(
@@ -862,7 +877,7 @@ class StreamManager:
                 return False
 
             # Create worker
-            self.logger.info(f"Creating worker for stream {stream_id} ({stream.name})")
+            self.logger.debug(f"Creating worker for stream {stream_id} ({stream.name})")
             worker = StreamWorker(stream, self._session_manager, self._db_manager)
 
             # Start worker with timeout
@@ -878,7 +893,7 @@ class StreamManager:
 
             if success:
                 self.workers[stream_id] = worker
-                self.logger.info(f"Successfully started stream {stream_id}")
+                self.logger.debug(f"Successfully started stream {stream_id}")
             else:
                 self.logger.error(f"Failed to start stream {stream_id}")
 

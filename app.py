@@ -85,11 +85,13 @@ def create_app(config_name=None):
     from routes.streams import bp as streams_bp
     from routes.tak_servers import bp as tak_servers_bp
     from routes.admin import bp as admin_bp
+    from routes.health import bp as health_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(streams_bp, url_prefix='/streams')
     app.register_blueprint(tak_servers_bp, url_prefix='/tak-servers')
-    app.register_blueprint(admin_bp, url_prefox='/admin')
+    app.register_blueprint(admin_bp, url_prefix='/admin')
+    app.register_blueprint(health_bp, url_prefix='/api')
 
     # Add context processors and error handlers
     setup_template_helpers(app)

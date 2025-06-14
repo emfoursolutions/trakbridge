@@ -420,7 +420,7 @@ class GarminPlugin(BaseGPSPlugin):
                 except Exception as xml_e:
                     self.logger.error(f"Alternative XML parsing failed: {xml_e}")
 
-            self.logger.info(f"Parsed {len(placemarks)} Point placemarks from KML")
+            self.logger.debug(f"Parsed {len(placemarks)} Point placemarks from KML")
             return placemarks
 
         except Exception as e:
