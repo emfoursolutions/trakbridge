@@ -3,6 +3,6 @@ venv/
 __pycache__/
 *.pyc
 app.db*
-.env
+.env*
 config.py
 utils/
