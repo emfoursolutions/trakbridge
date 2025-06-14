@@ -70,7 +70,7 @@ class DevelopmentConfig(BaseConfig):
                 'pool_timeout': 30,
                 'connect_args': {
                     'connect_timeout': 10,
-                    'application_name': 'GPS_TAK_App_Dev'
+                    'application_name': 'TrakBridge_Dev'
                 }
             }
         }
@@ -146,7 +146,7 @@ class ProductionConfig(BaseConfig):
                 'pool_timeout': 60,
                 'connect_args': {
                     'connect_timeout': 10,
-                    'application_name': 'GPS_TAK_App_Prod',
+                    'application_name': 'TrakBridge_Prod',
                     'sslmode': 'prefer'
                 }
             }

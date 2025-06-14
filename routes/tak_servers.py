@@ -8,19 +8,7 @@ from models.tak_server import TakServer
 from services.tak_servers_service import TakServerService, TakServerConnectionTester, TestSender
 import base64
 import logging
-import socket
-import ssl
-import tempfile
-import os
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.serialization import pkcs12
-from cryptography import x509
-from datetime import datetime, timezone
 import asyncio
-from configparser import ConfigParser
-import uuid
-import xml.etree.ElementTree as ET
-import pytak
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -66,6 +54,7 @@ def validate_certificate():
         logger.error(f"Certificate validation endpoint error: {str(e)}")
         return jsonify({'success': False, 'error': f'Validation failed: {str(e)}'}), 500
 
+
 @bp.route('/<int:server_id>/validate-certificate', methods=['POST'])
 def validate_stored_certificate(server_id):
     try:
@@ -84,6 +73,7 @@ def validate_stored_certificate(server_id):
             'success': False,
             'error': f'Certificate validation failed: {str(e)}'
         }), 500
+
 
 @bp.route('/')
 def list_tak_servers():
@@ -154,14 +144,14 @@ def create_tak_server():
                 raise ValueError(f"Certificate validation failed: {validation_result['error']}")
 
         # Log the data being inserted
-        logger.info(f"Creating TAK server: {data.get('name')} at {data.get('host')}:{port}")
+        logger.info(f"Creating TAK server: {data.get('name')} at {data.get('host')}:{data.get('port')}")
         logger.info(f"Protocol: {data.get('protocol', 'tls')}, SSL Verify: {verify_ssl}")
         logger.info(f"Certificate: {'Yes' if cert_p12_data else 'No'}")
 
         server = TakServer(
             name=data['name'],
             host=data['host'],
-            port=port,
+            port=data['port'],
             protocol=data.get('protocol', 'tls'),
             cert_p12=cert_p12_data,
             cert_p12_filename=cert_filename,
@@ -277,7 +267,7 @@ def edit_tak_server(server_id):
 
         server.name = data['name']
         server.host = data['host']
-        server.port = port
+        server.port = data['port']
         server.protocol = data.get('protocol', 'tls')
         server.cert_p12 = cert_p12_data
         server.cert_p12_filename = cert_filename

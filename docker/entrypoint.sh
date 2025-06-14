@@ -60,7 +60,7 @@ wait_for_database() {
     while [[ $attempt -le $max_attempts ]]; do
         case "$db_type" in
             "postgresql")
-                if pg_isready -h "$host" -p "$port" -U "${DB_USER:-postgres}" -d "${DB_NAME:-gps_tak_app}" >/dev/null 2>&1; then
+                if pg_isready -h "$host" -p "$port" -U "${DB_USER:-postgres}" -d "${DB_NAME:-trakbridge}" >/dev/null 2>&1; then
                     log_info "PostgreSQL is ready!"
                     return 0
                 fi

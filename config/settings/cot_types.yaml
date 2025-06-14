@@ -1,0 +1,107 @@
+# Cursor-on-Target (CoT) Type definitions
+# These are standard CoT identifiers used in TAK systems
+
+cot_types:
+  - value: "a-f-G-F-U"
+    label: "Friendly - Generic"
+    description: "Generic friendly marker"
+    category: "friendly"
+
+  - value: "a-h-G-F-U"
+    label: "Hostile - Generic"
+    description: "Generic hostile marker"
+    category: "hostile"
+
+  - value: "a-n-G-F-U"
+    label: "Neutral - Generic"
+    description: "Generic neutral marker"
+    category: "neutral"
+
+  - value: "a-u-G-F-U"
+    label: "Unknown - Generic"
+    description: "Unknown affiliation marker"
+    category: "unknown"
+
+  - value: "a-f-G-U-I"
+    label: "Friendly Ground Unit - Infantry"
+    description: "Friendly ground infantry unit"
+    category: "friendly"
+
+  - value: "a-f-G-U-A"
+    label: "Friendly Ground Unit - Armor"
+    description: "Friendly ground armored unit or tank"
+    category: "friendly"
+
+  - value: "a-f-G-U-S"
+    label: "Friendly Ground Unit - Special Forces"
+    description: "Friendly ground special operations forces"
+    category: "friendly"
+
+  - value: "a-f-G-E-V-L"
+    label: "Friendly Ground Equipment - Vehicle - Law Enforcement"
+    description: "Police or law enforcement vehicles"
+    category: "friendly"
+
+  - value: "a-f-G-E-V-F"
+    label: "Friendly Ground Equipment - Vehicle - Fire/Rescue"
+    description: "Fire department or rescue vehicles"
+    category: "friendly"
+
+  - value: "a-f-G-E-V-M"
+    label: "Friendly Ground Equipment - Vehicle - Medical"
+    description: "Ambulance or medical response vehicle"
+    category: "friendly"
+
+  - value: "a-f-G-E-V-U"
+    label: "Friendly Ground Equipment - Vehicle - Utility"
+    description: "Utility or public works vehicles"
+    category: "friendly"
+
+  - value: "a-f-A-M-F"
+    label: "Friendly Air Unit - Fixed Wing"
+    description: "Friendly fixed-wing aircraft"
+    category: "friendly"
+
+  - value: "a-f-A-M-R"
+    label: "Friendly Air Unit - Rotary Wing"
+    description: "Friendly rotary wing (helicopter)"
+    category: "friendly"
+
+  - value: "a-f-U-M"
+    label: "Friendly Maritime Unit"
+    description: "Friendly naval or maritime vessel"
+    category: "friendly"
+
+  - value: "a-h-G-U-C"
+    label: "Hostile Ground Unit - Civil"
+    description: "Hostile civilian ground unit"
+    category: "hostile"
+
+  - value: "a-h-G-U-I"
+    label: "Hostile Ground Unit - Infantry"
+    description: "Hostile infantry unit"
+    category: "hostile"
+
+  - value: "a-h-G-U-A"
+    label: "Hostile Ground Unit - Armor"
+    description: "Hostile armored vehicle or tank"
+    category: "hostile"
+
+  - value: "a-h-G-E-V-C"
+    label: "Hostile Ground Equipment - Vehicle - Civil"
+    description: "Hostile civilian vehicle"
+    category: "hostile"
+
+  - value: "a-n-A"
+    label: "Neutral Air"
+    description: "Neutral air asset"
+    category: "neutral"
+
+  - value: "a-n-U"
+    label: "Neutral Maritime"
+    description: "Neutral maritime vessel"
+    category: "neutral"
+
+
+# Default CoT type to use for new streams
+default_cot_type: "a-f-G-F-U"

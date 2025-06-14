@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Create Stream - GPS to TAK Server{% endblock %}
+{% block title %}Create Stream - Stream to TAK Server{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
@@ -23,13 +23,13 @@
                     <div class="mb-3">
                         <label for="name" class="form-label">Stream Name</label>
                         <input type="text" class="form-control" id="name" name="name" required>
-                        <div class="form-text">A descriptive name for this GPS stream</div>
+                        <div class="form-text">A descriptive name for this stream</div>
                     </div>
 
                     <div class="mb-3">
-                        <label for="plugin_type" class="form-label">GPS Provider</label>
+                        <label for="plugin_type" class="form-label">Stream Provider</label>
                         <select class="form-select" id="plugin_type" name="plugin_type" required onchange="updatePluginConfig()">
-                            <option value="">Select GPS Provider</option>
+                            <option value="">Select Stream Provider</option>
                             {% for plugin_name, plugin_meta in plugin_metadata.items() %}
                             <option value="{{ plugin_name }}" data-category="{{ plugin_meta.category }}">
                                 <i class="{{ plugin_meta.icon }}"></i> {{ plugin_meta.display_name }}
@@ -46,7 +46,7 @@
                             <option value="{{ server.id }}">{{ server.name }} ({{ server.host }}:{{ server.port }})</option>
                             {% endfor %}
                         </select>
-                        <div class="form-text">TAK server where GPS data will be sent</div>
+                        <div class="form-text">TAK server where stream data will be sent</div>
                     </div>
 
                     <div class="row">
@@ -54,7 +54,7 @@
                             <div class="mb-3">
                                 <label for="poll_interval" class="form-label">Poll Interval (seconds)</label>
                                 <input type="number" class="form-control" id="poll_interval" name="poll_interval" value="120" min="30" max="3600">
-                                <div class="form-text">How often to check for new GPS data</div>
+                                <div class="form-text">How often to check for new data</div>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -69,10 +69,11 @@
                     <div class="mb-3">
                         <label for="cot_type" class="form-label">COT Type</label>
                         <select class="form-select" id="cot_type" name="cot_type">
-                            <option value="a-f-G-U-C">Friendly Ground Unit - Civil (a-f-G-U-C)</option>
-                            <option value="a-f-G-U-C-I">Friendly Ground Unit - Individual (a-f-G-U-C-I)</option>
-                            <option value="a-f-G-E-V-C">Friendly Ground Equipment - Vehicle - Civil (a-f-G-E-V-C)</option>
-                            <option value="a-n-G">Neutral Ground (a-n-G)</option>
+                            {% for cot_type in cot_types %}
+                            <option value="{{ cot_type.value }}" {% if cot_type.value == default_cot_type %}selected{% endif %} title="{{ cot_type.description }}">
+                                {{ cot_type.label }} ({{ cot_type.value }})
+                            </option>
+                            {% endfor %}
                         </select>
                         <div class="form-text">Cursor-on-Target type identifier for tracked objects</div>
                     </div>
@@ -110,7 +111,7 @@
             </div>
             <div class="card-body">
                 <div id="help-content">
-                    <p class="text-muted">Select a GPS provider to see configuration instructions.</p>
+                    <p class="text-muted">Select a Stream provider to see configuration instructions.</p>
                 </div>
             </div>
         </div>
@@ -146,7 +147,7 @@ function updatePluginConfig() {
     if (!pluginType) {
         configSection.style.display = 'none';
         testBtn.style.display = 'none';
-        helpContent.innerHTML = '<p class="text-muted">Select a GPS provider to see configuration instructions.</p>';
+        helpContent.innerHTML = '<p class="text-muted">Select a Stream provider to see configuration instructions.</p>';
         return;
     }
 
@@ -272,7 +273,7 @@ function testConnection() {
     // Validate required fields first
     const pluginType = formData.get('plugin_type');
     if (!pluginType) {
-        showAlert('Please select a GPS provider first', 'warning');
+        showAlert('Please select a Stream provider first', 'warning');
         return;
     }
 

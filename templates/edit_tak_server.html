@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Edit TAK Server - GPS to TAK Server{% endblock %}
+{% block title %}Edit TAK Server - Stream to TAK Server{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
@@ -662,7 +662,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Helper function to show alerts
+     // Helper function to show alerts
     function showAlert(type, message) {
         // Remove existing alerts
         const existingAlerts = document.querySelectorAll('.alert:not(.alert-warning):not(#cert_info)');
@@ -681,10 +681,21 @@ document.addEventListener('DOMContentLoaded', function() {
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         `;
 
-        // Insert at top of content
-        const container = document.querySelector('.container-fluid') || document.querySelector('[role="main"]');
-        const firstCard = container.querySelector('.card');
-        container.insertBefore(alertDiv, firstCard);
+        // Find the best place to insert the alert
+        const titleRow = document.querySelector('.d-flex.justify-content-between.flex-wrap');
+        const mainRow = document.querySelector('.row');
+
+        if (titleRow && titleRow.parentNode) {
+            // Insert after the title row
+            titleRow.parentNode.insertBefore(alertDiv, titleRow.nextSibling);
+        } else if (mainRow && mainRow.parentNode) {
+            // Insert before the main content row
+            mainRow.parentNode.insertBefore(alertDiv, mainRow);
+        } else {
+            // Fallback: prepend to body content
+            const contentDiv = document.querySelector('[role="main"]') || document.body;
+            contentDiv.insertBefore(alertDiv, contentDiv.firstChild);
+        }
 
         // Auto-dismiss after 5 seconds for non-error messages
         if (type !== 'danger') {

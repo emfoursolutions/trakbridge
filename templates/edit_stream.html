@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Edit Stream - {{ stream.name }} - GPS to TAK Server{% endblock %}
+{% block title %}Edit Stream - {{ stream.name }} - Stream to TAK Server{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
@@ -23,13 +23,13 @@
                     <div class="mb-3">
                         <label for="name" class="form-label">Stream Name</label>
                         <input type="text" class="form-control" id="name" name="name" value="{{ stream.name }}" required>
-                        <div class="form-text">A descriptive name for this GPS stream</div>
+                        <div class="form-text">A descriptive name for this stream</div>
                     </div>
 
                     <div class="mb-3">
-                        <label for="plugin_type" class="form-label">GPS Provider</label>
+                        <label for="plugin_type" class="form-label">Stream Provider</label>
                         <select class="form-select" id="plugin_type" name="plugin_type" required onchange="updatePluginConfig()">
-                            <option value="">Select GPS Provider</option>
+                            <option value="">Select Stream Provider</option>
                             {% for plugin_name, plugin_meta in plugin_metadata.items() %}
                             <option value="{{ plugin_name }}" data-category="{{ plugin_meta.category }}"
                                     {% if plugin_name == stream.plugin_type %}selected{% endif %}>
@@ -49,7 +49,7 @@
                             </option>
                             {% endfor %}
                         </select>
-                        <div class="form-text">TAK server where GPS data will be sent</div>
+                        <div class="form-text">TAK server where Stream data will be sent</div>
                     </div>
 
                     <div class="row">
@@ -58,7 +58,7 @@
                                 <label for="poll_interval" class="form-label">Poll Interval (seconds)</label>
                                 <input type="number" class="form-control" id="poll_interval" name="poll_interval"
                                        value="{{ stream.poll_interval }}" min="30" max="3600">
-                                <div class="form-text">How often to check for new GPS data</div>
+                                <div class="form-text">How often to check for new Stream data</div>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -74,18 +74,11 @@
                     <div class="mb-3">
                         <label for="cot_type" class="form-label">COT Type</label>
                         <select class="form-select" id="cot_type" name="cot_type">
-                            <option value="a-f-G-U-C" {% if stream.cot_type == 'a-f-G-U-C' %}selected{% endif %}>
-                                Friendly Ground Unit - Civil (a-f-G-U-C)
+                            {% for cot_type in cot_types %}
+                            <option value="{{ cot_type.value }}" {% if cot_type.value == stream.cot_type %}selected{% endif %} title="{{ cot_type.description }}">
+                                {{ cot_type.label }} ({{ cot_type.value }})
                             </option>
-                            <option value="a-f-G-U-C-I" {% if stream.cot_type == 'a-f-G-U-C-I' %}selected{% endif %}>
-                                Friendly Ground Unit - Individual (a-f-G-U-C-I)
-                            </option>
-                            <option value="a-f-G-E-V-C" {% if stream.cot_type == 'a-f-G-E-V-C' %}selected{% endif %}>
-                                Friendly Ground Equipment - Vehicle - Civil (a-f-G-E-V-C)
-                            </option>
-                            <option value="a-n-G" {% if stream.cot_type == 'a-n-G' %}selected{% endif %}>
-                                Neutral Ground (a-n-G)
-                            </option>
+                            {% endfor %}
                         </select>
                         <div class="form-text">Cursor-on-Target type identifier for tracked objects</div>
                     </div>
@@ -168,7 +161,7 @@
             </div>
             <div class="card-body">
                 <div id="help-content">
-                    <p class="text-muted">Select a GPS provider to see configuration instructions.</p>
+                    <p class="text-muted">Select a Stream provider to see configuration instructions.</p>
                 </div>
             </div>
         </div>
@@ -208,7 +201,7 @@ function updatePluginConfig() {
     if (!pluginType) {
         configSection.style.display = 'none';
         testBtn.style.display = 'none';
-        helpContent.innerHTML = '<p class="text-muted">Select a GPS provider to see configuration instructions.</p>';
+        helpContent.innerHTML = '<p class="text-muted">Select a Stream provider to see configuration instructions.</p>';
         return;
     }
 
@@ -280,18 +273,12 @@ function generateFormField(field, currentConfig) {
                 ${optionsHtml}
             </select>`;
             break;
-        default:
+default:
             inputHtml = `<input type="text" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} value="${currentValue}">`;
     }
 
     const requiredBadge = field.required ? '<span class="badge bg-danger ms-1">Required</span>' : '';
-    let helpText = '';
-    if (field.help) {
-        helpText = `<div class="form-text">${field.help}</div>`;
-    }
-    if (field.type === 'password' && currentValue) {
-        helpText += `<div class="form-text text-muted">Leave blank to keep current password</div>`;
-    }
+    const helpText = field.help ? `<div class="form-text">${field.help}</div>` : '';
 
     return `
         <div class="mb-3">
@@ -341,7 +328,7 @@ function testConnection() {
     // Validate required fields first
     const pluginType = formData.get('plugin_type');
     if (!pluginType) {
-        showAlert('Please select a GPS provider first', 'warning');
+        showAlert('Please select a Stream provider first', 'warning');
         return;
     }
 
@@ -351,8 +338,7 @@ function testConnection() {
 
     for (const field of requiredFields) {
         const fieldValue = formData.get(`plugin_${field.name}`);
-        // For password fields, allow empty if current value exists
-        if (!fieldValue && (field.type !== 'password' || !currentConfig[field.name])) {
+        if (!fieldValue) {
             showAlert(`Please fill in the required field: ${field.label}`, 'warning');
             return;
         }
@@ -366,16 +352,6 @@ function testConnection() {
     for (let [key, value] of formData.entries()) {
         data[key] = value;
     }
-
-    // For password fields, if empty, use current password
-    pluginMeta.config_fields.forEach(field => {
-        if (field.type === 'password') {
-            const fieldName = `plugin_${field.name}`;
-            if (!data[fieldName] && currentConfig[field.name]) {
-                data[fieldName] = currentConfig[field.name];
-            }
-        }
-    });
 
     fetch('/test-connection', {
         method: 'POST',
@@ -422,7 +398,7 @@ function testConnection() {
 }
 
 function showAlert(message, type = 'info') {
-    // Create a simple alert
+    // Create a simple alert (you can replace this with a better notification system)
     const alertDiv = document.createElement('div');
     alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
     alertDiv.innerHTML = `
@@ -442,25 +418,7 @@ function showAlert(message, type = 'info') {
     }, 5000);
 }
 
-// Handle form submission to preserve passwords
-document.getElementById('streamForm').addEventListener('submit', function(e) {
-    const pluginType = document.getElementById('plugin_type').value;
-    const pluginMeta = pluginMetadata[pluginType];
-
-    if (pluginMeta) {
-        // Handle password fields - remove empty ones to preserve current values
-        pluginMeta.config_fields.forEach(field => {
-            if (field.type === 'password') {
-                const fieldElement = document.getElementById(`plugin_${field.name}`);
-                if (fieldElement && !fieldElement.value && currentConfig[field.name]) {
-                    fieldElement.remove();
-                }
-            }
-        });
-    }
-});
-
-// Auto-update plugin config on page load
+// Auto-update plugin config on page load if editing
 document.addEventListener('DOMContentLoaded', function() {
     const pluginType = document.getElementById('plugin_type').value;
     if (pluginType) {

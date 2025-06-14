@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}Streams - GPS to TAK Server{% endblock %}
+{% block title %}Streams - Stream to TAK Server{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">GPS Streams</h1>
+    <h1 class="h2">Streams</h1>
     <div class="btn-toolbar mb-2 mb-md-0">
         <div class="btn-group me-2">
             <a href="{{ url_for('streams.create_stream') }}" class="btn btn-sm btn-primary">
@@ -171,7 +171,7 @@
 <div class="text-center py-5">
     <i class="fas fa-stream fa-3x text-muted mb-3"></i>
     <h4>No Streams Yet</h4>
-    <p class="text-muted">Create your first GPS stream to get started with location tracking.</p>
+    <p class="text-muted">Create your first stream to get started with location tracking.</p>
     <a href="{{ url_for('streams.create_stream') }}" class="btn btn-primary">
         <i class="fas fa-plus"></i> Create Stream
     </a>
