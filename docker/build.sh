@@ -75,34 +75,34 @@ setup_secrets() {
 
     if [[ "$ENVIRONMENT" == "development" ]]; then
         # Development secrets (not secure)
-        if [[ ! -f "secrets/db_password.txt" ]] || [[ "$FORCE_RECREATE" == true ]]; then
-            echo "dev-password-123" > secrets/db_password.txt
+        if [[ ! -f "secrets/db_password" ]] || [[ "$FORCE_RECREATE" == true ]]; then
+            echo "dev-password-123" > secrets/db_password
             log_info "Created development database password"
         fi
 
-        if [[ ! -f "secrets/secret_key.txt" ]] || [[ "$FORCE_RECREATE" == true ]]; then
-            echo "dev-secret-key-change-in-production-$(date +%s)" > secrets/secret_key.txt
+        if [[ ! -f "secrets/secret_key" ]] || [[ "$FORCE_RECREATE" == true ]]; then
+            echo "dev-secret-key-change-in-production-$(date +%s)" > secrets/secret_key
             log_info "Created development secret key"
         fi
 
-        if [[ ! -f "secrets/master_key.txt" ]] || [[ "$FORCE_RECREATE" == true ]]; then
-            echo "dev-secret-key-change-in-production-$(date +%s)" > secrets/master_key.txt
+        if [[ ! -f "secrets/tb_master_key" ]] || [[ "$FORCE_RECREATE" == true ]]; then
+            echo "dev-secret-key-change-in-production-$(date +%s)" > secrets/tb_master_key
             log_info "Created development master key"
         fi
     else
         # Production secrets (secure)
-        if [[ ! -f "secrets/db_password.txt" ]] || [[ "$FORCE_RECREATE" == true ]]; then
-            openssl rand -base64 32 > secrets/db_password.txt
+        if [[ ! -f "secrets/db_password" ]] || [[ "$FORCE_RECREATE" == true ]]; then
+            openssl rand -base64 32 > secrets/db_password
             log_info "Generated secure database password"
         fi
 
-        if [[ ! -f "secrets/secret_key.txt" ]] || [[ "$FORCE_RECREATE" == true ]]; then
-            python3 -c "import secrets; print(secrets.token_urlsafe(64))" > secrets/secret_key.txt
+        if [[ ! -f "secrets/secret_key" ]] || [[ "$FORCE_RECREATE" == true ]]; then
+            python3 -c "import secrets; print(secrets.token_urlsafe(64))" > secrets/secret_key
             log_info "Generated secure secret key"
         fi
 
-        if [[ ! -f "secrets/master_key.txt" ]] || [[ "$FORCE_RECREATE" == true ]]; then
-            python3 -c "import secrets; print(secrets.token_urlsafe(64))" > secrets/master_key.txt
+        if [[ ! -f "secrets/tb_master_key" ]] || [[ "$FORCE_RECREATE" == true ]]; then
+            python3 -c "import secrets; print(secrets.token_urlsafe(64))" > secrets/tb_master_key
             log_info "Generated secure master key"
         fi
     fi
@@ -147,9 +147,9 @@ MAX_CONCURRENT_STREAMS=50
 DEFAULT_POLL_INTERVAL=60
 
 # Secret files
-DB_PASSWORD_FILE=./secrets/db_password.txt
-SECRET_KEY_FILE=./secrets/secret_key.txt
-TB_MASTER_KEY=./secrets/master_key.txt
+DB_PASSWORD_FILE=./secrets/db_password
+SECRET_KEY_FILE=./secrets/secret_key
+TB_MASTER_KEY=./secrets/tb_master_key
 EOF
                 ;;
             "production")
@@ -182,9 +182,9 @@ ENABLE_SQL_ECHO=false
 SQLALCHEMY_RECORD_QUERIES=false
 
 # Secret files
-DB_PASSWORD_FILE=./secrets/db_password.txt
-SECRET_KEY_FILE=./secrets/secret_key.txt
-TB_MASTER_KEY=./secrets/master_key.txt
+DB_PASSWORD_FILE=./secrets/db_password
+SECRET_KEY_FILE=./secrets/secret_key
+TB_MASTER_KEY=./secrets/tb_master_key
 EOF
                 ;;
             "staging")
@@ -212,9 +212,9 @@ MAX_CONCURRENT_STREAMS=100
 DEFAULT_POLL_INTERVAL=120
 
 # Secret files
-DB_PASSWORD_FILE=./secrets/db_password.txt
-SECRET_KEY_FILE=./secrets/secret_key.txt
-TB_MASTER_KEY=./secrets/master_key.txt
+DB_PASSWORD_FILE=./secrets/db_password
+SECRET_KEY_FILE=./secrets/secret_key
+TB_MASTER_KEY=./secrets/tb_master_key
 EOF
                 ;;
         esac
