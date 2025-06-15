@@ -27,7 +27,7 @@ services:
       DB_TYPE: ${DB_TYPE:-postgresql}
       DB_HOST: ${DB_HOST:-postgres}
       DB_PORT: ${DB_PORT:-5432}
-      DB_NAME: ${DB_NAME:-trakbridge_app}
+      DB_NAME: ${DB_NAME:-trakbridge_db}
       DB_USER: ${DB_USER:-postgres}
 
       # Application settings
@@ -115,7 +115,7 @@ services:
       - db
 
     environment:
-      POSTGRES_DB: ${DB_NAME:-trakbridge}
+      POSTGRES_DB: ${DB_NAME:-trakbridge_db}
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password
 
@@ -148,7 +148,7 @@ services:
       - db
 
     environment:
-      MYSQL_DATABASE: ${DB_NAME:-trakbridge}
+      MYSQL_DATABASE: ${DB_NAME:-trakbridge_db}
       MYSQL_USER: ${DB_USER:-mysql}
       MYSQL_PASSWORD_FILE: /run/secrets/db_password
       MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_password
