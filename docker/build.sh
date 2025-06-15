@@ -108,7 +108,7 @@ setup_secrets() {
     fi
 
     # Set appropriate permissions
-    chmod 600 secrets/*.txt
+    chmod 600 secrets/*
     log_info "Set secure permissions on secret files"
 }
 

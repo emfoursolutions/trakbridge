@@ -249,4 +249,4 @@ secrets:
     file: ${SECRET_KEY:-./secrets/secret_key}
 
   tb_master_key:
-    file: ${TB_MASTER_KEY:-./secrets/master_key}
+    file: ${TB_MASTER_KEY:-./secrets/tb_master_key}
