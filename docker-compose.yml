@@ -243,10 +243,10 @@ volumes:
 # Secrets
 secrets:
   db_password:
-    file: ${DB_PASSWORD_FILE:-./secrets/db_password.txt}
+    file: ${DB_PASSWORD:-./secrets/db_password}
 
   secret_key:
-    file: ${SECRET_KEY_FILE:-./secrets/secret_key.txt}
+    file: ${SECRET_KEY:-./secrets/secret_key}
 
   tb_master_key:
-    file: ${MASTER_KEY_FILE:-./secrets/master_key.txt}
+    file: ${TB_MASTER_KEY:-./secrets/master_key}
