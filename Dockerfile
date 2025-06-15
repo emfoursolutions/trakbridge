@@ -27,6 +27,9 @@ COPY requirements.txt /tmp/
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r /tmp/requirements.txt
 
+# Install Gunicorn with gevent support for production
+RUN pip install --no-cache-dir gunicorn[gevent]==21.2.0
+
 # ===============================
 # Stage 2 — Final Production Image
 # ===============================
@@ -57,11 +60,14 @@ COPY --from=builder /opt/venv /opt/venv
 
 # Create app directory and set permissions
 WORKDIR /app
-RUN mkdir -p /app/logs /app/data && \
+RUN mkdir -p /app/logs /app/data /app/tmp && \
     chown -R appuser:appuser /app
 
 # Copy application code
 COPY --chown=appuser:appuser . /app/
+
+# Copy Gunicorn configuration
+COPY --chown=appuser:appuser gunicorn.conf.py /app/gunicorn.conf.py
 
 # Create entrypoint script
 COPY --chown=appuser:appuser docker/entrypoint.sh /app/entrypoint.sh
@@ -79,7 +85,9 @@ EXPOSE 5000
 
 # Use entrypoint script
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=5000"]
+
+# Default command - let entrypoint decide the server
+CMD []
 
 # ===============================
 # Stage 3 — Development Image
@@ -106,5 +114,3 @@ RUN pip install --no-cache-dir \
 
 USER appuser
 
-# Override CMD for development
-CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=5000", "--debug"]

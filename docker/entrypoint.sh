@@ -190,16 +190,44 @@ trap cleanup SIGTERM SIGINT
 get_server_command() {
     case "$FLASK_ENV" in
         "development")
+            log_info "Using Flask development server"
             echo "python -m flask run --host=0.0.0.0 --port=5000 --debug"
             ;;
         "production"|"staging")
-            echo "gunicorn --config gunicorn.conf.py app:app"
+            # Check if gunicorn.conf.py exists
+            if [[ -f "/app/gunicorn.conf.py" ]]; then
+                log_info "Using Gunicorn production server with config file"
+                echo "gunicorn --config /app/gunicorn.conf.py app:app"
+            else
+                log_warn "gunicorn.conf.py not found, using inline Gunicorn configuration"
+                # Inline gunicorn configuration as fallback
+                echo "gunicorn --bind 0.0.0.0:5000 --workers ${GUNICORN_WORKERS:-4} --worker-class ${GUNICORN_WORKER_CLASS:-gevent} --worker-connections ${GUNICORN_WORKER_CONNECTIONS:-1000} --timeout ${GUNICORN_TIMEOUT:-30} --keepalive ${GUNICORN_KEEPALIVE:-2} --max-requests ${GUNICORN_MAX_REQUESTS:-1000} --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-50} --preload --log-level ${GUNICORN_LOG_LEVEL:-info} --access-logfile /app/logs/gunicorn-access.log --error-logfile /app/logs/gunicorn-error.log app:app"
+            fi
             ;;
         *)
-            # Default to production settings
-            echo "gunicorn --config gunicorn.conf.py app:app"
+            # Default to production settings with Gunicorn
+            log_info "Unknown environment '$FLASK_ENV', defaulting to Gunicorn"
+            if [[ -f "/app/gunicorn.conf.py" ]]; then
+                echo "gunicorn --config /app/gunicorn.conf.py app:app"
+            else
+                echo "gunicorn --bind 0.0.0.0:5000 --workers 4 --worker-class gevent --preload app:app"
+            fi
             ;;
     esac
+}
+
+# Function to check if Gunicorn is available
+check_gunicorn() {
+    if ! command -v gunicorn >/dev/null 2>&1; then
+        log_error "Gunicorn is not installed but required for production environment"
+        log_error "Installing Gunicorn..."
+        pip install gunicorn[gevent] || {
+            log_error "Failed to install Gunicorn"
+            return 1
+        }
+    fi
+    log_info "Gunicorn is available"
+    return 0
 }
 
 # Main execution
@@ -216,6 +244,14 @@ main() {
     if ! validate_config; then
         log_error "Configuration validation failed"
         exit 1
+    fi
+
+    # Check for Gunicorn in production/staging environments
+    if [[ "$FLASK_ENV" == "production" ]] || [[ "$FLASK_ENV" == "staging" ]]; then
+        if ! check_gunicorn; then
+            log_error "Gunicorn check failed"
+            exit 1
+        fi
     fi
 
     # Wait for database if needed
