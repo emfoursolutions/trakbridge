@@ -78,9 +78,6 @@ def pre_fork(server, worker):
 
 def post_fork(server, worker):
     """Called just after a worker has been forked."""
-    """Apply gevent monkey patching after worker fork"""
-    from gevent import monkey
-    monkey.patch_all()
     server.log.info("Worker spawned (pid: %s)", worker.pid)
 
 def post_worker_init(worker):

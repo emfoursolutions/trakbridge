@@ -257,7 +257,7 @@ get_server_command() {
             else
                 log_warn "gunicorn.conf.py not found, using inline Gunicorn configuration"
                 # Inline gunicorn configuration as fallback
-                echo "cd /app && gunicorn --bind 0.0.0.0:5000 --workers ${GUNICORN_WORKERS:-4} --worker-class ${GUNICORN_WORKER_CLASS:-gevent} --worker-connections ${GUNICORN_WORKER_CONNECTIONS:-1000} --timeout ${GUNICORN_TIMEOUT:-30} --keepalive ${GUNICORN_KEEPALIVE:-2} --max-requests ${GUNICORN_MAX_REQUESTS:-1000} --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-50} --preload --log-level ${GUNICORN_LOG_LEVEL:-info} --access-logfile /app/logs/gunicorn-access.log --error-logfile /app/logs/gunicorn-error.log app:app"
+                echo "cd /app && gunicorn --bind 0.0.0.0:5000 --workers ${GUNICORN_WORKERS:-4} --worker-class ${GUNICORN_WORKER_CLASS:-gevent} --worker-connections ${GUNICORN_WORKER_CONNECTIONS:-1000} --timeout ${GUNICORN_TIMEOUT:-30} --keepalive ${GUNICORN_KEEPALIVE:-2} --max-requests ${GUNICORN_MAX_REQUESTS:-1000} --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-50} --log-level ${GUNICORN_LOG_LEVEL:-info} --access-logfile /app/logs/gunicorn-access.log --error-logfile /app/logs/gunicorn-error.log app:app"
             fi
             ;;
         *)
