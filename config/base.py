@@ -150,7 +150,7 @@ class BaseConfig:
         password = self.secret_manager.get_secret('DB_PASSWORD', '')
         host = self.secret_manager.get_secret('DB_HOST', defaults.get('host', 'localhost'))
         port = self.secret_manager.get_secret('DB_PORT', str(defaults.get('port', 3306)))
-        name = self.secret_manager.get_secret('DB_NAME', defaults.get('name', 'trakbridge'))
+        name = self.secret_manager.get_secret('DB_NAME', defaults.get('name', 'trakbridge_db'))
 
         password_encoded = quote_plus(password) if password else ''
         return f'mysql+pymysql://{user}:{password_encoded}@{host}:{port}/{name}?charset=utf8mb4'
@@ -163,7 +163,7 @@ class BaseConfig:
         password = self.secret_manager.get_secret('DB_PASSWORD', '')
         host = self.secret_manager.get_secret('DB_HOST', defaults.get('host', 'localhost'))
         port = self.secret_manager.get_secret('DB_PORT', str(defaults.get('port', 5432)))
-        name = self.secret_manager.get_secret('DB_NAME', defaults.get('name', 'trakbridge'))
+        name = self.secret_manager.get_secret('DB_NAME', defaults.get('name', 'trakbridge_db'))
 
         password_encoded = quote_plus(password) if password else ''
         return f'postgresql://{user}:{password_encoded}@{host}:{port}/{name}'
