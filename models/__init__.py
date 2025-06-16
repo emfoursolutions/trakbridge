@@ -1,7 +1,7 @@
 # This file makes the models directory a Python package
 # and helps with import ordering
 
-from app import db
+from database import db
 
 # Import all models here to ensure they're registered with SQLAlchemy
 from database import TimestampMixin

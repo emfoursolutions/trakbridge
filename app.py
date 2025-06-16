@@ -1,7 +1,7 @@
 # =============================================================================
-# app.py - Enhanced Flask Application with Fixed Startup
+# app.py - Enhanced Flask Application Optimized for Gunicorn
 # =============================================================================
-from flask import Flask, render_template
+from flask import Flask, render_template, g
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 import os
@@ -17,6 +17,7 @@ import time
 from dotenv import load_dotenv
 import sys
 import subprocess
+import multiprocessing
 
 # Import config system
 from config.environments import get_config
@@ -32,6 +33,42 @@ logger = logging.getLogger(__name__)
 
 # Global stream manager instance (will be initialized after app creation)
 stream_manager = None
+
+# Global flag to track if worker has been initialized
+_worker_initialized = False
+
+# Track startup state per worker
+_startup_complete = False
+
+
+def is_gunicorn():
+    """Check if we're running under Gunicorn"""
+    return (
+            "gunicorn" in os.environ.get("SERVER_SOFTWARE", "") or
+            "GUNICORN_WORKER_ID" in os.environ or
+            hasattr(os, 'getppid') and 'gunicorn' in str(os.getppid())
+    )
+
+
+def get_worker_id():
+    """Get the current worker ID"""
+    # Try multiple methods to get worker ID
+    worker_id = os.environ.get('GUNICORN_WORKER_ID')
+    if worker_id:
+        return int(worker_id)
+
+    # Fallback: use process ID modulo for pseudo-worker-id
+    return os.getpid() % 1000
+
+
+def is_main_worker():
+    """Check if this is the main worker process that should start streams"""
+    if not is_gunicorn():
+        return True  # In development, always start streams
+
+    # In Gunicorn, only the first worker should start streams
+    worker_id = get_worker_id()
+    return worker_id == int(os.environ.get('GUNICORN_WORKER_ID', '1'))
 
 
 def create_app(config_name=None):
@@ -52,23 +89,26 @@ def create_app(config_name=None):
     db.init_app(app)
     migrate.init_app(app, db)
 
-    # Configure scoped sessions for thread safety
+    # Configure scoped sessions for thread safety - CRITICAL for Gunicorn
     with app.app_context():
-        # Make sessions thread-local
+        # Make sessions thread-local and worker-local
         db.session = scoped_session(db.session)
 
         # Import models AFTER db.init_app to avoid circular imports
-        # Import them individually rather than through the __init__.py
         from models.tak_server import TakServer
         from models.stream import Stream
 
         # Register models with SQLAlchemy
-        db.Model.metadata.create_all(bind=db.engine)
+        try:
+            db.Model.metadata.create_all(bind=db.engine)
+        except Exception as e:
+            logger.warning(f"Could not create tables (may already exist): {e}")
 
         # Initialize stream manager after models are loaded
         if stream_manager is None:
             from services.stream_manager import get_stream_manager
             stream_manager = get_stream_manager()
+            logger.info(f"Stream manager initialized in worker {get_worker_id()}")
 
     # Set up database event listeners
     setup_database_events()
@@ -76,7 +116,7 @@ def create_app(config_name=None):
     # Set up logging
     setup_logging(app)
 
-    # Register cleanup handlers
+    # Register cleanup handlers (Gunicorn-safe)
     setup_cleanup_handlers()
 
     # Register blueprints
@@ -96,7 +136,244 @@ def create_app(config_name=None):
     setup_template_helpers(app)
     setup_error_handlers(app)
 
+    # Set up modern Flask initialization (replaces @app.before_first_request)
+    setup_modern_worker_initialization(app)
+
+    logger.info(f"App created for worker {get_worker_id()}, Gunicorn: {is_gunicorn()}, Main worker: {is_main_worker()}")
+
     return app
+
+
+def setup_modern_worker_initialization(app):
+    """Set up modern Flask worker initialization using before_request"""
+
+    @app.before_request
+    def initialize_worker():
+        """Initialize worker-specific resources (runs once per worker)"""
+        global stream_manager, _worker_initialized
+
+        # Only run once per worker
+        if _worker_initialized:
+            return
+
+        _worker_initialized = True
+        worker_id = get_worker_id()
+
+        logger.info(f"Initializing worker {worker_id} - PID: {os.getpid()}")
+
+        # Set up event loop for this worker
+        setup_worker_event_loop()
+
+        # Initialize stream manager for this worker
+        if stream_manager and hasattr(stream_manager, 'ensure_worker_ready'):
+            try:
+                stream_manager.ensure_worker_ready()
+                logger.info(f"Stream manager initialized for worker {worker_id}")
+            except Exception as e:
+                logger.error(f"Failed to initialize stream manager for worker {worker_id}: {e}")
+
+        # Only start streams in the designated main worker
+        if is_main_worker():
+            logger.info(f"Worker {worker_id} is main worker - will start streams")
+            # Use a longer delay for Gunicorn to ensure all workers are ready
+            delay = 15 if is_gunicorn() else 5
+
+            # Use threading.Timer for delayed startup
+            startup_timer = threading.Timer(
+                delay,
+                lambda: start_streams_in_background(app)
+            )
+            startup_timer.daemon = True
+            startup_timer.start()
+
+            logger.info(f"Scheduled stream startup in {delay}s for worker {worker_id}")
+        else:
+            logger.info(f"Worker {worker_id} is not main worker - skipping stream startup")
+
+
+def setup_worker_event_loop():
+    """Set up event loop for worker process"""
+    try:
+        # Try to get existing event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            raise RuntimeError("Event loop is closed")
+        logger.debug(f"Using existing event loop in worker {get_worker_id()}")
+    except RuntimeError:
+        # Create new event loop for this worker
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            logger.info(f"Created new event loop for worker {get_worker_id()}")
+        except Exception as e:
+            logger.error(f"Failed to create event loop for worker {get_worker_id()}: {e}")
+
+
+def start_streams_in_background(app):
+    """Start streams in background thread with proper context"""
+
+    def startup_worker():
+        try:
+            with app.app_context():
+                logger.info(f"Starting stream startup process in worker {get_worker_id()}")
+                start_active_streams_gunicorn_safe()
+        except Exception as e:
+            logger.error(f"Error in background stream startup: {e}", exc_info=True)
+
+    # Create background thread for stream startup
+    startup_thread = threading.Thread(
+        target=startup_worker,
+        name=f"StreamStartup-Worker-{get_worker_id()}",
+        daemon=True
+    )
+    startup_thread.start()
+
+
+def start_active_streams_gunicorn_safe():
+    """Start all active streams with Gunicorn-specific optimizations"""
+    global stream_manager, _startup_complete
+
+    if _startup_complete:
+        logger.info("Stream startup already completed")
+        return
+
+    if stream_manager is None:
+        logger.error("Stream manager not initialized")
+        return
+
+    from models.stream import Stream
+
+    try:
+        worker_id = get_worker_id()
+        logger.info(f"Worker {worker_id}: Waiting for stream manager readiness...")
+
+        # Extended wait for Gunicorn workers
+        max_wait_seconds = 60
+        wait_interval = 0.5
+        max_iterations = int(max_wait_seconds / wait_interval)
+
+        for i in range(max_iterations):
+            try:
+                # Check multiple readiness conditions
+                if (hasattr(stream_manager, '_loop') and
+                        stream_manager._loop and
+                        not stream_manager._loop.is_closed()):
+
+                    # Try to access the event loop
+                    try:
+                        current_loop = asyncio.get_event_loop()
+                        if not current_loop.is_closed():
+                            logger.info(f"Worker {worker_id}: Stream manager ready after {i * wait_interval:.1f}s")
+                            break
+                    except RuntimeError:
+                        # Create event loop if needed
+                        setup_worker_event_loop()
+                        break
+
+            except Exception as e:
+                logger.debug(f"Worker {worker_id}: Stream manager not ready (attempt {i + 1}): {e}")
+
+            time.sleep(wait_interval)
+        else:
+            logger.error(f"Worker {worker_id}: Stream manager not ready after {max_wait_seconds}s")
+            return
+
+        logger.info(f"Worker {worker_id}: Fetching active streams...")
+
+        # Fetch active streams with retry logic
+        active_streams = None
+        for attempt in range(3):
+            try:
+                active_streams = db.session.query(Stream).filter_by(is_active=True).all()
+                logger.info(f"Worker {worker_id}: Found {len(active_streams)} active streams")
+                break
+            except Exception as db_e:
+                logger.warning(f"Worker {worker_id}: DB attempt {attempt + 1} failed: {db_e}")
+                if attempt < 2:
+                    time.sleep(2)
+                    # Try to refresh the session
+                    try:
+                        db.session.rollback()
+                    except:
+                        pass
+                else:
+                    logger.error(f"Worker {worker_id}: Failed to fetch streams after 3 attempts")
+                    return
+
+        if not active_streams:
+            logger.info(f"Worker {worker_id}: No active streams to start")
+            _startup_complete = True
+            return
+
+        # Start streams with Gunicorn-optimized settings
+        started_count = 0
+        failed_count = 0
+
+        for stream in active_streams:
+            try:
+                logger.info(f"Worker {worker_id}: Starting stream {stream.id} ({stream.name})...")
+
+                success = False
+                try:
+                    # Prefer sync method if available
+                    if hasattr(stream_manager, 'start_stream_sync'):
+                        success = stream_manager.start_stream_sync(stream.id)
+                    else:
+                        # Use async method with proper timeout for Gunicorn
+                        loop = asyncio.get_event_loop()
+                        future = asyncio.run_coroutine_threadsafe(
+                            stream_manager.start_stream(stream.id),
+                            loop
+                        )
+                        # Longer timeout for Gunicorn workers
+                        success = future.result(timeout=120)
+
+                except asyncio.TimeoutError:
+                    logger.error(f"Worker {worker_id}: Timeout starting stream {stream.id}")
+                    success = False
+                except Exception as start_e:
+                    logger.error(f"Worker {worker_id}: Error starting stream {stream.id}: {start_e}")
+                    success = False
+
+                # Update stream status
+                try:
+                    fresh_stream = db.session.get(Stream, stream.id)
+                    if fresh_stream:
+                        if success:
+                            fresh_stream.last_error = None
+                            started_count += 1
+                            logger.info(f"Worker {worker_id}: Successfully started stream {stream.id}")
+                        else:
+                            fresh_stream.is_active = False
+                            fresh_stream.last_error = "Failed to start during app startup"
+                            failed_count += 1
+                            logger.error(f"Worker {worker_id}: Failed to start stream {stream.id}")
+
+                        db.session.commit()
+                except Exception as db_e:
+                    logger.warning(f"Worker {worker_id}: Failed to update stream {stream.id} status: {db_e}")
+
+                # Longer delay between starts for Gunicorn stability
+                time.sleep(8 if is_gunicorn() else 3)
+
+            except Exception as e:
+                failed_count += 1
+                logger.error(f"Worker {worker_id}: Unexpected error with stream {stream.id}: {e}", exc_info=True)
+
+                try:
+                    fresh_stream = db.session.get(Stream, stream.id)
+                    if fresh_stream:
+                        fresh_stream.is_active = False
+                        fresh_stream.last_error = f"Startup error: {str(e)}"
+                        db.session.commit()
+                except Exception as db_e:
+                    logger.error(f"Worker {worker_id}: Failed to update stream {stream.id} error: {db_e}")
+
+        _startup_complete = True
+        logger.info(f"Worker {worker_id}: Startup complete - {started_count} started, {failed_count} failed")
+
+    except Exception as e:
+        logger.error(f"Worker {get_worker_id()}: Critical error in stream startup: {e}", exc_info=True)
 
 
 def configure_flask_app(app, config_instance):
@@ -107,11 +384,24 @@ def configure_flask_app(app, config_instance):
     app.config['DEBUG'] = config_instance.DEBUG
     app.config['TESTING'] = config_instance.TESTING
 
-    # SQLAlchemy settings
+    # SQLAlchemy settings with Gunicorn optimizations
     app.config['SQLALCHEMY_DATABASE_URI'] = config_instance.SQLALCHEMY_DATABASE_URI
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = config_instance.SQLALCHEMY_TRACK_MODIFICATIONS
     app.config['SQLALCHEMY_RECORD_QUERIES'] = config_instance.SQLALCHEMY_RECORD_QUERIES
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = config_instance.SQLALCHEMY_ENGINE_OPTIONS
+
+    # Enhanced engine options for Gunicorn
+    engine_options = config_instance.SQLALCHEMY_ENGINE_OPTIONS.copy()
+    if is_gunicorn():
+        # Optimize for multiple workers
+        engine_options.update({
+            'pool_size': 5,  # Smaller pool per worker
+            'max_overflow': 10,
+            'pool_timeout': 30,
+            'pool_recycle': 3600,  # Recycle connections hourly
+            'pool_pre_ping': True,  # Validate connections
+        })
+
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
     app.config['SQLALCHEMY_SESSION_OPTIONS'] = config_instance.SQLALCHEMY_SESSION_OPTIONS
 
     # Application-specific settings
@@ -131,7 +421,7 @@ def configure_flask_app(app, config_instance):
     app.config_instance = config_instance
 
     # Log configuration info
-    logger.info(f"Configured Flask app for environment: {config_instance.environment}")
+    logger.info(f"Configured Flask app for environment: {config_instance.environment} (Gunicorn: {is_gunicorn()})")
 
     # Validate configuration
     issues = config_instance.validate_config()
@@ -141,181 +431,62 @@ def configure_flask_app(app, config_instance):
             raise ValueError(f"Configuration validation failed: {issues}")
 
 
-def start_active_streams():
-    """Start all active streams with proper error handling and timing"""
-    global stream_manager
-
-    if stream_manager is None:
-        logger.error("Stream manager not initialized")
-        return
-
-    from models.stream import Stream
-
-    try:
-        # Wait for stream manager to be fully ready with longer timeout
-        logger.info("Waiting for stream manager to be ready...")
-        max_wait = 200  # 20 seconds - increased timeout
-        wait_count = 0
-
-        while wait_count < max_wait:
-            if (hasattr(stream_manager, '_loop') and
-                    stream_manager._loop and
-                    stream_manager._loop.is_running() and
-                    hasattr(stream_manager, '_session_manager') and
-                    stream_manager._session_manager and
-                    stream_manager._session_manager.session):
-                break
-            time.sleep(0.1)
-            wait_count += 1
-
-        if wait_count >= max_wait:
-            logger.error("Stream manager not ready after extended wait")
-            return
-
-        logger.info("Stream manager ready, fetching active streams")
-
-        # Fetch active streams with proper error handling
-        try:
-            active_streams = Stream.query.filter_by(is_active=True).all()
-            logger.info(f"Found {len(active_streams)} active streams to start")
-        except Exception as db_e:
-            logger.error(f"Failed to fetch active streams from database: {db_e}")
-            return
-
-        if not active_streams:
-            logger.info("No active streams found to start")
-            return
-
-        # Start streams with longer delays and better error handling
-        started_count = 0
-        for stream in active_streams:
-            try:
-                logger.info(f"Starting stream {stream.id} ({stream.name})...")
-
-                # Add longer timeout for startup and retry logic
-                max_retries = 3
-                retry_count = 0
-                success = False
-
-                while retry_count < max_retries and not success:
-                    try:
-                        success = stream_manager.start_stream_sync(stream.id)
-                        if success:
-                            logger.info(f"Successfully started stream {stream.id} ({stream.name})")
-                            # Clear any previous error on successful start
-                            fresh_stream = db.session.get(Stream, stream.id)
-                            fresh_stream.last_error = None  # or "" if you prefer empty string
-                            db.session.commit()
-                            started_count += 1
-                            break
-                        else:
-                            retry_count += 1
-                            if retry_count < max_retries:
-                                logger.warning(
-                                    f"Failed to start stream {stream.id}, retrying ({retry_count}/{max_retries})")
-                                time.sleep(2)  # Wait before retry
-                            else:
-                                logger.error(f"Failed to start stream {stream.id} after {max_retries} attempts")
-
-                    except Exception as start_e:
-                        retry_count += 1
-                        if retry_count < max_retries:
-                            logger.warning(
-                                f"Exception starting stream {stream.id}, retrying ({retry_count}/{max_retries}): {start_e}")
-                            time.sleep(2)
-                        else:
-                            logger.error(
-                                f"Exception starting stream {stream.id} after {max_retries} attempts: {start_e}")
-                            success = False
-
-                # Update stream status if failed
-                if not success:
-                    try:
-                        # Refresh the stream object to avoid session issues
-                        fresh_stream = Stream.query.get(stream.id)
-                        if fresh_stream:
-                            fresh_stream.is_active = False
-                            fresh_stream.last_error = "Failed to start during app startup"
-                            db.session.commit()
-                            logger.info(f"Marked stream {stream.id} as inactive due to startup failure")
-                    except Exception as db_e:
-                        logger.error(f"Failed to update stream {stream.id} status: {db_e}")
-                        try:
-                            db.session.rollback()
-                        except:
-                            pass
-
-                # Longer delay between starts to prevent overwhelming
-                time.sleep(3)
-
-            except Exception as e:
-                logger.error(f"Unexpected error starting stream {stream.id}: {e}", exc_info=True)
-                # Mark stream as inactive
-                try:
-                    fresh_stream = Stream.query.get(stream.id)
-                    if fresh_stream:
-                        fresh_stream.is_active = False
-                        fresh_stream.last_error = f"Startup error: {str(e)}"
-                        db.session.commit()
-                except Exception as db_e:
-                    logger.error(f"Failed to update stream {stream.id} status: {db_e}")
-                    try:
-                        db.session.rollback()
-                    except:
-                        pass
-
-        logger.info(f"Startup complete: {started_count}/{len(active_streams)} streams started successfully")
-
-    except Exception as e:
-        logger.error(f"Error in start_active_streams: {e}", exc_info=True)
-
-
 def setup_database_events():
-    """Set up database event listeners for better connection handling"""
+    """Set up database event listeners optimized for Gunicorn"""
 
     @event.listens_for(Pool, "connect")
     def set_sqlite_pragma(dbapi_conn, connection_record):
-        """Set SQLite pragmas for better performance and concurrency"""
+        """Set SQLite pragmas optimized for multi-worker environment"""
         if 'sqlite' in str(dbapi_conn):
             cursor = dbapi_conn.cursor()
-            # Enable WAL mode for better concurrency
+            # WAL mode is critical for multiple workers
             cursor.execute("PRAGMA journal_mode=WAL")
-            # Set busy timeout to 30 seconds
-            cursor.execute("PRAGMA busy_timeout=30000")
-            # Enable foreign keys
+            # Longer busy timeout for worker contention
+            cursor.execute("PRAGMA busy_timeout=60000")
             cursor.execute("PRAGMA foreign_keys=ON")
-            # Set synchronous mode for better performance
             cursor.execute("PRAGMA synchronous=NORMAL")
+            # Additional optimizations for Gunicorn
+            if is_gunicorn():
+                cursor.execute("PRAGMA cache_size=10000")  # Larger cache
+                cursor.execute("PRAGMA temp_store=memory")  # Memory temp storage
             cursor.close()
 
     @event.listens_for(Pool, "checkout")
     def receive_checkout(dbapi_conn, connection_record, connection_proxy):
         """Log connection checkouts in debug mode"""
-        logging.debug(f"Connection checked out: {id(dbapi_conn)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Worker {get_worker_id()}: Connection checked out: {id(dbapi_conn)}")
 
     @event.listens_for(Pool, "checkin")
     def receive_checkin(dbapi_conn, connection_record):
         """Log connection checkins in debug mode"""
-        logging.debug(f"Connection checked in: {id(dbapi_conn)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Worker {get_worker_id()}: Connection checked in: {id(dbapi_conn)}")
 
 
 def setup_logging(app):
-    """Set up application logging"""
+    """Set up application logging optimized for Gunicorn"""
 
     # Create logs directory if it doesn't exist
     log_dir = app.config.get('LOG_DIR', 'logs')
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
-    # Set up file handler
+    # Set up file handler with worker ID in filename for Gunicorn
     log_level = getattr(logging, app.config.get('LOG_LEVEL', 'INFO'))
+
+    # Different log file per worker in Gunicorn
+    if is_gunicorn():
+        log_filename = f'app-worker-{get_worker_id()}.log'
+    else:
+        log_filename = 'app.log'
 
     # Configure root logger
     logging.basicConfig(
         level=log_level,
-        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+        format=f'%(asctime)s [%(levelname)s] Worker-{get_worker_id()} %(name)s: %(message)s',
         handlers=[
-            logging.FileHandler(os.path.join(log_dir, 'app.log')),
+            logging.FileHandler(os.path.join(log_dir, log_filename)),
             logging.StreamHandler()
         ]
     )
@@ -328,55 +499,56 @@ def setup_logging(app):
 
 
 def setup_cleanup_handlers():
-    """Set up cleanup handlers for graceful shutdown"""
+    """Set up Gunicorn-safe cleanup handlers"""
 
     def cleanup():
         """Clean up resources on shutdown"""
         global stream_manager
 
+        worker_id = get_worker_id()
+        logger.info(f"Worker {worker_id}: Starting cleanup...")
+
         try:
-            # Clean up stream manager using the singleton's shutdown method
             if stream_manager is not None:
                 stream_manager.shutdown()
-                logger.info("Stream manager shutdown completed")
-
+                logger.info(f"Worker {worker_id}: Stream manager shutdown completed")
         except Exception as e:
-            logger.error(f"Error during stream cleanup: {e}")
+            logger.error(f"Worker {worker_id}: Error during stream cleanup: {e}")
 
         try:
-            # Clean up thread pool from streams module
             from routes.streams import cleanup_executor
             cleanup_executor()
         except ImportError:
             pass
 
         try:
-            # Clean up database connections
             db.session.remove()
             db.engine.dispose()
-        except:
-            pass
+            logger.info(f"Worker {worker_id}: Database cleanup completed")
+        except Exception as e:
+            logger.error(f"Worker {worker_id}: Database cleanup error: {e}")
 
-        logger.info("Application cleanup completed")
+        logger.info(f"Worker {worker_id}: Cleanup completed")
 
     # Register cleanup for various shutdown scenarios
     atexit.register(cleanup)
 
-    # Also register the stream manager's shutdown directly (with safety check)
-    def safe_stream_manager_shutdown():
-        global stream_manager
-        if stream_manager is not None:
-            stream_manager.shutdown()
-
-    atexit.register(safe_stream_manager_shutdown)
-
-    # For WSGI servers
+    # Gunicorn-safe signal handlers
     def cleanup_handler(signum, frame):
+        logger.info(f"Worker {get_worker_id()}: Received signal {signum}")
         cleanup()
-        exit(0)
+        sys.exit(0)
 
-    signal.signal(signal.SIGTERM, cleanup_handler)
-    signal.signal(signal.SIGINT, cleanup_handler)
+    # Only register signal handlers if we're in the main thread
+    # Gunicorn workers should handle this properly
+    try:
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGTERM, cleanup_handler)
+            signal.signal(signal.SIGINT, cleanup_handler)
+            logger.debug(f"Worker {get_worker_id()}: Signal handlers registered")
+    except (ValueError, OSError) as e:
+        # Will fail if not in main thread or if signals not supported
+        logger.debug(f"Worker {get_worker_id()}: Signal handlers not registered: {e}")
 
 
 def setup_template_helpers(app):
@@ -388,7 +560,8 @@ def setup_template_helpers(app):
         return dict(
             enumerate=enumerate,
             len=len,
-            str=str
+            str=str,
+            worker_id=get_worker_id()  # Add worker ID to templates
         )
 
 
@@ -401,14 +574,22 @@ def setup_error_handlers(app):
 
     @app.errorhandler(500)
     def internal_error(error):
-        db.session.rollback()
+        try:
+            db.session.rollback()
+        except Exception as e:
+            logger.error(f"Error during rollback: {e}")
         return render_template('errors/500.html'), 500
 
     @app.errorhandler(Exception)
     def handle_exception(e):
         """Handle uncaught exceptions"""
-        logging.error(f"Unhandled exception: {e}", exc_info=True)
-        db.session.rollback()
+        worker_id = get_worker_id()
+        logger.error(f"Worker {worker_id}: Unhandled exception: {e}", exc_info=True)
+
+        try:
+            db.session.rollback()
+        except Exception as rollback_e:
+            logger.error(f"Worker {worker_id}: Error during rollback: {rollback_e}")
 
         if app.debug:
             raise e
@@ -418,26 +599,6 @@ def setup_error_handlers(app):
 
 # Create the application instance
 app = create_app()
-
-
-# Delayed startup function that runs in a separate thread
-def delayed_startup():
-    """Run startup tasks after Flask is fully initialized"""
-    # Wait a bit for Flask to fully initialize
-    time.sleep(5)
-
-    with app.app_context():
-        logger.info("Running delayed startup tasks...")
-        start_active_streams()
-
-
-# Call start_active_streams ONCE during application startup
-if __name__ == "__main__" or not hasattr(start_active_streams, '_called'):
-    start_active_streams._called = True
-
-    # Run startup in a separate thread to avoid blocking Flask initialization
-    startup_thread = threading.Thread(target=delayed_startup, daemon=True, name="StartupThread")
-    startup_thread.start()
 
 if __name__ == '__main__':
     # Create tables within app context

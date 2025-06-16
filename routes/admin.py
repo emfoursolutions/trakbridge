@@ -1,7 +1,7 @@
 # routes/admin.py
 
 from flask import Blueprint, render_template, jsonify, current_app, abort
-from app import db, stream_manager
+from database import db
 from models.stream import Stream
 from models.tak_server import TakServer
 import platform
@@ -14,6 +14,13 @@ bp = Blueprint('admin', __name__)
 
 # Capture app start time for uptime display
 start_time = time.time()
+
+
+def get_stream_manager():
+    """Get stream manager instance from current app context"""
+    # Import here to avoid circular imports
+    from services.stream_manager import get_stream_manager
+    return get_stream_manager()
 
 
 # Optional: simple decorator for future admin access control
@@ -33,6 +40,9 @@ def admin_dashboard():
     uptime = datetime.timedelta(seconds=int(time.time() - start_time))
     streams_count = db.session.query(Stream).count()
     servers_count = db.session.query(TakServer).count()
+
+    # Get stream manager safely
+    stream_manager = get_stream_manager()
     running_streams = sum(
         1 for status in stream_manager.get_all_stream_status().values() if status.get("running")
     )
@@ -64,6 +74,7 @@ def admin_health_check():
 def admin_version():
     version = get_app_version()
     return jsonify(app_version=version, uptime=str(get_uptime()))
+
 
 @bp.route('/admin/about')
 def admin_about():
