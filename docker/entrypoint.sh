@@ -201,7 +201,7 @@ for key in ['FLASK_APP', 'FLASK_ENV', 'PYTHONPATH']:
             return 1
         fi
 
-        if [[ -z "$TB_MASTER_KEY" ]] && [[ ! -f "/run/secrets/master_key" ]]; then
+        if [[ -z "$TB_MASTER_KEY" ]] && [[ ! -f "/run/secrets/tb_master_key" ]]; then
             log_error "Master Key is required in production"
             return 1
         fi
