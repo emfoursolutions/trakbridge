@@ -12,6 +12,7 @@ backlog = 2048
 # Worker processes
 workers = int(os.environ.get('GUNICORN_WORKERS', multiprocessing.cpu_count() * 2 + 1))
 worker_class = os.environ.get('GUNICORN_WORKER_CLASS', 'gthread')
+threads = int(os.environ.get('GUNICORN_THREADS', 2))  # Add this line
 worker_connections = int(os.environ.get('GUNICORN_WORKER_CONNECTIONS', 1000))
 max_requests = int(os.environ.get('GUNICORN_MAX_REQUESTS', 1000))
 max_requests_jitter = int(os.environ.get('GUNICORN_MAX_REQUESTS_JITTER', 50))
@@ -52,7 +53,7 @@ limit_request_fields = 100
 limit_request_field_size = 8190
 
 # Application
-preload_app = True  # Load application before forking workers
+preload_app = False  # Load application before forking workers
 enable_stdio_inheritance = True
 
 # Worker process lifecycle
