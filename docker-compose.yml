@@ -127,10 +127,10 @@ services:
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/init-scripts:/docker-entrypoint-initdb.d:ro
+      - ./docker/init-scripts/postgres:/docker-entrypoint-initdb.d:ro
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-trakbridge}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-trakbridge}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -161,10 +161,10 @@ services:
 
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./docker/init-scripts:/docker-entrypoint-initdb.d:ro
+      - ./docker/init-scripts/mysql:/docker-entrypoint-initdb.d:ro
 
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
       interval: 10s
       timeout: 5s
       retries: 5

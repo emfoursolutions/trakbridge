@@ -284,8 +284,11 @@ EOF
 setup_docker_scripts() {
     log_step "Setting up Docker initialization scripts..."
 
+    # Create separate directories for each database
+    mkdir -p docker/init-scripts/postgres docker/init-scripts/mysql
+
     # PostgreSQL init script
-    cat > docker/init-scripts/01-init-postgres.sql << 'EOF'
+    cat > docker/init-scripts/postgres/01-init-postgres.sql << 'EOF'
 -- PostgreSQL initialization script
 -- This script runs when the PostgreSQL container starts for the first time
 
@@ -301,7 +304,7 @@ GRANT ALL PRIVILEGES ON DATABASE trakbridge_db TO postgres;
 EOF
 
     # MySQL init script
-    cat > docker/init-scripts/01-init-mysql.sql << 'EOF'
+    cat > docker/init-scripts/mysql/01-init-mysql.sql << 'EOF'
 -- MySQL initialization script
 -- This script runs when the MySQL container starts for the first time
 
@@ -316,7 +319,7 @@ GRANT ALL PRIVILEGES ON trakbridge_db.* TO 'mysql'@'%';
 FLUSH PRIVILEGES;
 EOF
 
-    log_info "Created database initialization scripts"
+    log_info "Created database initialization scripts in separate directories"
 }
 
 # Main setup
