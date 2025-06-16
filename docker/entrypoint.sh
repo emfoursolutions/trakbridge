@@ -253,20 +253,20 @@ get_server_command() {
             # Check if gunicorn.conf.py exists
             if [[ -f "/app/gunicorn.conf.py" ]]; then
                 log_info "Using Gunicorn production server with config file"
-                echo "cd /app && gunicorn --config /app/gunicorn.conf.py app:app"
+                echo "cd /app && gunicorn --config /app/gunicorn.conf.py wsgi:application"
             else
                 log_warn "gunicorn.conf.py not found, using inline Gunicorn configuration"
                 # Inline gunicorn configuration as fallback
-                echo "cd /app && gunicorn --bind 0.0.0.0:5000 --workers ${GUNICORN_WORKERS:-4} --worker-class ${GUNICORN_WORKER_CLASS:-gthread} --worker-connections ${GUNICORN_WORKER_CONNECTIONS:-1000} --timeout ${GUNICORN_TIMEOUT:-30} --keepalive ${GUNICORN_KEEPALIVE:-2} --max-requests ${GUNICORN_MAX_REQUESTS:-1000} --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-50} --log-level ${GUNICORN_LOG_LEVEL:-info} --access-logfile /app/logs/gunicorn-access.log --error-logfile /app/logs/gunicorn-error.log app:app"
+                echo "cd /app && gunicorn --bind 0.0.0.0:5000 --workers ${GUNICORN_WORKERS:-4} --worker-class ${GUNICORN_WORKER_CLASS:-gevent} --preload --worker-connections ${GUNICORN_WORKER_CONNECTIONS:-1000} --timeout ${GUNICORN_TIMEOUT:-30} --keepalive ${GUNICORN_KEEPALIVE:-2} --max-requests ${GUNICORN_MAX_REQUESTS:-1000} --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-50} --log-level ${GUNICORN_LOG_LEVEL:-info} --access-logfile /app/logs/gunicorn-access.log --error-logfile /app/logs/gunicorn-error.log wsgi:application"
             fi
             ;;
         *)
             # Default to production settings with Gunicorn
             log_info "Unknown environment '$FLASK_ENV', defaulting to Gunicorn"
             if [[ -f "/app/gunicorn.conf.py" ]]; then
-                echo "cd /app && gunicorn --config /app/gunicorn.conf.py app:app"
+                echo "cd /app && gunicorn --config /app/gunicorn.conf.py wsgi:application"
             else
-                echo "cd /app && gunicorn --bind 0.0.0.0:5000 --workers 4 --worker-class gevent --preload app:app"
+                echo "cd /app && gunicorn --bind 0.0.0.0:5000 --workers 4 --worker-class gevent --preload wsgi:application"
             fi
             ;;
     esac
