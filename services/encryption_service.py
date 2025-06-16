@@ -42,7 +42,7 @@ class EncryptionService:
 
         # Try plain text key file first (most common)
         key_file_paths = [
-            os.path.join(app_root, 'secrets', 'master_key.txt'),
+            os.path.join(app_root, 'secrets', 'tb_master_key'),
         ]
         for key_file_path in key_file_paths:
             if os.path.exists(key_file_path):
