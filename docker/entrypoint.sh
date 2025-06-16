@@ -37,7 +37,10 @@ export FLASK_APP=${FLASK_APP:-app.py}
 export DB_TYPE=${DB_TYPE:-sqlite}
 export LOG_LEVEL=${LOG_LEVEL:-INFO}
 
-log_info "Starting TrakBridge"
+# Ensure we're in the correct directory
+cd /app
+
+log_info "Starting TrakBridge from $(pwd)"
 log_info "Environment: $FLASK_ENV"
 log_info "Database Type: $DB_TYPE"
 log_info "Log Level: $LOG_LEVEL"
@@ -114,9 +117,62 @@ create_directories() {
 validate_config() {
     log_info "Validating configuration..."
 
-    # Check if Python can import the app
-    if ! python -c "from app import app; print('Application loaded successfully')" 2>/dev/null; then
-        log_error "Failed to load Flask application"
+    # Ensure we're in the app directory
+    cd /app
+
+    # Debug: Show current directory and Python path
+    log_debug "Current directory: $(pwd)"
+    log_debug "Python path: $PYTHONPATH"
+    log_debug "Contents of /app: $(ls -la /app)"
+
+    # Check if app.py exists
+    if [[ ! -f "/app/app.py" ]]; then
+        log_error "app.py not found in /app directory"
+        return 1
+    fi
+
+    # Set PYTHONPATH to include current directory
+    export PYTHONPATH="/app:${PYTHONPATH:-}"
+
+    # Test import with more detailed error reporting
+    log_info "Testing Flask application import..."
+    if python -c "
+import sys
+import os
+sys.path.insert(0, '/app')
+os.chdir('/app')
+try:
+    from app import app
+    print('Application loaded successfully')
+    print(f'App name: {app.name}')
+    print(f'App config keys: {list(app.config.keys())[:5]}...')
+except ImportError as e:
+    print(f'Import error: {e}')
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+except Exception as e:
+    print(f'Other error: {e}')
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+" 2>&1; then
+        log_info "Flask application import successful"
+    else
+        log_error "Failed to import Flask application"
+        log_error "Attempting to diagnose the issue..."
+
+        # Additional debugging
+        python -c "
+import sys
+print('Python version:', sys.version)
+print('Python path:', sys.path)
+print('Current working directory:', sys.getcwd())
+import os
+print('Environment variables:')
+for key in ['FLASK_APP', 'FLASK_ENV', 'PYTHONPATH']:
+    print(f'  {key}: {os.environ.get(key, \"Not set\")}')
+"
         return 1
     fi
 
@@ -197,20 +253,20 @@ get_server_command() {
             # Check if gunicorn.conf.py exists
             if [[ -f "/app/gunicorn.conf.py" ]]; then
                 log_info "Using Gunicorn production server with config file"
-                echo "gunicorn --config /app/gunicorn.conf.py app:app"
+                echo "cd /app && gunicorn --config /app/gunicorn.conf.py app:app"
             else
                 log_warn "gunicorn.conf.py not found, using inline Gunicorn configuration"
                 # Inline gunicorn configuration as fallback
-                echo "gunicorn --bind 0.0.0.0:5000 --workers ${GUNICORN_WORKERS:-4} --worker-class ${GUNICORN_WORKER_CLASS:-gevent} --worker-connections ${GUNICORN_WORKER_CONNECTIONS:-1000} --timeout ${GUNICORN_TIMEOUT:-30} --keepalive ${GUNICORN_KEEPALIVE:-2} --max-requests ${GUNICORN_MAX_REQUESTS:-1000} --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-50} --preload --log-level ${GUNICORN_LOG_LEVEL:-info} --access-logfile /app/logs/gunicorn-access.log --error-logfile /app/logs/gunicorn-error.log app:app"
+                echo "cd /app && gunicorn --bind 0.0.0.0:5000 --workers ${GUNICORN_WORKERS:-4} --worker-class ${GUNICORN_WORKER_CLASS:-gevent} --worker-connections ${GUNICORN_WORKER_CONNECTIONS:-1000} --timeout ${GUNICORN_TIMEOUT:-30} --keepalive ${GUNICORN_KEEPALIVE:-2} --max-requests ${GUNICORN_MAX_REQUESTS:-1000} --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-50} --preload --log-level ${GUNICORN_LOG_LEVEL:-info} --access-logfile /app/logs/gunicorn-access.log --error-logfile /app/logs/gunicorn-error.log app:app"
             fi
             ;;
         *)
             # Default to production settings with Gunicorn
             log_info "Unknown environment '$FLASK_ENV', defaulting to Gunicorn"
             if [[ -f "/app/gunicorn.conf.py" ]]; then
-                echo "gunicorn --config /app/gunicorn.conf.py app:app"
+                echo "cd /app && gunicorn --config /app/gunicorn.conf.py app:app"
             else
-                echo "gunicorn --bind 0.0.0.0:5000 --workers 4 --worker-class gevent --preload app:app"
+                echo "cd /app && gunicorn --bind 0.0.0.0:5000 --workers 4 --worker-class gevent --preload app:app"
             fi
             ;;
     esac
@@ -233,6 +289,9 @@ check_gunicorn() {
 # Main execution
 main() {
     log_info "=== TrakBridge Startup ==="
+
+    # Ensure we're in the correct directory
+    cd /app
 
     # Create necessary directories
     create_directories
@@ -274,7 +333,7 @@ main() {
         # No command provided, use the appropriate server for the environment
         server_cmd=$(get_server_command)
         log_info "Starting server: $server_cmd"
-        exec $server_cmd
+        eval $server_cmd
     else
         # Command provided, execute it
         exec "$@"
@@ -289,24 +348,29 @@ case "${1:-}" in
         ;;
     "python")
         log_info "Starting Python with args: ${*:2}"
+        cd /app
         exec "$@"
         ;;
     "flask")
         log_info "Starting Flask command: ${*:2}"
+        cd /app
         exec "$@"
         ;;
     "gunicorn")
         log_info "Starting Gunicorn with args: ${*:2}"
         main # Run setup first
+        cd /app
         exec "$@"
         ;;
     "test")
         log_info "Running tests"
         export FLASK_ENV=testing
+        cd /app
         exec python -m pytest "${@:2}"
         ;;
     "migrate")
         log_info "Running database migrations only"
+        cd /app
         create_directories
         setup_logging
         validate_config
@@ -318,13 +382,17 @@ case "${1:-}" in
         ;;
     "config-check")
         log_info "Checking configuration"
+        cd /app
         validate_config
         python -c "
+import sys
+sys.path.insert(0, '/app')
 from app import app
 print('Flask app loaded successfully')
 print(f'Environment: {app.config.get(\"FLASK_ENV\", \"unknown\")}')
 print(f'Debug mode: {app.config.get(\"DEBUG\", False)}')
-print(f'Database URI: {app.config.get(\"SQLALCHEMY_DATABASE_URI\", \"not set\")[:50]}...')
+db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', 'not set')
+print(f'Database URI: {db_uri[:50] if len(db_uri) > 50 else db_uri}...')
 "
         exit 0
         ;;
