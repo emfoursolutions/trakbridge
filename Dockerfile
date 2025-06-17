@@ -27,9 +27,6 @@ COPY requirements.txt /tmp/
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r /tmp/requirements.txt
 
-# Install Gunicorn with gevent support for production
-RUN pip install --no-cache-dir gunicorn[gevent]==21.2.0
-
 # ===============================
 # Stage 2 — Final Production Image
 # ===============================

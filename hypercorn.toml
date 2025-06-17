@@ -1,0 +1,58 @@
+# =============================================================================
+# Hypercorn Configuration for TrakBridge Production Deployment
+# =============================================================================
+
+# Server binding
+bind = "0.0.0.0:5000"
+
+# Worker configuration
+workers = 4
+worker_class = "asyncio"
+
+# Connection settings
+keep_alive = 5
+max_requests = 1000
+max_requests_jitter = 100
+
+# Timeouts (in seconds)
+timeout = 30
+graceful_timeout = 30
+
+# Logging
+log_level = "info"
+access_logfile = "/app/logs/hypercorn-access.log"
+error_logfile = "/app/logs/hypercorn-error.log"
+
+# SSL/TLS (uncomment and configure for HTTPS)
+# certfile = "/path/to/cert.pem"
+# keyfile = "/path/to/key.pem"
+
+# Performance tuning
+preload_app = true
+max_concurrent_connections = 1000
+
+# Enable/disable features
+enable_http2 = true
+enable_websockets = true
+
+# Application settings
+application_path = "app:app"
+
+# Environment-specific overrides
+[production]
+workers = 8
+max_requests = 2000
+timeout = 60
+log_level = "warning"
+
+[staging]
+workers = 4
+max_requests = 1000
+timeout = 30
+log_level = "info"
+
+[development]
+workers = 1
+max_requests = 100
+timeout = 10
+log_level = "debug"

@@ -43,3 +43,4 @@ SQLAlchemy
 types-python-dateutil
 Werkzeug
 yarl
+hypercorn[uvloop,h2,quic]

@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Docker Entrypoint Script for TrakBridge with Production WSGI Support
+# Docker Entrypoint Script for TrakBridge with Hypercorn Support
 # =============================================================================
 
 set -e
@@ -221,8 +221,8 @@ setup_logging() {
     # Create log files if they don't exist
     touch /app/logs/app.log
     touch /app/logs/error.log
-    touch /app/logs/gunicorn-access.log
-    touch /app/logs/gunicorn-error.log
+    touch /app/logs/hypercorn-access.log
+    touch /app/logs/hypercorn-error.log
 
     # Set appropriate permissions
     chmod 644 /app/logs/*.log
@@ -250,39 +250,47 @@ get_server_command() {
             echo "python -m flask run --host=0.0.0.0 --port=5000 --debug"
             ;;
         "production"|"staging")
-            # Check if gunicorn.conf.py exists
-            if [[ -f "/app/gunicorn.conf.py" ]]; then
-                log_info "Using Gunicorn production server with config file"
-                echo "cd /app && gunicorn --config /app/gunicorn.conf.py app:app"
+            # Check if hypercorn.toml exists
+            if [[ -f "/app/hypercorn.toml" ]]; then
+                log_info "Using Hypercorn production server with config file"
+                echo "cd /app && hypercorn --config /app/hypercorn.toml app:app"
             else
-                log_warn "gunicorn.conf.py not found, using inline Gunicorn configuration"
-                # Inline gunicorn configuration as fallback
-                echo "cd /app && gunicorn --bind 0.0.0.0:5000 --workers ${GUNICORN_WORKERS:-4} --worker-class ${GUNICORN_WORKER_CLASS:-gevent} --worker-connections ${GUNICORN_WORKER_CONNECTIONS:-1000} --timeout ${GUNICORN_TIMEOUT:-30} --keepalive ${GUNICORN_KEEPALIVE:-2} --max-requests ${GUNICORN_MAX_REQUESTS:-1000} --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-50} --log-level ${GUNICORN_LOG_LEVEL:-info} --access-logfile /app/logs/gunicorn-access.log --error-logfile /app/logs/gunicorn-error.log app:app"
+                log_info "Using Hypercorn production server with inline configuration"
+                # Inline hypercorn configuration as fallback
+                local workers=${HYPERCORN_WORKERS:-4}
+                local worker_class=${HYPERCORN_WORKER_CLASS:-asyncio}
+                local bind=${HYPERCORN_BIND:-0.0.0.0:5000}
+                local keep_alive=${HYPERCORN_KEEP_ALIVE:-5}
+                local max_requests=${HYPERCORN_MAX_REQUESTS:-1000}
+                local max_requests_jitter=${HYPERCORN_MAX_REQUESTS_JITTER:-100}
+                local log_level=${HYPERCORN_LOG_LEVEL:-info}
+
+                echo "cd /app && hypercorn --bind $bind --workers $workers --worker-class $worker_class --keep-alive $keep_alive --max-requests $max_requests --max-requests-jitter $max_requests_jitter --log-level $log_level --access-logfile /app/logs/hypercorn-access.log --error-logfile /app/logs/hypercorn-error.log app:app"
             fi
             ;;
         *)
-            # Default to production settings with Gunicorn
-            log_info "Unknown environment '$FLASK_ENV', defaulting to Gunicorn"
-            if [[ -f "/app/gunicorn.conf.py" ]]; then
-                echo "cd /app && gunicorn --config /app/gunicorn.conf.py app:app"
+            # Default to production settings with Hypercorn
+            log_info "Unknown environment '$FLASK_ENV', defaulting to Hypercorn"
+            if [[ -f "/app/hypercorn.toml" ]]; then
+                echo "cd /app && hypercorn --config /app/hypercorn.toml app:app"
             else
-                echo "cd /app && gunicorn --bind 0.0.0.0:5000 --workers 4 --worker-class gevent --preload app:app"
+                echo "cd /app && hypercorn --bind 0.0.0.0:5000 --workers 4 --worker-class asyncio app:app"
             fi
             ;;
     esac
 }
 
-# Function to check if Gunicorn is available
-check_gunicorn() {
-    if ! command -v gunicorn >/dev/null 2>&1; then
-        log_error "Gunicorn is not installed but required for production environment"
-        log_error "Installing Gunicorn..."
-        pip install gunicorn[gevent] || {
-            log_error "Failed to install Gunicorn"
+# Function to check if Hypercorn is available
+check_hypercorn() {
+    if ! command -v hypercorn >/dev/null 2>&1; then
+        log_error "Hypercorn is not installed but required for production environment"
+        log_error "Installing Hypercorn..."
+        pip install hypercorn || {
+            log_error "Failed to install Hypercorn"
             return 1
         }
     fi
-    log_info "Gunicorn is available"
+    log_info "Hypercorn is available"
     return 0
 }
 
@@ -305,10 +313,10 @@ main() {
         exit 1
     fi
 
-    # Check for Gunicorn in production/staging environments
+    # Check for Hypercorn in production/staging environments
     if [[ "$FLASK_ENV" == "production" ]] || [[ "$FLASK_ENV" == "staging" ]]; then
-        if ! check_gunicorn; then
-            log_error "Gunicorn check failed"
+        if ! check_hypercorn; then
+            log_error "Hypercorn check failed"
             exit 1
         fi
     fi
@@ -356,8 +364,8 @@ case "${1:-}" in
         cd /app
         exec "$@"
         ;;
-    "gunicorn")
-        log_info "Starting Gunicorn with args: ${*:2}"
+    "hypercorn")
+        log_info "Starting Hypercorn with args: ${*:2}"
         main # Run setup first
         cd /app
         exec "$@"
