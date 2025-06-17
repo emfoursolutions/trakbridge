@@ -63,8 +63,8 @@ RUN mkdir -p /app/logs /app/data /app/tmp && \
 # Copy application code
 COPY --chown=appuser:appuser . /app/
 
-# Copy Gunicorn configuration
-COPY --chown=appuser:appuser gunicorn.conf.py /app/gunicorn.conf.py
+# Copy Hypercorn configuration
+COPY --chown=appuser:appuser hypercorn.toml /app/hypercorn.toml
 
 # Create entrypoint script
 COPY --chown=appuser:appuser docker/entrypoint.sh /app/entrypoint.sh
