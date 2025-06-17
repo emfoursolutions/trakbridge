@@ -63,7 +63,7 @@ services:
       - ./logs:/app/logs
       - ./data:/app/data
       - ./plugins:/app/plugins
-      - ${CONFIG_DIR:-./config}:/app/config/settings:ro
+      - ${CONFIG_DIR:-./config}:/app/config:ro
 
     # Health check
     healthcheck:
