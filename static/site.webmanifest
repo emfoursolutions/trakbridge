@@ -1,0 +1,14 @@
+{
+    "name": "TrakBridge",
+    "short_name": "TrakBridge",
+    "icons": [
+        {
+            "src": "/static/favicon-32x32.png",
+            "sizes": "32x32",
+            "type": "image/png"
+        }
+    ],
+    "theme_color": "#667eea",
+    "background_color": "#ffffff",
+    "display": "standalone"
+}

@@ -103,14 +103,28 @@ class ConnectionTestService:
                 self.stream_manager._loop
             )
             success, device_count, error = future.result(timeout=timeout)
-            return success, device_count, error
+
+            # Return dictionary instead of tuple
+            return {
+                'success': success,
+                'device_count': device_count,
+                'error': error
+            }
 
         except asyncio.TimeoutError:
             logger.error(f"Connection test timed out for plugin {plugin_type}")
-            return False, 0, 'Connection test timed out'
+            return {
+                'success': False,
+                'device_count': 0,
+                'error': 'Connection test timed out'
+            }
         except Exception as e:
             logger.error(f"Error running sync connection test for {plugin_type}: {e}")
-            return False, 0, f'Test execution failed: {str(e)}'
+            return {
+                'success': False,
+                'device_count': 0,
+                'error': f'Test execution failed: {str(e)}'
+            }
 
     def test_stream_connection_sync(self, stream_id, timeout=30):
         """Synchronous wrapper for testing stream connections"""
@@ -121,14 +135,28 @@ class ConnectionTestService:
                 self.stream_manager._loop
             )
             success, device_count, error = future.result(timeout=timeout)
-            return success, device_count, error
+
+            # Return dictionary instead of tuple
+            return {
+                'success': success,
+                'device_count': device_count,
+                'error': error
+            }
 
         except asyncio.TimeoutError:
             logger.error(f"Connection test timed out for stream {stream_id}")
-            return False, 0, 'Connection test timed out'
+            return {
+                'success': False,
+                'device_count': 0,
+                'error': 'Connection test timed out'
+            }
         except Exception as e:
             logger.error(f"Error running sync connection test for stream {stream_id}: {e}")
-            return False, 0, f'Test execution failed: {str(e)}'
+            return {
+                'success': False,
+                'device_count': 0,
+                'error': f'Test execution failed: {str(e)}'
+            }
 
     async def batch_test_connections(self, test_configs):
         """Test multiple connections in parallel"""
