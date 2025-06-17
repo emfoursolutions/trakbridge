@@ -72,7 +72,8 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data
-      - ${CONFIG_DIR:-./config}:/app/config:ro
+      - ./plugins:/app/plugins
+      - ${CONFIG_DIR:-./config}:/app/config/settings:ro
 
     # Health check
     healthcheck:
