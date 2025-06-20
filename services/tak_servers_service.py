@@ -51,8 +51,8 @@ class TakServerService:
             subject = certificate.subject.rfc4514_string()
             issuer = certificate.issuer.rfc4514_string()
             serial_number = str(certificate.serial_number)
-            not_valid_before = certificate.not_valid_before.isoformat()
-            not_valid_after = certificate.not_valid_after.isoformat()
+            not_valid_before = certificate.not_valid_before_utc.isoformat()
+            not_valid_after = certificate.not_valid_after_utc.isoformat()
 
             # Check if certificate is currently valid
             now = datetime.now(timezone.utc)

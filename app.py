@@ -85,11 +85,13 @@ def create_app(config_name=None):
     from routes.tak_servers import bp as tak_servers_bp
     from routes.admin import bp as admin_bp
     from routes.health import bp as health_bp
+    from routes.cot_types import bp as cot_types_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(streams_bp, url_prefix='/streams')
     app.register_blueprint(tak_servers_bp, url_prefix='/tak-servers')
     app.register_blueprint(admin_bp, url_prefix='/admin')
+    app.register_blueprint(cot_types_bp, url_prefix='/admin')
     app.register_blueprint(health_bp, url_prefix='/api')
 
     # Add context processors and error handlers
@@ -100,7 +102,7 @@ def create_app(config_name=None):
 
 
 def configure_flask_app(app, config_instance):
-    """Configure Flask app with the new configuration system."""
+    """Configure Flask app with the configuration system."""
 
     # Core Flask settings
     app.config['SECRET_KEY'] = config_instance.SECRET_KEY

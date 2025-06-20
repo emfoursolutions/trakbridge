@@ -65,11 +65,29 @@
                     <div class="col-md-6">
                         <dl class="row">
                             <dt class="col-sm-4">COT Type:</dt>
-                            <dd class="col-sm-8">{{ stream.cot_type }}</dd>
-                            
+                            <dd class="col-sm-8">
+                                <div class="d-flex align-items-center">
+                                    {% if stream.cot_type_sidc %}
+                                        <img src="/static/cot_icons/{{ stream.cot_type_sidc }}"
+                                             alt="{{ stream.cot_type_label }}"
+                                             class="cot-icon me-2"
+                                             title="{{ stream.cot_type_description }}"
+                                             onerror="this.style.display='none'">
+                                    {% endif %}
+                                    <div>
+                                        <small class="text-muted">{{ stream.cot_type }}</small>
+                                    </div>
+                                </div>
+                            </dd>
+
                             <dt class="col-sm-4">Stale Time:</dt>
-                            <dd class="col-sm-8">{{ stream.cot_stale_time }} seconds</dd>
-                            
+                            <dd class="col-sm-8">
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-clock text-muted me-2"></i>
+                                    {{ stream.cot_stale_time }} seconds
+                                </div>
+                            </dd>
+
                             <dt class="col-sm-4">Last Poll:</dt>
                             <dd class="col-sm-8">
                                 {% if stream.last_poll %}
@@ -78,13 +96,13 @@
                                     Never
                                 {% endif %}
                             </dd>
-                            
+
                             <dt class="col-sm-4">Messages Sent:</dt>
                             <dd class="col-sm-8">{{ stream.total_messages_sent }}</dd>
                         </dl>
                     </div>
                 </div>
-                
+
                 {% if stream.last_error %}
                 <div class="alert alert-danger mt-3">
                     <h6><i class="fas fa-exclamation-triangle"></i> Last Error:</h6>
@@ -143,7 +161,7 @@
                             <p class="timeline-text">{{ stream.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</p>
                         </div>
                     </div>
-                    
+
                     {% if stream.updated_at != stream.created_at %}
                     <div class="timeline-item">
                         <div class="timeline-marker bg-info"></div>
@@ -153,7 +171,7 @@
                         </div>
                     </div>
                     {% endif %}
-                    
+
                     {% if stream.last_poll %}
                     <div class="timeline-item">
                         <div class="timeline-marker {% if stream.last_error %}bg-danger{% else %}bg-success{% endif %}"></div>
@@ -174,6 +192,42 @@
     </div>
 
     <div class="col-md-4">
+        <!-- COT Type Information Card -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5><i class="fas fa-map-marker-alt"></i> COT Type Information</h5>
+            </div>
+            <div class="card-body text-center">
+                {% if stream.cot_type_sidc %}
+                    <img src="/static/cot_icons/{{ stream.cot_type_sidc }}"
+                         alt="{{ stream.cot_type_label }}"
+                         class="cot-icon-large mb-3"
+                         title="{{ stream.cot_type_description }}"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div class="cot-icon-fallback" style="display: none;">
+                        <i class="fas fa-map-marker-alt fa-3x text-muted mb-3"></i>
+                    </div>
+                {% else %}
+                    <i class="fas fa-map-marker-alt fa-3x text-muted mb-3"></i>
+                {% endif %}
+
+                <h6 class="card-title">{{ stream.cot_type_label }}</h6>
+                <p class="card-text">
+                    <small class="text-muted">{{ stream.cot_type }}</small>
+                </p>
+
+                {% if stream.cot_type_description %}
+                <p class="card-text">{{ stream.cot_type_description }}</p>
+                {% endif %}
+
+                {% if stream.cot_type_category %}
+                <span class="badge bg-{% if stream.cot_type_category == 'friendly' %}success{% elif stream.cot_type_category == 'hostile' %}danger{% elif stream.cot_type_category == 'neutral' %}warning{% else %}secondary{% endif %}">
+                    {{ stream.cot_type_category|title }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
         <!-- Quick Actions Card -->
         <div class="card mb-3">
             <div class="card-header">
@@ -212,7 +266,7 @@
                         <small class="text-muted">Current Status</small>
                     </div>
                 </div>
-                
+
                 {% if stream.last_poll %}
                 <hr>
                 <div class="text-center">
@@ -237,9 +291,9 @@
                     <li><strong>Test:</strong> Verify connection to Stream provider</li>
                     <li><strong>Restart:</strong> Stop and start the stream</li>
                 </ul>
-                
+
                 <hr>
-                
+
                 <h6>Troubleshooting:</h6>
                 <ul class="list-unstyled">
                     <li>• Check Stream provider credentials</li>
@@ -258,10 +312,10 @@
 function controlStream(streamId, action) {
     const actionBtn = document.querySelector(`button[onclick="controlStream(${streamId}, '${action}')"]`);
     const originalText = actionBtn.innerHTML;
-    
+
     actionBtn.disabled = true;
     actionBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${action === 'start' ? 'Starting' : 'Stopping'}...`;
-    
+
     fetch(`/streams/${streamId}/${action}`, {
         method: 'POST',
         headers: {
@@ -312,10 +366,10 @@ function deleteStream(streamId) {
 function testConnection() {
     const testBtn = document.querySelector('button[onclick="testConnection()"]');
     const originalText = testBtn.innerHTML;
-    
+
     testBtn.disabled = true;
     testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
-    
+
     // Get stream configuration
     const streamData = {
         plugin_type: '{{ stream.plugin_type }}',
@@ -326,7 +380,7 @@ function testConnection() {
             {% endfor %}
         {% endif %}
     };
-    
+
     fetch('/streams/test-connection', {
         method: 'POST',
         headers: {
@@ -355,10 +409,10 @@ function testConnection() {
 function restartStream() {
     const restartBtn = document.querySelector('button[onclick="restartStream()"]');
     const originalText = restartBtn.innerHTML;
-    
+
     restartBtn.disabled = true;
     restartBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Restarting...';
-    
+
     // First stop, then start
     fetch(`/streams/{{ stream.id }}/stop`, {
         method: 'POST',
@@ -416,7 +470,7 @@ function refreshStatus() {
 {% if stream.is_active %}
 setInterval(function() {
     // Only refresh if no modals are open and user hasn't interacted recently
-    if (!document.querySelector('.modal.show') && 
+    if (!document.querySelector('.modal.show') &&
         Date.now() - (window.lastUserInteraction || 0) > 10000) {
         location.reload();
     }
@@ -430,6 +484,7 @@ document.addEventListener('click', function() {
 </script>
 
 <style>
+/* Timeline styles */
 .timeline {
     position: relative;
     padding-left: 30px;
@@ -476,12 +531,57 @@ document.addEventListener('click', function() {
     color: #6c757d;
 }
 
+/* COT Type Icon styles */
+.cot-icon {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
+.cot-icon-large {
+    width: 64px;
+    height: 64px;
+    object-fit: contain;
+}
+
+.cot-icon-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Status styles */
 .status-active {
     color: #28a745 !important;
 }
 
 .status-inactive {
     color: #6c757d !important;
+}
+
+/* Card enhancements */
+.card-header h5 {
+    margin-bottom: 0;
+}
+
+.badge {
+    font-size: 0.75em;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .cot-icon-large {
+        width: 48px;
+        height: 48px;
+    }
+
+    .timeline {
+        padding-left: 20px;
+    }
+
+    .timeline-marker {
+        left: -20px;
+    }
 }
 </style>
 {% endblock %}

@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+
+{% block title %}COT Types - Stream to TAK Server{% endblock %}
+
+{% block content %}
+<style>
+    .cot-icon {
+        width: 48px;
+        height: 48px;
+        object-fit: contain;
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        padding: 4px;
+    }
+    .cot-card {
+        transition: transform 0.2s ease-in-out;
+        border-left: 4px solid transparent;
+        margin-bottom: 1rem;
+    }
+    .cot-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .cot-card.friendly {
+        border-left-color: #28a745;
+    }
+    .cot-card.hostile {
+        border-left-color: #dc3545;
+    }
+    .cot-card.neutral {
+        border-left-color: #ffc107;
+    }
+    .cot-card.unknown {
+        border-left-color: #6c757d;
+    }
+    .category-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    .badge.friendly {
+        background-color: #28a745;
+    }
+    .badge.hostile {
+        background-color: #dc3545;
+    }
+    .badge.neutral {
+        background-color: #ffc107;
+        color: #000;
+    }
+    .badge.unknown {
+        background-color: #6c757d;
+    }
+    .search-filter {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: white;
+        padding: 1rem 0;
+        border-bottom: 1px solid #dee2e6;
+        margin-bottom: 1rem;
+    }
+    .cot-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 1rem;
+    }
+    .default-indicator {
+        color: #ffc107;
+    }
+    .icon-placeholder {
+        width: 48px;
+        height: 48px;
+        background-color: #e9ecef;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6c757d;
+    }
+</style>
+
+<!-- Header -->
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-tags me-2"></i>Cursor-on-Target (COT) Types
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="exportCotTypes()">
+                <i class="fas fa-download"></i> Export
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="refreshCotTypes()">
+                <i class="fas fa-sync"></i> Refresh
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card card-metric">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="card-title mb-0">Total COT Types</h6>
+                        <h3 class="mb-0">{{ cot_data.cot_types|length }}</h3>
+                    </div>
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-tags fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white" style="background-color: #28a745;">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="card-title mb-0">Friendly</h6>
+                        <h3 class="mb-0">{{ cot_stats.friendly }}</h3>
+                    </div>
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-shield-alt fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white" style="background-color: #dc3545;">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="card-title mb-0">Hostile</h6>
+                        <h3 class="mb-0">{{ cot_stats.hostile }}</h3>
+                    </div>
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-crosshairs fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white" style="background-color: #6c757d;">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="card-title mb-0">Other</h6>
+                        <h3 class="mb-0">{{ cot_stats.other }}</h3>
+                    </div>
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-question-circle fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Search and Filter -->
+<div class="search-filter">
+    <div class="row">
+        <div class="col-md-4">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="fas fa-search"></i>
+                </span>
+                <input type="text" class="form-control" id="searchInput" placeholder="Search COT types, labels, or descriptions...">
+            </div>
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" id="categoryFilter">
+                <option value="">All Categories</option>
+                {% for category in cot_stats.categories %}
+                <option value="{{ category }}">{{ category.title() }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" id="sortBy">
+                <option value="label">Sort by Label</option>
+                <option value="category">Sort by Category</option>
+                <option value="cot_type">Sort by COT Type</option>
+                <option value="sidc">Sort by SIDC</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-outline-secondary w-100" onclick="resetFilters()">
+                <i class="fas fa-undo"></i> Reset
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Default COT Type Info -->
+{% if cot_data.default_cot_type and cot_data.default_sidc %}
+<div class="alert alert-info mb-4">
+    <div class="d-flex align-items-center">
+        <i class="fas fa-star default-indicator me-2"></i>
+        <strong>Default COT Type:</strong> 
+        <span class="ms-2">{{ cot_data.default_cot_type }} ({{ cot_data.default_sidc }})</span>
+        <div class="ms-auto">
+            <small class="text-muted">Standard: {{ cot_data.icon_config.standard if cot_data.icon_config else 'MIL-STD-2525C' }}</small>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- COT Types Grid -->
+<div class="cot-grid" id="cotGrid">
+    {% for symbol in cot_data.cot_types %}
+    <div class="card cot-card {{ symbol.category }}" 
+         data-category="{{ symbol.category }}" 
+         data-label="{{ symbol.label }}" 
+         data-cot-type="{{ symbol.cot_type }}"
+         data-sidc="{{ symbol.sidc }}"
+         data-description="{{ symbol.description }}">
+        <div class="card-body">
+            <div class="d-flex align-items-start">
+                <div class="me-3">
+                    <img src="{{ url_for('static', filename='cot_icons/' + symbol.sidc) }}" 
+                         alt="{{ symbol.label }}" 
+                         class="cot-icon"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div class="icon-placeholder" style="display: none;">
+                        <i class="fas fa-image"></i>
+                    </div>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="card-title mb-0">{{ symbol.label }}</h6>
+                        <span class="badge {{ symbol.category }} category-badge">{{ symbol.category.title() }}</span>
+                        {% if symbol.cot_type == cot_data.default_cot_type %}
+                        <i class="fas fa-star default-indicator ms-1" title="Default COT Type"></i>
+                        {% endif %}
+                    </div>
+                    <p class="card-text text-muted small mb-2">{{ symbol.description }}</p>
+                    <div class="row small">
+                        <div class="col-sm-6">
+                            <strong>COT:</strong><br>
+                            <code class="small">{{ symbol.value }}</code>
+                        </div>
+                        <div class="col-sm-6">
+                            <strong>SIDC:</strong><br>
+                            <code class="small">{{ symbol.sidc }}</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- No Results Message -->
+<div id="noResults" class="text-center py-5" style="display: none;">
+    <i class="fas fa-search fa-3x text-muted mb-3"></i>
+    <h5 class="text-muted">No COT types found</h5>
+    <p class="text-muted">Try adjusting your search criteria or filters.</p>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Search and filter functionality
+let allCards = [];
+let currentSort = 'label';
+
+document.addEventListener('DOMContentLoaded', function() {
+    allCards = Array.from(document.querySelectorAll('.cot-card'));
+    
+    // Initialize event listeners
+    document.getElementById('searchInput').addEventListener('input', filterAndSort);
+    document.getElementById('categoryFilter').addEventListener('change', filterAndSort);
+    document.getElementById('sortBy').addEventListener('change', function() {
+        currentSort = this.value;
+        filterAndSort();
+    });
+});
+
+function filterAndSort() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const categoryFilter = document.getElementById('categoryFilter').value;
+    const sortBy = document.getElementById('sortBy').value;
+    
+    let filteredCards = allCards.filter(card => {
+        const matchesSearch = !searchTerm || 
+            card.dataset.label.toLowerCase().includes(searchTerm) ||
+            card.dataset.cotType.toLowerCase().includes(searchTerm) ||
+            card.dataset.sidc.toLowerCase().includes(searchTerm) ||
+            card.dataset.description.toLowerCase().includes(searchTerm);
+        
+        const matchesCategory = !categoryFilter || card.dataset.category === categoryFilter;
+        
+        return matchesSearch && matchesCategory;
+    });
+    
+    // Sort filtered cards
+    filteredCards.sort((a, b) => {
+        let aValue, bValue;
+        switch(sortBy) {
+            case 'category':
+                aValue = a.dataset.category;
+                bValue = b.dataset.category;
+                break;
+            case 'cot_type':
+                aValue = a.dataset.cotType;
+                bValue = b.dataset.cotType;
+                break;
+            case 'sidc':
+                aValue = a.dataset.sidc;
+                bValue = b.dataset.sidc;
+                break;
+            default: // label
+                aValue = a.dataset.label;
+                bValue = b.dataset.label;
+        }
+        return aValue.localeCompare(bValue);
+    });
+    
+    // Hide all cards
+    allCards.forEach(card => card.style.display = 'none');
+    
+    // Show filtered and sorted cards
+    const grid = document.getElementById('cotGrid');
+    filteredCards.forEach(card => {
+        card.style.display = 'block';
+        grid.appendChild(card); // Re-append to maintain sort order
+    });
+    
+    // Show/hide no results message
+    const noResults = document.getElementById('noResults');
+    if (filteredCards.length === 0) {
+        noResults.style.display = 'block';
+    } else {
+        noResults.style.display = 'none';
+    }
+}
+
+function resetFilters() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('categoryFilter').value = '';
+    document.getElementById('sortBy').value = 'label';
+    currentSort = 'label';
+    filterAndSort();
+}
+
+function exportCotTypes() {
+    // Create export data
+    const exportData = {
+        timestamp: new Date().toISOString(),
+        total_types: {{ cot_data.cot_types|length }},
+        categories: {{ cot_stats.categories|tojson }},
+        statistics: {{ cot_stats|tojson }},
+        cot_types: {{ cot_data.cot_types|tojson }}
+    };
+    
+    // Create and download file
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'cot_types_export_' + new Date().toISOString().split('T')[0] + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function refreshCotTypes() {
+    // Reload the page to get fresh data
+    window.location.reload();
+}
+
+// Copy COT type or SIDC to clipboard when clicked
+document.addEventListener('click', function(e) {
+    if (e.target.tagName === 'CODE') {
+        navigator.clipboard.writeText(e.target.textContent).then(function() {
+            // Show temporary feedback
+            const original = e.target.textContent;
+            e.target.textContent = 'Copied!';
+            e.target.style.background = '#28a745';
+            e.target.style.color = 'white';
+            
+            setTimeout(() => {
+                e.target.textContent = original;
+                e.target.style.background = '';
+                e.target.style.color = '';
+            }, 1000);
+        });
+    }
+});
+</script>
+{% endblock %}

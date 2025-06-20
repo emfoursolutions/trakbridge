@@ -1,107 +1,128 @@
-# Cursor-on-Target (CoT) Type definitions
-# These are standard CoT identifiers used in TAK systems
+# Cursor-on-Target (CoT) Type to SIDC mapping with SVG icon references
+# Compatible with MIL-STD-2525C format for military symbology
 
 cot_types:
   - value: "a-f-G-F-U"
+    sidc: "SFGPU------.svg"
     label: "Friendly - Generic"
     description: "Generic friendly marker"
     category: "friendly"
 
   - value: "a-h-G-F-U"
+    sidc: "SHGPU------.svg"
     label: "Hostile - Generic"
     description: "Generic hostile marker"
     category: "hostile"
 
   - value: "a-n-G-F-U"
+    sidc: "SNGPU------.svg"
     label: "Neutral - Generic"
     description: "Generic neutral marker"
     category: "neutral"
 
   - value: "a-u-G-F-U"
+    sidc: "SUGPU------.svg"
     label: "Unknown - Generic"
     description: "Unknown affiliation marker"
     category: "unknown"
 
   - value: "a-f-G-U-I"
+    sidc: "SFGPUCI----.svg"
     label: "Friendly Ground Unit - Infantry"
     description: "Friendly ground infantry unit"
     category: "friendly"
 
   - value: "a-f-G-U-A"
+    sidc: "SFGPUCA----.svg"
     label: "Friendly Ground Unit - Armor"
     description: "Friendly ground armored unit or tank"
     category: "friendly"
 
   - value: "a-f-G-U-S"
+    sidc: "SFFP-------.svg"
     label: "Friendly Ground Unit - Special Forces"
     description: "Friendly ground special operations forces"
     category: "friendly"
 
-  - value: "a-f-G-E-V-L"
-    label: "Friendly Ground Equipment - Vehicle - Law Enforcement"
-    description: "Police or law enforcement vehicles"
+  - value: "a-f-G-I-i-l"
+    sidc: "SFGPUULC----.svg"
+    label: "Friendly Ground Unit - Law Enforcement"
+    description: "Police or law enforcement"
     category: "friendly"
 
-  - value: "a-f-G-E-V-F"
-    label: "Friendly Ground Equipment - Vehicle - Fire/Rescue"
+  - value: "a-f-G-I-i-f"
+    sidc: "SFGPUULC----.svg"
+    label: "Friendly Ground Equipment - Fire/Rescue"
     description: "Fire department or rescue vehicles"
     category: "friendly"
 
   - value: "a-f-G-E-V-M"
-    label: "Friendly Ground Equipment - Vehicle - Medical"
+    sidc: "SFGPUSM----.svg"
+    label: "Friendly Ground Equipment - Medical"
     description: "Ambulance or medical response vehicle"
     category: "friendly"
 
   - value: "a-f-G-E-V-U"
+    sidc: "SFGPEVU----.svg"
     label: "Friendly Ground Equipment - Vehicle - Utility"
     description: "Utility or public works vehicles"
     category: "friendly"
 
   - value: "a-f-A-M-F"
+    sidc: "SFAP-------.svg"
     label: "Friendly Air Unit - Fixed Wing"
     description: "Friendly fixed-wing aircraft"
     category: "friendly"
 
   - value: "a-f-A-M-R"
+    sidc: "SFAPMh------.svg"
     label: "Friendly Air Unit - Rotary Wing"
     description: "Friendly rotary wing (helicopter)"
     category: "friendly"
 
   - value: "a-f-U-M"
+    sidc: "SFSP-------.svg"
     label: "Friendly Maritime Unit"
     description: "Friendly naval or maritime vessel"
     category: "friendly"
 
-  - value: "a-h-G-U-C"
-    label: "Hostile Ground Unit - Civil"
-    description: "Hostile civilian ground unit"
-    category: "hostile"
-
   - value: "a-h-G-U-I"
+    sidc: "SHGPUCI----.svg"
     label: "Hostile Ground Unit - Infantry"
     description: "Hostile infantry unit"
     category: "hostile"
 
   - value: "a-h-G-U-A"
+    sidc: "SHGPUCA----.svg"
     label: "Hostile Ground Unit - Armor"
     description: "Hostile armored vehicle or tank"
     category: "hostile"
 
   - value: "a-h-G-E-V-C"
+    sidc: "SHGPEVC----.svg"
     label: "Hostile Ground Equipment - Vehicle - Civil"
     description: "Hostile civilian vehicle"
     category: "hostile"
 
   - value: "a-n-A"
+    sidc: "SNAP-------.svg"
     label: "Neutral Air"
     description: "Neutral air asset"
     category: "neutral"
 
   - value: "a-n-U"
+    sidc: "SNSP-------.svg"
     label: "Neutral Maritime"
     description: "Neutral maritime vessel"
     category: "neutral"
 
-
 # Default CoT type to use for new streams
 default_cot_type: "a-f-G-F-U"
+default_sidc: "SFGPU------.svg"
+
+# Configuration for icon generation
+icon_config:
+  format: "svg"
+  size: "64x64"
+  background: "transparent"
+  standard: "MIL-STD-2525C"

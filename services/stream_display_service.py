@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from models.stream import Stream
 from sqlalchemy.orm import joinedload
 from services.stream_status_service import StreamStatusService
+from services.cot_type_service import cot_type_service
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,9 @@ class StreamDisplayService:
         # Format datetime fields
         self._format_datetime_fields(stream)
 
+        # Add COT type information
+        self._add_cot_type_info(stream)
+
     def _prepare_stream_for_detail(self, stream: Stream) -> None:
         """Prepare a stream for detail view display"""
         # Add plugin metadata
@@ -78,6 +82,9 @@ class StreamDisplayService:
 
         # Add display config (masked sensitive fields)
         self._add_display_config(stream)
+
+        # Add COT type information
+        self._add_cot_type_info(stream)
 
     def _add_plugin_metadata(self, stream: Stream) -> None:
         """Add plugin metadata to stream"""
@@ -99,6 +106,35 @@ class StreamDisplayService:
         else:
             # Fallback if no status service provided
             stream.running_status = {'running': False, 'error': 'Status service not available'}
+
+    def _add_cot_type_info(self, stream: Stream) -> None:
+        """Add COT type information including icon data"""
+        try:
+            cot_type = cot_type_service.get_cot_type_by_value(stream.cot_type)
+            if cot_type:
+                # Store the CotType object for potential future use
+                stream.cot_type_info = cot_type
+                # Add individual fields for easy template access
+                stream.cot_type_label = cot_type.label
+                stream.cot_type_description = cot_type.description
+                stream.cot_type_sidc = cot_type.sidc
+                stream.cot_type_category = cot_type.category
+            else:
+                # Fallback for unknown COT types
+                stream.cot_type_info = None
+                stream.cot_type_label = stream.cot_type
+                stream.cot_type_description = 'Unknown COT type'
+                stream.cot_type_sidc = ''
+                stream.cot_type_category = 'unknown'
+                logger.warning(f"Unknown COT type: {stream.cot_type} for stream {stream.id}")
+        except Exception as e:
+            logger.error(f"Error adding COT type info for stream {stream.id}: {e}")
+            # Set safe defaults
+            stream.cot_type_info = None
+            stream.cot_type_label = stream.cot_type
+            stream.cot_type_description = 'Error loading COT type info'
+            stream.cot_type_sidc = ''
+            stream.cot_type_category = 'unknown'
 
     def _format_datetime_fields(self, stream: Stream) -> None:
         """Format datetime fields for template display"""
@@ -195,6 +231,9 @@ class StreamDisplayService:
             if not hasattr(stream, 'last_poll_iso'):
                 self._format_datetime_fields(stream)
 
+            if not hasattr(stream, 'cot_type_info'):
+                self._add_cot_type_info(stream)
+
             formatted_stream = {
                 'id': stream.id,
                 'name': stream.name,
@@ -207,6 +246,8 @@ class StreamDisplayService:
                 'tak_server': stream.tak_server.name if stream.tak_server else None,
                 'poll_interval': stream.poll_interval,
                 'cot_type': stream.cot_type,
+                'cot_type_label': getattr(stream, 'cot_type_label', stream.cot_type),
+                'cot_type_sidc': getattr(stream, 'cot_type_sidc', ''),
                 'cot_stale_time': stream.cot_stale_time
             }
 
@@ -218,6 +259,7 @@ class StreamDisplayService:
         """Get a summary of stream information for quick display"""
         self._add_running_status(stream)
         self._format_datetime_fields(stream)
+        self._add_cot_type_info(stream)
 
         return {
             'id': stream.id,
@@ -228,7 +270,9 @@ class StreamDisplayService:
             'last_poll': getattr(stream, 'last_poll_iso', None),
             'message_count': stream.total_messages_sent or 0,
             'has_error': bool(stream.last_error),
-            'tak_server_name': stream.tak_server.name if stream.tak_server else None
+            'tak_server_name': stream.tak_server.name if stream.tak_server else None,
+            'cot_type_label': getattr(stream, 'cot_type_label', stream.cot_type),
+            'cot_type_sidc': getattr(stream, 'cot_type_sidc', '')
         }
 
     def get_plugin_usage_summary(self) -> Dict[str, Dict[str, Any]]:
