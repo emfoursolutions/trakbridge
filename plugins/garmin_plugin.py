@@ -82,6 +82,14 @@ class GarminPlugin(BaseGPSPlugin):
                     help_text="Your Garmin Connect account password"
                 ),
                 PluginConfigField(
+                    name="hide_inactive_devices",
+                    label="Hide Inactive Devices",
+                    field_type="checkbox",
+                    required=False,
+                    default_value=True,
+                    help_text="When checked, hides devices that have tracking turned off. When unchecked, shows all devices including those with tracking disabled."
+                ),
+                PluginConfigField(
                     name="retry_delay",
                     label="Retry Delay (seconds)",
                     field_type="number",
@@ -107,9 +115,9 @@ class GarminPlugin(BaseGPSPlugin):
         try:
             kml_data = await self._fetch_kml_feed(
                 session,
-                decrypted_config["url"],  # Use decrypted config
-                decrypted_config["username"],  # Use decrypted config
-                decrypted_config["password"]  # Use decrypted config - this was the main issue
+                decrypted_config["url"],
+                decrypted_config["username"],
+                decrypted_config["password"]
             )
 
             if kml_data is None:
@@ -120,31 +128,80 @@ class GarminPlugin(BaseGPSPlugin):
 
             # Convert placemarks to standardized location format
             locations = []
+            hide_inactive = self.config.get("hide_inactive_devices", True)
+
             for placemark in placemarks:
+                # Check if device is inactive and should be hidden
+                if hide_inactive and self._is_device_inactive(placemark):
+                    self.logger.debug(f"Skipping inactive device: {placemark.get('name', 'Unknown')}")
+                    continue
+
+                # Get the actual reporting time from ExtendedData/description
+                actual_reporting_time = self._parse_timestamp(placemark)
+
+                # Always use current time for CoT timestamp, add actual time to remarks
+                cot_timestamp = datetime.utcnow()
+                if actual_reporting_time:
+                    remarks_addition = f"Last Reported: {actual_reporting_time.strftime('%m/%d/%Y %H:%M:%S UTC')}"
+                else:
+                    remarks_addition = "Reporting time unavailable"
+
+                # Build description/remarks - handle None values properly
+                base_description = placemark.get("description") or ""
+                if base_description is None:
+                    base_description = ""
+
+                final_description = f"{base_description}{remarks_addition}".strip()
+
                 location = {
                     "name": placemark["name"],
                     "lat": float(placemark["lat"]),
                     "lon": float(placemark["lon"]),
-                    "timestamp": self._parse_timestamp(placemark) or datetime.utcnow(),
-                    "description": placemark.get("description", ""),
+                    "timestamp": cot_timestamp,
+                    "description": final_description,
                     "uid": placemark.get("uid"),
                     "additional_data": {
                         "source": "garmin",
+                        "actual_reporting_time": actual_reporting_time,
+                        "hide_inactive_setting": hide_inactive,
                         "raw_placemark": placemark
                     }
                 }
                 locations.append(location)
 
-            self.logger.info(f"Successfully fetched {len(locations)} locations from Garmin")
+            self.logger.info(
+                f"Successfully fetched {len(locations)} locations from Garmin (hide_inactive: {hide_inactive})")
             return locations
 
         except Exception as e:
             self.logger.error(f"Error fetching Garmin locations: {e}")
             return []
 
+    def _is_device_inactive(self, placemark: Dict[str, Any]) -> bool:
+        """
+        Check if a device is inactive based on the Event field in ExtendedData
+
+        Args:
+            placemark: Placemark dictionary
+
+        Returns:
+            True if device is inactive (tracking turned off), False otherwise
+        """
+        try:
+            extended_data = placemark.get("extended_data", {})
+            if extended_data:
+                event_value = extended_data.get("Event", "")
+                if event_value and "tracking turned off" in event_value.lower():
+                    self.logger.debug(f"Device inactive - Event: {event_value}")
+                    return True
+            return False
+        except Exception as e:
+            self.logger.debug(f"Error checking device activity status: {e}")
+            return False
+
     def _parse_timestamp(self, placemark: Dict[str, Any]) -> datetime:
         """
-        Try to extract timestamp from placemark description or extended data
+        Try to extract actual reporting timestamp from placemark description or extended data
 
         Args:
             placemark: Placemark dictionary
@@ -153,40 +210,89 @@ class GarminPlugin(BaseGPSPlugin):
             Parsed datetime or None if not found
         """
         try:
-            # Try to parse timestamp from description
-            description = placemark.get("description", "") or ""  # Handle None case
+            # First try ExtendedData (most reliable)
+            extended_data = placemark.get("extended_data", {})
+            if extended_data:
+                # Check for common time fields in ExtendedData
+                for time_field in ['Time UTC', 'Time', 'Timestamp', 'DateTime']:
+                    if time_field in extended_data:
+                        time_value = extended_data[time_field]
+                        parsed_time = self._parse_time_string(time_value)
+                        if parsed_time:
+                            self.logger.debug(f"Found timestamp in ExtendedData[{time_field}]: {parsed_time}")
+                            return parsed_time
 
-            # Ensure description is a string
-            if not isinstance(description, str):
-                self.logger.debug(f"Description is not a string: {type(description)}")
-                return None
+            # Fallback to parsing description
+            description = placemark.get("description", "") or ""
+            if isinstance(description, str):
+                parsed_time = self._parse_time_from_description(description)
+                if parsed_time:
+                    self.logger.debug(f"Found timestamp in description: {parsed_time}")
+                    return parsed_time
 
-            # Common Garmin timestamp patterns
-            import re
-
-            # Pattern: "Time: 2024-06-06 12:34:56 UTC"
-            time_match = re.search(r'Time:\s*([0-9]{4}-[0-9]{2}-[0-9]{2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})', description)
-            if time_match:
-                time_str = time_match.group(1)
-                return datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
-
-            # Pattern: ISO format in description
-            iso_match = re.search(r'([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})', description)
-            if iso_match:
-                time_str = iso_match.group(1)
-                return datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%S")
-
-            # Pattern: Alternative formats that might appear in Garmin feeds
-            # "06/07/2025 10:55:34"
-            date_match = re.search(r'([0-9]{1,2}/[0-9]{1,2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})', description)
-            if date_match:
-                time_str = date_match.group(1)
-                return datetime.strptime(time_str, "%m/%d/%Y %H:%M:%S")
+            self.logger.debug("No valid timestamp found in placemark")
+            return None
 
         except Exception as e:
-            self.logger.debug(f"Could not parse timestamp from placemark: {e}")
+            self.logger.debug(f"Error parsing timestamp from placemark: {e}")
+            return None
+
+    def _parse_time_string(self, time_str: str) -> datetime:
+        """Parse a time string using various common formats"""
+        if not time_str or not isinstance(time_str, str):
+            return None
+
+        # List of common timestamp formats
+        formats = [
+            "%m/%d/%Y %I:%M:%S %p",  # 6/20/2025 2:22:00 AM
+            "%m/%d/%Y %H:%M:%S",  # 6/20/2025 14:22:00
+            "%Y-%m-%d %H:%M:%S",  # 2025-06-20 14:22:00
+            "%Y-%m-%dT%H:%M:%S",  # 2025-06-20T14:22:00
+            "%Y-%m-%dT%H:%M:%SZ",  # 2025-06-20T14:22:00Z
+        ]
+
+        for fmt in formats:
+            try:
+                return datetime.strptime(time_str.strip(), fmt)
+            except ValueError:
+                continue
+
+        # Try ISO format with timezone handling
+        try:
+            return datetime.fromisoformat(time_str.replace('Z', '+00:00')).replace(tzinfo=None)
+        except ValueError:
+            pass
 
         return None
+
+    def _parse_time_from_description(self, description: str) -> datetime:
+        """Extract timestamp from description text using regex patterns"""
+        import re
+
+        # Pattern: "Time: 2024-06-06 12:34:56 UTC" or "Time UTC: ..."
+        time_match = re.search(r'Time(?:\s+UTC)?:\s*([^<\n]+)', description, re.IGNORECASE)
+        if time_match:
+            time_str = time_match.group(1).strip()
+            parsed_time = self._parse_time_string(time_str)
+            if parsed_time:
+                return parsed_time
+
+        # Pattern: ISO format anywhere in description
+        iso_match = re.search(r'([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})', description)
+        if iso_match:
+            time_str = iso_match.group(1)
+            parsed_time = self._parse_time_string(time_str)
+            if parsed_time:
+                return parsed_time
+
+        # Pattern: MM/DD/YYYY HH:MM:SS format
+        date_match = re.search(r'([0-9]{1,2}/[0-9]{1,2}/[0-9]{4}\s+[0-9]{1,2}:[0-9]{2}:[0-9]{2}(?:\s*[AP]M)?)',
+                               description, re.IGNORECASE)
+        if date_match:
+            time_str = date_match.group(1)
+            parsed_time = self._parse_time_string(time_str)
+            if parsed_time:
+                return parsed_time
 
     async def _fetch_kml_feed(self, session: aiohttp.ClientSession, url: str,
                               username: str, password: str, retries: int = 3) -> str:
@@ -328,10 +434,14 @@ class GarminPlugin(BaseGPSPlugin):
 
                             # Extract extended data and get ID
                             extended_data = self._extract_extended_data(feature)
-                            placemark_id = extended_data.get('Id', 'Unknown')
+                            placemark_id = extended_data.get('IMEI', 'Unknown')
+
+                            # Clean name and ID by removing spaces
+                            clean_name = str(getattr(feature, 'name', 'Unknown')).replace(' ', '')
+                            clean_id = str(placemark_id).replace(' ', '')
 
                             placemark_data = {
-                                "uid": f"{getattr(feature, 'name', 'Unknown')}-{placemark_id}",
+                                "uid": f"{clean_name}-{clean_id}",
                                 "name": getattr(feature, 'name', 'Unknown'),
                                 "lat": lat,
                                 "lon": lon,
@@ -400,10 +510,14 @@ class GarminPlugin(BaseGPSPlugin):
 
                                     # Extract extended data and get ID
                                     extended_data = self._extract_extended_data_from_xml(placemark_xml, namespaces)
-                                    placemark_id = extended_data.get('Id', 'Unknown')
+                                    placemark_id = extended_data.get('IMEI', 'Unknown')
+
+                                    # Clean name and ID by removing spaces
+                                    clean_name = str(name).replace(' ', '')
+                                    clean_id = str(placemark_id).replace(' ', '')
 
                                     placemark_data = {
-                                        "uid": f"{name}-{placemark_id}",
+                                        "uid": f"{clean_name}-{clean_id}",
                                         "name": name,
                                         "lat": lat,
                                         "lon": lon,

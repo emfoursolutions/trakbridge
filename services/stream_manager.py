@@ -446,14 +446,14 @@ class StreamWorker:
                     if self.stream.tak_server and hasattr(self, 'cot_service'):
                         success = await self._send_locations_to_tak_pytak(locations)
                         if success:
-                            self.logger.info(f"Successfully sent {len(locations)} locations to TAK server via PyTAK")
+                            self.logger.info(f"Successfully sent {len(locations)} locations to TAK server")
                         else:
-                            self.logger.error("Failed to send locations to TAK server via PyTAK")
+                            self.logger.error("Failed to send locations to TAK server")
                             # Try to reinitialize connection
                             await self._cleanup_tak_connection()
                             reconnect_success = await self._initialize_tak_connection()
                             if not reconnect_success:
-                                raise Exception("Failed to reinitialize PyTAK connection")
+                                raise Exception("Failed to reinitialize TAK connection")
                     else:
                         self.logger.warning("No TAK server configured or COT service not initialized")
 
@@ -538,14 +538,14 @@ class StreamWorker:
             if success:
                 # Update total_messages_sent in database
                 await self._update_stream_status_async(messages_sent=len(locations))
-                self.logger.info(f"Successfully processed and sent {len(locations)} locations via PyTAK")
+                self.logger.info(f"Successfully processed and sent {len(locations)} locations to TAK Server")
             else:
-                self.logger.error("Failed to process and send locations via PyTAK")
+                self.logger.error("Failed to process and send locations to TAK Server")
 
             return success
 
         except Exception as e:
-            self.logger.error(f"Failed to send locations to TAK server via PyTAK: {e}", exc_info=True)
+            self.logger.error(f"Failed to send locations to TAK server: {e}", exc_info=True)
             return False
 
     async def _send_locations_to_tak_fallback(self, locations: List[Dict]) -> bool:

@@ -123,22 +123,22 @@ class EnhancedCOTService:
 
                 # Parse timestamp - ensure we get a proper datetime object
                 if 'timestamp' in cleaned_location and cleaned_location['timestamp']:
-                    if isinstance(location['timestamp'], str):
+                    if isinstance(cleaned_location['timestamp'], str):
                         try:
-                            event_time = datetime.fromisoformat(location['timestamp'].replace('Z', '+00:00'))
+                            event_time = datetime.fromisoformat(cleaned_location['timestamp'].replace('Z', '+00:00'))
                             # Remove timezone info to avoid issues
                             if event_time.tzinfo is not None:
                                 event_time = event_time.replace(tzinfo=None)
                         except ValueError as e:
-                            logger.warning(f"Could not parse timestamp '{location['timestamp']}': {e}")
+                            logger.warning(f"Could not parse timestamp '{cleaned_location['timestamp']}': {e}")
                             event_time = datetime.utcnow()
-                    elif isinstance(location['timestamp'], datetime):
-                        event_time = location['timestamp']
+                    elif isinstance(cleaned_location['timestamp'], datetime):
+                        event_time = cleaned_location['timestamp']
                         # Remove timezone info to avoid issues
                         if event_time.tzinfo is not None:
                             event_time = event_time.replace(tzinfo=None)
                     else:
-                        logger.warning(f"Unexpected timestamp type: {type(location['timestamp'])}")
+                        logger.warning(f"Unexpected timestamp type: {type(cleaned_location['timestamp'])}")
                         event_time = datetime.utcnow()
                 else:
                     event_time = datetime.utcnow()
@@ -155,7 +155,7 @@ class EnhancedCOTService:
                     'time': event_time,
                     'start': event_time,
                     'stale': event_time + timedelta(seconds=int(stale_time)),
-                    'how': 'h-g-i-g-o',  # Standard PyTAK "how" value
+                    'how': 'm-g',  # Standard PyTAK "how" value
                     'lat': self._safe_float_convert(location['lat']),
                     'lon': self._safe_float_convert(location['lon']),
                     'hae': self._safe_float_convert(location.get('altitude', location.get('hae', 0.0))),
@@ -179,7 +179,7 @@ class EnhancedCOTService:
                 # Generate COT XML using PyTAK's functions
                 cot_xml = self._generate_cot_xml(event_data)
                 events.append(cot_xml)
-
+                logger.info(cot_xml)
                 logger.debug(f"Created PyTAK COT event for {cleaned_location.get('name', 'Unknown')}")
 
             except Exception as e:
@@ -195,9 +195,9 @@ class EnhancedCOTService:
         try:
             # Always use manual formatting to avoid PyTAK time conversion issues
             # PyTAK's cot_time() function may have issues with datetime objects
-            time_str = event_data['time'].strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-            start_str = event_data['start'].strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-            stale_str = event_data['stale'].strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            time_str = event_data['time'].strftime("%Y-%m-%dT%H:%M:%SZ")
+            start_str = event_data['start'].strftime("%Y-%m-%dT%H:%M:%SZ")
+            stale_str = event_data['stale'].strftime("%Y-%m-%dT%H:%M:%SZ")
 
             # Create COT event element
             cot_event = etree.Element("event")
@@ -225,7 +225,7 @@ class EnhancedCOTService:
             # Add contact info with endpoint (important for TAK Server)
             contact = etree.SubElement(detail, "contact")
             contact.set("callsign", event_data['callsign'])
-            contact.set("endpoint", "*:-1:stcp")  # Standard endpoint format
+            # contact.set("endpoint", "*:-1:stcp")  # Standard endpoint format
 
             # Add track information if available
             if 'speed' in event_data or 'course' in event_data:
@@ -266,8 +266,8 @@ class EnhancedCOTService:
                 else:
                     event_time = datetime.utcnow()
 
-                time_str = event_time.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-                stale_str = (event_time + timedelta(seconds=stale_time)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                time_str = event_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+                stale_str = (event_time + timedelta(seconds=stale_time)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
                 uid = location['uid']
 

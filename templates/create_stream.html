@@ -186,14 +186,16 @@ function renderPluginConfig(pluginMeta) {
     configBody.innerHTML = fields.map(field => generateFormField(field)).join('');
 }
 
+
 function generateFormField(field) {
+
     const fieldId = `plugin_${field.name}`;
     const isRequired = field.required ? 'required' : '';
     const placeholder = field.placeholder ? `placeholder="${field.placeholder}"` : '';
 
     let inputHtml = '';
 
-    switch (field.type) {
+    switch (field.field_type) {
         case 'password':
             inputHtml = `<input type="password" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder}>`;
             break;
@@ -209,6 +211,32 @@ function generateFormField(field) {
             const defaultVal = field.default ? `value="${field.default}"` : '';
             inputHtml = `<input type="number" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${min} ${max} ${defaultVal}>`;
             break;
+        case 'checkbox':
+            // Handle default value for checkbox
+            const isChecked = field.default === true ||
+                            field.default === 'true' ||
+                            field.default === '1' ||
+                            field.default === 1 ||
+                            field.default === 'on' ||
+                            field.default === 'yes' ||
+                            field.default === 'True' ? 'checked' : '';
+
+            // For checkboxes, we don't need the separate label since it's part of the checkbox structure
+            const checkboxRequiredBadge = field.required ? '<span class="badge bg-danger ms-1">Required</span>' : '';
+            const checkboxHelpText = field.help ? `<div class="form-text">${field.help}</div>` : '';
+
+            return `
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="${fieldId}" name="${fieldId}" ${isChecked} ${isRequired}>
+                        <label class="form-check-label" for="${fieldId}">
+                            ${field.label}${checkboxRequiredBadge}
+                        </label>
+                    </div>
+                    ${checkboxHelpText}
+                </div>
+            `;
+            break;
         case 'select':
             const options = field.options || [];
             const optionsHtml = options.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
@@ -218,12 +246,12 @@ function generateFormField(field) {
             </select>`;
             break;
         default:
-            const defaultValue = field.default ? `value="${field.default}"` : '';
+            const defaultValue = field.default_value ? `value="${field.default_value}"` : '';
             inputHtml = `<input type="text" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} ${defaultValue}>`;
     }
 
     const requiredBadge = field.required ? '<span class="badge bg-danger ms-1">Required</span>' : '';
-    const helpText = field.help ? `<div class="form-text">${field.help}</div>` : '';
+    const helpText = field.help_text ? `<div class="form-text">${field.help_text}</div>` : '';
 
     return `
         <div class="mb-3">

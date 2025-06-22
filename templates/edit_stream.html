@@ -246,7 +246,10 @@ function generateFormField(field, currentConfig) {
 
     let inputHtml = '';
 
-    switch (field.type) {
+    // Use field.field_type instead of field.type (common in Python objects)
+    const fieldType = field.type || field.field_type;
+
+    switch (fieldType) {
         case 'password':
             // For password fields, show placeholder text instead of current value
             const passwordPlaceholder = currentValue ? 'Leave blank to keep current password' : field.placeholder || '';
@@ -263,6 +266,23 @@ function generateFormField(field, currentConfig) {
             const max = field.max ? `max="${field.max}"` : '';
             inputHtml = `<input type="number" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${min} ${max} value="${currentValue}">`;
             break;
+        case 'checkbox':
+            // Handle various truthy values that might be stored in DB
+            const isChecked = currentValue === true ||
+                            currentValue === 'true' ||
+                            currentValue === '1' ||
+                            currentValue === 1 ||
+                            currentValue === 'on' ||
+                            currentValue === 'yes' ||
+                            currentValue === 'True' ? 'checked' : '';
+            inputHtml = `
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="${fieldId}" name="${fieldId}" ${isChecked} ${isRequired}>
+                    <label class="form-check-label" for="${fieldId}">
+                        ${field.label}
+                    </label>
+                </div>`;
+            break;
         case 'select':
             const options = field.options || [];
             const optionsHtml = options.map(opt =>
@@ -273,12 +293,23 @@ function generateFormField(field, currentConfig) {
                 ${optionsHtml}
             </select>`;
             break;
-default:
+        default:
+            console.log('Using default text input for field type:', fieldType);
             inputHtml = `<input type="text" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} value="${currentValue}">`;
     }
 
     const requiredBadge = field.required ? '<span class="badge bg-danger ms-1">Required</span>' : '';
-    const helpText = field.help ? `<div class="form-text">${field.help}</div>` : '';
+    const helpText = field.help || field.help_text ? `<div class="form-text">${field.help || field.help_text}</div>` : '';
+
+    // For checkbox fields, don't show the label again since it's already in the input HTML
+    if (fieldType === 'checkbox') {
+        return `
+            <div class="mb-3">
+                ${inputHtml}
+                ${helpText}
+            </div>
+        `;
+    }
 
     return `
         <div class="mb-3">

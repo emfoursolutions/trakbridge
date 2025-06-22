@@ -15,6 +15,7 @@ from sqlalchemy.pool import Pool
 import signal
 import time
 from dotenv import load_dotenv
+import threading
 import sys
 import subprocess
 
@@ -32,11 +33,20 @@ logger = logging.getLogger(__name__)
 
 # Global stream manager instance (will be initialized after app creation)
 stream_manager = None
+_stream_manager_lock = threading.Lock()
+
+
+def get_or_create_stream_manager():
+    global stream_manager
+    if stream_manager is None:
+        with _stream_manager_lock:
+            if stream_manager is None:  # Double-checked locking
+                from services.stream_manager import get_stream_manager
+                stream_manager = get_stream_manager()
+    return stream_manager
 
 
 def create_app(config_name=None):
-    global stream_manager
-
     app = Flask(__name__)
 
     # Determine environment and get configuration
@@ -65,10 +75,8 @@ def create_app(config_name=None):
         # Register models with SQLAlchemy
         db.Model.metadata.create_all(bind=db.engine)
 
-        # Initialize stream manager after models are loaded
-        if stream_manager is None:
-            from services.stream_manager import get_stream_manager
-            stream_manager = get_stream_manager()
+        # Initialize stream manager after models are loaded - now thread-safe
+        get_or_create_stream_manager()
 
     # Set up database event listeners
     setup_database_events()
