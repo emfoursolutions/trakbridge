@@ -179,7 +179,7 @@ class EnhancedCOTService:
                 # Generate COT XML using PyTAK's functions
                 cot_xml = self._generate_cot_xml(event_data)
                 events.append(cot_xml)
-                logger.info(cot_xml)
+                logger.debug(cot_xml)
                 logger.debug(f"Created PyTAK COT event for {cleaned_location.get('name', 'Unknown')}")
 
             except Exception as e:
