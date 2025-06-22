@@ -6,9 +6,8 @@ import asyncio
 import ssl
 import tempfile
 import os
-import uuid
 from lxml import etree
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional, Tuple
 import logging
 
@@ -131,7 +130,7 @@ class EnhancedCOTService:
                                 event_time = event_time.replace(tzinfo=None)
                         except ValueError as e:
                             logger.warning(f"Could not parse timestamp '{cleaned_location['timestamp']}': {e}")
-                            event_time = datetime.utcnow()
+                            event_time = datetime.now(timezone.utc)
                     elif isinstance(cleaned_location['timestamp'], datetime):
                         event_time = cleaned_location['timestamp']
                         # Remove timezone info to avoid issues
@@ -139,14 +138,14 @@ class EnhancedCOTService:
                             event_time = event_time.replace(tzinfo=None)
                     else:
                         logger.warning(f"Unexpected timestamp type: {type(cleaned_location['timestamp'])}")
-                        event_time = datetime.utcnow()
+                        event_time = datetime.now(timezone.utc)
                 else:
-                    event_time = datetime.utcnow()
+                    event_time = datetime.now(timezone.utc)
 
                 # Ensure event_time is a proper datetime object
                 if not isinstance(event_time, datetime):
                     logger.error(f"event_time is not a datetime object: {type(event_time)}")
-                    event_time = datetime.utcnow()
+                    event_time = datetime.now(timezone.utc)
 
                 # Create COT event data dictionary with safe conversions
                 event_data = {
@@ -260,11 +259,11 @@ class EnhancedCOTService:
                             event_time = datetime.fromisoformat(location['timestamp'].replace('Z', '+00:00')).replace(
                                 tzinfo=None)
                         except ValueError:
-                            event_time = datetime.utcnow()
+                            event_time = datetime.now(timezone.utc)
                     else:
                         event_time = location['timestamp']
                 else:
-                    event_time = datetime.utcnow()
+                    event_time = datetime.now(timezone.utc)
 
                 time_str = event_time.strftime("%Y-%m-%dT%H:%M:%SZ")
                 stale_str = (event_time + timedelta(seconds=stale_time)).strftime("%Y-%m-%dT%H:%M:%SZ")

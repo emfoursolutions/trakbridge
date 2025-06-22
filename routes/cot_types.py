@@ -1,11 +1,6 @@
-from flask import Blueprint, render_template, jsonify, current_app
+from flask import Blueprint, render_template
 from services.cot_type_service import cot_type_service
-from plugins.plugin_manager import plugin_manager
-from database import db
 import logging
-import yaml
-import os
-from collections import Counter
 
 logger = logging.getLogger(__name__)
 

@@ -7,7 +7,6 @@ import aiohttp
 import asyncio
 import certifi
 import ssl
-import logging
 from datetime import datetime, timezone
 import json
 
@@ -335,7 +334,7 @@ class TraccarPlugin(BaseGPSPlugin):
             Parsed datetime object
         """
         if not timestamp_str:
-            return datetime.utcnow()
+            return datetime.now(timezone.utc)
 
         try:
             # Traccar typically returns ISO 8601 format
@@ -353,7 +352,7 @@ class TraccarPlugin(BaseGPSPlugin):
 
         except Exception as e:
             self.logger.debug(f"Could not parse timestamp '{timestamp_str}': {e}")
-            return datetime.utcnow()
+            return datetime.now(timezone.utc)
 
     def _build_description(self, position: Dict[str, Any], device_info: Dict[str, Any]) -> str:
         """

@@ -4,10 +4,7 @@
 
 from typing import List, Dict, Any
 import aiohttp
-import asyncio
-import logging
 from datetime import datetime
-import json
 import ssl
 import certifi
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField

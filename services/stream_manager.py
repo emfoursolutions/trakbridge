@@ -5,20 +5,14 @@
 
 import asyncio
 import aiohttp
-import ssl
 from typing import Dict, Optional, List
 import logging
-from datetime import datetime
-from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 import threading
-import weakref
 import time
-from sqlalchemy.exc import SQLAlchemyError, DisconnectionError
-from sqlalchemy.orm import scoped_session
-import traceback
+from sqlalchemy.exc import SQLAlchemyError
 
 from models.stream import Stream
-from models.tak_server import TakServer
 from plugins.plugin_manager import plugin_manager
 
 from database import db
@@ -161,7 +155,7 @@ class DatabaseManager:
             if last_poll_time is not None:
                 stream.last_poll = last_poll_time
             elif is_active:  # Update last_poll when marking active
-                stream.last_poll = datetime.utcnow()
+                stream.last_poll = datetime.now(timezone.utc)
 
             if messages_sent is not None:
                 if not hasattr(stream, 'total_messages_sent') or stream.total_messages_sent is None:
@@ -385,7 +379,7 @@ class StreamWorker:
                 'lat': 0.0,
                 'lon': 0.0,
                 'name': 'Connection Test',
-                'timestamp': datetime.utcnow()
+                'timestamp': datetime.now(timezone.utc)
             }]
 
             # Try to create events to validate PyTAK availability
@@ -460,17 +454,17 @@ class StreamWorker:
                     # Update stream status with success
                     await self._update_stream_status_async(
                         last_error=None,
-                        last_poll_time=datetime.utcnow()
+                        last_poll_time=datetime.now(timezone.utc)
                     )
 
                     self._consecutive_errors = 0
-                    self._last_successful_poll = datetime.utcnow()
+                    self._last_successful_poll = datetime.now(timezone.utc)
                     self.logger.debug("Poll cycle completed successfully")
 
                 else:
                     self.logger.warning(f"No locations retrieved from {self.stream.plugin_type} plugin")
                     # Still update last poll time even if no data
-                    await self._update_stream_status_async(last_poll_time=datetime.utcnow())
+                    await self._update_stream_status_async(last_poll_time=datetime.now(timezone.utc))
 
                 # Wait for next poll or stop signal
                 try:
@@ -605,7 +599,7 @@ class StreamWorker:
 
     def get_health_status(self) -> Dict:
         """Get detailed health status of this worker"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return {
             'running': self.running,
             'startup_complete': self._startup_complete,
@@ -1030,7 +1024,7 @@ class StreamManager:
                 False,  # is_active = False
                 None,  # last_error = None (clear any previous error)
                 None,  # messages_sent = None
-                datetime.utcnow()  # last_poll_time
+                datetime.now(timezone.utc)  # last_poll_time
             )
 
             if success:
@@ -1051,7 +1045,7 @@ class StreamManager:
                 False,  # is_active = False
                 error_message,  # last_error
                 None,  # messages_sent = None
-                datetime.utcnow()  # last_poll_time
+                datetime.now(timezone.utc)  # last_poll_time
             )
 
             if success:
@@ -1221,7 +1215,7 @@ class StreamManager:
                             True,  # is_active = True
                             None,  # clear any error
                             None,  # messages_sent
-                            datetime.utcnow()  # last_poll_time
+                            datetime.now(timezone.utc)  # last_poll_time
                         )
                         self.logger.info(f"Updated database to mark stream {stream_id} as active")
                     except Exception as e:
@@ -1261,7 +1255,7 @@ class StreamManager:
                         False,  # is_active = False
                         "Failed to start during health check",  # last_error
                         None,  # messages_sent
-                        datetime.utcnow()  # last_poll_time
+                        datetime.now(timezone.utc)  # last_poll_time
                     )
             except Exception as e:
                 self.logger.error(f"Error handling database sync issue for stream {stream_id}: {e}")

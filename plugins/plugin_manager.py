@@ -9,8 +9,6 @@ import logging
 import os
 import inspect
 import pkgutil
-import asyncio
-import aiohttp
 
 
 class PluginManager:

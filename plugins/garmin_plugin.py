@@ -5,10 +5,9 @@
 from typing import List, Dict, Any
 import aiohttp
 import asyncio
-import logging
 import ssl
 import certifi
-from datetime import datetime
+from datetime import datetime, timezone
 from fastkml import kml
 
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
@@ -140,7 +139,7 @@ class GarminPlugin(BaseGPSPlugin):
                 actual_reporting_time = self._parse_timestamp(placemark)
 
                 # Always use current time for CoT timestamp, add actual time to remarks
-                cot_timestamp = datetime.utcnow()
+                cot_timestamp = datetime.now(timezone.utc)
                 if actual_reporting_time:
                     remarks_addition = f"Last Reported: {actual_reporting_time.strftime('%m/%d/%Y %H:%M:%S UTC')}"
                 else:
@@ -170,7 +169,7 @@ class GarminPlugin(BaseGPSPlugin):
                 locations.append(location)
 
             self.logger.info(
-                f"Successfully fetched {len(locations)} locations from Garmin (hide_inactive: {hide_inactive})")
+                f"Successfully fetched {len(locations)} locations from Garmin")
             return locations
 
         except Exception as e:

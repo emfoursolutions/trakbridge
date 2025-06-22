@@ -3,11 +3,10 @@
 # =============================================================================
 
 from flask import Blueprint, jsonify, current_app
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 import time
 import threading
-import os
 import psutil
 from sqlalchemy import text
 from database import db
@@ -44,7 +43,7 @@ def get_cached_health_check(check_name, check_function, *args, **kwargs):
             error_result = {
                 'status': 'unhealthy',
                 'error': str(e),
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': datetime.now(timezone.utc).isoformat()
             }
             _health_cache[cache_key] = {
                 'result': error_result,
@@ -58,7 +57,7 @@ def health_check():
     """Basic health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': datetime.now(timezone.utc).isoformat(),
         'version': '1.0.0',
         'service': 'trakbridge'
     })
@@ -94,7 +93,7 @@ def detailed_health_check():
 
     result = {
         'status': overall_status,
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': datetime.now(timezone.utc).isoformat(),
         'response_time_ms': response_time,
         'version': '1.0.0',
         'service': 'trakbridge',
@@ -130,12 +129,12 @@ def readiness_check():
                 'status': 'not_ready',
                 'failed_check': check_name,
                 'error': result.get('error', 'Unknown error'),
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': datetime.now(timezone.utc).isoformat()
             }), 503
 
     return jsonify({
         'status': 'ready',
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': datetime.now(timezone.utc).isoformat()
     })
 
 
@@ -144,7 +143,7 @@ def liveness_check():
     """Kubernetes liveness probe - basic check if app is alive"""
     return jsonify({
         'status': 'alive',
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': datetime.now(timezone.utc).isoformat(),
         'uptime_seconds': get_uptime_seconds()
     })
 
@@ -340,7 +339,7 @@ def check_streams_health():
 
         # Check for streams with recent errors
         recent_errors = 0
-        error_threshold = datetime.utcnow() - timedelta(minutes=15)
+        error_threshold = datetime.now(timezone.utc) - timedelta(minutes=15)
 
         for stream in streams:
             if (stream.last_error and

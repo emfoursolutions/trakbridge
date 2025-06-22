@@ -1,6 +1,6 @@
 # services/stream_config_service.py
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from models.stream import Stream
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ class StreamConfigService:
                 'poll_interval': stream.poll_interval,
                 'cot_type': stream.cot_type,
                 'cot_stale_time': stream.cot_stale_time,
-                'exported_at': datetime.utcnow().isoformat(),
+                'exported_at': datetime.now(timezone.utc).isoformat(),
                 'note': 'Sensitive fields have been masked for security' if not include_sensitive else 'Full configuration export'
             }
 

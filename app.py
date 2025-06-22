@@ -2,13 +2,10 @@
 # app.py - Enhanced Flask Application with Fixed Startup
 # =============================================================================
 from flask import Flask, render_template
-from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 import os
 import logging
 import atexit
-import asyncio
-import threading
 from sqlalchemy.orm import scoped_session
 from sqlalchemy import event
 from sqlalchemy.pool import Pool
@@ -16,8 +13,6 @@ import signal
 import time
 from dotenv import load_dotenv
 import threading
-import sys
-import subprocess
 
 # Import config system
 from config.environments import get_config

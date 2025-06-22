@@ -6,12 +6,11 @@ import os
 import base64
 import hashlib
 import secrets
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
-import json
 
 
 class EncryptionService:
