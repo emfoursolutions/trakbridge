@@ -409,6 +409,11 @@ def setup_error_handlers(app):
         db.session.rollback()
         return render_template('errors/500.html'), 500
 
+    @app.errorhandler(503)
+    def internal_error(error):
+        db.session.rollback()
+        return render_template('errors/503.html'), 503
+
     @app.errorhandler(Exception)
     def handle_exception(e):
         """Handle uncaught exceptions"""
