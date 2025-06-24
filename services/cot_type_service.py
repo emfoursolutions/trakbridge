@@ -1,3 +1,7 @@
+# =============================================================================
+# services/cot_type_service.py - CoT Type Service
+# Manages the CoT Types
+# =============================================================================
 import yaml
 from pathlib import Path
 from typing import List, Dict, Any, Optional
