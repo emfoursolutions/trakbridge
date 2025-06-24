@@ -8,7 +8,6 @@ import logging
 import asyncio
 from datetime import datetime
 from models.stream import Stream
-from models.tak_server import TakServer
 
 logger = logging.getLogger(__name__)
 
@@ -252,7 +251,7 @@ class StreamOperationsService:
             # Run health check in the background event loop
             future = asyncio.run_coroutine_threadsafe(
                 self.stream_manager.health_check(),
-                self.stream_manager._loop
+                self.stream_manager.loop
             )
             future.result(timeout=30)
 
@@ -366,3 +365,5 @@ class StreamOperationsService:
         except Exception as e:
             logger.error(f"Error getting status for stream {stream_id}: {e}")
             return {'running': False, 'error': str(e)}
+
+

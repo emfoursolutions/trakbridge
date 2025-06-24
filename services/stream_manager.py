@@ -712,6 +712,10 @@ class StreamManager:
                 self.logger.error(f"Error in restart_stream_sync for stream {stream_id}: {e}")
                 return False
 
+    @property
+    def loop(self):
+        return self._loop
+
 
 def get_stream_manager():
     """Get the global stream manager instance (singleton pattern)"""
