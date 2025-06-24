@@ -1,4 +1,7 @@
-# services/stream_config_service.py
+# =============================================================================
+# services/stream_config_service.py - Stream Configuration Service
+# =============================================================================
+
 import logging
 from datetime import datetime, timezone
 from models.stream import Stream
@@ -30,7 +33,8 @@ class StreamConfigService:
 
         return len(warnings) == 0, warnings
 
-    def extract_plugin_config_from_request(self, data):
+    @staticmethod
+    def extract_plugin_config_from_request(data):
         """Extract plugin configuration from request data by removing plugin_ prefix"""
         plugin_config = {}
         for key, value in data.items():
@@ -38,7 +42,8 @@ class StreamConfigService:
                 plugin_config[key[7:]] = value  # Remove 'plugin_' prefix
         return plugin_config
 
-    def export_stream_config(self, stream_id, include_sensitive=False):
+    @staticmethod
+    def export_stream_config(stream_id, include_sensitive=False):
         """Export stream configuration with optional sensitive field masking"""
         try:
             stream = Stream.query.get_or_404(stream_id)
@@ -52,7 +57,11 @@ class StreamConfigService:
                 'cot_type': stream.cot_type,
                 'cot_stale_time': stream.cot_stale_time,
                 'exported_at': datetime.now(timezone.utc).isoformat(),
-                'note': 'Sensitive fields have been masked for security' if not include_sensitive else 'Full configuration export'
+                'note': (
+                    'Sensitive fields have been masked for security'
+                    if not include_sensitive
+                    else 'Full configuration export'
+                )
             }
 
             return export_data
@@ -144,8 +153,9 @@ class StreamConfigService:
                         # Skip methods
                         if not callable(attr_value):
                             result[attr_name] = self.serialize_plugin_metadata(attr_value)
-                    except:
-                        pass  # Skip attributes that can't be accessed
+                    except Exception as e:
+                        # Skip attributes that can't be accessed
+                        logger.debug(f"Attributes: {e} skipped that can't be accessed")
             return result
         else:
             # Return as-is for basic types (str, int, bool, etc.)
