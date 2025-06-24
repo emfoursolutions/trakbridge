@@ -47,7 +47,8 @@ class StreamDisplayService:
 
         return stream
 
-    def get_stream_for_edit_form(self, stream_id: int) -> Stream:
+    @staticmethod
+    def get_stream_for_edit_form(stream_id: int) -> Stream:
         """Get a stream prepared for the edit form"""
         # Use joinedload to eagerly load the tak_server relationship
         stream = Stream.query.options(joinedload(Stream.tak_server)).filter_by(id=stream_id).first_or_404()
@@ -107,7 +108,8 @@ class StreamDisplayService:
             # Fallback if no status service provided
             stream.running_status = {'running': False, 'error': 'Status service not available'}
 
-    def _add_cot_type_info(self, stream: Stream) -> None:
+    @staticmethod
+    def _add_cot_type_info(stream: Stream) -> None:
         """Add COT type information including icon data"""
         try:
             cot_type = cot_type_service.get_cot_type_by_value(stream.cot_type)
@@ -136,7 +138,8 @@ class StreamDisplayService:
             stream.cot_type_sidc = ''
             stream.cot_type_category = 'unknown'
 
-    def _format_datetime_fields(self, stream: Stream) -> None:
+    @staticmethod
+    def _format_datetime_fields(stream: Stream) -> None:
         """Format datetime fields for template display"""
         if stream.last_poll and isinstance(stream.last_poll, datetime):
             try:
@@ -169,7 +172,8 @@ class StreamDisplayService:
             logger.warning(f"Could not prepare display config for stream {stream.id}: {e}")
             stream.display_config = {}
 
-    def calculate_plugin_statistics(self, streams: List[Stream]) -> Tuple[Dict[str, int], Dict[str, Any]]:
+    @staticmethod
+    def calculate_plugin_statistics(streams: List[Stream]) -> Tuple[Dict[str, int], Dict[str, Any]]:
         """Calculate plugin statistics and metadata"""
         plugin_stats = {}
         plugin_metadata = {}
@@ -212,8 +216,8 @@ class StreamDisplayService:
                         # Skip methods
                         if not callable(attr_value):
                             result[attr_name] = self._serialize_plugin_metadata(attr_value)
-                    except:
-                        pass  # Skip attributes that can't be accessed
+                    except Exception as e:
+                        logging.debug(f"Attributes: {e} skipped")  # Skip attributes that can't be accessed
             return result
         else:
             # Return as-is for basic types (str, int, bool, etc.)
