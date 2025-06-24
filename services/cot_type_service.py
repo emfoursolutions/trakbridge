@@ -33,7 +33,7 @@ class CotTypesService:
             yaml_path = Path(self.yaml_file_path)
             if not yaml_path.exists():
                 logger.warning(f"CoT types file not found: {self.yaml_file_path}")
-                return self._get_default_data()
+                return CotTypesService._get_default_data()
 
             with open(yaml_path, 'r', encoding='utf-8') as file:
                 data = yaml.safe_load(file)
@@ -42,12 +42,13 @@ class CotTypesService:
 
         except yaml.YAMLError as e:
             logger.error(f"Error parsing {self.yaml_file_path}: {e}")
-            return self._get_default_data()
+            return CotTypesService._get_default_data()
         except Exception as e:
             logger.error(f"Unexpected error loading CoT types: {e}")
-            return self._get_default_data()
+            return CotTypesService._get_default_data()
 
-    def _get_default_data(self) -> Dict[str, Any]:
+    @staticmethod
+    def _get_default_data() -> Dict[str, Any]:
         """Get default CoT types as fallback."""
         return {
             'cot_types': [
@@ -153,7 +154,8 @@ class CotTypesService:
             'default_cot_type': self._default_cot_type
         }
 
-    def calculate_cot_statistics(self, cot_data):
+    @staticmethod
+    def calculate_cot_statistics(cot_data):
         """Calculate statistics for COT types"""
 
         cot_types = cot_data.get('cot_types', [])
@@ -173,6 +175,7 @@ class CotTypesService:
         stats['other'] = len(cot_types) - stats['friendly'] - stats['hostile']
 
         return stats
+
 
 # Global service instance
 cot_type_service = CotTypesService()
