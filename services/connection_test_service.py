@@ -38,13 +38,13 @@ class ConnectionTestService:
                 # If session not available, create a temporary one
                 timeout = aiohttp.ClientTimeout(total=30)
                 async with aiohttp.ClientSession(timeout=timeout) as temp_session:
-                    success, device_count = await self._perform_connection_test(
+                    success, device_count = await ConnectionTestService._perform_connection_test(
                         plugin_instance, temp_session
                     )
                     return success, device_count, None
             else:
                 # Use shared session
-                success, device_count = await self._perform_connection_test(
+                success, device_count = await ConnectionTestService._perform_connection_test(
                     plugin_instance, session
                 )
                 return success, device_count, None
@@ -77,7 +77,8 @@ class ConnectionTestService:
             logger.error(f"Error testing stream connection for {stream_id}: {e}")
             return False, 0, str(e)
 
-    async def _perform_connection_test(self, plugin_instance, session):
+    @staticmethod
+    async def _perform_connection_test(plugin_instance, session):
         """Perform the actual connection test with the plugin instance"""
         try:
             # First test basic connection
@@ -296,5 +297,5 @@ class ConnectionTestService:
         """Destructor to ensure cleanup"""
         try:
             self.cleanup()
-        except:
-            pass  # Ignore errors during destruction
+        except Exception as e:
+            logger.debug(f"Destructor completed {e}")
