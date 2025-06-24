@@ -6,11 +6,13 @@ import os
 import base64
 import hashlib
 import secrets
+import logging
+import binascii
 from typing import Dict, Any, Optional
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-import logging
+from cryptography.exceptions import InvalidKey
 
 
 class EncryptionService:
@@ -147,7 +149,8 @@ class EncryptionService:
             self.logger.error(f"Failed to decrypt value: {e}")
             raise EncryptionError(f"Decryption failed: {e}")
 
-    def is_encrypted(self, value: str) -> bool:
+    @staticmethod
+    def is_encrypted(value: str) -> bool:
         """Check if a value is encrypted"""
         return isinstance(value, str) and value.startswith("ENC:")
 
@@ -163,7 +166,7 @@ class EncryptionService:
         for field_name in sensitive_fields:
             if field_name in encrypted_config:
                 value = encrypted_config[field_name]
-                if value and not self.is_encrypted(str(value)):
+                if value and not EncryptionService.is_encrypted(str(value)):
                     try:
                         encrypted_config[field_name] = self.encrypt_value(str(value))
                         self.logger.debug(f"Encrypted field: {field_name}")
@@ -216,7 +219,8 @@ class EncryptionService:
             self.logger.error(f"Key rotation failed: {e}")
             raise EncryptionError(f"Key rotation failed: {e}")
 
-    def hash_password(self, password: str, salt: Optional[bytes] = None) -> tuple:
+    @staticmethod
+    def hash_password(password: str, salt: Optional[bytes] = None) -> tuple:
         """
         Hash a password with salt using enhanced security
         """
@@ -252,10 +256,10 @@ class EncryptionService:
             try:
                 kdf.verify(password.encode(), expected_hash)
                 return True
-            except Exception:
+            except InvalidKey:
                 return False
 
-        except Exception as e:
+        except (binascii.Error, ValueError, TypeError) as e:
             self.logger.error(f"Error verifying password: {e}")
             return False
 
@@ -332,6 +336,8 @@ class EncryptedConfigMixin:
 
     def get_sensitive_fields(self) -> list:
         """Get list of sensitive field names from plugin metadata"""
+
+        # Expects self.get_config_fields() to be provided by the base class
         sensitive_fields = []
         config_fields = self.get_config_fields()
 
