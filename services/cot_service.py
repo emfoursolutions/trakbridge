@@ -17,6 +17,7 @@ try:
 
     PYTAK_AVAILABLE = True
 except ImportError:
+    pytak = None
     PYTAK_AVAILABLE = False
     logging.warning("PyTAK not available. Install with: pip install pytak")
 
@@ -54,7 +55,8 @@ class EnhancedCOTService:
         else:
             logger.debug("Using custom COT transmission implementation")
 
-    def _safe_float_convert(self, value: Any, default: float = 0.0) -> float:
+    @staticmethod
+    def _safe_float_convert(value: Any, default: float = 0.0) -> float:
         """Safely convert a value to float, handling various input types"""
         if value is None:
             return default
@@ -70,7 +72,8 @@ class EnhancedCOTService:
             logger.warning(f"Could not convert {value} (type: {type(value)}) to float: {e}, using default {default}")
             return default
 
-    def _validate_location_data(self, location: Dict[str, Any]) -> Dict[str, Any]:
+    @staticmethod
+    def _validate_location_data(location: Dict[str, Any]) -> Dict[str, Any]:
         """Validate and clean location data to prevent type errors"""
         cleaned_location = {}
 
@@ -103,11 +106,12 @@ class EnhancedCOTService:
             List of COT events as XML bytes
         """
         if self.use_pytak:
-            return await self._create_pytak_events(locations, cot_type, stale_time)
+            return await EnhancedCOTService._create_pytak_events(locations, cot_type, stale_time)
         else:
-            return await self._create_custom_events(locations, cot_type, stale_time)
+            return await EnhancedCOTService._create_custom_events(locations, cot_type, stale_time)
 
-    async def _create_pytak_events(self, locations: List[Dict[str, Any]],
+    @staticmethod
+    async def _create_pytak_events(locations: List[Dict[str, Any]],
                                    cot_type: str, stale_time: int) -> List[bytes]:
         """Create COT events using PyTAK's XML generation"""
         events = []
@@ -115,7 +119,7 @@ class EnhancedCOTService:
         for location in locations:
             try:
                 # Validate and clean location data first
-                cleaned_location = self._validate_location_data(location)
+                cleaned_location = EnhancedCOTService._validate_location_data(location)
 
                 # Debug: Log the location data to see what we're working with
                 logger.debug(f"Processing location: {cleaned_location}")
@@ -155,19 +159,21 @@ class EnhancedCOTService:
                     'start': event_time,
                     'stale': event_time + timedelta(seconds=int(stale_time)),
                     'how': 'm-g',  # Standard PyTAK "how" value
-                    'lat': self._safe_float_convert(location['lat']),
-                    'lon': self._safe_float_convert(location['lon']),
-                    'hae': self._safe_float_convert(location.get('altitude', location.get('hae', 0.0))),
-                    'ce': self._safe_float_convert(location.get('accuracy', location.get('ce', 999999)), 999999),
-                    'le': self._safe_float_convert(location.get('linear_error', location.get('le', 999999)), 999999),
+                    'lat': EnhancedCOTService._safe_float_convert(location['lat']),
+                    'lon': EnhancedCOTService._safe_float_convert(location['lon']),
+                    'hae': EnhancedCOTService._safe_float_convert(location.get('altitude', location.get('hae', 0.0))),
+                    'ce': EnhancedCOTService._safe_float_convert(location.get(
+                        'accuracy', location.get('ce', 999999)), 999999),
+                    'le': EnhancedCOTService._safe_float_convert(
+                        location.get('linear_error', location.get('le', 999999)), 999999),
                     'callsign': str(location.get('name', 'Unknown'))
                 }
 
                 # Add optional fields with safe conversions
                 if location.get('speed'):
-                    event_data['speed'] = self._safe_float_convert(location['speed'])
+                    event_data['speed'] = EnhancedCOTService._safe_float_convert(location['speed'])
                 if location.get('heading') or location.get('course'):
-                    event_data['course'] = self._safe_float_convert(
+                    event_data['course'] = EnhancedCOTService._safe_float_convert(
                         location.get('heading', location.get('course', 0.0)))
                 if location.get('description'):
                     event_data['remarks'] = str(location['description'])
@@ -176,7 +182,7 @@ class EnhancedCOTService:
                 logger.debug(f"Event data created: {event_data}")
 
                 # Generate COT XML using PyTAK's functions
-                cot_xml = self._generate_cot_xml(event_data)
+                cot_xml = EnhancedCOTService._generate_cot_xml(event_data)
                 events.append(cot_xml)
                 logger.debug(cot_xml)
                 logger.debug(f"Created PyTAK COT event for {cleaned_location.get('name', 'Unknown')}")
@@ -189,7 +195,8 @@ class EnhancedCOTService:
         logger.debug(f"Created {len(events)} PyTAK COT events from {len(locations)} locations")
         return events
 
-    def _generate_cot_xml(self, event_data: Dict[str, Any]) -> bytes:
+    @staticmethod
+    def _generate_cot_xml(event_data: Dict[str, Any]) -> bytes:
         """Generate COT XML using PyTAK's XML structure"""
         try:
             # Always use manual formatting to avoid PyTAK time conversion issues
@@ -245,7 +252,8 @@ class EnhancedCOTService:
             logger.error(f"Error generating COT XML: {e}")
             raise
 
-    async def _create_custom_events(self, locations: List[Dict[str, Any]],
+    @staticmethod
+    async def _create_custom_events(locations: List[Dict[str, Any]],
                                     cot_type: str, stale_time: int) -> List[bytes]:
         """Create COT events using custom XML generation (fallback)"""
         cot_events = []
@@ -282,11 +290,14 @@ class EnhancedCOTService:
 
                 # Add point element with proper attribute structure and safe conversions
                 point_attr = {
-                    "lat": f"{self._safe_float_convert(location['lat']):.8f}",
-                    "lon": f"{self._safe_float_convert(location['lon']):.8f}",
-                    "hae": f"{self._safe_float_convert(location.get('altitude', location.get('hae', 0.0))):.2f}",
-                    "ce": f"{self._safe_float_convert(location.get('accuracy', location.get('ce', 999999)), 999999):.2f}",
-                    "le": f"{self._safe_float_convert(location.get('linear_error', location.get('le', 999999)), 999999):.2f}"
+                    "lat": f"{EnhancedCOTService._safe_float_convert(location['lat']):.8f}",
+                    "lon": f"{EnhancedCOTService._safe_float_convert(location['lon']):.8f}",
+                    "hae": f"{EnhancedCOTService._safe_float_convert(location.get(
+                        'altitude', location.get('hae', 0.0))):.2f}",
+                    "ce": f"{EnhancedCOTService._safe_float_convert(location.get(
+                        'accuracy', location.get('ce', 999999)), 999999):.2f}",
+                    "le": f"{EnhancedCOTService._safe_float_convert(location.get(
+                        'linear_error', location.get('le', 999999)), 999999):.2f}"
                 }
                 etree.SubElement(cot_event, "point", attrib=point_attr)
 
@@ -301,9 +312,9 @@ class EnhancedCOTService:
                 # Add track information with safe conversions
                 if location.get('speed') or location.get('heading') or location.get('course'):
                     track = etree.SubElement(detail, "track")
-                    track.set("speed", f"{self._safe_float_convert(location.get('speed', 0.0)):.2f}")
-                    track.set("course",
-                              f"{self._safe_float_convert(location.get('heading', location.get('course', 0.0))):.2f}")
+                    track.set("speed", f"{EnhancedCOTService._safe_float_convert(location.get('speed', 0.0)):.2f}")
+                    track.set("course", f"{EnhancedCOTService._safe_float_convert(
+                                  location.get('heading', location.get('course', 0.0))):.2f}")
 
                 # Add remarks if available
                 if location.get('description'):
@@ -332,7 +343,7 @@ class EnhancedCOTService:
         if self.use_pytak:
             return await self._send_with_pytak(events, tak_server)
         else:
-            return await self._send_with_custom(events, tak_server)
+            return await EnhancedCOTService._send_with_custom(events, tak_server)
 
     async def _send_with_pytak(self, events: List[bytes], tak_server) -> bool:
         """Send events using PyTAK - use CLITool approach"""
@@ -340,7 +351,7 @@ class EnhancedCOTService:
             return await self._send_with_pytak_clitool(events, tak_server)
         except Exception as e:
             logger.warning(f"PyTAK CLITool approach failed: {e}, falling back to custom implementation")
-            return await self._send_with_custom(events, tak_server)
+            return await EnhancedCOTService._send_with_custom(events, tak_server)
 
     async def _send_with_pytak_clitool(self, events: List[bytes], tak_server) -> bool:
         """Send events using PyTAK's CLITool"""
@@ -351,47 +362,47 @@ class EnhancedCOTService:
             # Handle P12 certificate extraction first
             if tak_server.cert_p12 and len(tak_server.cert_p12) > 0:
                 logger.debug("Extracting P12 certificate for PyTAK")
-                cert_pem, key_pem = self._extract_p12_certificate(
+                cert_pem, key_pem = EnhancedCOTService._extract_p12_certificate(
                     tak_server.cert_p12,
                     tak_server.cert_password
                 )
-                cert_path, key_path = self._create_temp_cert_files(cert_pem, key_pem)
+                cert_path, key_path = EnhancedCOTService._create_temp_cert_files(cert_pem, key_pem)
                 logger.debug(f"Created temporary cert files: {cert_path}, {key_path}")
 
             # Create PyTAK configuration
             from configparser import ConfigParser
-            config = ConfigParser()
+            tak_config = ConfigParser()
 
             # Determine protocol
             protocol = "tls" if tak_server.protocol.lower() in ['tls', 'ssl'] else "tcp"
 
             # Create the configuration section properly
-            config.add_section('pytak_cot')
-            config.set('pytak_cot', 'COT_URL', f"{protocol}://{tak_server.host}:{tak_server.port}")
+            tak_config.add_section('pytak_cot')
+            tak_config.set('pytak_cot', 'COT_URL', f"{protocol}://{tak_server.host}:{tak_server.port}")
 
             # Add TLS configuration if needed
             if protocol == "tls":
-                config.set('pytak_cot', 'PYTAK_TLS_DONT_VERIFY', str(not tak_server.verify_ssl).lower())
+                tak_config.set('pytak_cot', 'PYTAK_TLS_DONT_VERIFY', str(not tak_server.verify_ssl).lower())
 
                 # Add certificate configuration if available
                 if cert_path and key_path:
-                    config.set('pytak_cot', 'PYTAK_TLS_CLIENT_CERT', cert_path)
-                    config.set('pytak_cot', 'PYTAK_TLS_CLIENT_KEY', key_path)
+                    tak_config.set('pytak_cot', 'PYTAK_TLS_CLIENT_CERT', cert_path)
+                    tak_config.set('pytak_cot', 'PYTAK_TLS_CLIENT_KEY', key_path)
                     logger.debug("Added client certificate to PyTAK configuration")
 
             # Create CLITool with proper config
-            clitool = pytak.CLITool(config["pytak_cot"])
+            clitool = pytak.CLITool(tak_config["pytak_cot"])
             await clitool.setup()
 
             # Create a simple worker class to send our events
             class EventSender(pytak.QueueWorker):
-                def __init__(self, queue, config, events_to_send):
-                    super().__init__(queue, config)
+                def __init__(self, queue, pytak_config, events_to_send):
+                    super().__init__(queue, pytak_config)
                     self.events_to_send = events_to_send
                     self.events_sent = 0
                     self.finished = False
 
-                async def run(self):
+                async def run(self, number_of_iterations=-1):
                     """Send all events then mark as finished"""
                     logger.debug(f"Starting to send {len(self.events_to_send)} events")
                     for event in self.events_to_send:
@@ -406,10 +417,10 @@ class EnhancedCOTService:
                     self.finished = True
 
             # Create sender worker
-            sender = EventSender(clitool.tx_queue, config["pytak_cot"], events)
+            sender = EventSender(clitool.tx_queue, tak_config["pytak_cot"], events)
 
             # Add the sender task
-            clitool.add_tasks(set([sender]))
+            clitool.add_tasks({sender})
 
             # Start CLITool in background and monitor sender completion
             clitool_task = None
@@ -445,21 +456,23 @@ class EnhancedCOTService:
                         pass
 
             # Clean up temporary certificate files
-            self._cleanup_temp_files(cert_path, key_path)
+            EnhancedCOTService._cleanup_temp_files(cert_path, key_path)
 
             return success
 
         except Exception as e:
             logger.error(f"Failed to send events: {e}")
             # Clean up on error
-            self._cleanup_temp_files(cert_path, key_path)
+            EnhancedCOTService._cleanup_temp_files(cert_path, key_path)
             return False
 
-    async def _send_with_custom(self, events: List[bytes], tak_server) -> bool:
+    @staticmethod
+    async def _send_with_custom(events: List[bytes], tak_server) -> bool:
         """Send events using custom implementation"""
-        return await self._send_cot_to_tak_server_direct(events, tak_server)
+        return await EnhancedCOTService._send_cot_to_tak_server_direct(events, tak_server)
 
-    async def _send_cot_to_tak_server_direct(self, cot_events: List[bytes], tak_server) -> bool:
+    @staticmethod
+    async def _send_cot_to_tak_server_direct(cot_events: List[bytes], tak_server) -> bool:
         """Direct send implementation without PyTAK"""
         if not cot_events:
             logger.warning("No COT events to send")
@@ -481,11 +494,11 @@ class EnhancedCOTService:
 
                 if tak_server.cert_p12 and len(tak_server.cert_p12) > 0:
                     try:
-                        cert_pem, key_pem = self._extract_p12_certificate(
+                        cert_pem, key_pem = EnhancedCOTService._extract_p12_certificate(
                             tak_server.cert_p12,
                             tak_server.cert_password
                         )
-                        cert_path, key_path = self._create_temp_cert_files(cert_pem, key_pem)
+                        cert_path, key_path = EnhancedCOTService._create_temp_cert_files(cert_pem, key_pem)
                         ssl_context.load_cert_chain(certfile=cert_path, keyfile=key_path)
                     except Exception as e:
                         logger.error(f"Failed to load P12 certificate: {e}")
@@ -526,9 +539,10 @@ class EnhancedCOTService:
                     await writer.wait_closed()
                 except Exception as e:
                     logger.debug(f"Error closing writer: {e}")
-            self._cleanup_temp_files(cert_path, key_path)
+            EnhancedCOTService._cleanup_temp_files(cert_path, key_path)
 
-    def _extract_p12_certificate(self, p12_data: bytes, password: Optional[str] = None) -> Tuple[bytes, bytes]:
+    @staticmethod
+    def _extract_p12_certificate(p12_data: bytes, password: Optional[str] = None) -> Tuple[bytes, bytes]:
         """Extract certificate and key from P12 data"""
         try:
             password_bytes = password.encode('utf-8') if password else None
@@ -548,7 +562,8 @@ class EnhancedCOTService:
         except Exception as e:
             raise Exception(f"P12 certificate extraction failed: {str(e)}")
 
-    def _create_temp_cert_files(self, cert_pem: bytes, key_pem: bytes) -> Tuple[str, str]:
+    @staticmethod
+    def _create_temp_cert_files(cert_pem: bytes, key_pem: bytes) -> Tuple[str, str]:
         """Create temporary certificate files"""
         cert_fd, cert_path = tempfile.mkstemp(suffix='.pem', prefix='tak_cert_')
         key_fd, key_path = tempfile.mkstemp(suffix='.pem', prefix='tak_key_')
@@ -565,11 +580,13 @@ class EnhancedCOTService:
                 os.close(key_fd)
                 os.unlink(cert_path)
                 os.unlink(key_path)
-            except:
-                pass
-            raise e
+            except Exception as cleanup_error:
+                logger.error(f"Error cleaning up temporary Certificate Files: {cleanup_error}")
+            logger.error(f"Error creating temporary Certificate Files: {e}")
+            raise
 
-    def _cleanup_temp_files(self, *file_paths):
+    @staticmethod
+    def _cleanup_temp_files(*file_paths):
         """Clean up temporary files"""
         for file_path in file_paths:
             try:
@@ -579,7 +596,8 @@ class EnhancedCOTService:
             except Exception as e:
                 logger.warning(f"Failed to cleanup temp file {file_path}: {e}")
 
-    async def cleanup(self):
+    @staticmethod
+    async def cleanup():
         """Clean up resources"""
         logger.debug("COT service cleanup completed")
 
