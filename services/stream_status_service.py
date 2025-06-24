@@ -178,7 +178,8 @@ class StreamStatusService:
             logger.error(f"Error getting running stream IDs: {e}")
             return []
 
-    def format_stream_last_poll(self, stream):
+    @staticmethod
+    def format_stream_last_poll(stream):
         """Format stream's last_poll datetime for display"""
         try:
             if stream.last_poll and isinstance(stream.last_poll, datetime):
@@ -201,7 +202,8 @@ class StreamStatusService:
                 'last_poll_iso': None
             }
 
-    def validate_stream_status_format(self, status, stream_id):
+    @staticmethod
+    def validate_stream_status_format(status, stream_id):
         """Validate and normalize stream status format"""
         if isinstance(status, dict):
             return status
