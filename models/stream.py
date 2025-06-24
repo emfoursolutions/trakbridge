@@ -26,6 +26,24 @@ class Stream(db.Model, TimestampMixin):
     # Relationship to TAK server
     tak_server = db.relationship('TakServer', back_populates='streams')
 
+    def __init__(
+        self,
+        name: str,
+        plugin_type: str,
+        poll_interval: int = 120,
+        cot_type: str = 'a-f-G-U-C',
+        cot_stale_time: int = 300,
+        tak_server_id: int = None,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.name = name
+        self.plugin_type = plugin_type
+        self.poll_interval = poll_interval
+        self.cot_type = cot_type
+        self.cot_stale_time = cot_stale_time
+        self.tak_server_id = tak_server_id
+
     def __repr__(self):
         return f'<Stream {self.name}>'
 
