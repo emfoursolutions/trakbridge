@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 import aiohttp
 import logging
-from services.encryption_service import EncryptionService
+
 
 
 class PluginConfigField:
@@ -53,6 +53,7 @@ class BaseGPSPlugin(ABC):
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.logger = logging.getLogger(f'{self.__class__.__name__}')
+        from services.encryption_service import EncryptionService
         self.encryption_service = EncryptionService()
 
     @property
@@ -140,6 +141,7 @@ class BaseGPSPlugin(ABC):
         Returns:
             Configuration with sensitive fields encrypted
         """
+        from services.encryption_service import EncryptionService
         from plugins.plugin_manager import plugin_manager
 
         # Get plugin metadata to identify sensitive fields
@@ -172,6 +174,7 @@ class BaseGPSPlugin(ABC):
         Returns:
             Configuration with sensitive fields decrypted
         """
+        from services.encryption_service import EncryptionService
         from plugins.plugin_manager import plugin_manager
 
         # Get plugin metadata to identify sensitive fields

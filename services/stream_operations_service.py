@@ -223,6 +223,20 @@ class StreamOperationsService:
                 if key.startswith('plugin_'):
                     plugin_config[key[7:]] = value  # Remove 'plugin_' prefix
 
+            # Handle missing checkbox fields for all plugins
+            from plugins.plugin_manager import plugin_manager
+            plugin_type = data.get('plugin_type')
+            if plugin_type:
+                metadata = plugin_manager.get_plugin_metadata(plugin_type)
+                if metadata:
+                    for field in metadata.get("config_fields", []):
+                        # Handle both dict and object (e.g., PluginConfigField)
+                        if (isinstance(field, dict) and field.get("field_type") == "checkbox") or \
+                                (hasattr(field, "field_type") and getattr(field, "field_type") == "checkbox"):
+                            field_name = field["name"] if isinstance(field, dict) else getattr(field, "name")
+                            if field_name not in plugin_config:
+                                plugin_config[field_name] = False
+
             stream.set_plugin_config(plugin_config)
 
             self.db.session.commit()

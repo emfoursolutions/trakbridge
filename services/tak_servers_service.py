@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from configparser import ConfigParser
 
-from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography import x509
 import pytak

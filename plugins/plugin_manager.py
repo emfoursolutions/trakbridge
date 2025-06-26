@@ -2,24 +2,27 @@
 # plugins/plugin_manager.py - Enhanced Plugin Management with API Support
 # =============================================================================
 
-from typing import Dict, Type, Optional, List, Any, Union
-from plugins.base_plugin import BaseGPSPlugin
+from typing import Dict, Type, Optional, List, Any, Union, TYPE_CHECKING
 import importlib
 import logging
 import os
 import inspect
 import pkgutil
 
+if TYPE_CHECKING:
+    from plugins.base_plugin import BaseGPSPlugin
+
 
 class PluginManager:
     """Enhanced manager for GPS tracking plugins with metadata support"""
 
     def __init__(self):
-        self.plugins: Dict[str, Type[BaseGPSPlugin]] = {}
+        self.plugins: Dict[str, Type["BaseGPSPlugin"]] = {}
         self.logger = logging.getLogger('PluginManager')
 
-    def register_plugin(self, plugin_class: Type[BaseGPSPlugin]):
+    def register_plugin(self, plugin_class: Type["BaseGPSPlugin"]):
         """Register a plugin class"""
+
         plugin_name = None
 
         # Try to get plugin name from class method first
@@ -75,7 +78,7 @@ class PluginManager:
         self.logger.warning(f"Unexpected config type {type(config)}, using empty config")
         return {}
 
-    def get_plugin(self, plugin_name: str, config: Union[Dict, str, None] = None) -> Optional[BaseGPSPlugin]:
+    def get_plugin(self, plugin_name: str, config: Union[Dict, str, None] = None) -> Optional["BaseGPSPlugin"]:
         """
         Create an instance of a plugin with the given configuration
 
@@ -192,7 +195,7 @@ class PluginManager:
             }
 
     async def test_plugin_connection(self, plugin_name: str, config: Union[Dict[str, Any], str, None]) -> Dict[
-        str, Any]:
+            str, Any]:
         """
         Test connection for a specific plugin configuration
 
@@ -258,6 +261,8 @@ class PluginManager:
         """
         Automatically load plugins from a directory
         """
+
+        from plugins.base_plugin import BaseGPSPlugin
         try:
             # Get absolute path of the plugins directory
             plugins_path = os.path.abspath(directory)
@@ -301,6 +306,8 @@ class PluginManager:
         """
         Alternative method that discovers Python files and loads them
         """
+
+        from plugins.base_plugin import BaseGPSPlugin
         try:
             plugins_path = os.path.abspath(directory)
 
@@ -336,6 +343,7 @@ class PluginManager:
 
     def reload_plugin(self, plugin_name: str) -> bool:
         """Reload a specific plugin (useful for development)"""
+        from plugins.base_plugin import BaseGPSPlugin
         if plugin_name not in self.plugins:
             self.logger.error(f"Cannot reload plugin '{plugin_name}': not found")
             return False
@@ -387,7 +395,7 @@ class PluginManager:
         return summary
 
     def safe_get_plugin(self, plugin_name: str, config: Union[Dict, str, None] = None,
-                        default_config: Optional[Dict] = None) -> Optional[BaseGPSPlugin]:
+                        default_config: Optional[Dict] = None) -> Optional["BaseGPSPlugin"]:
         """
         Safely get a plugin with fallback configuration
 

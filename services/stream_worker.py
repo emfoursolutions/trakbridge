@@ -7,14 +7,13 @@ import asyncio
 import logging
 from datetime import timezone, datetime
 from typing import Dict, List
-from models.stream import Stream
 from plugins.plugin_manager import plugin_manager
 
 
 class StreamWorker:
     """Individual stream worker that handles a single feed"""
 
-    def __init__(self, stream: Stream, session_manager, db_manager):
+    def __init__(self, stream, session_manager, db_manager):
         self.stream = stream
         self.plugin = None
         self.running = False

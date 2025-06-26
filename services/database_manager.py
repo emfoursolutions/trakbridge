@@ -4,11 +4,11 @@
 
 import logging
 import time
-from typing import Optional, List
+from typing import TYPE_CHECKING, Optional, List
 from sqlalchemy.exc import SQLAlchemyError
-from models.stream import Stream
 from datetime import timezone, datetime
-from database import db
+if TYPE_CHECKING:
+    from models.stream import Stream
 
 
 class DatabaseManager:
@@ -17,33 +17,40 @@ class DatabaseManager:
     def __init__(self, app_context_factory=None):
         self.logger = logging.getLogger('DatabaseManager')
         self._app_context_factory = app_context_factory
+        self.logger = logging.getLogger('DatabaseManager')
+        self._app_context_factory = app_context_factory
+
+        # Add debug logging
+        import traceback
+        self.logger.info(f"DatabaseManager created with factory: {app_context_factory is not None}")
+        if app_context_factory is None:
+            self.logger.warning("DatabaseManager created WITHOUT app_context_factory!")
+            self.logger.warning("Stack trace:")
+            for line in traceback.format_stack():
+                self.logger.warning(line.strip())
 
     def get_app_context(self):
         """Get Flask app context for database operations"""
         if self._app_context_factory:
             return self._app_context_factory()
-        # Fallback to direct import (to be removed in later phases)
-        try:
-            from app import app
-            return app
-        except Exception as e:
-            self.logger.error(f"Failed to get app context: {e}")
-            return None
+        self.logger.error("No app context factory provided for DatabaseManager")
+        return None
 
     def execute_db_operation(self, operation_func, *args, **kwargs):
         """Execute database operation with proper error handling and retry logic"""
+        from database import db
 
         max_retries = 3
         retry_delay = 0.5
 
         for attempt in range(max_retries):
             try:
-                app = self.get_app_context()
-                if not app:
+                app_ctx = self.get_app_context()
+                if not app_ctx:
                     self.logger.error("No app context available for database operation")
                     return None
 
-                with app.app_context():
+                with app_ctx:
                     # Create a new session for this operation
                     try:
                         result = operation_func(*args, **kwargs)
@@ -68,8 +75,9 @@ class DatabaseManager:
 
         return None
 
-    def get_stream(self, stream_id: int) -> Optional[Stream]:
+    def get_stream(self, stream_id: int) -> Optional["Stream"]:
         """Get stream by ID with error handling and proper session management"""
+        from models.stream import Stream
 
         def _get_stream():
             stream = Stream.query.get(stream_id)
@@ -137,6 +145,8 @@ class DatabaseManager:
                              messages_sent=None, last_poll_time=None):
         """Update stream status with proper error handling"""
 
+        from models.stream import Stream
+
         def _update_stream():
             stream = Stream.query.get(stream_id)
             if not stream:
@@ -163,8 +173,10 @@ class DatabaseManager:
 
         return self.execute_db_operation(_update_stream)
 
-    def get_active_streams(self) -> List[Stream]:
+    def get_active_streams(self) -> List["Stream"]:
         """Get all active streams with proper session management"""
+
+        from models.stream import Stream
 
         def _get_active_streams():
             streams = Stream.query.filter_by(is_active=True).all()
@@ -189,6 +201,8 @@ class DatabaseManager:
     def get_stream_with_relationships(self, stream_id: int):
         """Get stream with all relationships loaded - for use in Flask routes"""
 
+        from models.stream import Stream
+
         def _get_stream_with_relationships():
             from sqlalchemy.orm import joinedload
 
@@ -205,6 +219,8 @@ class DatabaseManager:
 
     def get_all_streams_with_relationships(self):
         """Get all streams with relationships loaded - for use in Flask routes"""
+
+        from models.stream import Stream
 
         def _get_all_streams_with_relationships():
             from sqlalchemy.orm import joinedload

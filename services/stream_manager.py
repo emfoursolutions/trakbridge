@@ -21,7 +21,7 @@ _stream_manager_instance = None
 _stream_manager_lock = threading.Lock()
 
 
-class StreamManager:
+class                         StreamManager:
     """Enhanced stream manager with robust database operations"""
 
     def __init__(self, app_context_factory=None):
@@ -717,15 +717,15 @@ class StreamManager:
         return self._loop
 
 
-def get_stream_manager():
+def get_stream_manager(app_context_factory=None):
     """Get the global stream manager instance (singleton pattern)"""
     global _stream_manager_instance
 
     with _stream_manager_lock:
         if _stream_manager_instance is None:
-            _stream_manager_instance = StreamManager()
+            _stream_manager_instance = StreamManager(app_context_factory=app_context_factory)
         return _stream_manager_instance
 
 
 # For backward compatibility
-stream_manager = get_stream_manager()
+# stream_manager = get_stream_manager()

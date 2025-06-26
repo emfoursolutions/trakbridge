@@ -1,9 +1,8 @@
 # routes/admin.py
 
 from flask import Blueprint, render_template, jsonify, current_app, abort
-from app import db, stream_manager
-from models.stream import Stream
-from models.tak_server import TakServer
+
+
 import platform
 import os
 import time
@@ -28,11 +27,22 @@ def admin_required(func):
     return wrapper
 
 
-@bp.route('/admin')
+@bp.route('/')
 def admin_dashboard():
+    import datetime, time, platform
+    from models.stream import Stream
+    from models.tak_server import TakServer
+    from database import db
+    from flask import current_app
+    from services.stream_manager import get_stream_manager
+
+    # Make sure start_time is defined somewhere globally
     uptime = datetime.timedelta(seconds=int(time.time() - start_time))
     streams_count = db.session.query(Stream).count()
     servers_count = db.session.query(TakServer).count()
+
+    # Use the correct stream_manager instance
+    stream_manager = get_stream_manager(app_context_factory=getattr(current_app, "app_context_factory", current_app.app_context))
     running_streams = sum(
         1 for status in stream_manager.get_all_stream_status().values() if status.get("running")
     )
@@ -50,9 +60,10 @@ def admin_dashboard():
     )
 
 
-@bp.route('/admin/health')
+@bp.route('/health')
 def admin_health_check():
     """Basic system health check (suitable for docker / kubernetes liveness probes)"""
+    from database import db
     try:
         db.session.execute('SELECT 1')  # Quick DB ping
         return jsonify(status='healthy', uptime=str(get_uptime())), 200
@@ -60,12 +71,13 @@ def admin_health_check():
         return jsonify(status='unhealthy', error=str(e)), 500
 
 
-@bp.route('/admin/version')
+@bp.route('/version')
 def admin_version():
     version = get_app_version()
     return jsonify(app_version=version, uptime=str(get_uptime()))
 
-@bp.route('/admin/about')
+
+@bp.route('/about')
 def admin_about():
     return render_template('admin/about.html')
 

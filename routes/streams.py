@@ -5,13 +5,15 @@
 
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 from models.tak_server import TakServer
-from services.stream_manager import stream_manager
+from services.stream_manager import get_stream_manager
 from services.stream_display_service import StreamDisplayService
 from services.stream_config_service import StreamConfigService
 from services.stream_operations_service import StreamOperationsService
 from services.connection_test_service import ConnectionTestService
 from services.stream_status_service import StreamStatusService
 from services.cot_type_service import cot_type_service
+
+from flask import current_app
 
 from plugins.plugin_manager import plugin_manager
 from database import db
@@ -23,9 +25,19 @@ logger = logging.getLogger(__name__)
 # Initialize services
 display_service = StreamDisplayService(plugin_manager)
 config_service = StreamConfigService(plugin_manager)
-operations_service = StreamOperationsService(stream_manager, db)
-test_service = ConnectionTestService(plugin_manager, stream_manager)
-status_service = StreamStatusService(stream_manager)
+
+
+def get_stream_services():
+    app_context_factory = getattr(current_app, "app_context_factory", None)
+    if app_context_factory is None:
+        # Fallback to the default Flask app context method
+        app_context_factory = current_app.app_context
+    stream_manager = get_stream_manager(app_context_factory=app_context_factory)
+    return {
+        'operations_service': StreamOperationsService(stream_manager, db),
+        'test_service': ConnectionTestService(plugin_manager, stream_manager),
+        'status_service': StreamStatusService(stream_manager),
+    }
 
 
 @bp.route('/')
@@ -54,6 +66,10 @@ def create_stream():
 
     # Handle POST request
     try:
+        # Get the correct operations_service at runtime
+        services = get_stream_services()
+        operations_service = services['operations_service']
+
         data = request.get_json() if request.is_json else request.form
         result = operations_service.create_stream(data)
 
@@ -91,6 +107,11 @@ def _render_create_form():
 @bp.route('/test-connection', methods=['POST'])
 def test_connection():
     """Test connection to a GPS provider without saving"""
+
+    # Get the correct test_service at runtime
+    services = get_stream_services()
+    test_service = services['test_service']
+
     try:
         data = request.get_json()
         plugin_type = data.get('plugin_type')
@@ -124,6 +145,11 @@ def view_stream(stream_id):
 @bp.route('/<int:stream_id>/start', methods=['POST'])
 def start_stream(stream_id):
     """Start a stream - enables it if disabled, then starts it"""
+
+    # Get the correct operations_service at runtime
+    services = get_stream_services()
+    operations_service = services['operations_service']
+
     try:
         result = operations_service.start_stream_with_enable(stream_id)
         return jsonify(result), 200 if result['success'] else 400
@@ -136,6 +162,11 @@ def start_stream(stream_id):
 @bp.route('/<int:stream_id>/stop', methods=['POST'])
 def stop_stream(stream_id):
     """Stop a stream"""
+
+    # Get the correct operations_service at runtime
+    services = get_stream_services()
+    operations_service = services['operations_service']
+
     try:
         result = operations_service.stop_stream_with_disable(stream_id)
         return jsonify(result), 200 if result['success'] else 400
@@ -148,6 +179,11 @@ def stop_stream(stream_id):
 @bp.route('/<int:stream_id>/restart', methods=['POST'])
 def restart_stream(stream_id):
     """Restart a stream"""
+
+    # Get the correct operations_service at runtime
+    services = get_stream_services()
+    operations_service = services['operations_service']
+
     try:
         result = operations_service.restart_stream(stream_id)
         return jsonify(result), 200 if result['success'] else 400
@@ -160,6 +196,11 @@ def restart_stream(stream_id):
 @bp.route('/<int:stream_id>/test', methods=['POST'])
 def test_stream(stream_id):
     """Test an existing stream's connection"""
+
+    # Get the correct test_service at runtime
+    services = get_stream_services()
+    test_service = services['test_service']
+
     try:
         result = test_service.test_stream_connection_sync(stream_id)
         return jsonify(result), 200 if result['success'] else 400
@@ -172,6 +213,11 @@ def test_stream(stream_id):
 @bp.route('/<int:stream_id>/delete', methods=['DELETE'])
 def delete_stream(stream_id):
     """Delete a stream"""
+
+    # Get the correct operations_service at runtime
+    services = get_stream_services()
+    operations_service = services['operations_service']
+
     try:
         result = operations_service.delete_stream(stream_id)
         return jsonify(result), 200 if result['success'] else 500
@@ -184,6 +230,11 @@ def delete_stream(stream_id):
 @bp.route('/<int:stream_id>/edit', methods=['GET', 'POST'])
 def edit_stream(stream_id):
     """Edit an existing stream"""
+
+    # Get the correct operations_service at runtime
+    services = get_stream_services()
+    operations_service = services['operations_service']
+
     if request.method == 'GET':
         return _render_edit_form(stream_id)
 
@@ -232,6 +283,11 @@ def _render_edit_form(stream_id):
 @bp.route('/api/stats')
 def api_stats():
     """Get statistics for all streams"""
+
+    # Get the correct status_service at runtime
+    services = get_stream_services()
+    status_service = services['status_service']
+
     try:
         stats = status_service.get_stream_statistics()
         return jsonify(stats)
@@ -244,8 +300,13 @@ def api_stats():
 @bp.route('/api/status')
 def api_status():
     """Get detailed status of all streams"""
+
+    # Get the correct status_service at runtime
+    services = get_stream_services()
+    status_service = services['status_service']
+
     try:
-        status_data = status_service.get_all_streams_detailed_status()
+        status_data = status_service.get_all_streams_status()
         return jsonify({'streams': status_data})
 
     except Exception as e:
@@ -298,6 +359,11 @@ def security_status():
 @bp.route('/health-check', methods=['POST'])
 def health_check():
     """Trigger a health check on all streams"""
+
+    # Get the correct operations_service at runtime
+    services = get_stream_services()
+    operations_service = services['operations_service']
+
     try:
         result = operations_service.run_health_check()
         return jsonify(result), 200 if result['success'] else 500
@@ -310,6 +376,11 @@ def health_check():
 @bp.route('/start-all', methods=['POST'])
 def start_all_streams():
     """Start all active streams"""
+
+    # Get the correct operations_service at runtime
+    services = get_stream_services()
+    operations_service = services['operations_service']
+
     try:
         result = operations_service.bulk_start_streams()
         return jsonify(result)
@@ -322,6 +393,11 @@ def start_all_streams():
 @bp.route('/stop-all', methods=['POST'])
 def stop_all_streams():
     """Stop all running streams"""
+
+    # Get the correct operations_service at runtime
+    services = get_stream_services()
+    operations_service = services['operations_service']
+
     try:
         result = operations_service.bulk_stop_streams()
         return jsonify(result)

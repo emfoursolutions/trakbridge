@@ -253,7 +253,7 @@ function generateFormField(field, currentConfig) {
         case 'password':
             // For password fields, show placeholder text instead of current value
             const passwordPlaceholder = currentValue ? 'Leave blank to keep current password' : field.placeholder || '';
-            inputHtml = `<input type="password" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} placeholder="${passwordPlaceholder}">`;
+            inputHtml = `<input type="password" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} value="${currentValue}">`;
             break;
         case 'url':
             inputHtml = `<input type="url" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} value="${currentValue}">`;

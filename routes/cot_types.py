@@ -1,5 +1,4 @@
 from flask import Blueprint, render_template
-from services.cot_type_service import cot_type_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -10,6 +9,7 @@ bp = Blueprint('cot_types', __name__)
 @bp.route('/cot_types')
 def list_cot_types():
     """Display all COT types with filtering and search capabilities"""
+    from services.cot_type_service import cot_type_service
     try:
         # Load COT data
         cot_data = cot_type_service.get_template_data()

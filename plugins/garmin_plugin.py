@@ -127,8 +127,17 @@ class GarminPlugin(BaseGPSPlugin):
 
             # Convert placemarks to standardized location format
             locations = []
-            hide_inactive = self.config.get("hide_inactive_devices", True)
 
+            def _to_bool(val, default=False):
+                if isinstance(val, bool):
+                    return val
+                if isinstance(val, str):
+                    return val.lower() in ("true", "1", "on", "yes")
+                if isinstance(val, int):
+                    return val != 0
+                return default
+
+            hide_inactive = _to_bool(self.config.get("hide_inactive_devices", True), default=True)
             for placemark in placemarks:
                 # Check if device is inactive and should be hidden
                 if hide_inactive and self._is_device_inactive(placemark):

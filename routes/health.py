@@ -229,8 +229,7 @@ def check_stream_manager_health():
         worker_count = len(stream_manager.workers) if hasattr(stream_manager, 'workers') else 0
 
         # Check session manager
-        session_manager_healthy = (hasattr(stream_manager, '_session_manager') and
-                                   stream_manager._session_manager is not None)
+        session_manager_healthy = getattr(stream_manager, 'session_manager', None) is not None
 
         status = 'healthy' if (loop_running and session_manager_healthy) else 'unhealthy'
 

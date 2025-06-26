@@ -9,8 +9,6 @@ import asyncio
 import aiohttp
 from concurrent.futures import ThreadPoolExecutor
 
-logger = logging.getLogger(__name__)
-
 
 class ConnectionTestService:
     """Service for handling connection testing operations"""
@@ -33,7 +31,7 @@ class ConnectionTestService:
                 return False, 0, 'Failed to create plugin instance'
 
             # Test connection using the shared session manager
-            session = self.stream_manager._session_manager.session
+            session = self.stream_manager.session_manager.session
             if not session:
                 # If session not available, create a temporary one
                 timeout = aiohttp.ClientTimeout(total=30)
@@ -299,3 +297,6 @@ class ConnectionTestService:
             self.cleanup()
         except Exception as e:
             logger.debug(f"Destructor completed {e}")
+
+
+logger = logging.getLogger(__name__)
