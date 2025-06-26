@@ -379,5 +379,3 @@ class StreamOperationsService:
         except Exception as e:
             logger.error(f"Error getting status for stream {stream_id}: {e}")
             return {'running': False, 'error': str(e)}
-
-
