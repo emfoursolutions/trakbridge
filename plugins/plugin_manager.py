@@ -8,6 +8,10 @@ import logging
 import os
 import inspect
 import pkgutil
+from services.exceptions import (
+    PluginError, PluginNotFoundError, PluginConfigurationError,
+    PluginConnectionError, PluginTimeoutError
+)
 
 if TYPE_CHECKING:
     from plugins.base_plugin import BaseGPSPlugin
@@ -29,7 +33,7 @@ class PluginManager:
         if hasattr(plugin_class, 'get_plugin_name'):
             try:
                 plugin_name = plugin_class.get_plugin_name()
-            except Exception as e:
+            except (AttributeError, TypeError) as e:
                 self.logger.warning(f"Failed to get plugin name from class method: {e}")
 
         # Fall back to creating a temporary instance
@@ -37,6 +41,9 @@ class PluginManager:
             try:
                 temp_instance = plugin_class({})
                 plugin_name = temp_instance.plugin_name
+            except (TypeError, ValueError) as e:
+                self.logger.error(f"Failed to create temporary instance for {plugin_class.__name__}: {e}")
+                return
             except Exception as e:
                 self.logger.error(f"Failed to get plugin name for {plugin_class.__name__}: {e}")
                 return

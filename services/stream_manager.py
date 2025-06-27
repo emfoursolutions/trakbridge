@@ -12,9 +12,13 @@ from typing import Dict, List
 from datetime import datetime, timezone
 
 # Import the extracted classes
-from .database_manager import DatabaseManager
-from .stream_worker import StreamWorker
-from .session_manager import SessionManager
+from services.database_manager import DatabaseManager
+from services.stream_worker import StreamWorker
+from services.session_manager import SessionManager
+from services.exceptions import (
+    StreamManagerError, StreamNotFoundError, StreamConfigurationError,
+    StreamStartupError, StreamTimeoutError, DatabaseError
+)
 
 # Global stream manager instance - use singleton pattern to prevent multiple instances
 _stream_manager_instance = None
@@ -80,8 +84,10 @@ class                         StreamManager:
                 # Clean up session manager
                 try:
                     self._loop.run_until_complete(self.session_manager.cleanup())
+                except (OSError, RuntimeError) as e:
+                    self.logger.error(f"System error cleaning up session manager: {e}")
                 except Exception as e:
-                    self.logger.error(f"Error cleaning up session manager: {e}")
+                    self.logger.error(f"Unexpected error cleaning up session manager: {e}")
 
                 # Clean up remaining tasks
                 pending = asyncio.all_tasks(self._loop)
@@ -94,8 +100,10 @@ class                         StreamManager:
                         self._loop.run_until_complete(
                             asyncio.gather(*pending, return_exceptions=True)
                         )
+                    except (OSError, RuntimeError) as e:
+                        self.logger.error(f"System error while gathering pending tasks during cleanup: {e}", exc_info=True)
                     except Exception as e:
-                        self.logger.error(f"Error while gathering pending tasks during cleanup: {e}", exc_info=True)
+                        self.logger.error(f"Unexpected error while gathering pending tasks during cleanup: {e}", exc_info=True)
 
                 self._loop.close()
                 self.logger.info("Background event loop closed")
@@ -126,8 +134,13 @@ class                         StreamManager:
                 await asyncio.sleep(5)  # Check every 5 seconds
         except asyncio.CancelledError:
             self.logger.info("Background loop cancelled")
+        except (OSError, RuntimeError) as e:
+            self.logger.error(f"System error in background loop: {e}", exc_info=True)
+            raise StreamManagerError(f"Background loop system error: {e}") from e
         except Exception as e:
-            self.logger.error(f"Error in background loop: {e}")
+            self.logger.error(f"Unexpected error in background loop: {e}", exc_info=True)
+            # Re-raise as StreamManagerError for consistency
+            raise StreamManagerError(f"Background loop error: {e}") from e
 
     async def _periodic_health_check(self):
         """Perform periodic health checks on workers"""
@@ -229,12 +242,12 @@ class                         StreamManager:
             # Start worker with timeout
             try:
                 success = await asyncio.wait_for(worker.start(), timeout=120)
-            except asyncio.TimeoutError:
-                self.logger.error(f"Timeout starting worker for stream {stream_id}")
+            except asyncio.TimeoutError as e:
+                self.logger.error(f"Timeout starting worker for stream {stream_id}: {e}")
                 try:
                     await asyncio.wait_for(worker.stop(), timeout=15)
-                except Exception as e:
-                    self.logger.error(f"Error stopping worker for stream {stream_id} after timeout: {e}", exc_info=True)
+                except Exception as cleanup_error:
+                    self.logger.error(f"Error stopping worker for stream {stream_id} after timeout: {cleanup_error}")
                 return False
 
             if success:
@@ -245,8 +258,20 @@ class                         StreamManager:
 
             return success
 
+        except asyncio.TimeoutError as e:
+            self.logger.error(f"Timeout in stream startup process for {stream_id}: {e}")
+            return False
+        except StreamNotFoundError:
+            self.logger.error(f"Stream {stream_id} not found in database")
+            return False
+        except StreamConfigurationError as e:
+            self.logger.error(f"Stream {stream_id} configuration error: {e}")
+            return False
+        except (OSError, RuntimeError) as e:
+            self.logger.error(f"System error starting stream {stream_id}: {e}", exc_info=True)
+            return False
         except Exception as e:
-            self.logger.error(f"Error starting stream {stream_id}: {e}", exc_info=True)
+            self.logger.error(f"Unexpected error starting stream {stream_id}: {e}", exc_info=True)
             return False
 
     async def stop_stream(self, stream_id: int, skip_db_update=False) -> bool:
@@ -263,8 +288,14 @@ class                         StreamManager:
             self.logger.info(f"Successfully stopped stream {stream_id}")
             return True
 
+        except asyncio.TimeoutError as e:
+            self.logger.error(f"Timeout stopping stream {stream_id}: {e}")
+            return False
+        except (OSError, RuntimeError) as e:
+            self.logger.error(f"System error stopping stream {stream_id}: {e}", exc_info=True)
+            return False
         except Exception as e:
-            self.logger.error(f"Error stopping stream {stream_id}: {e}")
+            self.logger.error(f"Unexpected error stopping stream {stream_id}: {e}", exc_info=True)
             return False
 
     async def restart_stream(self, stream_id: int) -> bool:

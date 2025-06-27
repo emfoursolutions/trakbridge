@@ -8,6 +8,10 @@ import logging
 import asyncio
 from datetime import datetime
 from models.stream import Stream
+from services.exceptions import (
+    StreamManagerError, StreamNotFoundError, StreamConfigurationError,
+    StreamStartupError, StreamTimeoutError, DatabaseError
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +66,21 @@ class StreamOperationsService:
                 'message': message
             }
 
+        except (ValueError, TypeError) as e:
+            logger.error(f"Configuration error creating stream: {e}")
+            return {'success': False, 'error': f'Invalid configuration: {e}'}
+        except StreamConfigurationError as e:
+            logger.error(f"Stream configuration error: {e}")
+            return {'success': False, 'error': f'Configuration error: {e}'}
+        except DatabaseError as e:
+            logger.error(f"Database error creating stream: {e}")
+            return {'success': False, 'error': f'Database error: {e}'}
+        except (OSError, RuntimeError) as e:
+            logger.error(f"System error creating stream: {e}", exc_info=True)
+            return {'success': False, 'error': f'System error: {e}'}
         except Exception as e:
-            self.db.session.rollback()
-            logger.error(f"Error creating stream: {e}")
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            logger.error(f"Unexpected error creating stream: {e}", exc_info=True)
+            return {'success': False, 'error': f'Unexpected error: {e}'}
 
     def start_stream_with_enable(self, stream_id):
         """Enable and start a stream"""

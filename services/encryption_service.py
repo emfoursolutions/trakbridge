@@ -13,6 +13,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.exceptions import InvalidKey
+from services.exceptions import EncryptionError, EncryptionKeyError, EncryptionDataError
 
 
 class EncryptionService:
@@ -114,9 +115,15 @@ class EncryptionService:
             # Add versioned prefix for future compatibility
             return f"ENC:v1:{encrypted_b64}"
 
+        except (ValueError, TypeError) as e:
+            self.logger.error(f"Invalid input for encryption: {e}")
+            raise EncryptionDataError(f"Invalid input for encryption: {e}") from e
+        except (OSError, RuntimeError) as e:
+            self.logger.error(f"System error during encryption: {e}")
+            raise EncryptionError(f"System error during encryption: {e}") from e
         except Exception as e:
-            self.logger.error(f"Failed to encrypt value: {e}")
-            raise EncryptionError(f"Encryption failed: {e}")
+            self.logger.error(f"Unexpected error during encryption: {e}")
+            raise EncryptionError(f"Encryption failed: {e}") from e
 
     def decrypt_value(self, encrypted_value: str) -> str:
         """
@@ -315,11 +322,6 @@ class EncryptionService:
                     self.logger.warning(f"Failed to read key file {key_file_path}: {e}")
 
         return "generated"
-
-
-class EncryptionError(Exception):
-    """Custom exception for encryption-related errors"""
-    pass
 
 
 # Global encryption service instance
