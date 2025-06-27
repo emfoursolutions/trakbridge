@@ -326,6 +326,20 @@ class EncryptionError(Exception):
 encryption_service = EncryptionService()
 
 
+def get_encryption_service():
+    """Get the encryption service instance - check Flask app context first, then fall back to global"""
+    try:
+        from flask import current_app, has_app_context
+        if has_app_context() and hasattr(current_app, 'encryption_service'):
+            return current_app.encryption_service
+    except (ImportError, RuntimeError):
+        # Flask not available or no app context
+        pass
+    
+    # Fallback to global instance for CLI/standalone use
+    return encryption_service
+
+
 # Enhanced base plugin class with encryption support
 class EncryptedConfigMixin:
     """Mixin to add encryption support to plugin configurations"""

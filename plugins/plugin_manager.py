@@ -425,3 +425,17 @@ plugin_manager = PluginManager()
 
 # Auto-load plugins on import
 plugin_manager.load_plugins_from_directory()
+
+
+def get_plugin_manager():
+    """Get the plugin manager instance - check Flask app context first, then fall back to global"""
+    try:
+        from flask import current_app, has_app_context
+        if has_app_context() and hasattr(current_app, 'plugin_manager'):
+            return current_app.plugin_manager
+    except (ImportError, RuntimeError):
+        # Flask not available or no app context
+        pass
+    
+    # Fallback to global instance for CLI/standalone use
+    return plugin_manager

@@ -142,9 +142,8 @@ class BaseGPSPlugin(ABC):
             Configuration with sensitive fields encrypted
         """
         from services.encryption_service import EncryptionService
-        from plugins.plugin_manager import plugin_manager
-
-        # Get plugin metadata to identify sensitive fields
+        from plugins.plugin_manager import get_plugin_manager
+        plugin_manager = get_plugin_manager()
         metadata = plugin_manager.get_plugin_metadata(plugin_type)
         if not metadata:
             return config
@@ -175,9 +174,8 @@ class BaseGPSPlugin(ABC):
             Configuration with sensitive fields decrypted
         """
         from services.encryption_service import EncryptionService
-        from plugins.plugin_manager import plugin_manager
-
-        # Get plugin metadata to identify sensitive fields
+        from plugins.plugin_manager import get_plugin_manager
+        plugin_manager = get_plugin_manager()
         metadata = plugin_manager.get_plugin_metadata(plugin_type)
         if not metadata:
             return config

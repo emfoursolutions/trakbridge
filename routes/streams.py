@@ -3,9 +3,8 @@
 # Business logic moved to service layer for better separation of concerns
 # =============================================================================
 
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, current_app
 from models.tak_server import TakServer
-from services.stream_manager import get_stream_manager
 from services.stream_display_service import StreamDisplayService
 from services.stream_config_service import StreamConfigService
 from services.stream_operations_service import StreamOperationsService
@@ -13,18 +12,21 @@ from services.connection_test_service import ConnectionTestService
 from services.stream_status_service import StreamStatusService
 from services.cot_type_service import cot_type_service
 
-from flask import current_app
-
-from plugins.plugin_manager import plugin_manager
 from database import db
 import logging
 
 bp = Blueprint('streams', __name__)
 logger = logging.getLogger(__name__)
 
-# Initialize services
-display_service = StreamDisplayService(plugin_manager)
-config_service = StreamConfigService(plugin_manager)
+
+def get_display_service():
+    """Get the display service with current app context"""
+    return StreamDisplayService(current_app.plugin_manager)
+
+
+def get_config_service():
+    """Get the config service with current app context"""
+    return StreamConfigService(current_app.plugin_manager)
 
 
 def get_stream_services():
@@ -32,10 +34,12 @@ def get_stream_services():
     if app_context_factory is None:
         # Fallback to the default Flask app context method
         app_context_factory = current_app.app_context
-    stream_manager = get_stream_manager(app_context_factory=app_context_factory)
+    stream_manager = getattr(current_app, "stream_manager", None)
+    if stream_manager is None:
+        raise ValueError("Stream manager not found in current_app")
     return {
         'operations_service': StreamOperationsService(stream_manager, db),
-        'test_service': ConnectionTestService(plugin_manager, stream_manager),
+        'test_service': ConnectionTestService(current_app.plugin_manager, stream_manager),
         'status_service': StreamStatusService(stream_manager),
     }
 
@@ -44,8 +48,8 @@ def get_stream_services():
 def list_streams():
     """Display list of all streams"""
     try:
-        streams = display_service.get_streams_for_listing()
-        plugin_stats, plugin_metadata = display_service.calculate_plugin_statistics(streams)
+        streams = get_display_service().get_streams_for_listing()
+        plugin_stats, plugin_metadata = get_display_service().calculate_plugin_statistics(streams)
 
         return render_template('streams.html',
                                streams=streams,
@@ -95,7 +99,7 @@ def _render_create_form():
     """Render the create stream form"""
     tak_servers = TakServer.query.all()
     cot_types = cot_type_service.get_template_data()
-    plugin_metadata = config_service.get_all_plugin_metadata()
+    plugin_metadata = get_config_service().get_all_plugin_metadata()
 
     return render_template('create_stream.html',
                            tak_servers=tak_servers,
@@ -119,7 +123,7 @@ def test_connection():
         if not plugin_type:
             return jsonify({'success': False, 'error': 'Plugin type required'}), 400
 
-        plugin_config = config_service.extract_plugin_config_from_request(data)
+        plugin_config = get_config_service().extract_plugin_config_from_request(data)
         result = test_service.test_plugin_connection_sync(plugin_type, plugin_config)
 
         return jsonify(result), 200 if result['success'] else 400
@@ -133,7 +137,7 @@ def test_connection():
 def view_stream(stream_id):
     """View stream details"""
     try:
-        stream = display_service.get_stream_for_detail_view(stream_id)
+        stream = get_display_service().get_stream_for_detail_view(stream_id)
         return render_template('stream_detail.html', stream=stream)
 
     except Exception as e:
@@ -263,9 +267,9 @@ def edit_stream(stream_id):
 
 def _render_edit_form(stream_id):
     """Render the edit stream form"""
-    stream = display_service.get_stream_for_edit_form(stream_id)
+    stream = get_display_service().get_stream_for_edit_form(stream_id)
     tak_servers = TakServer.query.all()
-    plugin_metadata = config_service.get_all_plugin_metadata()
+    plugin_metadata = get_config_service().get_all_plugin_metadata()
     cot_types = cot_type_service.get_template_data()
 
     return render_template('edit_stream.html',
@@ -318,7 +322,7 @@ def api_status():
 def get_plugin_config(plugin_name):
     """Get plugin configuration metadata"""
     try:
-        metadata = config_service.get_plugin_metadata(plugin_name)
+        metadata = get_config_service().get_plugin_metadata(plugin_name)
         if metadata:
             return jsonify(metadata)
         return jsonify({"error": "Plugin not found"}), 404
@@ -332,7 +336,7 @@ def get_plugin_config(plugin_name):
 def export_stream_config(stream_id):
     """Export stream configuration (sensitive fields masked)"""
     try:
-        export_data = config_service.export_stream_config(stream_id, include_sensitive=False)
+        export_data = get_config_service().export_stream_config(stream_id, include_sensitive=False)
         return jsonify(export_data)
 
     except Exception as e:
@@ -344,7 +348,7 @@ def export_stream_config(stream_id):
 def security_status():
     """Get security status of all streams"""
     try:
-        status = config_service.get_security_status()
+        status = get_config_service().get_security_status()
         return jsonify(status)
 
     except Exception as e:

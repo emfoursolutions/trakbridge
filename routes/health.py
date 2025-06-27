@@ -205,27 +205,20 @@ def check_encryption_health():
 def check_stream_manager_health():
     """Check stream manager health"""
     try:
-        # Import stream manager
-        try:
-            from services.stream_manager import stream_manager
-        except ImportError:
-            return {
-                'status': 'unhealthy',
-                'error': 'Stream manager not available'
-            }
-
+        stream_manager = current_app.stream_manager
+        
         if stream_manager is None:
             return {
                 'status': 'unhealthy',
                 'error': 'Stream manager not initialized'
             }
 
-        # Check if event loop is running
+        # Check if background loop is running
         loop_running = (hasattr(stream_manager, '_loop') and
-                        stream_manager._loop and
-                        stream_manager._loop.is_running())
+                       stream_manager._loop and
+                       stream_manager._loop.is_running())
 
-        # Get worker count
+        # Count active workers
         worker_count = len(stream_manager.workers) if hasattr(stream_manager, 'workers') else 0
 
         # Check session manager

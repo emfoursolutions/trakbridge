@@ -718,7 +718,16 @@ class                         StreamManager:
 
 
 def get_stream_manager(app_context_factory=None):
-    """Get the global stream manager instance (singleton pattern)"""
+    """Get the stream manager instance - check Flask app context first, then fall back to global"""
+    try:
+        from flask import current_app, has_app_context
+        if has_app_context() and hasattr(current_app, 'stream_manager'):
+            return current_app.stream_manager
+    except (ImportError, RuntimeError):
+        # Flask not available or no app context
+        pass
+    
+    # Fallback to global instance for CLI/standalone use
     global _stream_manager_instance
 
     with _stream_manager_lock:

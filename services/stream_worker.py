@@ -7,7 +7,9 @@ import asyncio
 import logging
 from datetime import timezone, datetime
 from typing import Dict, List
-from plugins.plugin_manager import plugin_manager
+
+# Import the accessor function
+from plugins.plugin_manager import get_plugin_manager
 
 
 class StreamWorker:
@@ -52,7 +54,7 @@ class StreamWorker:
                 self._consecutive_errors = 0
 
                 # Initialize plugin
-                self.plugin = plugin_manager.get_plugin(
+                self.plugin = get_plugin_manager().get_plugin(
                     self.stream.plugin_type,
                     self.stream.get_plugin_config()
                 )

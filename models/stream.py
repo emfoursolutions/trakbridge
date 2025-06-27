@@ -127,13 +127,13 @@ class Stream(db.Model, TimestampMixin):
 
     def _get_masked_plugin_config(self):
         """Get plugin configuration with sensitive fields masked for display"""
-        from plugins.plugin_manager import plugin_manager
-
-        raw_config = self.get_raw_plugin_config()
+        # Import inside method to avoid circular imports
+        from plugins.plugin_manager import get_plugin_manager
+        plugin_manager = get_plugin_manager()
         metadata = plugin_manager.get_plugin_metadata(self.plugin_type)
 
         if not metadata:
-            return raw_config
+            return self.get_raw_plugin_config()
 
         # Get list of sensitive fields
         sensitive_fields = []
@@ -144,7 +144,7 @@ class Stream(db.Model, TimestampMixin):
                 sensitive_fields.append(field_data.name)
 
         # Mask sensitive fields
-        masked_config = raw_config.copy()
+        masked_config = self.get_raw_plugin_config().copy()
         for field_name in sensitive_fields:
             if field_name in masked_config and masked_config[field_name]:
                 if self.is_field_encrypted(field_name):

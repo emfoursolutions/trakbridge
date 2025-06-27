@@ -8,6 +8,7 @@ import os
 import time
 import datetime
 import importlib.metadata
+import psutil
 
 bp = Blueprint('admin', __name__)
 
@@ -34,7 +35,6 @@ def admin_dashboard():
     from models.tak_server import TakServer
     from database import db
     from flask import current_app
-    from services.stream_manager import get_stream_manager
 
     # Make sure start_time is defined somewhere globally
     uptime = datetime.timedelta(seconds=int(time.time() - start_time))
@@ -42,7 +42,7 @@ def admin_dashboard():
     servers_count = db.session.query(TakServer).count()
 
     # Use the correct stream_manager instance
-    stream_manager = get_stream_manager(app_context_factory=getattr(current_app, "app_context_factory", current_app.app_context))
+    stream_manager = current_app.stream_manager
     running_streams = sum(
         1 for status in stream_manager.get_all_stream_status().values() if status.get("running")
     )

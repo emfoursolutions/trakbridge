@@ -26,19 +26,20 @@ load_dotenv()
 # Set up logger
 logger = logging.getLogger(__name__)
 
-# Global stream manager instance (will be initialized after app creation)
-stream_manager = None
-_stream_manager_lock = threading.Lock()
+# Remove global stream manager instance - will be attached to Flask app instead
+# stream_manager = None
+# _stream_manager_lock = threading.Lock()
 
 
-def get_or_create_stream_manager(app_context_factory=None):
-    global stream_manager
-    if stream_manager is None:
-        with _stream_manager_lock:
-            if stream_manager is None:  # Double-checked locking
-                from services.stream_manager import get_stream_manager
-                stream_manager = get_stream_manager(app_context_factory=app_context_factory)
-    return stream_manager
+# Remove the get_or_create_stream_manager function - no longer needed
+# def get_or_create_stream_manager(app_context_factory=None):
+#     global stream_manager
+#     if stream_manager is None:
+#         with _stream_manager_lock:
+#             if stream_manager is None:  # Double-checked locking
+#                 from services.stream_manager import get_stream_manager
+#                 stream_manager = get_stream_manager(app_context_factory=app_context_factory)
+#     return stream_manager
 
 
 def create_app(config_name=None):
@@ -76,8 +77,18 @@ def create_app(config_name=None):
         # Register models with SQLAlchemy
         db.Model.metadata.create_all(bind=db.engine)
 
-        # Initialize stream manager after models are loaded - now thread-safe
-        get_or_create_stream_manager(app_context_factory=app_context_factory)
+        # Initialize stream manager and attach to Flask app
+        from services.stream_manager import StreamManager
+        app.stream_manager = StreamManager(app_context_factory=app_context_factory)
+
+        # Initialize plugin manager and attach to Flask app
+        from plugins.plugin_manager import PluginManager
+        app.plugin_manager = PluginManager()
+        app.plugin_manager.load_plugins_from_directory()
+
+        # Initialize encryption service and attach to Flask app
+        from services.encryption_service import EncryptionService
+        app.encryption_service = EncryptionService()
 
     # Set up database event listeners
     setup_database_events()
@@ -154,7 +165,9 @@ def configure_flask_app(app, config_instance):
 
 def start_active_streams():
     """Start all active streams with proper error handling and timing"""
-    global stream_manager
+    from flask import current_app
+    
+    stream_manager = current_app.stream_manager
 
     if stream_manager is None:
         logger.error("Stream manager not initialized")
@@ -343,43 +356,38 @@ def setup_cleanup_handlers():
     """Set up cleanup handlers for graceful shutdown"""
 
     def cleanup():
-        """Clean up resources on shutdown"""
-        global stream_manager
-
+        """Clean up resources on application shutdown"""
+        from flask import current_app
+        
         try:
-            # Clean up stream manager using the singleton's shutdown method
-            if stream_manager is not None:
-                stream_manager.shutdown()
+            # Shutdown stream manager
+            if hasattr(current_app, 'stream_manager') and current_app.stream_manager is not None:
+                current_app.stream_manager.shutdown()
                 logger.info("Stream manager shutdown completed")
-
         except Exception as e:
             logger.error(f"Error during stream cleanup: {e}")
 
+        # Close database connections
         try:
-            # Clean up thread pool from streams module
-            from routes.streams import cleanup_executor
-            cleanup_executor()
-        except ImportError:
-            pass
-
-        try:
-            # Clean up database connections
             db.session.remove()
             db.engine.dispose()
-        except:
-            pass
+            logger.info("Database connections closed")
+        except Exception as e:
+            logger.error(f"Error closing database connections: {e}")
 
         logger.info("Application cleanup completed")
 
-    # Register cleanup for various shutdown scenarios
-    atexit.register(cleanup)
-
-    # Also register the stream manager's shutdown directly (with safety check)
     def safe_stream_manager_shutdown():
-        global stream_manager
-        if stream_manager is not None:
-            stream_manager.shutdown()
+        """Safely shutdown stream manager during application exit"""
+        from flask import current_app
+        
+        try:
+            if hasattr(current_app, 'stream_manager') and current_app.stream_manager is not None:
+                current_app.stream_manager.shutdown()
+        except Exception as e:
+            logger.error(f"Error during stream manager shutdown: {e}")
 
+    # Register cleanup handlers
     atexit.register(safe_stream_manager_shutdown)
 
     # For WSGI servers
@@ -417,7 +425,7 @@ def setup_error_handlers(app):
         return render_template('errors/500.html'), 500
 
     @app.errorhandler(503)
-    def internal_error(error):
+    def service_unavailable_error(error):
         db.session.rollback()
         return render_template('errors/503.html'), 503
 

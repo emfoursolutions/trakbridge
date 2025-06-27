@@ -44,7 +44,9 @@ class StreamConfigService:
                 plugin_config[key[7:]] = value
 
         # Handle missing checkbox fields for all plugins
-        from plugins.plugin_manager import plugin_manager
+        # Import inside method to avoid circular imports
+        from plugins.plugin_manager import get_plugin_manager
+        plugin_manager = get_plugin_manager()
         plugin_type = data.get('plugin_type')
         if plugin_type:
             metadata = plugin_manager.get_plugin_metadata(plugin_type)
