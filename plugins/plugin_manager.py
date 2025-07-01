@@ -425,6 +425,56 @@ class PluginManager:
             return self.get_plugin(plugin_name, default_config)
 
         return None
+    
+    async def check_all_plugins_health(self):
+        health_status = {}
+        
+        # Get existing stream configurations from the database
+        from models.stream import Stream
+        from database import db
+        
+        # Get all streams grouped by plugin type
+        streams_by_plugin = {}
+        try:
+            streams = db.session.query(Stream).all()
+            for stream in streams:
+                plugin_type = stream.plugin_type
+                if plugin_type not in streams_by_plugin:
+                    streams_by_plugin[plugin_type] = []
+                streams_by_plugin[plugin_type].append(stream)
+        except Exception as e:
+            self.logger.error(f"Could not fetch streams for health check: {e}")
+            streams_by_plugin = {}
+        
+        for name, plugin_class in self.plugins.items():
+            try:
+                if name in streams_by_plugin and streams_by_plugin[name]:
+                    # Test with actual stream configuration
+                    stream = streams_by_plugin[name][0]  # Use first stream's config
+                    config = stream.get_plugin_config()  # Use the method, not the attribute
+                    plugin_instance = plugin_class(config)
+                    health = await plugin_instance.health_check()
+                    
+                    # Add stream count info to health details
+                    stream_count = len(streams_by_plugin[name])
+                    if isinstance(health, dict) and "details" in health:
+                        if isinstance(health["details"], dict):
+                            health["details"]["configured_streams"] = stream_count
+                        else:
+                            health["details"] = f"{health['details']} ({stream_count} stream(s) configured)"
+                    else:
+                        health["details"] = f"{health.get('details', 'Health check completed')} ({stream_count} stream(s) configured)"
+                    
+                else:
+                    # No configured streams for this plugin
+                    plugin_instance = plugin_class({})
+                    health = {"status": "unconfigured", "details": "No streams configured for this plugin"}
+                    
+            except Exception as e:
+                self.logger.error(f"[PluginManager] Health check failed for plugin '{name}': {e}", exc_info=True)
+                health = {"status": "unhealthy", "details": str(e)}
+            health_status[name] = health
+        return health_status
 
 
 # Global plugin manager instance

@@ -250,6 +250,22 @@ class BaseGPSPlugin(ABC):
 
         return True
 
+    async def health_check(self) -> dict:
+        """
+        Return a health status dict for the plugin.
+        Override in subclasses for plugin-specific checks.
+        """
+        try:
+            # Default: use test_connection if available
+            if hasattr(self, "test_connection"):
+                result = await self.test_connection()
+                status = "healthy" if result.get("success") else "unhealthy"
+                return {"status": status, "details": result}
+            return {"status": "unknown", "details": "No health check implemented"}
+        except Exception as e:
+            self.logger.error(f"[{self.__class__.__name__}] health_check failed: {e}", exc_info=True)
+            return {"status": "unhealthy", "details": str(e)}
+
     async def test_connection(self) -> Dict[str, Any]:
         """
         Enhanced connection test that returns detailed results
@@ -284,7 +300,11 @@ class BaseGPSPlugin(ABC):
                 }
 
         except Exception as e:
-            self.logger.error(f"Connection test failed: {e}")
+            self.logger.error(
+                f"[{self.__class__.__name__}] Connection test failed: {e}",
+                exc_info=True,
+                extra={"plugin": self.__class__.__name__, "operation": "test_connection"}
+            )
             return {
                 "success": False,
                 "error": str(e),

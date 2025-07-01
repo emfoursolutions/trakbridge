@@ -1,7 +1,7 @@
 # routes/admin.py
 
 from flask import Blueprint, render_template, jsonify, current_app, abort
-
+import asyncio
 
 import platform
 import os
@@ -80,6 +80,24 @@ def admin_version():
 @bp.route('/about')
 def admin_about():
     return render_template('admin/about.html')
+
+
+@bp.route('/plugin-health', methods=['GET'])
+def plugin_health():
+    plugin_manager = getattr(current_app, "plugin_manager", None)
+    stream_manager = getattr(current_app, "stream_manager", None)
+    if not plugin_manager:
+        return jsonify({"error": "Plugin manager not available"}), 500
+    if not stream_manager:
+        return jsonify({"error": "Stream manager not available"}), 500
+
+    # Use the background event loop from stream_manager
+    future = asyncio.run_coroutine_threadsafe(
+        plugin_manager.check_all_plugins_health(),
+        stream_manager.loop
+    )
+    health_status = future.result()
+    return jsonify(health_status)
 
 
 def get_uptime():
