@@ -25,7 +25,7 @@ _stream_manager_instance = None
 _stream_manager_lock = threading.Lock()
 
 
-class                         StreamManager:
+class StreamManager:
     """Enhanced stream manager with robust database operations"""
 
     def __init__(self, app_context_factory=None):
@@ -101,9 +101,13 @@ class                         StreamManager:
                             asyncio.gather(*pending, return_exceptions=True)
                         )
                     except (OSError, RuntimeError) as e:
-                        self.logger.error(f"System error while gathering pending tasks during cleanup: {e}", exc_info=True)
+                        self.logger.error(
+                            f"System error while gathering pending tasks during cleanup: {e}", exc_info=True
+                        )
                     except Exception as e:
-                        self.logger.error(f"Unexpected error while gathering pending tasks during cleanup: {e}", exc_info=True)
+                        self.logger.error(
+                            f"Unexpected error while gathering pending tasks during cleanup: {e}", exc_info=True
+                        )
 
                 self._loop.close()
                 self.logger.info("Background event loop closed")

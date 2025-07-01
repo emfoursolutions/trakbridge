@@ -48,10 +48,25 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "coverage",
-    "black",
-    "flake8",
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.10.0",
+    "pytest-xdist>=3.0.0",
+    "pytest-timeout>=2.1.0",
+    "pytest-html>=3.1.0",
+    "pytest-json-report>=1.5.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+    "bandit>=1.7.0",
+    "safety>=2.3.0",
+    "factory-boy>=3.2.0",
+    "faker>=18.0.0",
+    "responses>=0.23.0",
+    "httpx>=0.24.0",
+    "coverage>=7.0.0",
     "bump2version",
     "pre-commit"
 ]
@@ -59,3 +74,9 @@ dev = [
 [build-system]
 requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["services*", "routes*", "models*", "plugins*", "config*", "tests*"]

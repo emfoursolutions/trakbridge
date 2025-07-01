@@ -1,12 +1,11 @@
 # =============================================================================
 # app.py - Enhanced Flask Application with Fixed Startup
 # =============================================================================
-from flask import Flask, render_template
+from flask import Flask, render_template, has_app_context
 from flask_migrate import Migrate
 import os
 import logging
 import atexit
-from sqlalchemy.orm import scoped_session
 from sqlalchemy import event
 from sqlalchemy.pool import Pool
 import signal
@@ -58,7 +57,7 @@ def create_app(config_name=None):
     config_instance = get_config(flask_env)
 
     # Configure Flask app with the new configuration system
-    configure_flask_app(app, config_instance) # type: ignore[attr-defined]
+    configure_flask_app(app, config_instance)  # type: ignore[attr-defined]
 
     # Initialize extensions with app
     db.init_app(app)
@@ -166,8 +165,8 @@ def configure_flask_app(app, config_instance):
 def start_active_streams():
     """Start all active streams with proper error handling and timing"""
     from flask import current_app
-    
-    stream_manager = current_app.stream_manager
+
+    stream_manager = getattr(current_app, "stream_manager", None)
 
     if stream_manager is None:
         logger.error("Stream manager not initialized")
@@ -184,14 +183,15 @@ def start_active_streams():
         while wait_count < max_wait:
             time.sleep(0.1)
             wait_count += 1
-            if (hasattr(stream_manager, '_loop') and
-                    stream_manager._loop and
-                    stream_manager._loop.is_running() and
+            if (
+                    hasattr(stream_manager, '_loop') and
+                    stream_manager.loop and
+                    stream_manager.loop.is_running() and
                     hasattr(stream_manager, 'session_manager') and
                     stream_manager.session_manager and
-                    stream_manager.session_manager, 'session', None):
+                    getattr(stream_manager.session_manager, 'session', None)
+            ):
                 break
-
 
         if wait_count >= max_wait:
             logger.error("Stream manager not ready after extended wait")
@@ -246,7 +246,9 @@ def start_active_streams():
                         retry_count += 1
                         if retry_count < max_retries:
                             logger.warning(
-                                f"Exception starting stream {stream.id}, retrying ({retry_count}/{max_retries}): {start_e}")
+                                f"Exception starting stream {stream.id}, "
+                                f"retrying ({retry_count}/{max_retries}): {start_e}"
+                            )
                             time.sleep(2)
                         else:
                             logger.error(
@@ -267,8 +269,10 @@ def start_active_streams():
                         logger.error(f"Failed to update stream {stream.id} status: {db_e}")
                         try:
                             db.session.rollback()
-                        except:
-                            pass
+                        except Exception as rollback_e:
+                            logger.error(
+                                f"Failed to rollback session after error updating stream {stream.id}: {rollback_e}"
+                            )
 
                 # Longer delay between starts to prevent overwhelming
                 time.sleep(3)
@@ -286,8 +290,10 @@ def start_active_streams():
                     logger.error(f"Failed to update stream {stream.id} status: {db_e}")
                     try:
                         db.session.rollback()
-                    except:
-                        pass
+                    except Exception as rollback_e:
+                        logger.error(
+                            f"Failed to rollback session after error updating stream {stream.id}: {rollback_e}"
+                        )
 
         logger.info(f"Startup complete: {started_count}/{len(active_streams)} streams started successfully")
 
@@ -358,10 +364,11 @@ def setup_cleanup_handlers():
     def cleanup():
         """Clean up resources on application shutdown"""
         from flask import current_app
-        
+
         try:
             # Shutdown stream manager
-            if hasattr(current_app, 'stream_manager') and current_app.stream_manager is not None:
+            stream_manager = getattr(current_app, "stream_manager", None)
+            if hasattr(current_app, 'stream_manager') and stream_manager is not None:
                 current_app.stream_manager.shutdown()
                 logger.info("Stream manager shutdown completed")
         except Exception as e:
@@ -380,9 +387,10 @@ def setup_cleanup_handlers():
     def safe_stream_manager_shutdown():
         """Safely shutdown stream manager during application exit"""
         from flask import current_app
-        
+
         try:
-            if hasattr(current_app, 'stream_manager') and current_app.stream_manager is not None:
+            stream_manager = getattr(current_app, "stream_manager", None)
+            if has_app_context() and hasattr(current_app, 'stream_manager') and stream_manager is not None:
                 current_app.stream_manager.shutdown()
         except Exception as e:
             logger.error(f"Error during stream manager shutdown: {e}")
