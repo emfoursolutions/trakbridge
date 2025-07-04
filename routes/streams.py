@@ -50,6 +50,8 @@ def list_streams():
     try:
         streams = get_display_service().get_streams_for_listing()
         plugin_stats, plugin_metadata = get_display_service().calculate_plugin_statistics(streams)
+        # Serialize all plugin metadata for JSON
+        plugin_metadata = {k: get_config_service().serialize_plugin_metadata(v) for k, v in plugin_metadata.items()}
 
         return render_template('streams.html',
                                streams=streams,
@@ -100,6 +102,8 @@ def _render_create_form():
     tak_servers = TakServer.query.all()
     cot_types = cot_type_service.get_template_data()
     plugin_metadata = get_config_service().get_all_plugin_metadata()
+    # Serialize all plugin metadata for JSON
+    plugin_metadata = {k: get_config_service().serialize_plugin_metadata(v) for k, v in plugin_metadata.items()}
 
     return render_template('create_stream.html',
                            tak_servers=tak_servers,
@@ -270,6 +274,8 @@ def _render_edit_form(stream_id):
     stream = get_display_service().get_stream_for_edit_form(stream_id)
     tak_servers = TakServer.query.all()
     plugin_metadata = get_config_service().get_all_plugin_metadata()
+    # Serialize all plugin metadata for JSON
+    plugin_metadata = {k: get_config_service().serialize_plugin_metadata(v) for k, v in plugin_metadata.items()}
     cot_types = cot_type_service.get_template_data()
 
     return render_template('edit_stream.html',
@@ -324,6 +330,7 @@ def get_plugin_config(plugin_name):
     try:
         metadata = get_config_service().get_plugin_metadata(plugin_name)
         if metadata:
+            metadata = get_config_service().serialize_plugin_metadata(metadata)
             return jsonify(metadata)
         return jsonify({"error": "Plugin not found"}), 404
 

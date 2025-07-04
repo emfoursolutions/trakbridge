@@ -1,202 +1,305 @@
 # =============================================================================
-# services/stream_config_service.py - Stream Configuration Service
+# services/stream_config_service.py - Stream Configuration Management Service
 # =============================================================================
 
 import logging
-from datetime import datetime, timezone
+from typing import Dict, Any, List, Optional, Union
 from models.stream import Stream
+from database import db
 
 logger = logging.getLogger(__name__)
 
 
 class StreamConfigService:
-    def __init__(self, plugin_manager):
+    """Service for managing stream configurations and plugin metadata"""
+
+    def __init__(self, plugin_manager: Any) -> None:
         self.plugin_manager = plugin_manager
 
-    def validate_plugin_config_security(self, plugin_type, config):
-        """Validate that sensitive fields are properly handled"""
-        metadata = self.plugin_manager.get_plugin_metadata(plugin_type)
-        if not metadata:
-            return True, []
+    def validate_plugin_config_security(self, plugin_type: str, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate plugin configuration for security issues"""
+        try:
+            validation_result: Dict[str, Any] = {
+                "valid": True,
+                "warnings": [],
+                "errors": [],
+                "security_issues": []
+            }
 
-        warnings = []
+            # Get plugin metadata to identify sensitive fields
+            metadata = self.plugin_manager.get_plugin_metadata(plugin_type)
+            if not metadata:
+                validation_result["errors"].append(f"Plugin type '{plugin_type}' not found")
+                validation_result["valid"] = False
+                return validation_result
 
-        # Check for sensitive fields that might be exposed
-        for field_data in metadata.get("config_fields", []):
-            if isinstance(field_data, dict) and field_data.get("sensitive"):
-                field_name = field_data["name"]
+            # Check for sensitive fields that should be encrypted
+            sensitive_fields = []
+            for field_data in metadata.get("config_fields", []):
+                if isinstance(field_data, dict) and field_data.get("sensitive"):
+                    sensitive_fields.append(field_data["name"])
+                elif hasattr(field_data, 'sensitive') and field_data.sensitive:
+                    sensitive_fields.append(field_data.name)
+
+            # Validate sensitive fields
+            for field_name in sensitive_fields:
                 if field_name in config:
                     value = config[field_name]
-                    # Warn if sensitive data doesn't appear to be encrypted
-                    if value and not str(value).startswith("ENC:"):
-                        warnings.append(f"Sensitive field '{field_name}' may not be encrypted")
+                    if isinstance(value, str) and len(value) < 8:
+                        validation_result["warnings"].append(
+                            f"Password '{field_name}' is very short (less than 8 characters)"
+                        )
+                    if isinstance(value, str) and value.lower() in ['password', '123456', 'admin']:
+                        validation_result["security_issues"].append(
+                            f"Password '{field_name}' appears to be weak"
+                        )
 
-        return len(warnings) == 0, warnings
+            # Check for common security issues
+            for key, value in config.items():
+                if isinstance(value, str):
+                    if 'password' in key.lower() and value == 'password':
+                        validation_result["security_issues"].append(
+                            f"Field '{key}' contains default password value"
+                        )
+                    if 'url' in key.lower() and not value.startswith(('http://', 'https://')):
+                        validation_result["warnings"].append(
+                            f"URL field '{key}' may not be properly formatted"
+                        )
 
-    @staticmethod
-    def extract_plugin_config_from_request(data):
-        """Extract plugin configuration from request data by removing plugin_ prefix"""
-        plugin_config = {}
+            return validation_result
 
-        # Handle all plugin_ fields that are present in the form data
+        except Exception as e:
+            logger.error(f"Error validating plugin config security: {e}")
+            return {
+                "valid": False,
+                "warnings": [],
+                "errors": [f"Validation error: {str(e)}"],
+                "security_issues": []
+            }
+
+    def extract_plugin_config_from_request(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract plugin configuration from request data"""
+        plugin_config: Dict[str, Any] = {}
+
         for key, value in data.items():
             if key.startswith('plugin_'):
-                plugin_config[key[7:]] = value
-
-        # Handle missing checkbox fields for all plugins
-        # Import inside method to avoid circular imports
-        from plugins.plugin_manager import get_plugin_manager
-        plugin_manager = get_plugin_manager()
-        plugin_type = data.get('plugin_type')
-        if plugin_type:
-            metadata = plugin_manager.get_plugin_metadata(plugin_type)
-            if metadata:
-                for field in metadata.get("config_fields", []):
-                    # Handle both dict and object (e.g., PluginConfigField)
-                    if (isinstance(field, dict) and field.get("field_type") == "checkbox") or \
-                            (hasattr(field, "field_type") and getattr(field, "field_type") == "checkbox"):
-                        field_name = field["name"] if isinstance(field, dict) else getattr(field, "name")
-                        if field_name not in plugin_config:
-                            plugin_config[field_name] = False
+                # Remove 'plugin_' prefix
+                config_key = key[7:]
+                plugin_config[config_key] = value
 
         return plugin_config
 
-    @staticmethod
-    def export_stream_config(stream_id, include_sensitive=False):
-        """Export stream configuration with optional sensitive field masking"""
+    def export_stream_config(self, stream_id: int, include_sensitive: bool = False) -> Dict[str, Any]:
+        """Export stream configuration for backup or migration"""
         try:
             stream = Stream.query.get_or_404(stream_id)
 
-            # Export with sensitive fields optionally masked
-            export_data = {
-                'name': stream.name,
-                'plugin_type': stream.plugin_type,
-                'plugin_config': stream.to_dict(include_sensitive=include_sensitive)['plugin_config'],
-                'poll_interval': stream.poll_interval,
-                'cot_type': stream.cot_type,
-                'cot_stale_time': stream.cot_stale_time,
-                'exported_at': datetime.now(timezone.utc).isoformat(),
-                'note': (
-                    'Sensitive fields have been masked for security'
-                    if not include_sensitive
-                    else 'Full configuration export'
-                )
+            export_data: Dict[str, Any] = {
+                "stream_id": stream.id,
+                "name": stream.name,
+                "plugin_type": stream.plugin_type,
+                "configuration": {
+                    "poll_interval": stream.poll_interval,
+                    "cot_type": stream.cot_type,
+                    "cot_stale_time": stream.cot_stale_time,
+                    "tak_server_id": stream.tak_server_id,
+                    "is_active": stream.is_active
+                },
+                "plugin_config": stream.to_dict(include_sensitive=include_sensitive)["plugin_config"],
+                "metadata": {
+                    "created_at": stream.created_at.isoformat() if stream.created_at else None,
+                    "updated_at": stream.updated_at.isoformat() if stream.updated_at else None,
+                    "total_messages_sent": stream.total_messages_sent
+                }
             }
+
+            # Add TAK server information if available
+            if stream.tak_server:
+                export_data["tak_server"] = {
+                    "id": stream.tak_server.id,
+                    "name": stream.tak_server.name,
+                    "host": stream.tak_server.host,
+                    "port": stream.tak_server.port
+                }
 
             return export_data
 
         except Exception as e:
-            logger.error(f"Error exporting stream config {stream_id}: {e}")
-            raise
+            logger.error(f"Error exporting stream config for {stream_id}: {e}")
+            return {
+                "error": str(e),
+                "stream_id": stream_id
+            }
 
-    def get_security_status(self):
-        """Get security status of all streams"""
+    def get_security_status(self) -> Dict[str, Any]:
+        """Get security status of all stream configurations"""
         try:
             streams = Stream.query.all()
-            status = {
-                'total_streams': len(streams),
-                'encrypted_streams': 0,
-                'warnings': []
+            security_status: Dict[str, Any] = {
+                "total_streams": len(streams),
+                "streams_with_issues": 0,
+                "encrypted_fields": 0,
+                "weak_passwords": 0,
+                "default_passwords": 0,
+                "stream_details": []
             }
 
             for stream in streams:
-                config = stream.get_raw_plugin_config()
-                is_secure, warnings = self.validate_plugin_config_security(stream.plugin_type, config)
+                stream_security = self._analyze_stream_security(stream)
+                security_status["stream_details"].append(stream_security)
 
-                if is_secure:
-                    status['encrypted_streams'] += 1
-                else:
-                    status['warnings'].extend([
-                        f"Stream '{stream.name}': {warning}" for warning in warnings
-                    ])
+                if stream_security["has_issues"]:
+                    security_status["streams_with_issues"] += 1
 
-            status['encryption_percentage'] = (
-                (status['encrypted_streams'] / status['total_streams'] * 100)
-                if status['total_streams'] > 0 else 100
-            )
+                security_status["encrypted_fields"] += stream_security["encrypted_fields"]
+                security_status["weak_passwords"] += stream_security["weak_passwords"]
+                security_status["default_passwords"] += stream_security["default_passwords"]
 
-            return status
+            return security_status
 
         except Exception as e:
             logger.error(f"Error getting security status: {e}")
-            raise
+            return {
+                "error": str(e),
+                "total_streams": 0,
+                "streams_with_issues": 0,
+                "encrypted_fields": 0,
+                "weak_passwords": 0,
+                "default_passwords": 0,
+                "stream_details": []
+            }
 
-    def get_plugin_metadata(self, plugin_name):
+    def get_plugin_metadata(self, plugin_name: str) -> Optional[Dict[str, Any]]:
         """Get metadata for a specific plugin"""
         try:
-            plugin_class = self.plugin_manager.plugins.get(plugin_name)
-            if plugin_class:
-                # Create temporary instance to get metadata
-                temp_instance = plugin_class({})
-                return self.serialize_plugin_metadata(temp_instance.plugin_metadata)
-            return None
-
+            return self.plugin_manager.get_plugin_metadata(plugin_name)
         except Exception as e:
             logger.error(f"Error getting plugin metadata for {plugin_name}: {e}")
             return None
 
-    def get_all_plugin_metadata(self):
+    def get_all_plugin_metadata(self) -> Dict[str, Dict[str, Any]]:
         """Get metadata for all available plugins"""
         try:
-            available_plugins = self.plugin_manager.list_plugins()
-            plugin_metadata = {}
-
-            for plugin_name in available_plugins:
-                metadata = self.get_plugin_metadata(plugin_name)
-                if metadata:
-                    plugin_metadata[plugin_name] = metadata
-
-            return plugin_metadata
-
+            return self.plugin_manager.get_all_plugin_metadata()
         except Exception as e:
             logger.error(f"Error getting all plugin metadata: {e}")
             return {}
 
-    def serialize_plugin_metadata(self, metadata):
-        """Convert plugin metadata to JSON-serializable format"""
-        if isinstance(metadata, dict):
-            result = {}
-            for key, value in metadata.items():
-                result[key] = self.serialize_plugin_metadata(value)
-            return result
-        elif isinstance(metadata, list):
-            return [self.serialize_plugin_metadata(item) for item in metadata]
-        elif hasattr(metadata, '__dict__'):
-            # This is likely a PluginConfigField or similar object
-            # Convert to dictionary
-            result = {}
-            for attr_name in dir(metadata):
-                if not attr_name.startswith('_'):  # Skip private attributes
-                    try:
-                        attr_value = getattr(metadata, attr_name)
-                        # Skip methods
-                        if not callable(attr_value):
-                            result[attr_name] = self.serialize_plugin_metadata(attr_value)
-                    except Exception as e:
-                        # Skip attributes that can't be accessed
-                        logger.debug(f"Attributes: {e} skipped that can't be accessed")
-            return result
-        else:
-            # Return as-is for basic types (str, int, bool, etc.)
-            return metadata
-
-    def prepare_stream_for_display(self, stream):
-        """Prepare stream data for display, masking sensitive fields"""
-        # Get plugin metadata to identify sensitive fields
-        plugin_class = self.plugin_manager.plugins.get(stream.plugin_type)
-        if not plugin_class:
-            return stream
-
+    def serialize_plugin_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Serialize plugin metadata for JSON response"""
         try:
-            temp_instance = plugin_class({})
-            metadata = self.serialize_plugin_metadata(temp_instance.plugin_metadata)
+            serialized: Dict[str, Any] = {
+                "display_name": metadata.get("display_name", ""),
+                "description": metadata.get("description", ""),
+                "icon": metadata.get("icon", ""),
+                "category": metadata.get("category", ""),
+                "config_fields": []
+            }
 
-            # Use the stream's to_dict method that masks sensitive data
-            stream.display_config = stream.to_dict(include_sensitive=False)['plugin_config']
-            stream.plugin_metadata = metadata
+            # Serialize config fields
+            for field in metadata.get("config_fields", []):
+                if hasattr(field, 'to_dict'):
+                    serialized["config_fields"].append(field.to_dict())
+                elif isinstance(field, dict):
+                    serialized["config_fields"].append(field)
+                else:
+                    logger.warning(f"Unexpected field type: {type(field)}")
+
+            # Serialize help sections
+            if "help_sections" in metadata:
+                serialized["help_sections"] = metadata["help_sections"]
+
+            return serialized
+
+        except Exception as e:
+            logger.error(f"Error serializing plugin metadata: {e}")
+            return {
+                "error": str(e),
+                "display_name": "",
+                "description": "",
+                "icon": "",
+                "category": "",
+                "config_fields": []
+            }
+
+    def prepare_stream_for_display(self, stream: Stream) -> Stream:
+        """Prepare a stream object for display with additional metadata"""
+        try:
+            # Add plugin metadata
+            metadata = self.get_plugin_metadata(stream.plugin_type)
+            if metadata:
+                # Add metadata as a property to the stream object
+                setattr(stream, '_plugin_metadata', metadata)
+                setattr(stream, 'plugin_display_name', metadata.get("display_name", stream.plugin_type))
+                setattr(stream, 'plugin_description', metadata.get("description", ""))
+                setattr(stream, 'plugin_icon', metadata.get("icon", ""))
+                setattr(stream, 'plugin_category', metadata.get("category", ""))
 
             return stream
 
         except Exception as e:
-            logger.warning(f"Could not prepare stream {stream.id} for display: {e}")
+            logger.error(f"Error preparing stream for display: {e}")
             return stream
+
+    def _analyze_stream_security(self, stream: Stream) -> Dict[str, Any]:
+        """Analyze security of a single stream configuration"""
+        try:
+            analysis: Dict[str, Any] = {
+                "stream_id": stream.id,
+                "stream_name": stream.name,
+                "plugin_type": stream.plugin_type,
+                "has_issues": False,
+                "encrypted_fields": 0,
+                "weak_passwords": 0,
+                "default_passwords": 0,
+                "issues": []
+            }
+
+            # Get plugin metadata
+            metadata = self.get_plugin_metadata(stream.plugin_type)
+            if not metadata:
+                analysis["issues"].append("Plugin metadata not found")
+                analysis["has_issues"] = True
+                return analysis
+
+            # Check for encrypted fields
+            raw_config = stream.get_raw_plugin_config()
+            for key, value in raw_config.items():
+                if isinstance(value, str) and value.startswith('ENC:'):
+                    analysis["encrypted_fields"] += 1
+
+            # Check for weak passwords
+            sensitive_fields = []
+            for field_data in metadata.get("config_fields", []):
+                if isinstance(field_data, dict) and field_data.get("sensitive"):
+                    sensitive_fields.append(field_data["name"])
+                elif hasattr(field_data, 'sensitive') and field_data.sensitive:
+                    sensitive_fields.append(field_data.name)
+
+            decrypted_config = stream.get_plugin_config()
+            for field_name in sensitive_fields:
+                if field_name in decrypted_config:
+                    value = decrypted_config[field_name]
+                    if isinstance(value, str):
+                        if len(value) < 8:
+                            analysis["weak_passwords"] += 1
+                            analysis["issues"].append(f"Weak password in field '{field_name}'")
+                        if value.lower() in ['password', '123456', 'admin']:
+                            analysis["default_passwords"] += 1
+                            analysis["issues"].append(f"Default password in field '{field_name}'")
+
+            analysis["has_issues"] = len(analysis["issues"]) > 0
+            return analysis
+
+        except Exception as e:
+            logger.error(f"Error analyzing stream security for {stream.id}: {e}")
+            return {
+                "stream_id": stream.id,
+                "stream_name": stream.name,
+                "plugin_type": stream.plugin_type,
+                "has_issues": True,
+                "encrypted_fields": 0,
+                "weak_passwords": 0,
+                "default_passwords": 0,
+                "issues": [f"Analysis error: {str(e)}"]
+            }
