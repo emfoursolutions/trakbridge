@@ -263,14 +263,6 @@ function generateFormField(field, currentConfig) {
             inputHtml = `<input type="number" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${min} ${max} value="${currentValue}">`;
             break;
         case 'checkbox':
-
-            console.log(
-                'Checkbox field:', field.name,
-                '| currentValue:', currentValue,
-                '| field.default:', field.default,
-                '| field:', field
-            );
-
             let isChecked = '';
             if (currentValue === true ||
                 currentValue === 'true' ||
