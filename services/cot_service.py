@@ -11,6 +11,12 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional, Tuple
 import logging
 
+# Add this after the existing imports
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from models.tak_server import TakServer
+
 # PyTAK imports
 try:
     import pytak
@@ -353,6 +359,34 @@ class EnhancedCOTService:
             logger.warning(f"PyTAK CLITool approach failed: {e}, falling back to custom implementation")
             return await EnhancedCOTService._send_with_custom(events, tak_server)
 
+    async def send_to_persistent_service(self, locations: List[Dict[str, Any]],
+                                         tak_server, cot_type: str = "a-f-G-U-C",
+                                         stale_time: int = 300) -> bool:
+        """
+        Send locations to persistent COT service (queue-based)
+        """
+        try:
+            # Create COT events
+            events = await self.create_cot_events(locations, cot_type, stale_time)
+
+            if not events:
+                logger.warning("No COT events created from locations")
+                return False
+
+            # Send events to persistent service
+            success_count = 0
+            for event in events:
+                success = await cot_service.enqueue_event(event, tak_server.id)
+                if success:
+                    success_count += 1
+
+            logger.info(f"Enqueued {success_count}/{len(events)} events for TAK server {tak_server.name}")
+            return success_count > 0
+
+        except Exception as e:
+            logger.error(f"Failed to send to persistent service: {e}")
+            return False
+
     async def _send_with_pytak_clitool(self, events: List[bytes], tak_server) -> bool:
         """Send events using PyTAK's CLITool"""
         cert_path = None
@@ -637,3 +671,419 @@ class EnhancedCOTService:
         except Exception as e:
             logger.error(f"Failed to process and send locations: {str(e)}")
             return False
+
+
+# Replace the PersistentCOTService class with this implementation
+
+class PersistentCOTService:
+    """
+    Manages persistent PyTAK workers and queues for each TAK server.
+    """
+
+    def __init__(self):
+        self.workers: Dict[int, asyncio.Task] = {}  # tak_server_id -> worker task
+        self.queues: Dict[int, asyncio.Queue] = {}  # tak_server_id -> event queue
+        self.connections: Dict[int, Any] = {}  # tak_server_id -> pytak connection
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
+        self._running = False
+
+    async def start_worker(self, tak_server):
+        """
+        Start a persistent PyTAK worker for a given TAK server.
+        Returns True if successful, False otherwise.
+        """
+        tak_server_id = tak_server.id
+        if tak_server_id in self.workers:
+            logger.info(f"Worker for TAK server {tak_server_id} already running.")
+            return True  # Return True since worker is already running
+
+        if not PYTAK_AVAILABLE:
+            logger.error("PyTAK not available. Cannot start persistent worker.")
+            return False
+
+        queue = asyncio.Queue()
+        self.queues[tak_server_id] = queue
+
+        # Create an event to signal when connection is established
+        connection_ready = asyncio.Event()
+        connection_error = None
+
+        async def cot_worker():
+            """PyTAK worker coroutine"""
+            nonlocal connection_error
+            try:
+                logger.info(f"Starting persistent worker for TAK server {tak_server.name}")
+
+                # Create PyTAK configuration
+                config = await self._create_pytak_config(tak_server)
+
+                # Create connection using PyTAK's protocol factory with timeout
+                try:
+                    logger.debug(f"Attempting to connect to TAK server {tak_server.name} at {tak_server.host}:{tak_server.port}")
+                    # Add timeout to prevent hanging
+                    connection_result = await asyncio.wait_for(
+                        pytak.protocol_factory(config),
+                        timeout=30.0  # 30 second timeout
+                    )
+                    
+                    # Handle the connection result (might be a tuple for TCP)
+                    if isinstance(connection_result, tuple) and len(connection_result) == 2:
+                        reader, writer = connection_result
+                        logger.info(f"Received (reader, writer) tuple for TAK server {tak_server.name}")
+                        self.connections[tak_server_id] = (reader, writer)
+                    else:
+                        logger.info(f"Received single connection object for TAK server {tak_server.name}")
+                        self.connections[tak_server_id] = connection_result
+                    
+                    logger.info(f"Successfully connected to TAK server {tak_server.name}")
+                    
+                    # Signal that connection is ready
+                    connection_ready.set()
+                    
+                except asyncio.TimeoutError:
+                    error_msg = f"Timeout connecting to TAK server {tak_server.name}"
+                    logger.error(error_msg)
+                    connection_error = Exception(error_msg)
+                    return
+                except Exception as e:
+                    error_msg = f"Failed to connect to TAK server {tak_server.name}: {e}"
+                    logger.error(error_msg)
+                    connection_error = Exception(error_msg)
+                    return
+
+                # Start the transmission worker
+                await self._transmission_worker(queue, self.connections[tak_server_id], tak_server)
+
+            except Exception as e:
+                logger.error(f"PyTAK worker failed for TAK server {tak_server_id}: {e}")
+                connection_error = e
+                # Clean up on error
+                await self._cleanup_worker(tak_server_id)
+
+        try:
+            # Create the task
+            task = asyncio.create_task(cot_worker())
+            self.workers[tak_server_id] = task
+            
+            # Wait for connection to be established (with timeout)
+            try:
+                await asyncio.wait_for(connection_ready.wait(), timeout=35.0)  # Slightly longer than connection timeout
+                logger.info(f"Started PyTAK worker for TAK server {tak_server_id}.")
+                return True
+            except asyncio.TimeoutError:
+                logger.error(f"Timeout waiting for worker to start for TAK server {tak_server_id}")
+                # Clean up the task
+                task.cancel()
+                try:
+                    await asyncio.wait_for(task, timeout=5.0)
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    pass
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to start worker for TAK server {tak_server_id}: {e}")
+            return False
+
+        # Check if there was a connection error
+        if connection_error:
+            logger.error(f"Connection error for TAK server {tak_server_id}: {connection_error}")
+            return False
+
+    async def _transmission_worker(self, queue: asyncio.Queue, connection, tak_server):
+        """Handle transmission of COT events from queue"""
+        logger.info(f"Starting transmission worker for TAK server {tak_server.name}")
+        
+        # Handle the case where connection might be a tuple (reader, writer)
+        if isinstance(connection, tuple) and len(connection) == 2:
+            reader, writer = connection
+            logger.info(f"Using (reader, writer) tuple for TAK server {tak_server.name}")
+            use_writer = True
+        else:
+            reader = connection
+            writer = None
+            use_writer = False
+            logger.info(f"Using single connection object for TAK server {tak_server.name}")
+        
+        try:
+            while True:
+                try:
+                    logger.debug(f"Waiting for events from queue for TAK server {tak_server.name}")
+                    # Get event from queue with timeout
+                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
+
+                    if event is None:  # Shutdown signal
+                        logger.info(f"Received shutdown signal for TAK server {tak_server.id}")
+                        break
+
+                    logger.info(f"Received event from queue for TAK server {tak_server.name}, sending...")
+                    
+                    # Send the event using the appropriate method
+                    if use_writer and writer:
+                        # Use writer for TCP connections
+                        writer.write(event)
+                        await writer.drain()
+                        logger.info(f"Successfully sent COT event via writer to TAK server {tak_server.name}")
+                    elif hasattr(reader, 'send'):
+                        # Use reader.send for other connection types
+                        await reader.send(event)
+                        logger.info(f"Successfully sent COT event via reader.send to TAK server {tak_server.name}")
+                    else:
+                        logger.error(f"No suitable send method found for TAK server {tak_server.name}")
+                        continue
+                
+                    # Mark task as done
+                    queue.task_done()
+
+                except asyncio.TimeoutError:
+                    # Timeout is normal, continue listening
+                    logger.debug(f"Timeout waiting for events from queue for TAK server {tak_server.name}")
+                    continue
+                except Exception as e:
+                    logger.error(f"Error sending COT event to {tak_server.name}: {e}")
+                    # Mark task as done even on error
+                    queue.task_done()
+
+        except Exception as e:
+            logger.error(f"Transmission worker error for {tak_server.name}: {e}")
+        finally:
+            # Clean up connection
+            if use_writer and writer:
+                try:
+                    writer.close()
+                    await writer.wait_closed()
+                    logger.info(f"Closed writer for TAK server {tak_server.name}")
+                except Exception as e:
+                    logger.debug(f"Error closing writer: {e}")
+            elif hasattr(reader, 'close'):
+                try:
+                    await reader.close()
+                    logger.info(f"Closed reader for TAK server {tak_server.name}")
+                except Exception as e:
+                    logger.debug(f"Error closing reader: {e}")
+
+    async def _create_pytak_config(self, tak_server):
+        """Create PyTAK configuration from TAK server settings"""
+        from configparser import ConfigParser
+
+        config = ConfigParser()
+        config.add_section('pytak')
+
+        # Determine protocol
+        protocol = "tls" if tak_server.protocol.lower() in ['tls', 'ssl'] else "tcp"
+        config.set('pytak', 'COT_URL', f"{protocol}://{tak_server.host}:{tak_server.port}")
+
+        # Add TLS configuration if needed
+        if protocol == "tls":
+            config.set('pytak', 'PYTAK_TLS_DONT_VERIFY', str(not tak_server.verify_ssl).lower())
+
+            # Handle P12 certificate if available
+            if tak_server.cert_p12 and len(tak_server.cert_p12) > 0:
+                try:
+                    cert_pem, key_pem = EnhancedCOTService._extract_p12_certificate(
+                        tak_server.cert_p12,
+                        tak_server.cert_password
+                    )
+                    cert_path, key_path = EnhancedCOTService._create_temp_cert_files(cert_pem, key_pem)
+                    config.set('pytak', 'PYTAK_TLS_CLIENT_CERT', cert_path)
+                    config.set('pytak', 'PYTAK_TLS_CLIENT_KEY', key_path)
+                except Exception as e:
+                    logger.error(f"Failed to configure P12 certificate: {e}")
+
+        logger.debug(f"Created PyTAK config for {tak_server.name}: {dict(config['pytak'])}")
+        return config['pytak']
+
+    async def stop_worker(self, tak_server_id: int):
+        """
+        Stop the PyTAK worker for a given TAK server.
+        """
+        await self._cleanup_worker(tak_server_id)
+
+    async def _cleanup_worker(self, tak_server_id: int):
+        """Clean up worker resources"""
+        try:
+            # Send shutdown signal to queue
+            if tak_server_id in self.queues:
+                await self.queues[tak_server_id].put(None)
+
+            # Cancel worker task
+            if tak_server_id in self.workers:
+                task = self.workers[tak_server_id]
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await asyncio.wait_for(task, timeout=5.0)
+                    except (asyncio.CancelledError, asyncio.TimeoutError):
+                        pass
+                del self.workers[tak_server_id]
+
+            # Clean up connection
+            if tak_server_id in self.connections:
+                connection = self.connections[tak_server_id]
+                try:
+                    await connection.close()
+                except Exception as e:
+                    logger.debug(f"Error closing connection: {e}")
+                del self.connections[tak_server_id]
+
+            # Clean up queue
+            if tak_server_id in self.queues:
+                del self.queues[tak_server_id]
+
+            logger.info(f"Cleaned up PyTAK worker for TAK server {tak_server_id}.")
+
+        except Exception as e:
+            logger.error(f"Error cleaning up worker {tak_server_id}: {e}")
+
+    async def enqueue_event(self, event: bytes, tak_server_id: int):
+        """
+        Put a COT event onto the TAK server's queue.
+        """
+        if tak_server_id not in self.queues:
+            logger.error(f"No queue for TAK server {tak_server_id}. Event not sent.")
+            return False
+
+        try:
+            queue = self.queues[tak_server_id]
+            queue_size_before = queue.qsize()
+            await queue.put(event)
+            queue_size_after = queue.qsize()
+            logger.info(f"Enqueued COT event for TAK server {tak_server_id}. Queue size: {queue_size_before} -> {queue_size_after}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to enqueue event for TAK server {tak_server_id}: {e}")
+            return False
+
+    async def ensure_workers(self):
+        """
+        Ensure a worker is running for each TAK server in the database.
+        """
+        try:
+            # Import here to avoid circular imports
+            from models.tak_server import TakServer
+            from database import db
+
+            tak_servers = db.session.query(TakServer).all()
+            for tak_server in tak_servers:
+                if tak_server.id not in self.workers:
+                    await self.start_worker(tak_server)
+        except Exception as e:
+            logger.error(f"Error ensuring workers: {e}")
+
+    def get_worker_status(self, tak_server_id: int) -> Dict[str, Any]:
+        """Get status information for a specific worker"""
+        status = {
+            'worker_running': tak_server_id in self.workers,
+            'queue_exists': tak_server_id in self.queues,
+            'connection_exists': tak_server_id in self.connections,
+            'queue_size': 0
+        }
+
+        if tak_server_id in self.queues:
+            status['queue_size'] = self.queues[tak_server_id].qsize()
+
+        if tak_server_id in self.workers:
+            task = self.workers[tak_server_id]
+            status['worker_done'] = task.done()
+            status['worker_cancelled'] = task.cancelled()
+            if task.done() and not task.cancelled():
+                try:
+                    exception = task.exception()
+                    status['worker_exception'] = str(exception) if exception else None
+                except Exception:
+                    status['worker_exception'] = 'Unknown'
+
+        return status
+
+    def get_all_worker_status(self) -> Dict[int, Dict[str, Any]]:
+        """Get status for all workers"""
+        return {
+            tak_server_id: self.get_worker_status(tak_server_id)
+            for tak_server_id in set(list(self.workers.keys()) + list(self.queues.keys()))
+        }
+
+    def get_detailed_worker_status(self, tak_server_id: int) -> Dict[str, Any]:
+        """Get detailed status information for a specific worker"""
+        status = self.get_worker_status(tak_server_id)
+        
+        # Add more detailed information
+        if tak_server_id in self.queues:
+            queue = self.queues[tak_server_id]
+            status['queue_size'] = queue.qsize()
+            status['queue_full'] = queue.full()
+            status['queue_empty'] = queue.empty()
+        
+        if tak_server_id in self.workers:
+            task = self.workers[tak_server_id]
+            status['worker_done'] = task.done()
+            status['worker_cancelled'] = task.cancelled()
+            status['worker_running'] = not task.done() and not task.cancelled()
+            
+            if task.done() and not task.cancelled():
+                try:
+                    exception = task.exception()
+                    status['worker_exception'] = str(exception) if exception else None
+                except Exception:
+                    status['worker_exception'] = 'Unknown'
+        
+        if tak_server_id in self.connections:
+            connection = self.connections[tak_server_id]
+            status['connection_exists'] = True
+            # Try to get connection status if possible
+            try:
+                status['connection_closed'] = getattr(connection, 'closed', None)
+            except:
+                status['connection_closed'] = 'Unknown'
+        else:
+            status['connection_exists'] = False
+        
+        return status
+
+    async def test_worker_communication(self, tak_server_id: int) -> bool:
+        """Test if the worker is actually processing events"""
+        if tak_server_id not in self.queues:
+            logger.error(f"No queue for TAK server {tak_server_id}")
+            return False
+        
+        try:
+            # Create a test event
+            test_event = b'<test>test</test>'
+            
+            # Put it in the queue
+            queue = self.queues[tak_server_id]
+            await queue.put(test_event)
+            
+            # Wait a bit to see if it gets processed
+            await asyncio.sleep(2)
+            
+            # Check queue size
+            queue_size = queue.qsize()
+            logger.info(f"Test event queue size after 2 seconds: {queue_size}")
+            
+            return queue_size == 0  # If queue is empty, event was processed
+            
+        except Exception as e:
+            logger.error(f"Error testing worker communication: {e}")
+            return False
+
+    async def shutdown(self):
+        """Shutdown all workers and clean up resources"""
+        logger.info("Shutting down persistent COT service...")
+
+        # Stop all workers
+        tasks = []
+        for tak_server_id in list(self.workers.keys()):
+            tasks.append(self.stop_worker(tak_server_id))
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Final cleanup
+        self.workers.clear()
+        self.queues.clear()
+        self.connections.clear()
+
+        logger.info("Persistent COT service shutdown complete.")
+
+
+# Singleton instance
+cot_service = PersistentCOTService()

@@ -1,12 +1,11 @@
 # =============================================================================
-# plugins/base_plugin.py - Enhanced Base Plugin Class with Encryption Support
+# plugins/base_plugin.py - Enhanced Base Plugin Class with Persistent COT Support
 # =============================================================================
 
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 import aiohttp
 import logging
-
 
 
 class PluginConfigField:
@@ -48,7 +47,7 @@ class PluginConfigField:
 
 
 class BaseGPSPlugin(ABC):
-    """Enhanced base class for GPS tracking plugins with encryption support"""
+    """Enhanced base class for GPS tracking plugins with persistent COT support"""
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
@@ -208,6 +207,55 @@ class BaseGPSPlugin(ABC):
             - additional_data: Dict of any additional data
         """
         pass
+
+    async def process_and_enqueue_locations(self, locations: List[Dict[str, Any]], stream) -> None:
+        """
+        Process locations and enqueue COT events using persistent COT service.
+
+        This method replaces direct TAK server connections with queue-based messaging
+        through the persistent COT service.
+
+        Args:
+            locations: List of location dictionaries from fetch_locations()
+            stream: Stream model instance (must have tak_server_id, cot_type, cot_stale_time)
+        """
+        if not locations:
+            self.logger.debug("No locations to process")
+            return
+
+        try:
+            # Import here to avoid circular imports
+            from services.cot_service import cot_service, EnhancedCOTService
+
+            # Ensure persistent worker is running for this TAK server
+            if hasattr(stream, 'tak_server_id') and stream.tak_server_id:
+                await cot_service.ensure_worker_running(stream.tak_server_id)
+
+            # Create COT events from locations
+            cot_events = await EnhancedCOTService().create_cot_events(
+                locations,
+                cot_type=getattr(stream, 'cot_type', 'a-f-G-U-C'),
+                stale_time=getattr(stream, 'cot_stale_time', 300)
+            )
+
+            # Enqueue events to persistent worker
+            enqueued_count = 0
+            for event in cot_events:
+                if hasattr(stream, 'tak_server_id') and stream.tak_server_id:
+                    cot_service.enqueue_event(event, stream.tak_server_id)
+                    enqueued_count += 1
+                else:
+                    self.logger.warning(f"Stream {getattr(stream, 'id', 'unknown')} has no TAK server ID")
+
+            self.logger.info(
+                f"[{self.plugin_name}] Enqueued {enqueued_count} COT events for stream {getattr(stream, 'id', 'unknown')}"
+            )
+
+        except Exception as e:
+            self.logger.error(
+                f"[{self.plugin_name}] Error processing and enqueuing locations: {e}",
+                exc_info=True
+            )
 
     def validate_config(self) -> bool:
         """Enhanced validation using plugin metadata"""

@@ -12,6 +12,7 @@ from typing import Dict, List
 from datetime import datetime, timezone
 
 # Import the extracted classes
+from services.cot_service import cot_service
 from services.database_manager import DatabaseManager
 from services.stream_worker import StreamWorker
 from services.session_manager import SessionManager
@@ -48,8 +49,44 @@ class StreamManager:
         self.db_manager = DatabaseManager(app_context_factory)
         self.session_manager = SessionManager()
 
+        # Initialize persistent COT service flag
+        self._cot_service_initialized = False
+
         # Start background loop
         self._start_background_loop()
+
+    async def _initialize_persistent_cot_service(self):
+        """Initialize persistent COT service for all TAK servers"""
+        if self._cot_service_initialized:
+            return
+            
+        try:
+            self.logger.info("Initializing persistent COT service")
+
+            # Get all active TAK servers from database
+            active_streams = self.db_manager.get_active_streams()
+
+            # Use a dictionary to deduplicate by tak_server.id or name
+            tak_servers = {}
+
+            for stream in active_streams:
+                if stream.tak_server:
+                    # Use tak_server.id as key for deduplication
+                    # If tak_server doesn't have an id, use name as fallback
+                    key = getattr(stream.tak_server, 'id', None) or getattr(stream.tak_server, 'name', None)
+                    if key:
+                        tak_servers[key] = stream.tak_server
+
+            # Start persistent workers for each unique TAK server
+            for tak_server in tak_servers.values():
+                self.logger.info(f"Starting persistent worker for TAK server: {tak_server.name}")
+                await cot_service.start_worker(tak_server)
+
+            self.logger.info(f"Initialized persistent COT service for {len(tak_servers)} TAK servers")
+            self._cot_service_initialized = True
+
+        except Exception as e:
+            self.logger.error(f"Error initializing persistent COT service: {e}", exc_info=True)
 
     def _start_background_loop(self):
         """Start the background event loop in a separate thread"""
@@ -133,6 +170,10 @@ class StreamManager:
     async def _background_loop(self):
         """Background loop that keeps the event loop alive"""
         self.logger.info("StreamManager background loop started")
+        
+        # Initialize persistent COT service after loop starts
+        await self._initialize_persistent_cot_service()
+        
         try:
             while not self._shutdown_event.is_set():
                 await asyncio.sleep(5)  # Check every 5 seconds
@@ -255,6 +296,10 @@ class StreamManager:
                 return False
 
             if success:
+                # The StreamWorker already ensures the persistent PyTAK worker is running
+                # No need to call cot_service.start_worker() again here
+                self.logger.debug(f"Stream {stream_id} started successfully, persistent worker already ensured by StreamWorker")
+                
                 self.workers[stream_id] = worker
                 self.logger.debug(f"Successfully started stream {stream_id}")
             else:
@@ -465,6 +510,32 @@ class StreamManager:
                 if isinstance(result, Exception):
                     self.logger.error(f"Failed to cleanup stream {stream_id} in database: {result}")
 
+    async def _cleanup_persistent_cot_service(self):
+        """Clean up all persistent COT workers"""
+        try:
+            self.logger.info("Cleaning up persistent COT service")
+
+            # Get all currently running workers
+            running_workers = cot_service.get_running_workers()
+
+            if running_workers:
+                self.logger.info(f"Stopping {len(running_workers)} persistent COT workers")
+
+                # Stop all workers
+                for tak_server in running_workers:
+                    try:
+                        cot_service.stop_worker(tak_server)
+                        self.logger.debug(f"Stopped persistent worker for TAK server: {tak_server.name}")
+                    except Exception as e:
+                        self.logger.error(f"Error stopping persistent worker for {tak_server.name}: {e}")
+
+            # Clean up the service
+            await cot_service.cleanup()
+            self.logger.info("Persistent COT service cleanup completed")
+
+        except Exception as e:
+            self.logger.error(f"Error cleaning up persistent COT service: {e}", exc_info=True)
+
     def get_stream_status(self, stream_id: int) -> Dict:
         """Get status of a specific stream with enhanced database integration"""
         # Check if stream is in active workers
@@ -554,6 +625,49 @@ class StreamManager:
             status['_database_error'] = str(e)
 
         return status
+
+    def ensure_tak_workers_running(self):
+        """Ensure persistent workers are running for all active TAK servers"""
+        try:
+            self.logger.debug("Ensuring TAK workers are running for all active streams")
+
+            # Get currently active streams
+            active_streams = self.db_manager.get_active_streams()
+
+            # Use dictionary to deduplicate TAK servers
+            required_tak_servers = {}
+
+            for stream in active_streams:
+                if stream.tak_server:
+                    key = getattr(stream.tak_server, 'id', None) or getattr(stream.tak_server, 'name', None)
+                    if key:
+                        required_tak_servers[key] = stream.tak_server
+
+            # Get currently running workers
+            running_workers = cot_service.get_running_workers()
+
+            # Convert to set of keys for comparison
+            running_tak_server_keys = set()
+            if running_workers:
+                for tak_server in running_workers.keys():
+                    key = getattr(tak_server, 'id', None) or getattr(tak_server, 'name', None)
+                    if key:
+                        running_tak_server_keys.add(key)
+
+            # Start workers for TAK servers that need them
+            required_keys = set(required_tak_servers.keys())
+            missing_keys = required_keys - running_tak_server_keys
+
+            for key in missing_keys:
+                tak_server = required_tak_servers[key]
+                self.logger.info(f"Starting missing persistent worker for TAK server: {tak_server.name}")
+                cot_service.start_worker(tak_server)
+
+            if missing_keys:
+                self.logger.info(f"Started {len(missing_keys)} missing persistent workers")
+
+        except Exception as e:
+            self.logger.error(f"Error ensuring TAK workers are running: {e}", exc_info=True)
 
     async def health_check(self):
         """Perform comprehensive health check on all running streams with database validation"""
@@ -646,6 +760,26 @@ class StreamManager:
                     )
             except Exception as e:
                 self.logger.error(f"Error handling database sync issue for stream {stream_id}: {e}")
+        try:
+            self.logger.debug("Checking persistent COT service health")
+
+            # Ensure required workers are running
+            self.ensure_tak_workers_running()
+
+            # Check worker health status
+            running_workers = cot_service.get_running_workers()
+            if running_workers:
+                self.logger.debug(f"Persistent COT service has {len(running_workers)} running workers")
+
+                # Optional: Check individual worker health
+                for tak_server, worker_info in running_workers.items():
+                    if hasattr(worker_info, 'is_healthy') and not worker_info.is_healthy():
+                        self.logger.warning(f"Persistent worker for {tak_server.name} appears unhealthy")
+                        # Optionally restart the worker
+                        cot_service.restart_worker(tak_server)
+
+        except Exception as e:
+            self.logger.error(f"Error checking persistent COT service health: {e}")
 
         self.logger.info("Health check completed")
 
@@ -670,6 +804,19 @@ class StreamManager:
             except Exception as e:
                 self.logger.error(f"Error stopping streams during shutdown: {e}")
 
+        # Clean up persistent COT service
+        if self._loop and not self._loop.is_closed():
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    self._cleanup_persistent_cot_service(), self._loop
+                )
+                future.result(timeout=10)
+                self.logger.info("Persistent COT service cleaned up during shutdown")
+            except asyncio.TimeoutError:
+                self.logger.warning("Timeout cleaning up persistent COT service during shutdown")
+            except Exception as e:
+                self.logger.error(f"Error cleaning up persistent COT service during shutdown: {e}")
+
         # Cancel health check task
         if self._health_check_task and not self._health_check_task.done():
             try:
@@ -685,6 +832,11 @@ class StreamManager:
                 self.logger.warning("Background thread did not terminate within timeout")
             else:
                 self.logger.info("Background thread terminated successfully")
+
+        # Clear references to avoid memory leaks
+        self.workers.clear()
+        self.db_manager = None
+        self.session_manager = None
 
     # Thread-safe public methods for Flask routes with enhanced database operations
     def start_stream_sync(self, stream_id: int) -> bool:

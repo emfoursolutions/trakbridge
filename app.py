@@ -348,35 +348,51 @@ def setup_cleanup_handlers():
 
     def cleanup():
         """Clean up resources on application shutdown"""
-        from flask import current_app
-
         try:
-            # Shutdown stream manager
-            stream_manager = getattr(current_app, "stream_manager", None)
-            if hasattr(current_app, 'stream_manager') and stream_manager is not None:
-                current_app.stream_manager.shutdown()
-                logger.info("Stream manager shutdown completed")
-        except Exception as e:
-            logger.error(f"Error during stream cleanup: {e}")
+            # Try to get current_app, but handle case where context is not available
+            try:
+                from flask import current_app
+                stream_manager = getattr(current_app, "stream_manager", None)
+                if hasattr(current_app, 'stream_manager') and stream_manager is not None:
+                    current_app.stream_manager.shutdown()
+                    logger.info("Stream manager shutdown completed")
+            except RuntimeError as e:
+                if "Working outside of application context" in str(e):
+                    logger.info("Application context not available during shutdown, skipping stream manager cleanup")
+                else:
+                    logger.error(f"Error during stream cleanup: {e}")
+            except Exception as e:
+                logger.error(f"Error during stream cleanup: {e}")
 
-        # Close database connections
-        try:
-            db.session.remove()
-            db.engine.dispose()
-            logger.info("Database connections closed")
+            # Close database connections
+            try:
+                db.session.remove()
+                db.engine.dispose()
+                logger.info("Database connections closed")
+            except Exception as e:
+                logger.error(f"Error closing database connections: {e}")
+
         except Exception as e:
-            logger.error(f"Error closing database connections: {e}")
+            logger.error(f"Error during cleanup: {e}")
 
         logger.info("Application cleanup completed")
 
     def safe_stream_manager_shutdown():
         """Safely shutdown stream manager during application exit"""
-        from flask import current_app
-
         try:
-            stream_manager = getattr(current_app, "stream_manager", None)
-            if has_app_context() and hasattr(current_app, 'stream_manager') and stream_manager is not None:
-                current_app.stream_manager.shutdown()
+            # Try to get current_app, but handle case where context is not available
+            try:
+                from flask import current_app
+                stream_manager = getattr(current_app, "stream_manager", None)
+                if hasattr(current_app, 'stream_manager') and stream_manager is not None:
+                    current_app.stream_manager.shutdown()
+            except RuntimeError as e:
+                if "Working outside of application context" in str(e):
+                    logger.info("Application context not available during shutdown, skipping stream manager shutdown")
+                else:
+                    logger.error(f"Error during stream manager shutdown: {e}")
+            except Exception as e:
+                logger.error(f"Error during stream manager shutdown: {e}")
         except Exception as e:
             logger.error(f"Error during stream manager shutdown: {e}")
 

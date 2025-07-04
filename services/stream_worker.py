@@ -1,5 +1,5 @@
 # =============================================================================
-# services/stream_worker.py - Stream Worker Service
+# services/stream_worker.py - Stream Worker Service (Updated for Persistent COT)
 # Manages the individual streams and is called by Stream Manager Service
 # =============================================================================
 
@@ -10,6 +10,7 @@ from typing import Dict, List
 
 # Import the accessor function
 from plugins.plugin_manager import get_plugin_manager
+from services.cot_service import cot_service  # Import the PersistentCOTService singleton
 
 
 class StreamWorker:
@@ -23,21 +24,21 @@ class StreamWorker:
         self.session_manager = session_manager
         self.db_manager = db_manager
         self.logger = logging.getLogger(f'StreamWorker-{stream.name}')
-        self.tak_connection = None
         self.reader = None
         self.writer = None
         self._stop_event = None
         self._start_lock = asyncio.Lock()
         self._startup_complete = False
-        self._consecutive_errors = 0  # Add this line
-        self._last_successful_poll = None  # This one too, since it's also used
+        self._consecutive_errors = 0
+        self._last_successful_poll = None
+        self._tak_worker_ensured = False  # Track if we've ensured the persistent worker exists
 
     @property
     def startup_complete(self):
         return self._startup_complete
 
     async def start(self):
-        """Start the stream worker with proper locking and duplicate prevention + PyTAK integration"""
+        """Start the stream worker with persistent PyTAK integration"""
         async with self._start_lock:
             if self.running and self._startup_complete:
                 self.logger.warning(f"Stream {self.stream.name} is already running and startup complete")
@@ -70,11 +71,11 @@ class StreamWorker:
                     self.running = False
                     return False
 
-                # Initialize TAK server connection with PyTAK if configured
+                # Initialize persistent TAK server connection if configured
                 if self.stream.tak_server:
-                    success = await self._initialize_tak_connection()
+                    success = await self._ensure_persistent_tak_worker()
                     if not success:
-                        self.logger.error("Failed to initialize TAK server connection")
+                        self.logger.error("Failed to ensure persistent TAK server worker")
                         self.running = False
                         return False
 
@@ -103,7 +104,7 @@ class StreamWorker:
                 return False
 
     async def stop(self, skip_db_update=False):
-        """Stop the stream worker and cleanup PyTAK resources"""
+        """Stop the stream worker"""
         async with self._start_lock:
             if not self.running:
                 self.logger.info(f"Stream '{self.stream.name}' is not running, nothing to stop")
@@ -125,8 +126,9 @@ class StreamWorker:
                 except (asyncio.CancelledError, asyncio.TimeoutError):
                     self.logger.info(f"Task for stream '{self.stream.name}' was cancelled or timed out")
 
-            # Clean up PyTAK resources
-            await self._cleanup_tak_connection()
+            # Note: We don't stop the persistent worker here as other streams might be using it
+            # The PersistentCOTService manages worker lifecycle automatically
+            self._tak_worker_ensured = False
 
             # Update database only if not during shutdown
             if not skip_db_update:
@@ -153,55 +155,75 @@ class StreamWorker:
             self.logger.error(f"Failed to update stream status asynchronously: {e}")
             return False
 
-    async def _initialize_tak_connection(self) -> bool:
-        """Initialize PyTAK client for TAK server connection"""
+    async def _ensure_persistent_tak_worker(self) -> bool:
+        """Ensure persistent PyTAK worker exists for TAK server connection"""
         try:
-            tak_server = self.stream.tak_server
-            self.logger.debug(f"Initializing connection to TAK server {tak_server.name}")
-
-            # Initialize the COT service with PyTAK enabled
-            if not hasattr(self, 'cot_service'):
-                from services.cot_service import EnhancedCOTService
-                self.cot_service = EnhancedCOTService(use_pytak=True)
-
-            # Test connection by creating a simple test event
-            test_locations = [{
-                'uid': f'test-{tak_server.name}',
-                'lat': 0.0,
-                'lon': 0.0,
-                'name': 'Connection Test',
-                'timestamp': datetime.now(timezone.utc)
-            }]
-
-            # Try to create events to validate PyTAK availability
-            test_events = await self.cot_service.create_cot_events(
-                test_locations,
-                self.stream.cot_type or "a-f-G-U-C",
-                30  # Short stale time for test
-            )
-
-            if not test_events:
-                self.logger.error("Failed to create test COT events")
+            if not cot_service:
+                self.logger.error("Persistent COT service not available")
                 return False
 
-            self.logger.info(f"Connection initialized for TAK server {tak_server.name}")
+            tak_server = self.stream.tak_server
+            self.logger.debug(f"Ensuring persistent worker for TAK server {tak_server.name}")
+
+            # Check if worker is already running
+            worker_status = cot_service.get_worker_status(tak_server.id)
+            if worker_status and worker_status.get('worker_running', False):
+                self.logger.info(f"Persistent worker already running for TAK server {tak_server.name}")
+                self._tak_worker_ensured = True
+                return True
+
+            # Start the worker
+            success = await cot_service.start_worker(tak_server)
+            if not success:
+                self.logger.error(f"Failed to start persistent worker for TAK server {tak_server.name}")
+                return False
+
+            # Verify worker started successfully
+            worker_status = cot_service.get_worker_status(tak_server.id)
+            if not worker_status or not worker_status.get('worker_running', False):
+                self.logger.error(f"Worker failed to start for TAK server {tak_server.name}")
+                return False
+
+            # Test the connection with a simple location
+            await self._test_persistent_connection()
+
+            self._tak_worker_ensured = True
+            self.logger.info(f"Persistent worker ensured for TAK server {tak_server.name}")
             return True
 
         except Exception as e:
-            self.logger.error(f"Failed to initialize TAK Server connection: {e}", exc_info=True)
+            self.logger.error(f"Failed to ensure persistent TAK worker: {e}", exc_info=True)
             return False
 
-    async def _cleanup_tak_connection(self):
-        """Clean up PyTAK connection resources"""
-        if hasattr(self, 'cot_service'):
-            try:
-                await self.cot_service.cleanup()
-                self.logger.info("TAK Server connection resources cleaned up")
-            except Exception as e:
-                self.logger.error(f"Error cleaning up TAK Server connection: {e}")
+    async def _test_persistent_connection(self):
+        """Test the persistent connection with a simple location"""
+        try:
+            test_locations = [{
+                'uid': f'test-{self.stream.tak_server.name}-{self.stream.name}',
+                'lat': 0.0,
+                'lon': 0.0,
+                'name': f'Connection Test - {self.stream.name}',
+                'timestamp': datetime.now(timezone.utc)
+            }]
+
+            # Use the persistent service's send method
+            success = await cot_service.send_to_persistent_service(
+                locations=test_locations,
+                tak_server=self.stream.tak_server,
+                cot_type=self.stream.cot_type or "a-f-G-U-C",
+                stale_time=30  # Short stale time for test
+            )
+
+            if success:
+                self.logger.info(f"Connection test successful for TAK server {self.stream.tak_server.name}")
+            else:
+                self.logger.warning(f"Connection test failed for TAK server {self.stream.tak_server.name}")
+
+        except Exception as e:
+            self.logger.error(f"Connection test failed: {e}")
 
     async def _run_loop(self):
-        """Main processing loop for the stream with PyTAK integration"""
+        """Main processing loop for the stream with persistent PyTAK integration"""
         max_consecutive_errors = 5
         backoff_multiplier = 2
         max_backoff = 300  # 5 minutes
@@ -227,23 +249,30 @@ class StreamWorker:
                 if locations:
                     self.logger.info(f"Retrieved {len(locations)} locations from {self.stream.plugin_type} plugin")
 
-                    # Send to TAK server if configured
-                    if self.stream.tak_server and hasattr(self, 'cot_service'):
-                        success = await self._send_locations_to_tak_pytak(locations)
+                    # Send to persistent TAK server if configured
+                    if self.stream.tak_server and self._tak_worker_ensured:
+                        success = await self._send_locations_to_persistent_tak(locations)
                         if success:
                             self.logger.info(f"Successfully sent {len(locations)} locations to TAK server")
                         else:
                             self.logger.error("Failed to send locations to TAK server")
-                            # Try to reinitialize connection
-                            await self._cleanup_tak_connection()
-                            reconnect_success = await self._initialize_tak_connection()
-                            if not reconnect_success:
-                                self.logger.warning("Failed to reinitialize TAK connection, trying direct method")
-                                success = await self._send_locations_to_tak_fallback(locations)
+                            # Try to restart the worker
+                            self.logger.info("Attempting to restart persistent TAK worker")
+                            await cot_service.stop_worker(self.stream.tak_server.id)
+                            await asyncio.sleep(2)  # Brief delay
+                            restart_success = await self._ensure_persistent_tak_worker()
+                            if restart_success:
+                                # Retry sending
+                                success = await self._send_locations_to_persistent_tak(locations)
                                 if not success:
-                                    raise Exception("Both PyTAK and direct methods failed")
+                                    raise Exception("Failed to send locations after worker restart")
+                            else:
+                                raise Exception("Failed to restart persistent TAK worker")
                     else:
-                        self.logger.warning("No TAK server configured or COT service not initialized")
+                        if not self.stream.tak_server:
+                            self.logger.warning("No TAK server configured")
+                        else:
+                            self.logger.warning("Persistent TAK worker not ensured")
 
                     # Update stream status with success
                     await self._update_stream_status_async(
@@ -308,81 +337,60 @@ class StreamWorker:
 
         self.logger.info(f"Main loop for stream '{self.stream.name}' has ended")
 
-    async def _send_locations_to_tak_pytak(self, locations: List[Dict]) -> bool:
-        """Send locations to TAK server using PyTAK with improved error handling"""
+    async def _send_locations_to_persistent_tak(self, locations: List[Dict]) -> bool:
+        """Send locations to persistent TAK server using the persistent service"""
         try:
-            if not hasattr(self, 'cot_service'):
-                self.logger.error("COT service not initialized")
+            if not self._tak_worker_ensured:
+                self.logger.error("Persistent TAK worker not ensured")
                 return False
 
-            # Use the enhanced COT service to process and send locations
-            success = await self.cot_service.process_and_send_locations(
-                locations=locations,
-                tak_server=self.stream.tak_server,
-                cot_type=self.stream.cot_type or "a-f-G-U-C",
-                stale_time=self.stream.cot_stale_time or 300
-            )
+            if not cot_service:
+                self.logger.error("Persistent COT service not available")
+                return False
 
-            if success:
-                # Update total_messages_sent in database
-                await self._update_stream_status_async(messages_sent=len(locations))
-                self.logger.info(f"Successfully processed and sent {len(locations)} locations to TAK Server")
-            else:
-                self.logger.error("Failed to process and send locations to TAK Server")
-
-            return success
-
-        except Exception as e:
-            self.logger.error(f"Failed to send locations to TAK server: {e}", exc_info=True)
-            return False
-
-    async def _send_locations_to_tak_fallback(self, locations: List[Dict]) -> bool:
-        """Initialize client for Direct TAK server connection"""
-        try:
-            tak_server = self.stream.tak_server
-            self.logger.debug(f"Initializing connection to TAK server {tak_server.name}")
-
-            # Initialize the COT service with PyTAK enabled
-            if not hasattr(self, 'cot_service'):
-                from services.cot_service import EnhancedCOTService
-                self.cot_service = EnhancedCOTService(use_pytak=False)
-
-            # Test connection by creating a simple test event
-            test_locations = [{
-                'uid': f'test-{tak_server.name}',
-                'lat': 0.0,
-                'lon': 0.0,
-                'name': 'Connection Test',
-                'timestamp': datetime.now(timezone.utc)
-            }]
-
-            # Try to create events to validate PyTAK availability
-            test_events = await self.cot_service.create_cot_events(
-                test_locations,
+            # Create COT events directly
+            from services.cot_service import EnhancedCOTService
+            cot_events = await EnhancedCOTService().create_cot_events(
+                locations,
                 self.stream.cot_type or "a-f-G-U-C",
-                30  # Short stale time for test
+                self.stream.cot_stale_time or 300
             )
 
-            if not test_events:
-                self.logger.error("Failed to create test COT events")
+            if not cot_events:
+                self.logger.warning("No COT events created from locations")
                 return False
 
-            self.logger.info(f"Direct Connection initialized for TAK server {tak_server.name}")
+            # Enqueue each event directly
+            events_sent = 0
+            for event in cot_events:
+                await cot_service.enqueue_event(event, self.stream.tak_server.id)
+                events_sent += 1
+
+            # Update total_messages_sent in database
+            await self._update_stream_status_async(messages_sent=events_sent)
+            self.logger.info(f"Successfully enqueued {events_sent} COT events via persistent service")
             return True
 
         except Exception as e:
-            self.logger.error(f"Failed to initialize Direct TAK Server connection: {e}", exc_info=True)
+            self.logger.error(f"Failed to send locations to persistent TAK server: {e}", exc_info=True)
             return False
 
     def get_health_status(self) -> Dict:
         """Get detailed health status of this worker"""
-        # now = datetime.now(timezone.utc)
+        # Get persistent worker status if available
+        persistent_worker_status = None
+        if self.stream.tak_server and cot_service:
+            persistent_worker_status = cot_service.get_worker_status(self.stream.tak_server.id)
+
         return {
             'running': self.running,
             'startup_complete': self._startup_complete,
             'consecutive_errors': self._consecutive_errors,
             'last_successful_poll': self._last_successful_poll.isoformat() if self._last_successful_poll else None,
-            'has_tak_connection': self.writer is not None,
+            'tak_worker_ensured': self._tak_worker_ensured,
             'task_done': self.task.done() if self.task else None,
             'task_cancelled': self.task.cancelled() if self.task else None,
+            'persistent_worker_status': persistent_worker_status,
+            'total_persistent_workers': len(cot_service.workers) if cot_service else 0,
+            'total_persistent_queues': len(cot_service.queues) if cot_service else 0,
         }
