@@ -25,21 +25,6 @@ load_dotenv()
 # Set up logger
 logger = logging.getLogger(__name__)
 
-# Remove global stream manager instance - will be attached to Flask app instead
-# stream_manager = None
-# _stream_manager_lock = threading.Lock()
-
-
-# Remove the get_or_create_stream_manager function - no longer needed
-# def get_or_create_stream_manager(app_context_factory=None):
-#     global stream_manager
-#     if stream_manager is None:
-#         with _stream_manager_lock:
-#             if stream_manager is None:  # Double-checked locking
-#                 from services.stream_manager import get_stream_manager
-#                 stream_manager = get_stream_manager(app_context_factory=app_context_factory)
-#     return stream_manager
-
 
 def create_app(config_name=None):
     app = Flask(__name__)
