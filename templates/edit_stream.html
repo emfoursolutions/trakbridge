@@ -83,14 +83,6 @@
                         <div class="form-text">Cursor-on-Target type identifier for tracked objects</div>
                     </div>
 
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="is_active" name="is_active"
-                               {% if stream.is_active %}checked{% endif %}>
-                        <label class="form-check-label" for="is_active">
-                            Stream Active
-                        </label>
-                        <div class="form-text">Enable or disable this stream</div>
-                    </div>
                 </div>
             </div>
 
@@ -242,7 +234,11 @@ function generateFormField(field, currentConfig) {
     const fieldId = `plugin_${field.name}`;
     const isRequired = field.required ? 'required' : '';
     const placeholder = field.placeholder ? `placeholder="${field.placeholder}"` : '';
-    const currentValue = currentConfig[field.name] || field.default || '';
+    
+    // Use strict undefined/null check so false is respected
+    const currentValue = (currentConfig && currentConfig[field.name] !== undefined && currentConfig[field.name] !== null)
+        ? currentConfig[field.name]
+        : (field.default !== undefined ? field.default : '');
 
     let inputHtml = '';
 
@@ -267,14 +263,24 @@ function generateFormField(field, currentConfig) {
             inputHtml = `<input type="number" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${min} ${max} value="${currentValue}">`;
             break;
         case 'checkbox':
-            // Handle various truthy values that might be stored in DB
-            const isChecked = currentValue === true ||
-                            currentValue === 'true' ||
-                            currentValue === '1' ||
-                            currentValue === 1 ||
-                            currentValue === 'on' ||
-                            currentValue === 'yes' ||
-                            currentValue === 'True' ? 'checked' : '';
+
+            console.log(
+                'Checkbox field:', field.name,
+                '| currentValue:', currentValue,
+                '| field.default:', field.default,
+                '| field:', field
+            );
+
+            let isChecked = '';
+            if (currentValue === true ||
+                currentValue === 'true' ||
+                currentValue === 1 ||
+                currentValue === '1' ||
+                currentValue === 'on' ||
+                currentValue === 'yes' ||
+                currentValue === 'True') {
+                isChecked = 'checked';
+            }
             inputHtml = `
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="${fieldId}" name="${fieldId}" ${isChecked} ${isRequired}>

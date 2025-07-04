@@ -194,8 +194,10 @@ function generateFormField(field) {
     const placeholder = field.placeholder ? `placeholder="${field.placeholder}"` : '';
 
     let inputHtml = '';
+    // Use field.field_type instead of field.type (common in Python objects)
+    const fieldType = field.type || field.field_type;
 
-    switch (field.field_type) {
+    switch (fieldType) {
         case 'password':
             inputHtml = `<input type="password" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder}>`;
             break;
@@ -212,6 +214,7 @@ function generateFormField(field) {
             inputHtml = `<input type="number" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${min} ${max} ${defaultVal}>`;
             break;
         case 'checkbox':
+
             // Handle default value for checkbox
             const isChecked = field.default === true ||
                             field.default === 'true' ||
