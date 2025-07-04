@@ -7,6 +7,7 @@
 import logging
 import asyncio
 from datetime import datetime
+from typing import Dict, Any, Optional, Union
 from models.stream import Stream
 from services.exceptions import (
     StreamManagerError, StreamNotFoundError, StreamConfigurationError,
@@ -19,11 +20,11 @@ logger = logging.getLogger(__name__)
 class StreamOperationsService:
     """Service for handling stream lifecycle operations"""
 
-    def __init__(self, stream_manager, db):
+    def __init__(self, stream_manager: Any, db: Any) -> None:
         self.stream_manager = stream_manager
         self.db = db
 
-    def create_stream(self, data):
+    def create_stream(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new stream with the provided data"""
         try:
             stream = Stream(
@@ -36,7 +37,7 @@ class StreamOperationsService:
             )
 
             # Set plugin configuration
-            plugin_config = {}
+            plugin_config: Dict[str, Any] = {}
             for key, value in data.items():
                 if key.startswith('plugin_'):
                     plugin_config[key[7:]] = value  # Remove 'plugin_' prefix
@@ -82,7 +83,7 @@ class StreamOperationsService:
             logger.error(f"Unexpected error creating stream: {e}", exc_info=True)
             return {'success': False, 'error': f'Unexpected error: {e}'}
 
-    def start_stream_with_enable(self, stream_id):
+    def start_stream_with_enable(self, stream_id: int) -> Dict[str, Any]:
         """Enable and start a stream"""
         try:
             # First, ensure the stream is enabled in the database
@@ -117,7 +118,7 @@ class StreamOperationsService:
                 'error': str(e)
             }
 
-    def stop_stream_with_disable(self, stream_id):
+    def stop_stream_with_disable(self, stream_id: int) -> Dict[str, Any]:
         """Stop and disable a stream"""
         try:
             # Update database status
@@ -149,7 +150,7 @@ class StreamOperationsService:
                 'error': str(e)
             }
 
-    def restart_stream(self, stream_id):
+    def restart_stream(self, stream_id: int) -> Dict[str, Any]:
         """Restart a stream"""
         try:
             # Use the stream manager's sync wrapper for restart
@@ -175,7 +176,7 @@ class StreamOperationsService:
                 'error': str(e)
             }
 
-    def delete_stream(self, stream_id):
+    def delete_stream(self, stream_id: int) -> Dict[str, Any]:
         """Delete a stream"""
         try:
             stream = Stream.query.get_or_404(stream_id)
@@ -205,7 +206,7 @@ class StreamOperationsService:
                 'error': str(e)
             }
 
-    def update_stream_safely(self, stream_id, data):
+    def update_stream_safely(self, stream_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
         """Update stream with proper stop/restart handling"""
         try:
             from sqlalchemy.orm import joinedload
@@ -230,7 +231,7 @@ class StreamOperationsService:
             stream.tak_server_id = int(data['tak_server_id'])
 
             # Update plugin configuration
-            plugin_config = {}
+            plugin_config: Dict[str, Any] = {}
             for key, value in data.items():
                 if key.startswith('plugin_'):
                     plugin_config[key[7:]] = value  # Remove 'plugin_' prefix
@@ -272,7 +273,7 @@ class StreamOperationsService:
                 'error': str(e)
             }
 
-    def run_health_check(self):
+    def run_health_check(self) -> Dict[str, Any]:
         """Trigger a health check on all streams"""
         try:
             # Run health check in the background event loop
@@ -294,7 +295,7 @@ class StreamOperationsService:
                 'error': str(e)
             }
 
-    def bulk_start_streams(self):
+    def bulk_start_streams(self) -> Dict[str, Any]:
         """Start all active streams"""
         try:
             active_streams = Stream.query.filter_by(is_active=True).all()
@@ -326,7 +327,7 @@ class StreamOperationsService:
                 'error': str(e)
             }
 
-    def bulk_stop_streams(self):
+    def bulk_stop_streams(self) -> Dict[str, Any]:
         """Stop all running streams"""
         try:
             # Get running status with error handling
@@ -372,7 +373,7 @@ class StreamOperationsService:
                 'error': str(e)
             }
 
-    def _safe_get_stream_status(self, stream_id):
+    def _safe_get_stream_status(self, stream_id: int) -> Optional[Dict[str, Any]]:
         """Safely get stream status, ensuring it returns a dict"""
         try:
             status = self.stream_manager.get_stream_status(stream_id)
