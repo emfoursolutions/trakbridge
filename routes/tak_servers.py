@@ -155,9 +155,11 @@ def create_tak_server():
             protocol=data.get('protocol', 'tls'),
             cert_p12=cert_p12_data,
             cert_p12_filename=cert_filename,
-            cert_password=data.get('cert_password', ''),
             verify_ssl=verify_ssl
         )
+        
+        # Set the certificate password using the encrypted method
+        server.set_cert_password(data.get('cert_password', ''))
 
         # Add to session and attempt commit
         db.session.add(server)
@@ -271,8 +273,10 @@ def edit_tak_server(server_id):
         server.protocol = data.get('protocol', 'tls')
         server.cert_p12 = cert_p12_data
         server.cert_p12_filename = cert_filename
-        server.cert_password = data.get('cert_password', '')
         server.verify_ssl = verify_ssl
+        
+        # Set the certificate password using the encrypted method
+        server.set_cert_password(data.get('cert_password', ''))
 
         db.session.flush()  # Check for constraint violations
         db.session.commit()

@@ -1,14 +1,25 @@
-# =============================================================================
-# config/secrets.py - Secure Secret Management (Enhanced)
-# =============================================================================
+"""
+File: config/secrets.py
 
-import os
+Description:
+    Loads the secrets manager for plugins and the database configuration.
+
+Author: {{AUTHOR}}
+Created: 2025-07-05
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import logging
-from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, List
-from pathlib import Path
+import os
 import time
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
+
+# Third-party imports
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

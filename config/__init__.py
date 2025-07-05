@@ -1,9 +1,20 @@
-# =============================================================================
-# config/__init__.py
-# =============================================================================
+"""
+File: config/__init__.py
 
-import os
+Description:
+    Package initialisation for the configuration system
+
+Author: {{AUTHOR}}
+Created: 2025-07-05
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import logging
+import os
+
+# Local application imports
 from .environments import get_config
 
 logger = logging.getLogger(__name__)

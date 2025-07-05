@@ -1,9 +1,20 @@
-# =============================================================================
-# models/stream.py - Enhanced Stream Model with Encryption Support
-# =============================================================================
+"""
+File: models/stream.py
 
-from database import db, TimestampMixin
+Description:
+    stream Model
+
+Author: {{AUTHOR}}
+Created: 2025-07-05
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import json
+
+# Local application imports
+from database import db, TimestampMixin
 from plugins.base_plugin import BaseGPSPlugin
 
 

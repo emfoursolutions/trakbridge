@@ -1,10 +1,21 @@
-# =============================================================================
-# config/schema.py - Configuration Schema Definition
-# =============================================================================
+"""
+File: config/schema.py
 
-from typing import Dict, Any, List, Optional, Union
+Description:
+    Loads the application schemas.
+
+Author: {{AUTHOR}}
+Created: 2025-07-05
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 from dataclasses import dataclass, field
 from enum import Enum
+
+# Third-party imports
+from typing import Any, Dict, List, Optional
 
 
 class LogLevel(Enum):

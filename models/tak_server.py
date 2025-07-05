@@ -1,8 +1,18 @@
-# =============================================================================
-# models/tak_server.py - TAK Server Model
-# =============================================================================
+"""
+File: models/tak_server.py
 
-from database import db, TimestampMixin  # Import both from database.py
+Description:
+    tak_server Model
+
+Author: {{AUTHOR}}
+Created: 2025-07-05
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Local application imports
+from database import db, TimestampMixin
+from services.encryption_service import get_encryption_service
 
 
 class TakServer(db.Model, TimestampMixin):
@@ -17,7 +27,7 @@ class TakServer(db.Model, TimestampMixin):
     # TLS Configuration - Updated for P12 support
     cert_p12 = db.Column(db.LargeBinary)  # Store P12 certificate file as binary
     cert_p12_filename = db.Column(db.String(255))  # Store original filename
-    cert_password = db.Column(db.String(255))  # Password for P12 certificate
+    cert_password = db.Column(db.String(255))  # Password for P12 certificate (encrypted)
     verify_ssl = db.Column(db.Boolean, default=True)
 
     # Use back_populates instead of backref to match Stream model
@@ -25,6 +35,37 @@ class TakServer(db.Model, TimestampMixin):
 
     def __repr__(self):
         return f'<TakServer {self.name}>'
+
+    def get_cert_password(self) -> str:
+        """Get the decrypted certificate password"""
+        if not self.cert_password:
+            return ""
+        
+        try:
+            encryption_service = get_encryption_service()
+            return encryption_service.decrypt_value(self.cert_password)
+        except Exception as e:
+            # Log the error but don't fail - return empty string
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to decrypt certificate password for server {self.id}: {e}")
+            return ""
+
+    def set_cert_password(self, password: str):
+        """Set the certificate password (encrypted)"""
+        if not password:
+            self.cert_password = None
+            return
+        
+        try:
+            encryption_service = get_encryption_service()
+            self.cert_password = encryption_service.encrypt_value(password)
+        except Exception as e:
+            # Log the error and raise it
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to encrypt certificate password for server {self.id}: {e}")
+            raise
 
     def to_dict(self):
         return {
@@ -51,6 +92,6 @@ class TakServer(db.Model, TimestampMixin):
             # For PyTAK, we'll need to extract the cert and key from P12
             # This will be handled in the COT service
             config['PYTAK_TLS_CLIENT_P12'] = self.cert_p12
-            config['PYTAK_TLS_CLIENT_PASSWORD'] = self.cert_password
+            config['PYTAK_TLS_CLIENT_PASSWORD'] = self.get_cert_password()
 
         return config

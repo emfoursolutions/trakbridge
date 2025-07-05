@@ -1,7 +1,7 @@
 # routes/admin.py
 
 from flask import Blueprint, render_template, jsonify, current_app, abort
-import asyncio
+
 
 import platform
 import os
@@ -60,17 +60,6 @@ def admin_dashboard():
     )
 
 
-@bp.route('/health')
-def admin_health_check():
-    """Basic system health check (suitable for docker / kubernetes liveness probes)"""
-    from database import db
-    try:
-        db.session.execute('SELECT 1')  # Quick DB ping
-        return jsonify(status='healthy', uptime=str(get_uptime())), 200
-    except Exception as e:
-        return jsonify(status='unhealthy', error=str(e)), 500
-
-
 @bp.route('/version')
 def admin_version():
     version = get_app_version()
@@ -80,24 +69,6 @@ def admin_version():
 @bp.route('/about')
 def admin_about():
     return render_template('admin/about.html')
-
-
-@bp.route('/plugin-health', methods=['GET'])
-def plugin_health():
-    plugin_manager = getattr(current_app, "plugin_manager", None)
-    stream_manager = getattr(current_app, "stream_manager", None)
-    if not plugin_manager:
-        return jsonify({"error": "Plugin manager not available"}), 500
-    if not stream_manager:
-        return jsonify({"error": "Stream manager not available"}), 500
-
-    # Use the background event loop from stream_manager
-    future = asyncio.run_coroutine_threadsafe(
-        plugin_manager.check_all_plugins_health(),
-        stream_manager.loop
-    )
-    health_status = future.result()
-    return jsonify(health_status)
 
 
 def get_uptime():

@@ -1,21 +1,21 @@
-# =============================================================================
-# app.py - Enhanced Flask Application with Fixed Startup
-# =============================================================================
-from flask import Flask, render_template, has_app_context
-from flask_migrate import Migrate
-import os
-import logging
+# Standard library imports
 import atexit
+import logging
+import os
+import signal
+import threading
+import time
+
+# Third-party imports
+from dotenv import load_dotenv
+from flask import Flask, has_app_context, render_template
+from flask_migrate import Migrate
 from sqlalchemy import event
 from sqlalchemy.pool import Pool
-import signal
-import time
-from dotenv import load_dotenv
-import threading
 
-# Import config system
+# Local application imports
 from config.environments import get_config
-from database import db  # Import db from database.py
+from database import db
 
 # Initialize extensions
 migrate = Migrate()

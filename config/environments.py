@@ -1,10 +1,23 @@
-# =============================================================================
-# config/environments.py - Environment-specific Configuration Classes
-# =============================================================================
+"""
+File: config/environments.py
 
-import os
+Description:
+    Loads the Environment Variable Configuration for TrakBridge
+
+Author: {{AUTHOR}}
+Created: 2025-07-05
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import logging
-from typing import Dict, Any
+import os
+
+# Third-party imports
+from typing import Any, Dict
+
+# Local application imports
 from .base import BaseConfig
 
 logger = logging.getLogger(__name__)
@@ -181,8 +194,8 @@ class ProductionConfig(BaseConfig):
         issues = super().validate_config()
 
         # Additional production-specific validations
-        #if self.secret_manager.get_secret('DB_TYPE', 'sqlite') == 'sqlite':
-        #    issues.append("SQLite is not recommended for production use")
+        if self.secret_manager.get_secret('DB_TYPE', 'sqlite') == 'sqlite':
+            issues.append("SQLite is not recommended for production use")
 
         # Check for secure settings
         if self.HTTP_TIMEOUT < 30:

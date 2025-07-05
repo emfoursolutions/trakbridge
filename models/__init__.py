@@ -1,11 +1,18 @@
-# This file makes the models directory a Python package
-# and helps with import ordering
+"""
+File: models/__init__.py
 
-from database import db
+Description:
+    Package initialisation for the models
 
-# Import all models here to ensure they're registered with SQLAlchemy
-from database import TimestampMixin
+Author: {{AUTHOR}}
+Created: 2025-07-05
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Local application imports
 from .tak_server import TakServer
-from .stream import Stream  # Assuming you have a Stream model
+from .stream import Stream
+from database import db, TimestampMixin
 
 __all__ = ['db', 'TimestampMixin', 'TakServer', 'Stream']

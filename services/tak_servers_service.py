@@ -121,8 +121,8 @@ class TakServerService:
 
             # Parse the PKCS#12 certificate
             try:
-                # Get password from database field
-                password = server.cert_password.encode('utf-8') if server.cert_password else None
+                # Get decrypted password from database field
+                password = server.get_cert_password().encode('utf-8') if server.get_cert_password() else None
 
                 private_key, certificate, additional_certificates = pkcs12.load_key_and_certificates(
                     cert_data,
@@ -302,8 +302,9 @@ class TakServerConnectionTester:
                 if cert_file:
                     config_dict['PYTAK_TLS_CLIENT_CERT'] = cert_file
                     config_dict['PYTAK_TLS_CLIENT_KEY'] = cert_file  # P12 contains both
-                    if server.cert_password:
-                        config_dict['PYTAK_TLS_CLIENT_PASSWORD'] = server.cert_password
+                    cert_password = server.get_cert_password()
+                    if cert_password:
+                        config_dict['PYTAK_TLS_CLIENT_PASSWORD'] = cert_password
 
                 if not server.verify_ssl:
                     config_dict['PYTAK_TLS_DONT_VERIFY'] = '1'

@@ -8,6 +8,7 @@ import logging
 import time
 import threading
 import psutil
+import asyncio
 from services.health_service import health_service
 
 bp = Blueprint('health', __name__)
@@ -49,6 +50,30 @@ def get_cached_health_check(check_name, check_function, *args, **kwargs):
                 'timestamp': now
             }
             return error_result
+
+
+@bp.route('/status')
+def api_status():
+    """API endpoint for system status"""
+    # Import models inside the route to avoid circular imports
+    from models.stream import Stream
+    from models.tak_server import TakServer
+
+    streams = Stream.query.all()
+
+    # Handle stream_manager import carefully
+    try:
+        from services.stream_manager import stream_manager
+        running_workers = len(stream_manager.workers)
+    except ImportError:
+        running_workers = 0
+
+    return jsonify({
+        'total_streams': len(streams),
+        'active_streams': sum(1 for s in streams if s.is_active),
+        'tak_servers': TakServer.query.count(),
+        'running_workers': running_workers
+    })
 
 
 @bp.route('/health')
@@ -175,6 +200,24 @@ def check_encryption_health():
             'error': str(e),
             'error_type': type(e).__name__
         }
+
+
+@bp.route('/health/plugins', methods=['GET'])
+def plugin_health():
+    plugin_manager = getattr(current_app, "plugin_manager", None)
+    stream_manager = getattr(current_app, "stream_manager", None)
+    if not plugin_manager:
+        return jsonify({"error": "Plugin manager not available"}), 500
+    if not stream_manager:
+        return jsonify({"error": "Stream manager not available"}), 500
+
+    # Use the background event loop from stream_manager
+    future = asyncio.run_coroutine_threadsafe(
+        plugin_manager.check_all_plugins_health(),
+        stream_manager.loop
+    )
+    health_status = future.result()
+    return jsonify(health_status)
 
 
 def check_stream_manager_health():
@@ -357,8 +400,7 @@ def check_tak_servers_health():
                 {
                     'name': server.name,
                     'host': server.host,
-                    'port': server.port,
-                    'enabled': server.enabled
+                    'port': server.port
                 }
                 for server in tak_servers
             ]

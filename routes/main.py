@@ -33,27 +33,6 @@ def index():
                            total_streams=len(streams))
 
 
-@bp.route('/api/status')
-def api_status():
-    """API endpoint for system status"""
-    # Import models inside the route to avoid circular imports
-    from models.stream import Stream
-    from models.tak_server import TakServer
 
-    streams = Stream.query.all()
-
-    # Handle stream_manager import carefully
-    try:
-        from services.stream_manager import stream_manager
-        running_workers = len(stream_manager.workers)
-    except ImportError:
-        running_workers = 0
-
-    return jsonify({
-        'total_streams': len(streams),
-        'active_streams': sum(1 for s in streams if s.is_active),
-        'tak_servers': TakServer.query.count(),
-        'running_workers': running_workers
-    })
 
 

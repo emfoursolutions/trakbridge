@@ -54,17 +54,15 @@ class HealthService:
                     'size': db.engine.pool.size(),
                     'checked_in': db.engine.pool.checkedin(),
                     'checked_out': db.engine.pool.checkedout(),
-                    'overflow': db.engine.pool.overflow(),
-                    'invalid': db.engine.pool.invalid()
-                }
+                    'overflow': db.engine.pool.overflow()
+                },
+                'timestamp': datetime.now(timezone.utc).isoformat()
             }
-
         except Exception as e:
-            logger.error(f"Database health check failed: {e}")
             return {
                 'status': 'unhealthy',
                 'error': str(e),
-                'error_type': type(e).__name__
+                'timestamp': datetime.now(timezone.utc).isoformat()
             }
     
     def check_connection_pool_health(self) -> Dict[str, Any]:
@@ -76,7 +74,6 @@ class HealthService:
                 'checked_in': pool.checkedin(),
                 'checked_out': pool.checkedout(),
                 'overflow': pool.overflow(),
-                'invalid': pool.invalid(),
                 'utilization_percent': round((pool.checkedout() / pool.size()) * 100, 2) if pool.size() > 0 else 0
             }
             
@@ -84,9 +81,9 @@ class HealthService:
             if pool_stats['utilization_percent'] > 80:
                 status = 'warning'
                 message = 'High connection pool utilization'
-            elif pool_stats['invalid'] > 0:
+            elif pool_stats['checked_out'] > pool_stats['size'] * 0.9:
                 status = 'warning'
-                message = f'{pool_stats["invalid"]} invalid connections detected'
+                message = 'High number of checked out connections'
             else:
                 status = 'healthy'
                 message = 'Connection pool healthy'

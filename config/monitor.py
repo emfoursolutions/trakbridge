@@ -1,16 +1,26 @@
-# =============================================================================
-# config/monitor.py - Configuration Monitoring and Hot-Reloading
-# =============================================================================
+"""
+File: config/monitor.py
 
+Description:
+    Loads the configuration monitor. Enables the dynamic reloading of configuration changes.
+
+Author: {{AUTHOR}}
+Created: 2025-07-05
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
+import logging
 import os
 import time
-import threading
-import logging
 from pathlib import Path
-from typing import Dict, Any, List, Callable, Optional
+
+# Third-party imports
+from typing import Any, Callable, Dict, List, Optional
+from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler, FileModifiedEvent
-import yaml
+
 
 logger = logging.getLogger(__name__)
 

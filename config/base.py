@@ -1,15 +1,27 @@
-# =============================================================================
-# config/base.py - Base Configuration System
-# =============================================================================
+"""
+File: config/base.py
 
-import os
-import yaml
+Description:
+    Loads the Base Configuration for TrakBridge
+
+Author: {{AUTHOR}}
+Created: 2025-07-05
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import logging
+import os
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict
 from urllib.parse import quote_plus
 
-from .secrets import get_secret_manager, SecretManager
+# Third-party imports
+import yaml
+
+# Local application imports
+from .secrets import get_secret_manager
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +57,8 @@ class ConfigLoader:
             logger.error(f"Failed to load configuration file {filename}: {e}")
             return {}
 
-    def get_config_value(self, config: Dict[str, Any], *keys: str, default: Any = None) -> Any:
+    @staticmethod
+    def get_config_value(config: Dict[str, Any], *keys: str, default: Any = None) -> Any:
         """Get a nested configuration value."""
         value = config
         for key in keys:
@@ -298,7 +311,8 @@ class BaseConfig:
 
         return default
 
-    def _get_nested_value(self, config: Dict[str, Any], keys: list) -> Any:
+    @staticmethod
+    def _get_nested_value(config: Dict[str, Any], keys: list) -> Any:
         """Get nested value from config using list of keys."""
         value = config
         for key in keys:
