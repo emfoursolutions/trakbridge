@@ -1,5 +1,5 @@
 # =============================================================================
-# routes/health.py - Health Check Routes
+# routes/health.py - Health Check Routes (Updated)
 # =============================================================================
 
 from flask import Blueprint, jsonify, current_app
@@ -8,8 +8,7 @@ import logging
 import time
 import threading
 import psutil
-from sqlalchemy import text
-from database import db
+from services.health_service import health_service
 
 bp = Blueprint('health', __name__)
 logger = logging.getLogger(__name__)
@@ -69,7 +68,7 @@ def detailed_health_check():
     start_time = time.time()
 
     checks = {
-        'database': get_cached_health_check('database', check_database_health),
+        'database': get_cached_health_check('database', health_service.run_all_database_checks),
         'encryption': get_cached_health_check('encryption', check_encryption_health),
         'stream_manager': get_cached_health_check('stream_manager', check_stream_manager_health),
         'system': get_cached_health_check('system', check_system_health),
@@ -120,7 +119,7 @@ def readiness_check():
 
     for check_name in checks:
         if check_name == 'database':
-            result = get_cached_health_check('database', check_database_health)
+            result = get_cached_health_check('database', health_service.check_database_connectivity)
         elif check_name == 'encryption':
             result = get_cached_health_check('encryption', check_encryption_health)
 
@@ -148,44 +147,20 @@ def liveness_check():
     })
 
 
+@bp.route('/health/database')
+def database_health():
+    """Database-specific health check"""
+    result = get_cached_health_check('database', health_service.run_all_database_checks)
+    
+    # Return appropriate HTTP status code
+    status_code = 503 if result.get('status') == 'unhealthy' else 200
+    return jsonify(result), status_code
+
+
+# Legacy function for backward compatibility
 def check_database_health():
-    """Check database connectivity and basic operations"""
-    try:
-        start_time = time.time()
-
-        # Test basic connectivity
-        db.session.execute(text('SELECT 1'))
-
-        # Test table access
-        from models.stream import Stream
-        from models.tak_server import TakServer
-
-        stream_count = Stream.query.count()
-        tak_server_count = TakServer.query.count()
-
-        response_time = round((time.time() - start_time) * 1000, 2)
-
-        return {
-            'status': 'healthy',
-            'response_time_ms': response_time,
-            'stream_count': stream_count,
-            'tak_server_count': tak_server_count,
-            'connection_pool': {
-                'size': db.engine.pool.size(),
-                'checked_in': db.engine.pool.checkedin(),
-                'checked_out': db.engine.pool.checkedout(),
-                'overflow': db.engine.pool.overflow(),
-                'invalid': db.engine.pool.invalid()
-            }
-        }
-
-    except Exception as e:
-        logger.error(f"Database health check failed: {e}")
-        return {
-            'status': 'unhealthy',
-            'error': str(e),
-            'error_type': type(e).__name__
-        }
+    """Legacy database health check - now delegates to health service"""
+    return health_service.check_database_connectivity()
 
 
 def check_encryption_health():
