@@ -1,12 +1,37 @@
-# =============================================================================
-# plugins/spot_plugin.py - SPOT Satellite Tracker Plugin
-# =============================================================================
+"""
+File: plugins/spot_plugin.py
 
-from typing import List, Dict, Any
-import aiohttp
-from datetime import datetime
+Description:
+    Plugin implementation for fetching and processing location data from SPOT Satellite trackers.
+    Connects to the SPOT public feed API using a feed ID and optional password, supports
+    configuration validation specific to SPOT, and provides detailed metadata for UI integration.
+    Implements asynchronous fetching of location messages, parses and standardizes the data,
+    and supports connection testing with detailed results. Designed to integrate with the
+    BaseGPSPlugin framework, supporting secure config handling and logging.
+
+Key features:
+    - Fetches the latest location updates from SPOT API
+    - Parses and normalizes raw SPOT message data into a common location format
+    - Provides user-friendly setup and help instructions as metadata
+    - Validates SPOT-specific configuration parameters
+    - Supports async connection testing with error handling and feedback
+
+Author: {{AUTHOR}}
+Created: 2025-07-05
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import ssl
+from datetime import datetime
+from typing import List, Dict, Any
+
+# Third-party imports
+import aiohttp
 import certifi
+
+# Local application imports
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
 
 

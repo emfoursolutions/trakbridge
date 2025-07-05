@@ -1,16 +1,34 @@
-# =============================================================================
-# plugins/plugin_manager.py - Enhanced Plugin Management with API Support
-# =============================================================================
+"""
+File: plugins/plugin_manager.py
 
-from typing import Dict, Type, Optional, List, Any, Union, TYPE_CHECKING
+Description:
+    Manages discovery, loading, registration, and lifecycle of GPS tracking plugins.
+    Supports plugin configuration, validation, metadata extraction, connection testing,
+    runtime health checks, and dynamic reloading. Integrates with the stream model for
+    system-wide plugin orchestration.
+
+Author: {{AUTHOR}}
+Created: 2025-07-05
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import importlib
+import inspect
 import logging
 import os
-import inspect
 import pkgutil
-from services.exceptions import (
-    PluginError, PluginNotFoundError, PluginConfigurationError,
-    PluginConnectionError, PluginTimeoutError
+
+# Third-party imports
+from typing import (
+    Dict,
+    Type,
+    Optional,
+    List,
+    Any,
+    Union,
+    TYPE_CHECKING,
 )
 
 if TYPE_CHECKING:

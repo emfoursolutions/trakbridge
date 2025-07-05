@@ -1,16 +1,42 @@
-# =============================================================================
-# plugins/traccar_plugin.py - Traccar GPS Platform Plugin (SSL Timeout Fixed)
-# =============================================================================
+"""
+File: plugins/traccar_plugin.py
 
-from typing import List, Dict, Any
-import aiohttp
+Description:
+    Plugin implementation for fetching and processing location data from the Traccar GPS tracking platform.
+    Connects to a Traccar server REST API using basic authentication, supports secure HTTPS connections,
+    device filtering, and configurable request timeouts. Implements asynchronous fetching of device and position data,
+    normalizes and enriches GPS positions with detailed metadata including speed, altitude, battery, and ignition status.
+    Provides detailed metadata for UI integration, validates configuration parameters specific to Traccar,
+    and supports enhanced async connection testing with comprehensive results and logging.
+    Designed to integrate with the BaseGPSPlugin framework, supporting secure config handling and robust error handling.
+
+Key features:
+    - Fetches current GPS positions and device information from Traccar REST API
+    - Normalizes raw position data into a standardized location format with detailed attributes
+    - Supports device name filtering and configurable API timeouts
+    - Validates Traccar-specific configuration including server URL and credentials
+    - Handles SSL context and connection optimizations to prevent timeouts
+    - Provides async connection testing with detailed success/error feedback and device counts
+
+Author: {{AUTHOR}}
+Created: 2025-07-05
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import asyncio
-import certifi
+import json
 import ssl
 from datetime import datetime, timezone
-import json
 
+# Third-party imports
+import aiohttp
+import certifi
+
+# Local application imports
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
+from typing import List, Dict, Any
 
 
 class TraccarPlugin(BaseGPSPlugin):

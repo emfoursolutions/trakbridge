@@ -1,15 +1,38 @@
-# =============================================================================
-# plugins/garmin_plugin.py - Enhanced Garmin KML Feed Plugin with Metadata
-# =============================================================================
+"""
+File: plugins/garmin_plugin.py
 
-from typing import List, Dict, Any
-import aiohttp
+Description:
+    Garmin InReach KML plugin for GPS tracking. This plugin connects to Garmin MapShare
+    feeds using authenticated requests, fetches and parses KML data, and extracts
+    standardized location information for use with TAK servers. It supports retries,
+    SSL verification, extended metadata extraction, device filtering (e.g., hiding
+    inactive devices), and integration with the plugin framework for metadata-driven
+    configuration and UI generation.
+
+Key features:
+    - Fetches the latest location updates from Garmin MapShare API
+    - Parses and normalizes raw SPOT message data into a Cursor on Target format
+    - Provides user-friendly setup and help instructions as metadata
+    - Validates Garmin configuration parameters
+    - Supports async connection testing with error handling and feedback
+
+Author: {{AUTHOR}}
+Created: 2025-07-05
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import asyncio
 import ssl
-import certifi
 from datetime import datetime, timezone
+
+# Third-party imports
+import aiohttp
+import certifi
 from fastkml import kml
 
+# Local application imports
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
 
 

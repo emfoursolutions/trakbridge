@@ -1,11 +1,26 @@
-# =============================================================================
-# plugins/base_plugin.py - Enhanced Base Plugin Class with Persistent COT Support
-# =============================================================================
+"""
+File: plugins/base_plugin.py
 
-from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
-import aiohttp
+Description:
+    Defines the abstract base class for GPS tracking plugins, providing a standard
+    interface, common configuration validation, encryption support for sensitive fields,
+    and integration with the persistent COT event system. Includes helper classes and
+    methods to support plugin metadata, dynamic configuration UI generation, and
+    asynchronous communication with TAK servers.
+
+Author: {{AUTHOR}}
+Created: 2025-07-05
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import logging
+from abc import ABC, abstractmethod
+
+# Third-party imports
+import aiohttp
+from typing import Any, Dict, List, Optional
 
 
 class PluginConfigField:
