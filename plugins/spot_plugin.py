@@ -143,8 +143,13 @@ class SpotPlugin(BaseGPSPlugin):
                     messages = self._parse_spot_response(data)
 
                     if not messages:
-                        self.logger.info("No messages found from SPOT")
-                        return []
+                        # Check if this was due to a JSON error (like feed not found)
+                        if "response" in data and "errors" in data.get("response", {}):
+                            self.logger.error("SPOT API returned error in JSON response")
+                            return []
+                        else:
+                            self.logger.info("No messages found from SPOT")
+                            return []
 
                     # Find the newest message by timestamp
                     newest_message = max(messages,
@@ -204,9 +209,15 @@ class SpotPlugin(BaseGPSPlugin):
                 errors = feed_response["errors"]["error"]
                 if isinstance(errors, list):
                     for error in errors:
-                        self.logger.error(f"SPOT API error: {error.get('description', 'Unknown error')}")
+                        error_code = error.get('code', 'Unknown')
+                        error_text = error.get('text', 'Unknown error')
+                        error_desc = error.get('description', 'Unknown error')
+                        self.logger.error(f"SPOT API error {error_code}: {error_text} - {error_desc}")
                 else:
-                    self.logger.error(f"SPOT API error: {errors.get('description', 'Unknown error')}")
+                    error_code = errors.get('code', 'Unknown')
+                    error_text = errors.get('text', 'Unknown error')
+                    error_desc = errors.get('description', 'Unknown error')
+                    self.logger.error(f"SPOT API error {error_code}: {error_text} - {error_desc}")
                 return []
 
             messages_container = feed_response.get("messages", {})

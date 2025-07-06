@@ -190,7 +190,7 @@
 
                     <!-- Action Buttons -->
                     <div class="d-flex justify-content-between">
-                        <button type="button" class="btn btn-outline-info" id="testBtn" onclick="testServer({{ server.id }})">
+                        <button type="button" class="btn btn-outline-info" onclick="testServerConfig()" title="Test Connection">
                             <i class="fas fa-network-wired"></i> Test Connection
                         </button>
                         <div>
@@ -315,100 +315,83 @@
 {% block scripts %}
 <script>
 // Improved test server function with better visual feedback
-function testServer(serverId) {
-    const testBtn = document.getElementById('testBtn');
-    const originalContent = testBtn.innerHTML;
-    const connectionStatus = document.getElementById('connectionStatus');
-    const connectionResults = document.getElementById('connectionResults');
-
+function testServerConfig() {
+    const button = event.target.closest('button');
+    const originalContent = button.innerHTML;
+    
     // Show loading state
-    testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
-    testBtn.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    button.disabled = true;
+    
+    // Collect form data
+    const formData = {
+        name: document.getElementById('name').value,
+        host: document.getElementById('host').value,
+        port: parseInt(document.getElementById('port').value),
+        protocol: document.getElementById('protocol').value,
+        verify_ssl: document.getElementById('verify_ssl').checked
+    };
+    
+    // Handle certificate file if present
+    const certFile = document.getElementById('cert_p12_file');
+    if (certFile && certFile.files.length > 0) {
+        const file = certFile.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            // Convert to base64
+            const base64 = btoa(String.fromCharCode(...new Uint8Array(e.target.result)));
+            formData.cert_p12 = base64;
+            
+            // Handle password if present
+            const password = document.getElementById('cert_password');
+            if (password && password.value) {
+                formData.cert_password = password.value;
+            }
+            
+            // Send test request
+            sendTestRequest(formData, button, originalContent);
+        };
+        reader.readAsArrayBuffer(file);
+    } else {
+        // Send test request without certificate
+        sendTestRequest(formData, button, originalContent);
+    }
+}
 
-    // Show connection status card
-    connectionStatus.style.display = 'block';
-    connectionResults.innerHTML = `
-        <div class="d-flex align-items-center">
-            <div class="spinner-border spinner-border-sm text-primary me-3" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <div>
-                <h6 class="mb-1">Testing Connection</h6>
-                <small class="text-muted">Connecting to {{ server.host }}:{{ server.port }}...</small>
-            </div>
-        </div>
-    `;
-
-    fetch(`/tak-servers/${serverId}/test`, {
+function sendTestRequest(formData, button, originalContent) {
+    fetch('/tak-servers/test-config', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-        }
+        },
+        body: JSON.stringify(formData)
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Show success feedback
-            testBtn.innerHTML = '<i class="fas fa-check text-success"></i> Connected';
-            connectionResults.innerHTML = `
-                <div class="alert alert-success border-0 shadow-sm mb-0">
-                    <div class="d-flex align-items-center">
-                        <i class="fas fa-check-circle fa-2x text-success me-3"></i>
-                        <div>
-                            <h6 class="alert-heading mb-1">Connection Successful!</h6>
-                            <p class="mb-0 small">Successfully connected to {{ server.host }}:{{ server.port }}</p>
-                            ${data.response_time ? `<small class="text-muted">Response time: ${data.response_time}ms</small>` : ''}
-                        </div>
-                    </div>
-                </div>
-            `;
-
+            button.innerHTML = '<i class="fas fa-check text-success"></i>';
             setTimeout(() => {
-                testBtn.innerHTML = originalContent;
-                testBtn.disabled = false;
-            }, 3000);
+                button.innerHTML = originalContent;
+                button.disabled = false;
+            }, 2000);
+            showAlert('success', 'Connection test successful!');
         } else {
-            // Show error feedback
-            testBtn.innerHTML = '<i class="fas fa-times text-danger"></i> Failed';
-            connectionResults.innerHTML = `
-                <div class="alert alert-danger border-0 shadow-sm mb-0">
-                    <div class="d-flex align-items-center">
-                        <i class="fas fa-exclamation-circle fa-2x text-danger me-3"></i>
-                        <div>
-                            <h6 class="alert-heading mb-1">Connection Failed</h6>
-                            <p class="mb-0 small">${data.error || 'Unable to connect to server'}</p>
-                            <small class="text-muted">Check server configuration and network connectivity</small>
-                        </div>
-                    </div>
-                </div>
-            `;
-
+            button.innerHTML = '<i class="fas fa-times text-danger"></i>';
             setTimeout(() => {
-                testBtn.innerHTML = originalContent;
-                testBtn.disabled = false;
-            }, 5000);
+                button.innerHTML = originalContent;
+                button.disabled = false;
+            }, 2000);
+            showAlert('danger', 'Connection test failed: ' + data.error);
         }
     })
     .catch(error => {
-        console.error('Error testing server:', error);
-        testBtn.innerHTML = '<i class="fas fa-times text-danger"></i> Error';
-        connectionResults.innerHTML = `
-            <div class="alert alert-danger border-0 shadow-sm mb-0">
-                <div class="d-flex align-items-center">
-                    <i class="fas fa-exclamation-triangle fa-2x text-danger me-3"></i>
-                    <div>
-                        <h6 class="alert-heading mb-1">Test Error</h6>
-                        <p class="mb-0 small">An error occurred while testing the connection</p>
-                        <small class="text-muted">Please try again or check the console for details</small>
-                    </div>
-                </div>
-            </div>
-        `;
-
+        console.error('Error:', error);
+        button.innerHTML = '<i class="fas fa-times text-danger"></i>';
         setTimeout(() => {
-            testBtn.innerHTML = originalContent;
-            testBtn.disabled = false;
-        }, 5000);
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        }, 2000);
+        showAlert('danger', 'Network error occurred during connection test');
     });
 }
 

@@ -350,3 +350,54 @@ def test_tak_server(server_id):
         logger.error(f"Connection test error for server {server_id}: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+@bp.route('/test-config', methods=['POST'])
+def test_tak_server_config():
+    """Test TAK server configuration without saving to database"""
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['name', 'host', 'port', 'protocol']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({
+                    'success': False,
+                    'error': f'Missing required field: {field}'
+                }), 400
+        
+        # Create a temporary server object for testing
+        from models.tak_server import TakServer
+        temp_server = TakServer(
+            name=data['name'],
+            host=data['host'],
+            port=data['port'],
+            protocol=data.get('protocol', 'tls'),
+            verify_ssl=data.get('verify_ssl', True)
+        )
+        
+        # Handle certificate data if provided
+        if 'cert_p12' in data and data['cert_p12']:
+            # Decode base64 certificate data
+            import base64
+            cert_data = base64.b64decode(data['cert_p12'])
+            temp_server.cert_p12 = cert_data
+            
+            # Handle certificate password if provided
+            if 'cert_password' in data and data['cert_password']:
+                temp_server.set_cert_password(data['cert_password'])
+        
+        # Test the connection using the existing service
+        from services.tak_servers_service import TakServerService
+        
+        # Test connection using static method
+        result = asyncio.run(TakServerService.test_server_connection(temp_server))
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+

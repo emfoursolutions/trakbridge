@@ -96,8 +96,8 @@
                 <button type="submit" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Create Stream
                 </button>
-                <button type="button" class="btn btn-outline-info" onclick="testConnection()" id="test-btn" style="display: none;">
-                    <i class="fas fa-link"></i> Test Connection
+                <button type="button" class="btn btn-outline-info" onclick="testStreamConfig()" title="Test Connection">
+                    <i class="fas fa-network-wired"></i> Test Connection
                 </button>
                 <a href="{{ url_for('streams.list_streams') }}" class="btn btn-secondary">Cancel</a>
             </div>
@@ -142,11 +142,9 @@ function updatePluginConfig() {
     const pluginType = document.getElementById('plugin_type').value;
     const configSection = document.getElementById('plugin-config-section');
     const helpContent = document.getElementById('help-content');
-    const testBtn = document.getElementById('test-btn');
 
     if (!pluginType) {
         configSection.style.display = 'none';
-        testBtn.style.display = 'none';
         helpContent.innerHTML = '<p class="text-muted">Select a Stream provider to see configuration instructions.</p>';
         return;
     }
@@ -163,9 +161,6 @@ function updatePluginConfig() {
 
     // Update help content
     renderHelpContent(pluginMeta);
-
-    // Show test button
-    testBtn.style.display = 'inline-block';
 
     // Show config section
     configSection.style.display = 'block';
@@ -188,10 +183,11 @@ function renderPluginConfig(pluginMeta) {
 
 
 function generateFormField(field) {
-
+    const pluginType = document.getElementById('plugin_type').value;
     const fieldId = `plugin_${field.name}`;
     const isRequired = field.required ? 'required' : '';
     const placeholder = field.placeholder ? `placeholder="${field.placeholder}"` : '';
+    const dataPluginAttr = `data-plugin="${pluginType}"`;
 
     let inputHtml = '';
     // Use field.field_type instead of field.type (common in Python objects)
@@ -199,19 +195,19 @@ function generateFormField(field) {
 
     switch (fieldType) {
         case 'password':
-            inputHtml = `<input type="password" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder}>`;
+            inputHtml = `<input type="password" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} ${dataPluginAttr}>`;
             break;
         case 'url':
-            inputHtml = `<input type="url" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder}>`;
+            inputHtml = `<input type="url" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} ${dataPluginAttr}>`;
             break;
         case 'email':
-            inputHtml = `<input type="email" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder}>`;
+            inputHtml = `<input type="email" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} ${dataPluginAttr}>`;
             break;
         case 'number':
             const min = field.min ? `min="${field.min}"` : '';
             const max = field.max ? `max="${field.max}"` : '';
             const defaultVal = field.default ? `value="${field.default}"` : '';
-            inputHtml = `<input type="number" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${min} ${max} ${defaultVal}>`;
+            inputHtml = `<input type="number" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${min} ${max} ${defaultVal} ${dataPluginAttr}>`;
             break;
         case 'checkbox':
 
@@ -231,7 +227,7 @@ function generateFormField(field) {
             return `
                 <div class="mb-3">
                     <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="${fieldId}" name="${fieldId}" ${isChecked} ${isRequired}>
+                        <input class="form-check-input" type="checkbox" id="${fieldId}" name="${fieldId}" ${isChecked} ${isRequired} ${dataPluginAttr}>
                         <label class="form-check-label" for="${fieldId}">
                             ${field.label}${checkboxRequiredBadge}
                         </label>
@@ -243,14 +239,14 @@ function generateFormField(field) {
         case 'select':
             const options = field.options || [];
             const optionsHtml = options.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
-            inputHtml = `<select class="form-select" id="${fieldId}" name="${fieldId}" ${isRequired}>
+            inputHtml = `<select class="form-select" id="${fieldId}" name="${fieldId}" ${isRequired} ${dataPluginAttr}>
                 <option value="">Select ${field.label}</option>
                 ${optionsHtml}
             </select>`;
             break;
         default:
             const defaultValue = field.default_value ? `value="${field.default_value}"` : '';
-            inputHtml = `<input type="text" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} ${defaultValue}>`;
+            inputHtml = `<input type="text" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} ${defaultValue} ${dataPluginAttr}>`;
     }
 
     const requiredBadge = field.required ? '<span class="badge bg-danger ms-1">Required</span>' : '';
@@ -293,83 +289,66 @@ function renderHelpContent(pluginMeta) {
     helpContent.innerHTML = html;
 }
 
-function testConnection() {
-    const form = document.getElementById('streamForm');
-    const formData = new FormData(form);
-    const testBtn = document.getElementById('test-btn');
-    const testResults = document.getElementById('test-results');
-    const testResultsBody = document.getElementById('test-results-body');
-    const originalText = testBtn.innerHTML;
-
-    // Validate required fields first
-    const pluginType = formData.get('plugin_type');
-    if (!pluginType) {
-        showAlert('Please select a Stream provider first', 'warning');
-        return;
-    }
-
-    // Check if required plugin fields are filled
-    const pluginMeta = pluginMetadata[pluginType];
-    const requiredFields = pluginMeta.config_fields.filter(field => field.required);
-
-    for (const field of requiredFields) {
-        const fieldValue = formData.get(`plugin_${field.name}`);
-        if (!fieldValue) {
-            showAlert(`Please fill in the required field: ${field.label}`, 'warning');
-            return;
-        }
-    }
-
-    testBtn.disabled = true;
-    testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
-
-    // Convert FormData to JSON
-    const data = {};
-    for (let [key, value] of formData.entries()) {
-        data[key] = value;
-    }
-
-    fetch('/test-connection', {
+function testStreamConfig() {
+    const button = event.target.closest('button');
+    const originalContent = button.innerHTML;
+    
+    // Show loading state
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    button.disabled = true;
+    
+    // Collect form data
+    const formData = {
+        name: document.getElementById('name').value,
+        plugin_type: document.getElementById('plugin_type').value,
+        plugin_config: {}
+    };
+    
+    // Collect plugin-specific configuration
+    const pluginType = formData.plugin_type;
+    const configFields = document.querySelectorAll(`[data-plugin="${pluginType}"]`);
+    
+    configFields.forEach(field => {
+        // Extract the actual field name from the name attribute (remove 'plugin_' prefix)
+        const fieldName = field.name.replace('plugin_', '');
+        const fieldValue = field.type === 'checkbox' ? field.checked : field.value;
+        formData.plugin_config[fieldName] = fieldValue;
+    });
+    
+    // Send test request
+    fetch('/streams/test-config', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(formData)
     })
     .then(response => response.json())
     .then(data => {
-        testResults.style.display = 'block';
-
         if (data.success) {
-            testResultsBody.innerHTML = `
-                <div class="alert alert-success">
-                    <i class="fas fa-check-circle"></i> Connection successful!
-                    <br><small>Found ${data.device_count || 0} device(s)</small>
-                    ${data.devices && data.devices.length > 0 ?
-                        `<br><small>Devices: ${data.devices.join(', ')}</small>` : ''}
-                </div>
-            `;
+            button.innerHTML = '<i class="fas fa-check text-success"></i>';
+            setTimeout(() => {
+                button.innerHTML = originalContent;
+                button.disabled = false;
+            }, 2000);
+            showAlert('success', 'Connection test successful!');
         } else {
-            testResultsBody.innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="fas fa-exclamation-triangle"></i> Connection failed
-                    <br><small>${data.error || 'Unknown error'}</small>
-                </div>
-            `;
+            button.innerHTML = '<i class="fas fa-times text-danger"></i>';
+            setTimeout(() => {
+                button.innerHTML = originalContent;
+                button.disabled = false;
+            }, 2000);
+            showAlert('danger', 'Connection test failed: ' + data.error);
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        testResults.style.display = 'block';
-        testResultsBody.innerHTML = `
-            <div class="alert alert-danger">
-                <i class="fas fa-exclamation-triangle"></i> Network error occurred
-            </div>
-        `;
-    })
-    .finally(() => {
-        testBtn.disabled = false;
-        testBtn.innerHTML = originalText;
+        button.innerHTML = '<i class="fas fa-times text-danger"></i>';
+        setTimeout(() => {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        }, 2000);
+        showAlert('danger', 'Network error occurred during connection test');
     });
 }
 

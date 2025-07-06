@@ -416,3 +416,70 @@ def stop_all_streams():
     except Exception as e:
         logger.error(f"Error stopping all streams: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@bp.route('/test-config', methods=['POST'])
+def test_stream_config():
+    """Test stream configuration without saving to database"""
+    try:
+        data = request.get_json()
+        logger.info(f"Received test-config data: {data}")
+        logger.info(f"Plugin config type: {type(data.get('plugin_config'))}, value: {data.get('plugin_config')}")
+        
+        # Validate required fields
+        if 'plugin_type' not in data or not data['plugin_type']:
+            logger.error("Missing required field: plugin_type")
+            return jsonify({
+                'success': False,
+                'error': 'Missing required field: plugin_type'
+            }), 400
+        
+        # plugin_config can be empty for testing, but must be present
+        if 'plugin_config' not in data:
+            logger.error("Missing required field: plugin_config")
+            return jsonify({
+                'success': False,
+                'error': 'Missing required field: plugin_config'
+            }), 400
+        
+        # Test the connection using the plugin
+        from plugins.plugin_manager import get_plugin_manager
+        plugin_manager = get_plugin_manager()
+        
+        # Get plugin instance
+        plugin_instance = plugin_manager.get_plugin(data['plugin_type'], data['plugin_config'])
+        if not plugin_instance:
+            logger.error(f"Plugin type not found or failed to create: {data['plugin_type']}")
+            return jsonify({
+                'success': False,
+                'error': f'Plugin type not found: {data["plugin_type"]}'
+            }), 400
+        
+        logger.info(f"Created plugin instance for {data['plugin_type']} with config: {data['plugin_config']}")
+        
+        # Test connection
+        import asyncio
+        try:
+            logger.info("Starting connection test...")
+            # Run the test connection
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(plugin_instance.test_connection())
+            loop.close()
+            
+            logger.info(f"Connection test result: {result}")
+            return jsonify(result)
+            
+        except Exception as e:
+            logger.error(f"Connection test failed with exception: {e}", exc_info=True)
+            return jsonify({
+                'success': False,
+                'error': f'Connection test failed: {str(e)}'
+            }), 500
+        
+    except Exception as e:
+        logger.error(f"Test config failed with exception: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500

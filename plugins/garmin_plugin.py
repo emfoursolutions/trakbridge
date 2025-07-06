@@ -370,11 +370,20 @@ class GarminPlugin(BaseGPSPlugin):
                         return content
 
                     elif response.status == 401:
+                        error_text = await response.text()
                         self.logger.error("Unauthorized access (401). Check Garmin credentials.")
                         return None
-
+                    elif response.status == 403:
+                        error_text = await response.text()
+                        self.logger.error("Forbidden access (403). Check user permissions.")
+                        return None
+                    elif response.status == 404:
+                        error_text = await response.text()
+                        self.logger.error("Resource not found (404). Check the KML feed URL.")
+                        return None
                     else:
-                        self.logger.error(f"Error fetching KML feed: HTTP {response.status}")
+                        error_text = await response.text()
+                        self.logger.error(f"Error fetching KML feed: HTTP {response.status}: {error_text}")
 
             except ssl.SSLError as ssl_err:
                 self.logger.warning(f"SSL Error on attempt {attempt + 1}: {ssl_err}")

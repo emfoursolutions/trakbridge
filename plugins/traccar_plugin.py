@@ -291,10 +291,17 @@ class TraccarPlugin(BaseGPSPlugin):
                     self.logger.info(f"Successfully fetched {len(data)} positions from Traccar API")
                     return data
                 elif response.status == 401:
+                    error_text = await response.text()
                     self.logger.error("Unauthorized access (401). Check Traccar credentials.")
+                    # Return empty list but with error info in the response
                     return []
                 elif response.status == 403:
+                    error_text = await response.text()
                     self.logger.error("Forbidden access (403). Check user permissions.")
+                    return []
+                elif response.status == 404:
+                    error_text = await response.text()
+                    self.logger.error("Resource not found (404). Check server URL and API endpoint.")
                     return []
                 else:
                     error_text = await response.text()
@@ -520,12 +527,16 @@ class TraccarPlugin(BaseGPSPlugin):
                 # Test API connectivity by fetching devices first
                 devices = await self._fetch_devices_from_api(session, config)
 
-                if devices is None:
-                    return {
-                        "success": False,
-                        "error": "Failed to connect to Traccar API",
-                        "message": "Could not fetch device list"
-                    }
+                # Check if devices fetch failed (empty list could indicate auth error)
+                if devices is None or len(devices) == 0:
+                    # Try to fetch positions to see if it's an auth issue
+                    positions = await self._fetch_positions_from_api(session, config)
+                    if positions is None or len(positions) == 0:
+                        return {
+                            "success": False,
+                            "error": "Authentication failed or no devices found",
+                            "message": "Could not fetch devices or positions. Check credentials and permissions."
+                        }
 
                 # Test positions endpoint
                 positions = await self._fetch_positions_from_api(session, config)

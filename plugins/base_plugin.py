@@ -353,6 +353,14 @@ class BaseGPSPlugin(ABC):
                         "message": "Connection test failed"
                     }
 
+                # Check if we got an empty list - this could indicate authentication failure
+                if len(locations) == 0:
+                    return {
+                        "success": False,
+                        "error": "No devices found - check credentials and permissions",
+                        "message": "Connection successful but no devices returned. This may indicate authentication or permission issues."
+                    }
+
                 device_names = [loc.get("name", "Unknown") for loc in locations]
 
                 return {
@@ -360,6 +368,37 @@ class BaseGPSPlugin(ABC):
                     "message": f"Successfully connected and found {len(locations)} device(s)",
                     "device_count": len(locations),
                     "devices": device_names
+                }
+        
+        except aiohttp.ClientResponseError as e:
+            # Handle specific HTTP status codes
+            if e.status == 401:
+                self.logger.error(f"[{self.__class__.__name__}] Authentication failed (401): {e}")
+                return {
+                    "success": False,
+                    "error": f"HTTP 401 Unauthorized: {e.message}",
+                    "message": "Authentication failed. Check your username and password."
+                }
+            elif e.status == 403:
+                self.logger.error(f"[{self.__class__.__name__}] Access forbidden (403): {e}")
+                return {
+                    "success": False,
+                    "error": f"HTTP 403 Forbidden: {e.message}",
+                    "message": "Access forbidden. Check your user permissions."
+                }
+            elif e.status == 404:
+                self.logger.error(f"[{self.__class__.__name__}] Resource not found (404): {e}")
+                return {
+                    "success": False,
+                    "error": f"HTTP 404 Not Found: {e.message}",
+                    "message": "Resource not found. Check the server URL and API endpoint."
+                }
+            else:
+                self.logger.error(f"[{self.__class__.__name__}] HTTP error {e.status}: {e}")
+                return {
+                    "success": False,
+                    "error": f"HTTP {e.status}: {e.message}",
+                    "message": f"HTTP error occurred: {e.status}"
                 }
 
         except Exception as e:
