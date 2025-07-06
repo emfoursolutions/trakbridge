@@ -205,6 +205,102 @@ class EncryptionService:
 
         return decrypted_config
 
+    def rotate_database_keys(self, new_master_key: str) -> Dict[str, Any]:
+        """
+        Rotate encryption keys for database records (certificate passwords and stream plugin passwords)
+        """
+        try:
+            from models.tak_server import TakServer
+            from models.stream import Stream
+            from database import db
+            from plugins.plugin_manager import get_plugin_manager
+            import json
+
+            rotated_count = 0
+            errors = []
+
+            # Create new service with new key
+            new_service = EncryptionService(new_master_key)
+
+            # 1. Rotate TAK server certificate passwords
+            servers = TakServer.query.filter(TakServer.cert_password.isnot(None)).all()
+            for server in servers:
+                try:
+                    # Decrypt with current key
+                    old_password = self.decrypt_value(server.cert_password)
+
+                    # Encrypt with new key
+                    new_encrypted_password = new_service.encrypt_value(old_password)
+
+                    # Update the database record
+                    server.cert_password = new_encrypted_password
+                    rotated_count += 1
+
+                except Exception as e:
+                    error_msg = f"Failed to rotate certificate password for server {server.name} (ID: {server.id}): {e}"
+                    errors.append(error_msg)
+                    self.logger.error(error_msg)
+
+            # 2. Rotate stream plugin passwords
+            streams = Stream.query.filter(Stream.plugin_config.isnot(None)).all()
+            plugin_manager = get_plugin_manager()
+
+            for stream in streams:
+                try:
+                    if not stream.plugin_config:
+                        continue
+
+                    # Get plugin metadata to identify sensitive fields
+                    metadata = plugin_manager.get_plugin_metadata(stream.plugin_type)
+                    if not metadata:
+                        continue
+
+                    # Get list of sensitive fields
+                    sensitive_fields = []
+                    for field_data in metadata.get("config_fields", []):
+                        if isinstance(field_data, dict) and field_data.get("sensitive"):
+                            sensitive_fields.append(field_data["name"])
+                        elif hasattr(field_data, 'sensitive') and field_data.sensitive:
+                            sensitive_fields.append(field_data.name)
+
+                    if not sensitive_fields:
+                        continue
+
+                    # Get current config and decrypt sensitive fields
+                    current_config = stream.get_plugin_config()
+
+                    # Re-encrypt sensitive fields with new key
+                    rotated_config = new_service.encrypt_config(current_config, sensitive_fields)
+
+                    # Update the stream's plugin config
+                    stream.plugin_config = json.dumps(rotated_config)
+                    rotated_count += 1
+
+                except Exception as e:
+                    error_msg = f"Failed to rotate plugin passwords for stream {stream.name} (ID: {stream.id}): {e}"
+                    errors.append(error_msg)
+                    self.logger.error(error_msg)
+
+            # Commit all changes
+            if rotated_count > 0:
+                db.session.commit()
+
+            return {
+                "success": True,
+                "message": f"Successfully rotated {rotated_count} encrypted passwords (certificates + plugin configs)",
+                "rotated_count": rotated_count,
+                "errors": errors
+            }
+
+        except Exception as e:
+            self.logger.error(f"Database key rotation failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "rotated_count": 0,
+                "errors": [str(e)]
+            }
+
     def rotate_key(self, new_master_key: str, config_data: Dict[str, Any], sensitive_fields: list) -> Dict[str, Any]:
         """
         Rotate encryption key by decrypting with old key and encrypting with new key

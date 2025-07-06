@@ -1,3 +1,25 @@
+"""
+File: routes/cot_types.py
+
+Description:
+    Displays all Cursor-on-Target (COT) event types in a structured format for review, filtering, and analysis.
+    Fetches data from the YAML-backed configuration via the `cot_type_service`, computes classification statistics,
+    and renders a UI view with error handling and status feedback. This route provides support for reviewing all known
+    COT event types categorized as friendly, hostile, neutral, unknown, or other.
+
+Key features:
+    - Loads and parses COT type definitions from a YAML configuration
+    - Computes statistical breakdowns by affiliation and category
+    - Renders a structured HTML template with the parsed and analyzed data
+    - Gracefully handles missing or malformed data with user-friendly error messaging
+    - Supports logging for debugging and operational visibility
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
 from flask import Blueprint, render_template
 import logging
 

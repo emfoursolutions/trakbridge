@@ -7,6 +7,7 @@ import threading
 import time
 
 # Third-party imports
+import click
 from dotenv import load_dotenv
 from flask import Flask, has_app_context, render_template
 from flask_migrate import Migrate
@@ -358,7 +359,7 @@ def setup_cleanup_handlers():
                     logger.info("Stream manager shutdown completed")
             except RuntimeError as e:
                 if "Working outside of application context" in str(e):
-                    logger.info("Application context not available during shutdown, skipping stream manager cleanup")
+                    logger.debug("Application context not available during shutdown, skipping stream manager cleanup")
                 else:
                     logger.error(f"Error during stream cleanup: {e}")
             except Exception as e:
@@ -479,3 +480,4 @@ if __name__ == '__main__':
         db.create_all()
 
     app.run(debug=False, port=8080, threaded=True)
+

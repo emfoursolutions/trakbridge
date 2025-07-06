@@ -240,7 +240,7 @@
                                 </span>
                             </div>
                             <small class="text-muted">
-                                {% if server.cert_password %}Password protected P12 file{% else %}No password set{% endif %}
+                                {% if server.has_cert_password() %}Password protected P12 file{% else %}No password set{% endif %}
                             </small>
                         </div>
                         {% endif %}

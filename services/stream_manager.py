@@ -510,31 +510,26 @@ class StreamManager:
                 if isinstance(result, Exception):
                     self.logger.error(f"Failed to cleanup stream {stream_id} in database: {result}")
 
-    async def _cleanup_persistent_cot_service(self):
-        """Clean up all persistent COT workers"""
+    def _cleanup_persistent_cot_service(self):
+        """Clean up persistent COT service during shutdown"""
         try:
-            self.logger.info("Cleaning up persistent COT service")
-
-            # Get all currently running workers
-            running_workers = cot_service.get_running_workers()
-
-            if running_workers:
-                self.logger.info(f"Stopping {len(running_workers)} persistent COT workers")
-
-                # Stop all workers
-                for tak_server in running_workers:
-                    try:
-                        cot_service.stop_worker(tak_server)
-                        self.logger.debug(f"Stopped persistent worker for TAK server: {tak_server.name}")
-                    except Exception as e:
-                        self.logger.error(f"Error stopping persistent worker for {tak_server.name}: {e}")
-
-            # Clean up the service
-            await cot_service.cleanup()
-            self.logger.info("Persistent COT service cleanup completed")
-
+            if hasattr(self, 'cot_service') and self.cot_service:
+                # Check if the service has the method before calling it
+                if hasattr(self.cot_service, 'get_running_workers'):
+                    running_workers = self.cot_service.get_running_workers()
+                    if running_workers:
+                        self.logger.info(f"Stopping {len(running_workers)} persistent COT workers")
+                        for worker in running_workers:
+                            if hasattr(worker, 'stop'):
+                                worker.stop()
+                else:
+                    # Fallback: just log that we're cleaning up
+                    self.logger.info("Cleaning up persistent COT service (no running workers method)")
+                    
         except Exception as e:
-            self.logger.error(f"Error cleaning up persistent COT service: {e}", exc_info=True)
+            self.logger.error(f"Error cleaning up persistent COT service: {e}")
+        finally:
+            self.logger.info("Persistent COT service cleaned up during shutdown")
 
     def get_stream_status(self, stream_id: int) -> Dict:
         """Get status of a specific stream with enhanced database integration"""

@@ -4,7 +4,7 @@
 
 import logging
 import time
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, Optional, List, Dict, Any
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import timezone, datetime
 if TYPE_CHECKING:
@@ -128,7 +128,14 @@ class DatabaseManager:
             tak_copy.protocol = stream.tak_server.protocol
             tak_copy.verify_ssl = stream.tak_server.verify_ssl
             tak_copy.cert_p12 = stream.tak_server.cert_p12
-            tak_copy.cert_password = stream.tak_server.cert_password
+            tak_copy.cert_password = stream.tak_server.get_cert_password()
+            tak_copy.has_cert_password = stream.tak_server.has_cert_password
+            
+            # Add method to get cert password (for compatibility)
+            def get_cert_password():
+                return tak_copy.cert_password
+            
+            tak_copy.get_cert_password = get_cert_password
             stream_copy.tak_server = tak_copy
         else:
             stream_copy.tak_server = None

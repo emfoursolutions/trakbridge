@@ -36,6 +36,10 @@ class TakServer(db.Model, TimestampMixin):
     def __repr__(self):
         return f'<TakServer {self.name}>'
 
+    def has_cert_password(self) -> bool:
+        """Check if a certificate password is set"""
+        return bool(self.cert_password)
+
     def get_cert_password(self) -> str:
         """Get the decrypted certificate password"""
         if not self.cert_password:

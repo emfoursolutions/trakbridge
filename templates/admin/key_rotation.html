@@ -1,0 +1,487 @@
+{% extends "base.html" %}
+
+{% block title %}Key Rotation - Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-key"></i> Encryption Key Rotation
+                </h1>
+                <a href="{{ url_for('admin.admin_dashboard') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+
+            <!-- System Information -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-database"></i> Database Information
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Type:</strong></td>
+                                    <td><span class="badge bg-primary">{{ db_info.type|title }}</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Path:</strong></td>
+                                    <td><code>{{ db_info.path }}</code></td>
+                                </tr>
+                                {% if db_info.error %}
+                                <tr>
+                                    <td><strong>Error:</strong></td>
+                                    <td><span class="text-danger">{{ db_info.error }}</span></td>
+                                </tr>
+                                {% endif %}
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-shield-alt"></i> Key Storage
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Method:</strong></td>
+                                    <td>
+                                        {% if storage_info.method == 'environment_variable' %}
+                                            <span class="badge bg-success">Environment Variable</span>
+                                        {% elif storage_info.method == 'file' %}
+                                            <span class="badge bg-info">File</span>
+                                        {% elif storage_info.method == 'generated' %}
+                                            <span class="badge bg-warning">Generated</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Unknown</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% if storage_info.method == 'environment_variable' %}
+                                <tr>
+                                    <td><strong>Variable:</strong></td>
+                                    <td><code>{{ storage_info.name }}</code></td>
+                                </tr>
+                                {% elif storage_info.method == 'file' %}
+                                <tr>
+                                    <td><strong>Path:</strong></td>
+                                    <td><code>{{ storage_info.path }}</code></td>
+                                </tr>
+                                {% endif %}
+                                <tr>
+                                    <td><strong>Secure:</strong></td>
+                                    <td>
+                                        {% if storage_info.secure %}
+                                            <span class="badge bg-success">Yes</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">No</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% if storage_info.warning %}
+                                <tr>
+                                    <td><strong>Warning:</strong></td>
+                                    <td><span class="text-warning">{{ storage_info.warning }}</span></td>
+                                </tr>
+                                {% endif %}
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Rotation Form -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-sync-alt"></i> Rotate Encryption Key
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <strong>Warning:</strong> Key rotation will re-encrypt all certificate passwords in the database. 
+                                Make sure you have a backup before proceeding.
+                            </div>
+
+                            <form id="keyRotationForm">
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <div class="mb-3">
+                                            <label for="newKey" class="form-label">New Master Key</label>
+                                            <input type="password" class="form-control" id="newKey" name="newKey" 
+                                                   placeholder="Enter new encryption key" required>
+                                            <div class="form-text">
+                                                The new key must be at least 32 characters long and will be used to re-encrypt all data.
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">&nbsp;</label>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="createBackup" name="createBackup" checked>
+                                                <label class="form-check-label" for="createBackup">
+                                                    Create database backup
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="d-flex gap-2">
+                                    <button type="submit" class="btn btn-primary" id="startRotationBtn">
+                                        <i class="fas fa-play"></i> Start Key Rotation
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" id="generateKeyBtn">
+                                        <i class="fas fa-magic"></i> Generate Key
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rotation Status -->
+            <div class="row mb-4" id="rotationStatusSection" style="display: none;">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-tasks"></i> Rotation Status
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="rotationStatus">
+                                <div class="text-center">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p class="mt-2">Starting key rotation...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rotation Log -->
+            <div class="row" id="rotationLogSection" style="display: none;">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-list"></i> Rotation Log
+                            </h5>
+                            <button class="btn btn-sm btn-outline-secondary" id="refreshLogBtn">
+                                <i class="fas fa-sync-alt"></i> Refresh
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="rotationLog" style="max-height: 400px; overflow-y: auto;">
+                                <!-- Log entries will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Restart Information -->
+            <div class="row mt-4" id="restartInfoSection" style="display: none;">
+                <div class="col-12">
+                    <div class="card border-warning">
+                        <div class="card-header bg-warning text-dark">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-exclamation-triangle"></i> Application Restart Required
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="restartInfo">
+                                <!-- Restart information will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Generate Key Modal -->
+<div class="modal fade" id="generateKeyModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Generated Encryption Key</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Here's a securely generated encryption key:</p>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="generatedKey" readonly>
+                    <button class="btn btn-outline-secondary" type="button" id="copyKeyBtn">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+                <div class="alert alert-info mt-3">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Important:</strong> Save this key securely. You'll need it to decrypt data if you lose access to the application.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="useGeneratedKeyBtn">Use This Key</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let rotationInterval = null;
+
+$(document).ready(function() {
+    // Generate key button
+    $('#generateKeyBtn').click(function() {
+        // Generate a secure random key
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+        let key = '';
+        for (let i = 0; i < 64; i++) {
+            key += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        $('#generatedKey').val(key);
+        $('#generateKeyModal').modal('show');
+    });
+
+    // Use generated key
+    $('#useGeneratedKeyBtn').click(function() {
+        $('#newKey').val($('#generatedKey').val());
+        $('#generateKeyModal').modal('hide');
+    });
+
+    // Copy key button
+    $('#copyKeyBtn').click(function() {
+        const keyField = document.getElementById('generatedKey');
+        keyField.select();
+        document.execCommand('copy');
+        
+        // Show feedback
+        const btn = $(this);
+        const originalText = btn.html();
+        btn.html('<i class="fas fa-check"></i> Copied!');
+        setTimeout(() => {
+            btn.html(originalText);
+        }, 2000);
+    });
+
+    // Key rotation form submission
+    $('#keyRotationForm').submit(function(e) {
+        e.preventDefault();
+        
+        const newKey = $('#newKey').val();
+        const createBackup = $('#createBackup').is(':checked');
+        
+        if (!newKey || newKey.length < 32) {
+            alert('New key must be at least 32 characters long');
+            return;
+        }
+        
+        if (!confirm('Are you sure you want to start key rotation? This will re-encrypt all certificate passwords.')) {
+            return;
+        }
+        
+        // Disable form
+        $('#startRotationBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Starting...');
+        
+        // Start rotation
+        $.ajax({
+            url: '{{ url_for("admin.start_key_rotation") }}',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                new_key: newKey,
+                create_backup: createBackup
+            }),
+            success: function(response) {
+                if (response.success) {
+                    $('#rotationStatusSection').show();
+                    $('#rotationLogSection').show();
+                    startStatusPolling();
+                } else {
+                    alert('Failed to start rotation: ' + response.error);
+                    $('#startRotationBtn').prop('disabled', false).html('<i class="fas fa-play"></i> Start Key Rotation');
+                }
+            },
+            error: function(xhr) {
+                const response = xhr.responseJSON || {};
+                alert('Error starting rotation: ' + (response.error || 'Unknown error'));
+                $('#startRotationBtn').prop('disabled', false).html('<i class="fas fa-play"></i> Start Key Rotation');
+            }
+        });
+    });
+
+    // Refresh log button
+    $('#refreshLogBtn').click(function() {
+        updateRotationStatus();
+    });
+
+    function startStatusPolling() {
+        if (rotationInterval) {
+            clearInterval(rotationInterval);
+        }
+        
+        rotationInterval = setInterval(function() {
+            updateRotationStatus();
+        }, 2000);
+    }
+
+    function updateRotationStatus() {
+        $.ajax({
+            url: '{{ url_for("admin.get_rotation_status") }}',
+            method: 'GET',
+            success: function(response) {
+                updateStatusDisplay(response);
+                
+                // Stop polling if rotation is complete
+                if (response.completed) {
+                    clearInterval(rotationInterval);
+                    rotationInterval = null;
+                    $('#startRotationBtn').prop('disabled', false).html('<i class="fas fa-play"></i> Start Key Rotation');
+                    
+                    // Show restart information
+                    showRestartInfo();
+                }
+            },
+            error: function(xhr) {
+                console.error('Error updating status:', xhr);
+            }
+        });
+    }
+
+    function updateStatusDisplay(status) {
+        const statusDiv = $('#rotationStatus');
+        const logDiv = $('#rotationLog');
+        
+        // Update status
+        if (status.is_rotating) {
+            statusDiv.html(`
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Key rotation in progress...</p>
+                </div>
+            `);
+        } else if (status.completed) {
+            statusDiv.html(`
+                <div class="text-center text-success">
+                    <i class="fas fa-check-circle fa-3x"></i>
+                    <h4 class="mt-2">Key Rotation Completed!</h4>
+                    <p>All certificate passwords have been re-encrypted with the new key.</p>
+                </div>
+            `);
+        }
+        
+        // Update log
+        if (status.log && status.log.length > 0) {
+            let logHtml = '';
+            status.log.forEach(function(entry) {
+                const icon = entry.message.includes('✅') ? 'fas fa-check text-success' :
+                           entry.message.includes('❌') ? 'fas fa-times text-danger' :
+                           entry.message.includes('⚠️') ? 'fas fa-exclamation-triangle text-warning' :
+                           entry.message.includes('🔄') ? 'fas fa-sync-alt text-primary' :
+                           entry.message.includes('📊') ? 'fas fa-chart-bar text-info' :
+                           entry.message.includes('🔧') ? 'fas fa-wrench text-secondary' :
+                           'fas fa-info-circle text-info';
+                
+                logHtml += `
+                    <div class="d-flex align-items-start mb-2">
+                        <i class="${icon} me-2 mt-1"></i>
+                        <div class="flex-grow-1">
+                            <small class="text-muted">${entry.timestamp}</small>
+                            <div>${entry.message}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            logDiv.html(logHtml);
+            logDiv.scrollTop(logDiv[0].scrollHeight);
+        }
+    }
+
+    function showRestartInfo() {
+        $.ajax({
+            url: '{{ url_for("admin.get_restart_info") }}',
+            method: 'GET',
+            success: function(response) {
+                const restartDiv = $('#restartInfo');
+                let html = '<p><strong>To apply the new encryption key, restart the application:</strong></p>';
+                
+                if (response.method === 'systemd') {
+                    html += `
+                        <div class="alert alert-info">
+                            <i class="fas fa-terminal"></i>
+                            <strong>Systemd Service:</strong><br>
+                            <code>${response.instruction}</code>
+                        </div>
+                    `;
+                } else if (response.method === 'supervisor') {
+                    html += `
+                        <div class="alert alert-info">
+                            <i class="fas fa-terminal"></i>
+                            <strong>Supervisor:</strong><br>
+                            <code>${response.instruction}</code>
+                        </div>
+                    `;
+                } else if (response.method === 'container') {
+                    html += `
+                        <div class="alert alert-info">
+                            <i class="fas fa-docker"></i>
+                            <strong>Docker Container:</strong><br>
+                            ${response.instruction}
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>Manual Restart Required:</strong><br>
+                            ${response.instruction}
+                        </div>
+                    `;
+                }
+                
+                restartDiv.html(html);
+                $('#restartInfoSection').show();
+            },
+            error: function(xhr) {
+                const response = xhr.responseJSON || {};
+                $('#restartInfo').html(`
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Manual Restart Required:</strong><br>
+                        Please restart the application manually to apply the new encryption key.
+                    </div>
+                `);
+                $('#restartInfoSection').show();
+            }
+        });
+    }
+});
+</script>
+{% endblock %} 

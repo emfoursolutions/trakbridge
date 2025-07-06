@@ -398,7 +398,7 @@ class EnhancedCOTService:
                 logger.debug("Extracting P12 certificate for PyTAK")
                 cert_pem, key_pem = EnhancedCOTService._extract_p12_certificate(
                     tak_server.cert_p12,
-                    tak_server.cert_password
+                    tak_server.get_cert_password()
                 )
                 cert_path, key_path = EnhancedCOTService._create_temp_cert_files(cert_pem, key_pem)
                 logger.debug(f"Created temporary cert files: {cert_path}, {key_path}")
@@ -530,7 +530,7 @@ class EnhancedCOTService:
                     try:
                         cert_pem, key_pem = EnhancedCOTService._extract_p12_certificate(
                             tak_server.cert_p12,
-                            tak_server.cert_password
+                            tak_server.get_cert_password()
                         )
                         cert_path, key_path = EnhancedCOTService._create_temp_cert_files(cert_pem, key_pem)
                         ssl_context.load_cert_chain(certfile=cert_path, keyfile=key_path)
@@ -881,7 +881,7 @@ class PersistentCOTService:
                 try:
                     cert_pem, key_pem = EnhancedCOTService._extract_p12_certificate(
                         tak_server.cert_p12,
-                        tak_server.cert_password
+                        tak_server.get_cert_password()
                     )
                     cert_path, key_path = EnhancedCOTService._create_temp_cert_files(cert_pem, key_pem)
                     config.set('pytak', 'PYTAK_TLS_CLIENT_CERT', cert_path)

@@ -165,16 +165,22 @@ function deleteServer(serverId) {
 function showAlert(type, message) {
     // Create alert element
     const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = `
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        max-width: 400px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    `;
     alertDiv.setAttribute('role', 'alert');
     alertDiv.innerHTML = `
         ${message}
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     `;
     
-    // Insert at top of content
-    const contentDiv = document.querySelector('[role="main"]') || document.querySelector('.container-fluid');
-    contentDiv.insertBefore(alertDiv, contentDiv.firstChild);
+    // Add to body to ensure it's above everything
+    document.body.appendChild(alertDiv);
     
     // Auto-dismiss after 5 seconds
     setTimeout(() => {

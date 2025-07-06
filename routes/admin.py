@@ -2,17 +2,21 @@
 File: routes/admin.py
 
 Description:
-    Admin dashboard blueprint for the TAKBridge application. Provides basic UI views and JSON endpoints
-    to monitor system status, such as uptime, application version, number of configured streams and TAK servers,
-    and how many streams are actively running. Includes optional admin access control for future use
-    and utilities to calculate system uptime and retrieve the application version from metadata or environment.
+   Admin dashboard blueprint for the TAKBridge application. Provides comprehensive administrative
+   interface with system monitoring, key rotation management, and application status endpoints.
+   Displays real-time metrics including uptime, stream counts, server statistics, and system
+   information. Features secure key rotation capabilities with backup options and status tracking.
 
 Key features:
-    - `/admin/`: Renders a dashboard view with system and application metrics
-    - `/admin/version`: Returns app version and uptime as a JSON response
-    - `/admin/about`: Static "About" page for admin interface
-    - `get_uptime()`: Calculates server uptime since app startup
-    - `get_app_version()`: Retrieves application version from installed package metadata or fallback env var
+   - `/admin/`: Main dashboard with system metrics, stream/server counts, and platform info
+   - `/admin/version`: JSON endpoint returning app version and uptime information
+   - `/admin/about`: Static about page for administrative interface
+   - `/admin/key-rotation`: Key rotation management interface with system status
+   - `/admin/key-rotation/start`: POST endpoint to initiate key rotation process
+   - `/admin/key-rotation/status`: Real-time key rotation status monitoring
+   - `/admin/key-rotation/restart-info`: Application restart information endpoint
+   - `get_uptime()`: Calculates server uptime since application startup
+   - `get_app_version()`: Retrieves version from package metadata or environment fallback
 
 Author: {{AUTHOR}}
 Created: 2025-07-05
@@ -24,10 +28,14 @@ Version: {{VERSION}}
 import os
 import time
 import datetime
+import platform
 import importlib.metadata
 
 # Third-party imports
-from flask import Blueprint, render_template, jsonify, current_app, abort
+from flask import Blueprint, render_template, current_app, request, jsonify, flash, redirect, url_for
+
+# Local application imports
+from services.key_rotation_service import get_key_rotation_service
 
 
 bp = Blueprint('admin', __name__)
@@ -38,11 +46,9 @@ start_time = time.time()
 
 @bp.route('/')
 def admin_dashboard():
-    import datetime, time, platform
     from models.stream import Stream
     from models.tak_server import TakServer
     from database import db
-    from flask import current_app
 
     # Make sure start_time is defined somewhere globally
     uptime = datetime.timedelta(seconds=int(time.time() - start_time))
@@ -77,6 +83,70 @@ def admin_version():
 @bp.route('/about')
 def admin_about():
     return render_template('admin/about.html')
+
+
+@bp.route('/key-rotation')
+def key_rotation_page():
+    """Key rotation management page"""
+    try:
+        key_rotation_service = get_key_rotation_service()
+        
+        # Get current system information
+        db_info = key_rotation_service.get_database_info()
+        storage_info = key_rotation_service.get_key_storage_info()
+        rotation_status = key_rotation_service.get_rotation_status()
+        
+        return render_template('admin/key_rotation.html',
+                             db_info=db_info,
+                             storage_info=storage_info,
+                             rotation_status=rotation_status)
+    except Exception as e:
+        flash(f'Error loading key rotation page: {e}', 'error')
+        return redirect(url_for('admin.admin_dashboard'))
+
+
+@bp.route('/key-rotation/start', methods=['POST'])
+def start_key_rotation():
+    """Start key rotation process"""
+    try:
+        data = request.get_json()
+        new_key = data.get('new_key')
+        create_backup = data.get('create_backup', True)
+        
+        if not new_key:
+            return jsonify({'success': False, 'error': 'New key is required'}), 400
+        
+        key_rotation_service = get_key_rotation_service()
+        result = key_rotation_service.start_rotation(new_key, create_backup, current_app._get_current_object())
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@bp.route('/key-rotation/status')
+def get_rotation_status():
+    """Get current rotation status"""
+    try:
+        key_rotation_service = get_key_rotation_service()
+        status = key_rotation_service.get_rotation_status()
+        return jsonify(status)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/key-rotation/restart-info')
+def get_restart_info():
+    """Get application restart information"""
+    try:
+        key_rotation_service = get_key_rotation_service()
+        restart_info = key_rotation_service.restart_application()
+        return jsonify(restart_info)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 def get_uptime():
