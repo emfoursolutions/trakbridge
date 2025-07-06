@@ -1,31 +1,39 @@
-# routes/admin.py
+"""
+File: routes/admin.py
 
-from flask import Blueprint, render_template, jsonify, current_app, abort
+Description:
+    Admin dashboard blueprint for the TAKBridge application. Provides basic UI views and JSON endpoints
+    to monitor system status, such as uptime, application version, number of configured streams and TAK servers,
+    and how many streams are actively running. Includes optional admin access control for future use
+    and utilities to calculate system uptime and retrieve the application version from metadata or environment.
 
+Key features:
+    - `/admin/`: Renders a dashboard view with system and application metrics
+    - `/admin/version`: Returns app version and uptime as a JSON response
+    - `/admin/about`: Static "About" page for admin interface
+    - `get_uptime()`: Calculates server uptime since app startup
+    - `get_app_version()`: Retrieves application version from installed package metadata or fallback env var
 
-import platform
+Author: {{AUTHOR}}
+Created: 2025-07-05
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import os
 import time
 import datetime
 import importlib.metadata
-import psutil
+
+# Third-party imports
+from flask import Blueprint, render_template, jsonify, current_app, abort
+
 
 bp = Blueprint('admin', __name__)
 
 # Capture app start time for uptime display
 start_time = time.time()
-
-
-# Optional: simple decorator for future admin access control
-def admin_required(func):
-    def wrapper(*args, **kwargs):
-        # Replace with real auth check if needed
-        if not current_app.debug:  # Allow unrestricted access only in debug mode
-            abort(403)
-        return func(*args, **kwargs)
-
-    wrapper.__name__ = func.__name__
-    return wrapper
 
 
 @bp.route('/')

@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 import aiohttp
 import certifi
 from fastkml import kml
+from typing import List, Dict, Any
 
 # Local application imports
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField

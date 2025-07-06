@@ -31,12 +31,12 @@ import ssl
 from datetime import datetime, timezone
 
 # Third-party imports
+from typing import List, Dict, Any
 import aiohttp
 import certifi
 
 # Local application imports
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
-from typing import List, Dict, Any
 
 
 class TraccarPlugin(BaseGPSPlugin):
