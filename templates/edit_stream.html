@@ -389,14 +389,14 @@ function testStreamConfig() {
                 button.innerHTML = originalContent;
                 button.disabled = false;
             }, 2000);
-            showAlert('success', 'Connection test successful!');
+            showAlert('Connection test successful!', 'success');
         } else {
             button.innerHTML = '<i class="fas fa-times text-danger"></i>';
             setTimeout(() => {
                 button.innerHTML = originalContent;
                 button.disabled = false;
             }, 2000);
-            showAlert('danger', 'Connection test failed: ' + data.error);
+            showAlert('Connection test failed: ' + data.error, 'danger');
         }
     })
     .catch(error => {
@@ -406,7 +406,7 @@ function testStreamConfig() {
             button.innerHTML = originalContent;
             button.disabled = false;
         }, 2000);
-        showAlert('danger', 'Network error occurred during connection test');
+        showAlert('Network error occurred during connection test', 'danger');
     });
 }
 

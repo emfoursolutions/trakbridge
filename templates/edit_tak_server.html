@@ -374,14 +374,14 @@ function sendTestRequest(formData, button, originalContent) {
                 button.innerHTML = originalContent;
                 button.disabled = false;
             }, 2000);
-            showAlert('success', 'Connection test successful!');
+            showAlert('Connection test successful!', 'success');
         } else {
             button.innerHTML = '<i class="fas fa-times text-danger"></i>';
             setTimeout(() => {
                 button.innerHTML = originalContent;
                 button.disabled = false;
             }, 2000);
-            showAlert('danger', 'Connection test failed: ' + data.error);
+            showAlert('Connection test failed: ' + data.error, 'danger');
         }
     })
     .catch(error => {
@@ -391,10 +391,54 @@ function sendTestRequest(formData, button, originalContent) {
             button.innerHTML = originalContent;
             button.disabled = false;
         }, 2000);
-        showAlert('danger', 'Network error occurred during connection test');
+        showAlert('Network error occurred during connection test', 'danger');
     });
 }
+     // Helper function to show alerts
+     function showAlert(message, type = 'info') {
+        // Remove existing alerts
+        const existingAlerts = document.querySelectorAll('.alert:not(.alert-warning):not(#cert_info)');
+        existingAlerts.forEach(alert => {
+            if (!alert.classList.contains('alert-warning') || !alert.innerHTML.includes('Warning:')) {
+                alert.remove();
+            }
+        });
 
+        // Create new alert
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.setAttribute('role', 'alert');
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+
+        // Find the best place to insert the alert
+        const titleRow = document.querySelector('.d-flex.justify-content-between.flex-wrap');
+        const mainRow = document.querySelector('.row');
+
+        if (titleRow && titleRow.parentNode) {
+            // Insert after the title row
+            titleRow.parentNode.insertBefore(alertDiv, titleRow.nextSibling);
+        } else if (mainRow && mainRow.parentNode) {
+            // Insert before the main content row
+            mainRow.parentNode.insertBefore(alertDiv, mainRow);
+        } else {
+            // Fallback: prepend to body content
+            const contentDiv = document.querySelector('[role="main"]') || document.body;
+            contentDiv.insertBefore(alertDiv, contentDiv.firstChild);
+        }
+
+        // Auto-dismiss after 5 seconds for non-error messages
+        if (type !== 'danger') {
+            setTimeout(() => {
+                if (alertDiv && alertDiv.parentNode) {
+                    alertDiv.remove();
+                }
+            }, 5000);
+        }
+    }
+    
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('editServerForm');
     const protocolSelect = document.getElementById('protocol');
@@ -447,14 +491,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
 
             if (!validExtensions.includes(fileExtension)) {
-                showAlert('warning', 'Please select a valid P12/PFX certificate file (.p12, .pfx, .pkcs12)');
+                showAlert('Please select a valid P12/PFX certificate file (.p12, .pfx, .pkcs12)', 'warning');
                 resetCertificateState();
                 return;
             }
 
             // Check file size (max 5MB)
             if (file.size > 5 * 1024 * 1024) {
-                showAlert('warning', 'Certificate file is too large. Maximum size is 5MB.');
+                showAlert('Certificate file is too large. Maximum size is 5MB.', 'warning');
                 resetCertificateState();
                 return;
             }
@@ -510,7 +554,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Validate certificate
     validateCertBtn.addEventListener('click', function() {
         if (!currentCertFile) {
-            showAlert('warning', 'Please select a certificate file first.');
+            showAlert('Please select a certificate file first.', 'warning');
             return;
         }
 
@@ -594,7 +638,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Check certificate validation for TLS with certificate
         const protocol = protocolSelect.value;
         if (protocol === 'tls' && currentCertFile && !certValidated) {
-            showAlert('warning', 'Please validate the certificate before updating the server.');
+            showAlert('Please validate the certificate before updating the server.', 'warning');
             return;
         }
 
@@ -618,7 +662,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 // Handle redirect responses
                 if (response.redirected || response.status === 302) {
-                    showAlert('success', 'TAK Server updated successfully!');
+                    showAlert('TAK Server updated successfully!', 'success');
                     setTimeout(() => {
                         window.location.href = `/tak-servers/${serverId}`;
                     }, 1500);
@@ -629,7 +673,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (result && result.success) {
-                showAlert('success', 'TAK Server updated successfully!');
+                showAlert('TAK Server updated successfully!', 'success');
                 setTimeout(() => {
                     window.location.href = `/tak-servers/${serverId}`;
                 }, 1500);
@@ -638,57 +682,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (error) {
             console.error('Update error:', error);
-            showAlert('danger', 'Error updating server: ' + error.message);
+            showAlert('Error updating server: ' + error.message, 'danger');
         } finally {
             submitBtn.innerHTML = originalContent;
             submitBtn.disabled = false;
         }
     });
-
-     // Helper function to show alerts
-    function showAlert(type, message) {
-        // Remove existing alerts
-        const existingAlerts = document.querySelectorAll('.alert:not(.alert-warning):not(#cert_info)');
-        existingAlerts.forEach(alert => {
-            if (!alert.classList.contains('alert-warning') || !alert.innerHTML.includes('Warning:')) {
-                alert.remove();
-            }
-        });
-
-        // Create new alert
-        const alertDiv = document.createElement('div');
-        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-        alertDiv.setAttribute('role', 'alert');
-        alertDiv.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        `;
-
-        // Find the best place to insert the alert
-        const titleRow = document.querySelector('.d-flex.justify-content-between.flex-wrap');
-        const mainRow = document.querySelector('.row');
-
-        if (titleRow && titleRow.parentNode) {
-            // Insert after the title row
-            titleRow.parentNode.insertBefore(alertDiv, titleRow.nextSibling);
-        } else if (mainRow && mainRow.parentNode) {
-            // Insert before the main content row
-            mainRow.parentNode.insertBefore(alertDiv, mainRow);
-        } else {
-            // Fallback: prepend to body content
-            const contentDiv = document.querySelector('[role="main"]') || document.body;
-            contentDiv.insertBefore(alertDiv, contentDiv.firstChild);
-        }
-
-        // Auto-dismiss after 5 seconds for non-error messages
-        if (type !== 'danger') {
-            setTimeout(() => {
-                if (alertDiv && alertDiv.parentNode) {
-                    alertDiv.remove();
-                }
-            }, 5000);
-        }
-    }
 
     // Auto-fill port based on protocol (only if default ports)
     protocolSelect.addEventListener('change', function() {

@@ -36,16 +36,16 @@ class ConnectionTestService:
                 # If session not available, create a temporary one
                 timeout = aiohttp.ClientTimeout(total=30)
                 async with aiohttp.ClientSession(timeout=timeout) as temp_session:
-                    success, device_count = await ConnectionTestService._perform_connection_test(
+                    success, device_count, error = await ConnectionTestService._perform_connection_test(
                         plugin_instance, temp_session
                     )
-                    return success, device_count, None
+                    return success, device_count, error
             else:
                 # Use shared session
-                success, device_count = await ConnectionTestService._perform_connection_test(
+                success, device_count, error = await ConnectionTestService._perform_connection_test(
                     plugin_instance, session
                 )
-                return success, device_count, None
+                return success, device_count, error
 
         except asyncio.TimeoutError:
             logger.error(f"Connection test timed out for plugin {plugin_type}")
@@ -79,19 +79,21 @@ class ConnectionTestService:
     async def _perform_connection_test(plugin_instance, session):
         """Perform the actual connection test with the plugin instance"""
         try:
-            # First test basic connection
-            connection_ok = await plugin_instance.test_connection()
-            if not connection_ok:
-                return False, 0
-
-            # Then try to fetch sample data to get device count
-            locations = await plugin_instance.fetch_locations(session)
-            device_count = len(locations) if locations else 0
-            return True, device_count
+            # Test connection using the plugin's enhanced test_connection method
+            result = await plugin_instance.test_connection()
+            
+            if not result.get("success", False):
+                # Return failure with error message
+                error_msg = result.get("error", "Unknown connection error")
+                return False, 0, error_msg
+            
+            # If successful, return success with device count
+            device_count = result.get("device_count", 0)
+            return True, device_count, None
 
         except Exception as e:
             logger.error(f"Error in connection test: {e}")
-            return False, 0
+            return False, 0, str(e)
 
     def test_plugin_connection_sync(self, plugin_type, plugin_config, timeout=30):
         """Synchronous wrapper for testing plugin connections"""
@@ -187,6 +189,7 @@ class ConnectionTestService:
                         'config_index': i
                     })
                 else:
+                    # result is now a 3-tuple: (success, device_count, error)
                     success, device_count, error = result
                     processed_results.append({
                         'success': success,
@@ -250,23 +253,23 @@ class ConnectionTestService:
                 return report
 
             # Test connection
-            success, device_count, error = self.test_plugin_connection_sync(plugin_type, plugin_config)
-            report['connection_test_passed'] = success
-            report['device_count'] = device_count
-            report['connection_error'] = error
+            result = self.test_plugin_connection_sync(plugin_type, plugin_config)
+            report['connection_test_passed'] = result['success']
+            report['device_count'] = result['device_count']
+            report['connection_error'] = result['error']
 
             # Add recommendations based on results
-            if not success:
+            if not result['success']:
                 report['recommendations'].extend([
                     'Check network connectivity to the data source',
                     'Verify authentication credentials are correct',
                     'Ensure the data source is accessible and responding'
                 ])
-            elif device_count == 0:
+            elif result['device_count'] == 0:
                 report['recommendations'].append(
                     'Connection successful but no devices found - check data source configuration')
             else:
-                report['recommendations'].append(f'Connection successful with {device_count} devices found')
+                report['recommendations'].append(f'Connection successful with {result["device_count"]} devices found')
 
             return report
 

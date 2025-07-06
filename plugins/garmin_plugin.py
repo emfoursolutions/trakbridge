@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 import aiohttp
 import certifi
 from fastkml import kml
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 # Local application imports
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
@@ -144,8 +144,11 @@ class GarminPlugin(BaseGPSPlugin):
             )
 
             if kml_data is None:
-                self.logger.warning("No KML data received from Garmin feed")
-                return []
+                self.logger.warning("No KML data received from Garmin feed - likely authentication or connection error")
+                return [{"_error": "401", "_error_message": "Authentication failed"}]
+            elif isinstance(kml_data, dict) and "_error" in kml_data:
+                # Return the error indicator as-is
+                return [kml_data]
 
             placemarks = self._parse_kml(kml_data)
 
@@ -328,7 +331,7 @@ class GarminPlugin(BaseGPSPlugin):
         return str(value).strip()
 
     async def _fetch_kml_feed(self, session: aiohttp.ClientSession, url: str,
-                              username: str, password: str, retries: int = 3) -> str:
+                              username: str, password: str, retries: int = 3) -> Optional[str]:
         """
         Fetch Garmin KML feed with retry mechanism
 
@@ -360,11 +363,11 @@ class GarminPlugin(BaseGPSPlugin):
                         # Validate content
                         if not content or content.isspace():
                             self.logger.error("Received empty KML feed")
-                            return None
+                            return {"_error": "invalid_url", "_error_message": "Empty response from server"}
 
                         if "<kml" not in content:
                             self.logger.error("Received non-KML content")
-                            return None
+                            return {"_error": "invalid_url", "_error_message": "Invalid KML feed URL"}
 
                         self.logger.info("KML Feed Successfully Fetched")
                         return content

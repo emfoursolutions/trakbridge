@@ -349,16 +349,73 @@ class BaseGPSPlugin(ABC):
                 if locations is None:
                     return {
                         "success": False,
-                        "error": "Failed to fetch location data",
+                        "error": "Failed: Unable to fetch location data",
                         "message": "Connection test failed"
                     }
 
+                # Check if the plugin returned an error indicator
+                if locations and len(locations) > 0 and isinstance(locations[0], dict) and "_error" in locations[0]:
+                    error_info = locations[0]
+                    error_code = error_info.get("_error", "unknown")
+                    error_message = error_info.get("_error_message", "Unknown error")
+                    
+                    # Map error codes to specific messages
+                    if error_code == "401":
+                        return {
+                            "success": False,
+                            "error": "Invalid Credentials",
+                            "message": "Authentication failed. Check your username and password."
+                        }
+                    elif error_code == "403":
+                        return {
+                            "success": False,
+                            "error": "Unauthorised Access",
+                            "message": "Access forbidden. Check your user permissions."
+                        }
+                    elif error_code == "404":
+                        return {
+                            "success": False,
+                            "error": "Invalid URL or API End Point",
+                            "message": "Resource not found. Check the server URL and API endpoint."
+                        }
+                    elif error_code == "500":
+                        return {
+                            "success": False,
+                            "error": "Server Error",
+                            "message": "Server error occurred. Please try again later."
+                        }
+                    elif error_code == "json_error":
+                        return {
+                            "success": False,
+                            "error": "Invalid Feed ID or Password",
+                            "message": "SPOT API returned an error. Check your feed ID and password."
+                        }
+                    elif error_code == "connection_failed":
+                        return {
+                            "success": False,
+                            "error": "Connection Failed - Unknown Error",
+                            "message": "Failed to fetch KML feed. Check your credentials and feed URL."
+                        }
+                    elif error_code == "invalid_url":
+                        return {
+                            "success": False,
+                            "error": "Invalid URL or API End Point",
+                            "message": "Invalid KML feed URL. Check the URL and ensure it's a valid Garmin MapShare feed."
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "error": f"HTTP {error_code} Error",
+                            "message": f"HTTP error occurred: {error_code}"
+                        }
+
                 # Check if we got an empty list - this could indicate authentication failure
                 if len(locations) == 0:
+                    # Since we're in a test_connection context, empty list likely means auth/permission error
                     return {
                         "success": False,
-                        "error": "No devices found - check credentials and permissions",
-                        "message": "Connection successful but no devices returned. This may indicate authentication or permission issues."
+                        "error": "Invalid Credentials or No Devices Found",
+                        "message": "No devices found. This usually indicates authentication or permission issues."
                     }
 
                 device_names = [loc.get("name", "Unknown") for loc in locations]
@@ -370,37 +427,6 @@ class BaseGPSPlugin(ABC):
                     "devices": device_names
                 }
         
-        except aiohttp.ClientResponseError as e:
-            # Handle specific HTTP status codes
-            if e.status == 401:
-                self.logger.error(f"[{self.__class__.__name__}] Authentication failed (401): {e}")
-                return {
-                    "success": False,
-                    "error": f"HTTP 401 Unauthorized: {e.message}",
-                    "message": "Authentication failed. Check your username and password."
-                }
-            elif e.status == 403:
-                self.logger.error(f"[{self.__class__.__name__}] Access forbidden (403): {e}")
-                return {
-                    "success": False,
-                    "error": f"HTTP 403 Forbidden: {e.message}",
-                    "message": "Access forbidden. Check your user permissions."
-                }
-            elif e.status == 404:
-                self.logger.error(f"[{self.__class__.__name__}] Resource not found (404): {e}")
-                return {
-                    "success": False,
-                    "error": f"HTTP 404 Not Found: {e.message}",
-                    "message": "Resource not found. Check the server URL and API endpoint."
-                }
-            else:
-                self.logger.error(f"[{self.__class__.__name__}] HTTP error {e.status}: {e}")
-                return {
-                    "success": False,
-                    "error": f"HTTP {e.status}: {e.message}",
-                    "message": f"HTTP error occurred: {e.status}"
-                }
-
         except Exception as e:
             self.logger.error(
                 f"[{self.__class__.__name__}] Connection test failed: {e}",
@@ -409,6 +435,6 @@ class BaseGPSPlugin(ABC):
             )
             return {
                 "success": False,
-                "error": str(e),
+                "error": f"{str(e)}",
                 "message": "Connection test failed"
             }

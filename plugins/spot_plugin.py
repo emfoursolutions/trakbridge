@@ -146,7 +146,7 @@ class SpotPlugin(BaseGPSPlugin):
                         # Check if this was due to a JSON error (like feed not found)
                         if "response" in data and "errors" in data.get("response", {}):
                             self.logger.error("SPOT API returned error in JSON response")
-                            return []
+                            return [{"_error": "json_error", "_error_message": "SPOT API returned error in response"}]
                         else:
                             self.logger.info("No messages found from SPOT")
                             return []
@@ -177,15 +177,15 @@ class SpotPlugin(BaseGPSPlugin):
 
                 elif response.status == 401:
                     self.logger.error("Unauthorized access to SPOT feed. Check feed password.")
-                    return []
+                    return [{"_error": "401", "_error_message": "Unauthorized access"}]
                 elif response.status == 404:
                     self.logger.error("SPOT feed not found. Check feed ID.")
-                    return []
+                    return [{"_error": "404", "_error_message": "Resource not found"}]
                 else:
                     self.logger.error(f"Error fetching SPOT data: HTTP {response.status}")
                     error_text = await response.text()
                     self.logger.debug(f"Response: {error_text}")
-                    return []
+                    return [{"_error": str(response.status), "_error_message": f"HTTP {response.status} error"}]
 
         except Exception as e:
             self.logger.error(f"Error fetching SPOT locations: {e}")
@@ -218,7 +218,7 @@ class SpotPlugin(BaseGPSPlugin):
                     error_text = errors.get('text', 'Unknown error')
                     error_desc = errors.get('description', 'Unknown error')
                     self.logger.error(f"SPOT API error {error_code}: {error_text} - {error_desc}")
-                return []
+                return [{"_error": "json_error", "_error_message": f"SPOT API error: {error_code}"}]
 
             messages_container = feed_response.get("messages", {})
             messages = messages_container.get("message", [])
@@ -290,11 +290,9 @@ class SpotPlugin(BaseGPSPlugin):
                 return False
 
         return True
-
+"""
     async def test_connection(self) -> Dict[str, Any]:
-        """
-        Test connection to SPOT API with detailed results
-        """
+
         try:
             timeout = aiohttp.ClientTimeout(total=30)
             async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -324,3 +322,4 @@ class SpotPlugin(BaseGPSPlugin):
                 "error": str(e),
                 "message": "Connection test failed"
             }
+"""

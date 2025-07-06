@@ -219,6 +219,11 @@ class TraccarPlugin(BaseGPSPlugin):
         """
         positions = await self._fetch_positions_from_api(session, config)
 
+        # Check for error indicators first
+        if positions and len(positions) > 0 and isinstance(positions[0], dict) and "_error" in positions[0]:
+            # Return the error indicator as-is for the base plugin to handle
+            return positions
+
         if not positions:
             self.logger.warning("No position data received from Traccar API")
             return []
@@ -293,20 +298,20 @@ class TraccarPlugin(BaseGPSPlugin):
                 elif response.status == 401:
                     error_text = await response.text()
                     self.logger.error("Unauthorized access (401). Check Traccar credentials.")
-                    # Return empty list but with error info in the response
-                    return []
+                    # Return error indicator instead of empty list
+                    return [{"_error": "401", "_error_message": "Unauthorized access"}]
                 elif response.status == 403:
                     error_text = await response.text()
                     self.logger.error("Forbidden access (403). Check user permissions.")
-                    return []
+                    return [{"_error": "403", "_error_message": "Forbidden access"}]
                 elif response.status == 404:
                     error_text = await response.text()
                     self.logger.error("Resource not found (404). Check server URL and API endpoint.")
-                    return []
+                    return [{"_error": "404", "_error_message": "Resource not found"}]
                 else:
                     error_text = await response.text()
                     self.logger.error(f"API request failed with status {response.status}: {error_text}")
-                    return []
+                    return [{"_error": str(response.status), "_error_message": f"HTTP {response.status} error"}]
 
         except asyncio.TimeoutError:
             self.logger.error("Request timed out while fetching positions")
@@ -507,14 +512,9 @@ class TraccarPlugin(BaseGPSPlugin):
             return False
 
         return True
-
+"""
     async def test_connection(self) -> Dict[str, Any]:
-        """
-        Enhanced connection test that returns detailed results
 
-        Returns:
-            Dictionary with connection test results
-        """
         connector = None
         try:
             config = self.get_decrypted_config()
@@ -593,3 +593,4 @@ class TraccarPlugin(BaseGPSPlugin):
 
             # Small delay to allow cleanup
             await asyncio.sleep(0.1)
+"""
