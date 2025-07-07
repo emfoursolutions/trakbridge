@@ -40,7 +40,7 @@ migrate = Migrate()
 load_dotenv()
 
 # Set up logger
-logger = logging.getLogger("trakbridge")
+logger = logging.getLogger("main")
 
 
 def create_app(config_name=None):
