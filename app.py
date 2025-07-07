@@ -1,3 +1,17 @@
+"""
+TAK Stream Management System - Main Application Entry Point
+
+Main Flask application factory providing multi-threaded stream management,
+TAK server integration, and plugin architecture for data processing workflows.
+
+Features: Application factory pattern, stream lifecycle management, database
+integration, plugin system, encryption services, and production-ready deployment.
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+License: GNU General Public License v3.0 (GPLv3)
+"""
+
 # Standard library imports
 import atexit
 import logging
