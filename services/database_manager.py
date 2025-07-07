@@ -1,39 +1,40 @@
-# =============================================================================
-# services/database_manager.py - Database Management Service
-# =============================================================================
-
+# Standard library imports
 import logging
 import time
 from typing import TYPE_CHECKING, Optional, List, Dict, Any
-from sqlalchemy.exc import SQLAlchemyError
 from datetime import timezone, datetime
+
+# Third-party imports
+from sqlalchemy.exc import SQLAlchemyError
+
+# Local application imports
 if TYPE_CHECKING:
     from models.stream import Stream
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
     """Thread-safe database manager for async operations"""
 
     def __init__(self, app_context_factory=None):
-        self.logger = logging.getLogger('DatabaseManager')
-        self._app_context_factory = app_context_factory
-        self.logger = logging.getLogger('DatabaseManager')
         self._app_context_factory = app_context_factory
 
         # Add debug logging
         import traceback
-        self.logger.info(f"DatabaseManager created with factory: {app_context_factory is not None}")
+        logger.info(f"DatabaseManager created with factory: {app_context_factory is not None}")
         if app_context_factory is None:
-            self.logger.warning("DatabaseManager created WITHOUT app_context_factory!")
-            self.logger.warning("Stack trace:")
+            logger.warning("DatabaseManager created WITHOUT app_context_factory!")
+            logger.warning("Stack trace:")
             for line in traceback.format_stack():
-                self.logger.warning(line.strip())
+                logger.warning(line.strip())
 
     def get_app_context(self):
         """Get Flask app context for database operations"""
         if self._app_context_factory:
             return self._app_context_factory()
-        self.logger.error("No app context factory provided for DatabaseManager")
+        logger.error("No app context factory provided for DatabaseManager")
         return None
 
     def execute_db_operation(self, operation_func, *args, **kwargs):
@@ -47,7 +48,7 @@ class DatabaseManager:
             try:
                 app_ctx = self.get_app_context()
                 if not app_ctx:
-                    self.logger.error("No app context available for database operation")
+                    logger.error("No app context available for database operation")
                     return None
 
                 with app_ctx:
@@ -58,18 +59,18 @@ class DatabaseManager:
                         return result
                     except SQLAlchemyError as e:
                         db.session.rollback()
-                        self.logger.error(f"Database error (attempt {attempt + 1}/{max_retries}): {e}")
+                        logger.error(f"Database error (attempt {attempt + 1}/{max_retries}): {e}")
                         if attempt == max_retries - 1:
                             raise
                         time.sleep(retry_delay * (attempt + 1))
                     except Exception as e:
                         db.session.rollback()
-                        self.logger.error(f"Unexpected error in database operation: {e}")
+                        logger.error(f"Unexpected error in database operation: {e}")
                         raise
 
             except Exception as e:
                 if attempt == max_retries - 1:
-                    self.logger.error(f"Database operation failed after {max_retries} attempts: {e}")
+                    logger.error(f"Database operation failed after {max_retries} attempts: {e}")
                     return None
                 time.sleep(retry_delay * (attempt + 1))
 
@@ -157,7 +158,7 @@ class DatabaseManager:
         def _update_stream():
             stream = Stream.query.get(stream_id)
             if not stream:
-                self.logger.warning(f"Stream {stream_id} not found for status update")
+                logger.warning(f"Stream {stream_id} not found for status update")
                 return False
 
             if is_active is not None:
@@ -198,7 +199,9 @@ class DatabaseManager:
                     _ = stream.tak_server.port
                     _ = stream.tak_server.protocol
 
-                detached_streams.append(DatabaseManager._create_detached_stream_copy(stream))
+                # Create detached copy
+                detached_stream = DatabaseManager._create_detached_stream_copy(stream)
+                detached_streams.append(detached_stream)
 
             return detached_streams
 
@@ -206,41 +209,44 @@ class DatabaseManager:
         return result if result is not None else []
 
     def get_stream_with_relationships(self, stream_id: int):
-        """Get stream with all relationships loaded - for use in Flask routes"""
-
+        """Get stream with all relationships loaded"""
         from models.stream import Stream
 
         def _get_stream_with_relationships():
-            from sqlalchemy.orm import joinedload
-
-            # Use joinedload to eagerly load the tak_server relationship
-            stream = Stream.query.options(
-                joinedload(Stream.tak_server)
-            ).filter_by(id=stream_id).first()
-
+            stream = Stream.query.get(stream_id)
             if stream:
+                # Eagerly load relationships
+                _ = stream.tak_server
+                if stream.tak_server:
+                    _ = stream.tak_server.name
+                    _ = stream.tak_server.host
+                    _ = stream.tak_server.port
+                    _ = stream.tak_server.protocol
+
                 return DatabaseManager._create_detached_stream_copy(stream)
             return None
 
         return self.execute_db_operation(_get_stream_with_relationships)
 
     def get_all_streams_with_relationships(self):
-        """Get all streams with relationships loaded - for use in Flask routes"""
-
+        """Get all streams with relationships loaded"""
         from models.stream import Stream
 
         def _get_all_streams_with_relationships():
-            from sqlalchemy.orm import joinedload
-
-            streams = Stream.query.options(
-                joinedload(Stream.tak_server)
-            ).all()
-
+            streams = Stream.query.all()
             detached_streams = []
             for stream in streams:
-                detached_streams.append(DatabaseManager._create_detached_stream_copy(stream))
+                # Eagerly load relationships
+                _ = stream.tak_server
+                if stream.tak_server:
+                    _ = stream.tak_server.name
+                    _ = stream.tak_server.host
+                    _ = stream.tak_server.port
+                    _ = stream.tak_server.protocol
+
+                detached_stream = DatabaseManager._create_detached_stream_copy(stream)
+                detached_streams.append(detached_stream)
 
             return detached_streams
 
-        result = self.execute_db_operation(_get_all_streams_with_relationships)
-        return result if result is not None else []
+        return self.execute_db_operation(_get_all_streams_with_relationships)

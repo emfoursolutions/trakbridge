@@ -25,11 +25,12 @@ Version: {{VERSION}}
 """
 
 # Standard library imports
-import os
-import time
 import datetime
-import platform
 import importlib.metadata
+import os
+import platform
+import time
+from typing import Dict, Any
 
 # Third-party imports
 from flask import Blueprint, render_template, current_app, request, jsonify, flash, redirect, url_for
@@ -37,6 +38,9 @@ from flask import Blueprint, render_template, current_app, request, jsonify, fla
 # Local application imports
 from services.key_rotation_service import get_key_rotation_service
 
+# Module-level logger
+import logging
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('admin', __name__)
 
@@ -44,7 +48,7 @@ bp = Blueprint('admin', __name__)
 start_time = time.time()
 
 
-@bp.route('/')
+@bp.route('/system_info')
 def admin_dashboard():
     from models.stream import Stream
     from models.tak_server import TakServer

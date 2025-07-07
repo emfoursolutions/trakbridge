@@ -3,7 +3,7 @@
 # Manages all streams
 # =============================================================================
 
-# services/stream_manager.py
+# Standard library imports
 import asyncio
 import logging
 import threading
@@ -11,7 +11,10 @@ import time
 from typing import Dict, List
 from datetime import datetime, timezone
 
-# Import the extracted classes
+# Third-party imports
+# (none for this file)
+
+# Local application imports
 from services.cot_service import cot_service
 from services.database_manager import DatabaseManager
 from services.stream_worker import StreamWorker
@@ -25,12 +28,14 @@ from services.exceptions import (
 _stream_manager_instance = None
 _stream_manager_lock = threading.Lock()
 
+# Module-level logger
+logger = logging.getLogger(__name__)
+
 
 class StreamManager:
     """Enhanced stream manager with robust database operations"""
 
     def __init__(self, app_context_factory=None):
-        self.logger = logging.getLogger('StreamManager')
         self.workers: Dict[int, StreamWorker] = {}
         self.running = False
         self._loop = None
@@ -61,7 +66,7 @@ class StreamManager:
             return
             
         try:
-            self.logger.info("Initializing persistent COT service")
+            logger.info("Initializing persistent COT service")
 
             # Get all active TAK servers from database
             active_streams = self.db_manager.get_active_streams()
@@ -79,20 +84,20 @@ class StreamManager:
 
             # Start persistent workers for each unique TAK server
             for tak_server in tak_servers.values():
-                self.logger.info(f"Starting persistent worker for TAK server: {tak_server.name}")
+                logger.info(f"Starting persistent worker for TAK server: {tak_server.name}")
                 await cot_service.start_worker(tak_server)
 
-            self.logger.info(f"Initialized persistent COT service for {len(tak_servers)} TAK servers")
+            logger.info(f"Initialized persistent COT service for {len(tak_servers)} TAK servers")
             self._cot_service_initialized = True
 
         except Exception as e:
-            self.logger.error(f"Error initializing persistent COT service: {e}", exc_info=True)
+            logger.error(f"Error initializing persistent COT service: {e}", exc_info=True)
 
     def _start_background_loop(self):
         """Start the background event loop in a separate thread"""
         with self._initialization_lock:
             if self._initialized:
-                self.logger.warning("StreamManager already initialized, skipping")
+                logger.warning("StreamManager already initialized, skipping")
                 return
             self._initialized = True
 
@@ -112,7 +117,7 @@ class StreamManager:
                 self._loop.run_until_complete(self._background_loop())
 
             except Exception as e:
-                self.logger.error(f"Error in background loop: {e}", exc_info=True)
+                logger.error(f"Error in background loop: {e}", exc_info=True)
             finally:
                 # Cancel health check task
                 if self._health_check_task and not self._health_check_task.done():
@@ -122,14 +127,14 @@ class StreamManager:
                 try:
                     self._loop.run_until_complete(self.session_manager.cleanup())
                 except (OSError, RuntimeError) as e:
-                    self.logger.error(f"System error cleaning up session manager: {e}")
+                    logger.error(f"System error cleaning up session manager: {e}")
                 except Exception as e:
-                    self.logger.error(f"Unexpected error cleaning up session manager: {e}")
+                    logger.error(f"Unexpected error cleaning up session manager: {e}")
 
                 # Clean up remaining tasks
                 pending = asyncio.all_tasks(self._loop)
                 if pending:
-                    self.logger.info(f"Cancelling {len(pending)} pending tasks")
+                    logger.info(f"Cancelling {len(pending)} pending tasks")
                     for task in pending:
                         task.cancel()
 
@@ -138,16 +143,16 @@ class StreamManager:
                             asyncio.gather(*pending, return_exceptions=True)
                         )
                     except (OSError, RuntimeError) as e:
-                        self.logger.error(
+                        logger.error(
                             f"System error while gathering pending tasks during cleanup: {e}", exc_info=True
                         )
                     except Exception as e:
-                        self.logger.error(
+                        logger.error(
                             f"Unexpected error while gathering pending tasks during cleanup: {e}", exc_info=True
                         )
 
                 self._loop.close()
-                self.logger.info("Background event loop closed")
+                logger.info("Background event loop closed")
 
         self._loop_thread = threading.Thread(
             target=run_loop,
@@ -164,12 +169,12 @@ class StreamManager:
             wait_count += 1
 
         if wait_count >= max_wait:
-            self.logger.error("Background event loop failed to start within timeout")
+            logger.error("Background event loop failed to start within timeout")
             raise RuntimeError("Failed to start StreamManager background loop")
 
     async def _background_loop(self):
         """Background loop that keeps the event loop alive"""
-        self.logger.info("StreamManager background loop started")
+        logger.info("StreamManager background loop started")
         
         # Initialize persistent COT service after loop starts
         await self._initialize_persistent_cot_service()
@@ -178,12 +183,12 @@ class StreamManager:
             while not self._shutdown_event.is_set():
                 await asyncio.sleep(5)  # Check every 5 seconds
         except asyncio.CancelledError:
-            self.logger.info("Background loop cancelled")
+            logger.info("Background loop cancelled")
         except (OSError, RuntimeError) as e:
-            self.logger.error(f"System error in background loop: {e}", exc_info=True)
+            logger.error(f"System error in background loop: {e}", exc_info=True)
             raise StreamManagerError(f"Background loop system error: {e}") from e
         except Exception as e:
-            self.logger.error(f"Unexpected error in background loop: {e}", exc_info=True)
+            logger.error(f"Unexpected error in background loop: {e}", exc_info=True)
             # Re-raise as StreamManagerError for consistency
             raise StreamManagerError(f"Background loop error: {e}") from e
 
@@ -196,7 +201,7 @@ class StreamManager:
                 if not self.workers:
                     continue
 
-                self.logger.debug(f"Performing health check on {len(self.workers)} workers")
+                logger.debug(f"Performing health check on {len(self.workers)} workers")
 
                 unhealthy_workers = []
                 for stream_id, worker in self.workers.items():
@@ -209,14 +214,14 @@ class StreamManager:
                         unhealthy_workers.append((stream_id, health))
 
                 if unhealthy_workers:
-                    self.logger.warning(f"Found {len(unhealthy_workers)} unhealthy workers")
+                    logger.warning(f"Found {len(unhealthy_workers)} unhealthy workers")
                     for stream_id, health in unhealthy_workers:
-                        self.logger.warning(f"Worker {stream_id} unhealthy: {health}")
+                        logger.warning(f"Worker {stream_id} unhealthy: {health}")
 
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                self.logger.error(f"Error in periodic health check: {e}")
+                logger.error(f"Error in periodic health check: {e}")
 
     def _run_coroutine_threadsafe(self, coro, timeout=60):
         """Run a coroutine in the background event loop from another thread"""
@@ -227,13 +232,13 @@ class StreamManager:
         try:
             return future.result(timeout=timeout)
         except Exception as e:
-            self.logger.error(f"Error in threadsafe coroutine execution: {e}")
+            logger.error(f"Error in threadsafe coroutine execution: {e}")
             raise
 
     async def start_stream(self, stream_id: int) -> bool:
         """Start a specific stream with enhanced checking and error handling"""
         try:
-            self.logger.info(f"Starting stream {stream_id}")
+            logger.info(f"Starting stream {stream_id}")
 
             # Check if already running
             if stream_id in self.workers:
@@ -241,22 +246,22 @@ class StreamManager:
                 health = worker.get_health_status()
 
                 if health['running'] and health['startup_complete']:
-                    self.logger.info(f"Stream {stream_id} is already running")
+                    logger.info(f"Stream {stream_id} is already running")
                     return True
                 elif health['running'] and not health['startup_complete']:
-                    self.logger.warning(f"Stream {stream_id} is currently starting up")
+                    logger.warning(f"Stream {stream_id} is currently starting up")
                     return False
                 else:
                     # Clean up dead worker
-                    self.logger.info(f"Cleaning up dead worker for stream {stream_id}")
+                    logger.info(f"Cleaning up dead worker for stream {stream_id}")
                     try:
                         await asyncio.wait_for(worker.stop(), timeout=15)
                     except asyncio.TimeoutError:
-                        self.logger.error(f"Timeout cleaning up worker for stream {stream_id}")
+                        logger.error(f"Timeout cleaning up worker for stream {stream_id}")
                     del self.workers[stream_id]
 
             # Get fresh stream data from database
-            self.logger.debug(f"Fetching stream {stream_id} from database")
+            logger.debug(f"Fetching stream {stream_id} from database")
             try:
                 stream = await asyncio.wait_for(
                     asyncio.get_event_loop().run_in_executor(
@@ -264,63 +269,63 @@ class StreamManager:
                     ), timeout=15
                 )
             except asyncio.TimeoutError:
-                self.logger.error(f"Timeout fetching stream {stream_id} from database")
+                logger.error(f"Timeout fetching stream {stream_id} from database")
                 return False
 
             if not stream:
-                self.logger.error(f"Stream {stream_id} not found")
+                logger.error(f"Stream {stream_id} not found")
                 return False
 
             # Validate stream configuration
             if not stream.is_active:
-                self.logger.warning(f"Stream {stream_id} ({stream.name}) is not active")
+                logger.warning(f"Stream {stream_id} ({stream.name}) is not active")
                 return False
 
             if not stream.tak_server:
-                self.logger.error(f"Stream {stream_id} has no TAK server configured")
+                logger.error(f"Stream {stream_id} has no TAK server configured")
                 return False
 
             # Create worker
-            self.logger.debug(f"Creating worker for stream {stream_id} ({stream.name})")
+            logger.debug(f"Creating worker for stream {stream_id} ({stream.name})")
             worker = StreamWorker(stream, self.session_manager, self.db_manager)
 
             # Start worker with timeout
             try:
                 success = await asyncio.wait_for(worker.start(), timeout=120)
             except asyncio.TimeoutError as e:
-                self.logger.error(f"Timeout starting worker for stream {stream_id}: {e}")
+                logger.error(f"Timeout starting worker for stream {stream_id}: {e}")
                 try:
                     await asyncio.wait_for(worker.stop(), timeout=15)
                 except Exception as cleanup_error:
-                    self.logger.error(f"Error stopping worker for stream {stream_id} after timeout: {cleanup_error}")
+                    logger.error(f"Error stopping worker for stream {stream_id} after timeout: {cleanup_error}")
                 return False
 
             if success:
                 # The StreamWorker already ensures the persistent PyTAK worker is running
                 # No need to call cot_service.start_worker() again here
-                self.logger.debug(f"Stream {stream_id} started successfully, persistent worker already ensured by StreamWorker")
+                logger.debug(f"Stream {stream_id} started successfully, persistent worker already ensured by StreamWorker")
                 
                 self.workers[stream_id] = worker
-                self.logger.debug(f"Successfully started stream {stream_id}")
+                logger.debug(f"Successfully started stream {stream_id}")
             else:
-                self.logger.error(f"Failed to start stream {stream_id}")
+                logger.error(f"Failed to start stream {stream_id}")
 
             return success
 
         except asyncio.TimeoutError as e:
-            self.logger.error(f"Timeout in stream startup process for {stream_id}: {e}")
+            logger.error(f"Timeout in stream startup process for {stream_id}: {e}")
             return False
         except StreamNotFoundError:
-            self.logger.error(f"Stream {stream_id} not found in database")
+            logger.error(f"Stream {stream_id} not found in database")
             return False
         except StreamConfigurationError as e:
-            self.logger.error(f"Stream {stream_id} configuration error: {e}")
+            logger.error(f"Stream {stream_id} configuration error: {e}")
             return False
         except (OSError, RuntimeError) as e:
-            self.logger.error(f"System error starting stream {stream_id}: {e}", exc_info=True)
+            logger.error(f"System error starting stream {stream_id}: {e}", exc_info=True)
             return False
         except Exception as e:
-            self.logger.error(f"Unexpected error starting stream {stream_id}: {e}", exc_info=True)
+            logger.error(f"Unexpected error starting stream {stream_id}: {e}", exc_info=True)
             return False
 
     async def stop_stream(self, stream_id: int, skip_db_update=False) -> bool:

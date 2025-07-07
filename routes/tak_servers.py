@@ -1,16 +1,17 @@
-# =============================================================================
-# routes/tak_servers.py - TAK Server Routes (Updated with Certificate Verification)
-# =============================================================================
+# Standard library imports
+import base64
+import logging
 
+# Third-party imports
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
+import asyncio
+
+# Local application imports
 from database import db
 from models.tak_server import TakServer
 from services.tak_servers_service import TakServerService
-import base64
-import logging
-import asyncio
 
-# Set up logging
+# Module-level logger
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('tak_servers', __name__)
@@ -400,4 +401,3 @@ def test_tak_server_config():
             'success': False,
             'error': str(e)
         }), 500
-

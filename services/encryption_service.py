@@ -1,7 +1,4 @@
-# =============================================================================
-# services/encryption_service.py - Enhanced Encryption Service
-# =============================================================================
-
+# Standard library imports
 import os
 import base64
 import hashlib
@@ -9,18 +6,24 @@ import secrets
 import logging
 import binascii
 from typing import Dict, Any, Optional
+
+# Third-party imports
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.exceptions import InvalidKey
+
+# Local application imports
 from services.exceptions import EncryptionError, EncryptionKeyError, EncryptionDataError
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 
 class EncryptionService:
     """Enhanced service for encrypting and decrypting sensitive configuration data"""
 
     def __init__(self, master_key: Optional[str] = None):
-        self.logger = logging.getLogger('EncryptionService')
         self._master_key = master_key or self._get_or_create_master_key()
         self._cipher_suite = None
 
@@ -31,7 +34,7 @@ class EncryptionService:
         # Try environment variable first
         master_key = os.environ.get('TB_MASTER_KEY')
         if master_key:
-            self.logger.debug("Master key loaded from environment variable")
+            logger.debug("Master key loaded from environment variable")
             return master_key
 
         # Try to get Flask app root path if available
@@ -52,16 +55,16 @@ class EncryptionService:
                     with open(key_file_path, 'r') as f:
                         master_key = f.read().strip()
                         if master_key:
-                            self.logger.debug(f"Master key loaded from {key_file_path}")
+                            logger.debug(f"Master key loaded from {key_file_path}")
                             return master_key
                 except Exception as e:
-                    self.logger.warning(f"Failed to read key file {key_file_path}: {e}")
+                    logger.warning(f"Failed to read key file {key_file_path}: {e}")
 
         # Generate new key as last resort
         master_key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
 
         # Enhanced warning with actionable instructions
-        self.logger.warning(
+        logger.warning(
             "⚠️  ENCRYPTION KEY WARNING ⚠️\n"
             "No master key found. Generated temporary key for this session.\n"
             "🔧 TO FIX THIS:\n"
@@ -72,10 +75,10 @@ class EncryptionService:
         )
 
         # Only log in development/debug mode
-        if self.logger.isEnabledFor(logging.DEBUG):
-            self.logger.debug(f"Generated Master Key: {master_key}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Generated Master Key: {master_key}")
         else:
-            self.logger.info("Master key generated (not logged for security)")
+            logger.info("Master key generated (not logged for security)")
 
         return master_key
 
@@ -116,13 +119,13 @@ class EncryptionService:
             return f"ENC:v1:{encrypted_b64}"
 
         except (ValueError, TypeError) as e:
-            self.logger.error(f"Invalid input for encryption: {e}")
+            logger.error(f"Invalid input for encryption: {e}")
             raise EncryptionDataError(f"Invalid input for encryption: {e}") from e
         except (OSError, RuntimeError) as e:
-            self.logger.error(f"System error during encryption: {e}")
+            logger.error(f"System error during encryption: {e}")
             raise EncryptionError(f"System error during encryption: {e}") from e
         except Exception as e:
-            self.logger.error(f"Unexpected error during encryption: {e}")
+            logger.error(f"Unexpected error during encryption: {e}")
             raise EncryptionError(f"Encryption failed: {e}") from e
 
     def decrypt_value(self, encrypted_value: str) -> str:
@@ -153,7 +156,7 @@ class EncryptionService:
             return decrypted_bytes.decode()
 
         except Exception as e:
-            self.logger.error(f"Failed to decrypt value: {e}")
+            logger.error(f"Failed to decrypt value: {e}")
             raise EncryptionError(f"Decryption failed: {e}")
 
     @staticmethod
@@ -176,9 +179,9 @@ class EncryptionService:
                 if value and not EncryptionService.is_encrypted(str(value)):
                     try:
                         encrypted_config[field_name] = self.encrypt_value(str(value))
-                        self.logger.debug(f"Encrypted field: {field_name}")
+                        logger.debug(f"Encrypted field: {field_name}")
                     except Exception as e:
-                        self.logger.error(f"Failed to encrypt field '{field_name}': {e}")
+                        logger.error(f"Failed to encrypt field '{field_name}': {e}")
                         raise
 
         return encrypted_config
@@ -198,10 +201,11 @@ class EncryptionService:
                 if value:
                     try:
                         decrypted_config[field_name] = self.decrypt_value(str(value))
+                        logger.debug(f"Decrypted field: {field_name}")
                     except Exception as e:
-                        self.logger.error(f"Failed to decrypt field '{field_name}': {e}")
-                        # Keep encrypted value rather than failing
-                        pass
+                        logger.error(f"Failed to decrypt field '{field_name}': {e}")
+                        # Keep original value if decryption fails
+                        continue
 
         return decrypted_config
 
@@ -239,7 +243,7 @@ class EncryptionService:
                 except Exception as e:
                     error_msg = f"Failed to rotate certificate password for server {server.name} (ID: {server.id}): {e}"
                     errors.append(error_msg)
-                    self.logger.error(error_msg)
+                    logger.error(error_msg)
 
             # 2. Rotate stream plugin passwords
             streams = Stream.query.filter(Stream.plugin_config.isnot(None)).all()
@@ -279,7 +283,7 @@ class EncryptionService:
                 except Exception as e:
                     error_msg = f"Failed to rotate plugin passwords for stream {stream.name} (ID: {stream.id}): {e}"
                     errors.append(error_msg)
-                    self.logger.error(error_msg)
+                    logger.error(error_msg)
 
             # Commit all changes
             if rotated_count > 0:
@@ -293,7 +297,7 @@ class EncryptionService:
             }
 
         except Exception as e:
-            self.logger.error(f"Database key rotation failed: {e}")
+            logger.error(f"Database key rotation failed: {e}")
             return {
                 "success": False,
                 "error": str(e),
@@ -315,11 +319,11 @@ class EncryptionService:
             # Encrypt with new key
             rotated_data = new_service.encrypt_config(decrypted_data, sensitive_fields)
 
-            self.logger.info("Key rotation completed successfully")
+            logger.info("Key rotation completed successfully")
             return rotated_data
 
         except Exception as e:
-            self.logger.error(f"Key rotation failed: {e}")
+            logger.error(f"Key rotation failed: {e}")
             raise EncryptionError(f"Key rotation failed: {e}")
 
     @staticmethod
@@ -363,7 +367,7 @@ class EncryptionService:
                 return False
 
         except (binascii.Error, ValueError, TypeError) as e:
-            self.logger.error(f"Error verifying password: {e}")
+            logger.error(f"Error verifying password: {e}")
             return False
 
     def health_check(self) -> Dict[str, Any]:
@@ -412,10 +416,10 @@ class EncryptionService:
                     with open(key_file_path, 'r') as f:
                         master_key = f.read().strip()
                         if master_key:
-                            self.logger.debug(f"Master key loaded from {key_file_path}")
+                            logger.debug(f"Master key loaded from {key_file_path}")
                             return master_key
                 except Exception as e:
-                    self.logger.warning(f"Failed to read key file {key_file_path}: {e}")
+                    logger.warning(f"Failed to read key file {key_file_path}: {e}")
 
         return "generated"
 

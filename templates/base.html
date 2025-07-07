@@ -258,15 +258,15 @@
                                     </a>
                                 </li>
                                 <li class="nav-item">
-                                    <a class="nav-link {% if request.endpoint == 'admin.admin_about' %}active{% endif %}"
-                                       href="{{ url_for('admin.admin_about') }}" onclick="closeSidebarOnMobile()">
-                                        <i class="fas fa-question-circle me-2"></i>About
-                                    </a>
-                                </li>
-                                <li class="nav-item">
                                     <a class="nav-link {% if request.endpoint == 'admin.key_rotation_page' %}active{% endif %}"
                                        href="{{ url_for('admin.key_rotation_page') }}" onclick="closeSidebarOnMobile()">
                                         <i class="fas fa-key me-2"></i>Key Rotation
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link {% if request.endpoint == 'admin.admin_about' %}active{% endif %}"
+                                       href="{{ url_for('admin.admin_about') }}" onclick="closeSidebarOnMobile()">
+                                        <i class="fas fa-question-circle me-2"></i>About
                                     </a>
                                 </li>
                             </ul>
@@ -328,12 +328,12 @@
             }
         }
 
-        // Auto-expand settings menu if user is on a settings page
+        // Alternative solution - more robust approach that checks for any /admin/ path:
         document.addEventListener('DOMContentLoaded', function() {
             const currentPath = window.location.pathname;
-            const settingsPages = ['/admin/admin_dashboard', '/admin/admin_about', '/admin/cot_types', '/admin/key-rotation'];
 
-            if (settingsPages.some(page => currentPath.includes(page))) {
+            // Check if current path starts with /admin/ (excluding just /admin itself)
+            if (currentPath.startsWith('/admin/') && currentPath !== '/admin/') {
                 toggleSettings();
             }
         });

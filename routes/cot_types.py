@@ -20,9 +20,13 @@ Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """
 
-from flask import Blueprint, render_template
+# Standard library imports
 import logging
 
+# Third-party imports
+from flask import Blueprint, render_template
+
+# Module-level logger
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('cot_types', __name__)

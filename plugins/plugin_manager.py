@@ -19,8 +19,6 @@ import inspect
 import logging
 import os
 import pkgutil
-
-# Third-party imports
 from typing import (
     Dict,
     Type,
@@ -31,8 +29,15 @@ from typing import (
     TYPE_CHECKING,
 )
 
+# Third-party imports
+# (none for this file)
+
+# Local application imports
 if TYPE_CHECKING:
     from plugins.base_plugin import BaseGPSPlugin
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 
 class PluginManager:
@@ -40,7 +45,6 @@ class PluginManager:
 
     def __init__(self):
         self.plugins: Dict[str, Type["BaseGPSPlugin"]] = {}
-        self.logger = logging.getLogger('PluginManager')
 
     def register_plugin(self, plugin_class: Type["BaseGPSPlugin"]):
         """Register a plugin class"""
@@ -52,7 +56,7 @@ class PluginManager:
             try:
                 plugin_name = plugin_class.get_plugin_name()
             except (AttributeError, TypeError) as e:
-                self.logger.warning(f"Failed to get plugin name from class method: {e}")
+                logger.warning(f"Failed to get plugin name from class method: {e}")
 
         # Fall back to creating a temporary instance
         if not plugin_name:
@@ -60,14 +64,14 @@ class PluginManager:
                 temp_instance = plugin_class({})
                 plugin_name = temp_instance.plugin_name
             except (TypeError, ValueError) as e:
-                self.logger.error(f"Failed to create temporary instance for {plugin_class.__name__}: {e}")
+                logger.error(f"Failed to create temporary instance for {plugin_class.__name__}: {e}")
                 return
             except Exception as e:
-                self.logger.error(f"Failed to get plugin name for {plugin_class.__name__}: {e}")
+                logger.error(f"Failed to get plugin name for {plugin_class.__name__}: {e}")
                 return
 
         self.plugins[plugin_name] = plugin_class
-        self.logger.info(f"Registered plugin: {plugin_name}")
+        logger.info(f"Registered plugin: {plugin_name}")
 
     def _validate_and_normalize_config(self, config: Union[Dict, str, None]) -> Dict:
         """
@@ -93,14 +97,14 @@ class PluginManager:
                 return json.loads(config)
             except (json.JSONDecodeError, ValueError):
                 # If not JSON, treat as a configuration name or identifier
-                self.logger.warning(f"String config '{config}' could not be parsed as JSON, using empty config")
+                logger.warning(f"String config '{config}' could not be parsed as JSON, using empty config")
                 return {}
 
         if isinstance(config, dict):
             return config.copy()
 
         # For any other type, log warning and return empty dict
-        self.logger.warning(f"Unexpected config type {type(config)}, using empty config")
+        logger.warning(f"Unexpected config type {type(config)}, using empty config")
         return {}
 
     def get_plugin(self, plugin_name: str, config: Union[Dict, str, None] = None) -> Optional["BaseGPSPlugin"]:
@@ -115,7 +119,7 @@ class PluginManager:
             Plugin instance or None if creation fails
         """
         if plugin_name not in self.plugins:
-            self.logger.error(f"Plugin not found: {plugin_name}")
+            logger.error(f"Plugin not found: {plugin_name}")
             return None
 
         # Normalize configuration input
@@ -125,12 +129,12 @@ class PluginManager:
         try:
             plugin_instance = plugin_class(normalized_config)
             if not plugin_instance.validate_config():
-                self.logger.error(f"Plugin {plugin_name} configuration validation failed")
+                logger.error(f"Plugin {plugin_name} configuration validation failed")
                 return None
             return plugin_instance
         except Exception as e:
-            self.logger.error(f"Failed to create plugin instance for '{plugin_name}': {e}")
-            self.logger.debug(f"Config type: {type(config)}, Config value: {config}")
+            logger.error(f"Failed to create plugin instance for '{plugin_name}': {e}")
+            logger.debug(f"Config type: {type(config)}, Config value: {config}")
             return None
 
     def list_plugins(self) -> List[str]:
@@ -148,7 +152,7 @@ class PluginManager:
             temp_instance = plugin_class({})
             return temp_instance.plugin_metadata
         except Exception as e:
-            self.logger.error(f"Failed to get metadata for plugin {plugin_name}: {e}")
+            logger.error(f"Failed to get metadata for plugin {plugin_name}: {e}")
             return None
 
     def get_all_plugin_metadata(self) -> Dict[str, Dict[str, Any]]:
@@ -171,7 +175,7 @@ class PluginManager:
             config_fields = temp_instance.get_config_fields()
             return [field.to_dict() for field in config_fields]
         except Exception as e:
-            self.logger.error(f"Failed to get config schema for plugin {plugin_name}: {e}")
+            logger.error(f"Failed to get config schema for plugin {plugin_name}: {e}")
             return None
 
     def validate_plugin_config(self, plugin_name: str, config: Union[Dict[str, Any], str, None]) -> Dict[str, Any]:
@@ -257,7 +261,7 @@ class PluginManager:
             return await plugin_instance.test_connection()
 
         except Exception as e:
-            self.logger.error(f"Connection test failed for plugin {plugin_name}: {e}")
+            logger.error(f"Connection test failed for plugin {plugin_name}: {e}")
             return {
                 "success": False,
                 "error": str(e),
@@ -293,7 +297,7 @@ class PluginManager:
             plugins_path = os.path.abspath(directory)
 
             if not os.path.exists(plugins_path):
-                self.logger.warning(f"Plugins directory not found: {plugins_path}")
+                logger.warning(f"Plugins directory not found: {plugins_path}")
                 return
 
             # Add plugins directory to Python path if not already there
@@ -322,10 +326,10 @@ class PluginManager:
                             self.register_plugin(obj)
 
                 except Exception as e:
-                    self.logger.error(f"Failed to load plugin module {modname}: {e}")
+                    logger.error(f"Failed to load plugin module {modname}: {e}")
 
         except Exception as e:
-            self.logger.error(f"Failed to load plugins from directory {directory}: {e}")
+            logger.error(f"Failed to load plugins from directory {directory}: {e}")
 
     def auto_discover_and_load_plugins(self, directory: str = 'plugins'):
         """
@@ -337,7 +341,7 @@ class PluginManager:
             plugins_path = os.path.abspath(directory)
 
             if not os.path.exists(plugins_path):
-                self.logger.warning(f"Plugins directory not found: {plugins_path}")
+                logger.warning(f"Plugins directory not found: {plugins_path}")
                 return
 
             # Get all Python files in the directory
@@ -361,16 +365,16 @@ class PluginManager:
                                 self.register_plugin(obj)
 
                     except Exception as e:
-                        self.logger.error(f"Failed to load plugin file {filename}: {e}")
+                        logger.error(f"Failed to load plugin file {filename}: {e}")
 
         except Exception as e:
-            self.logger.error(f"Failed to discover plugins in directory {directory}: {e}")
+            logger.error(f"Failed to discover plugins in directory {directory}: {e}")
 
     def reload_plugin(self, plugin_name: str) -> bool:
         """Reload a specific plugin (useful for development)"""
         from plugins.base_plugin import BaseGPSPlugin
         if plugin_name not in self.plugins:
-            self.logger.error(f"Cannot reload plugin '{plugin_name}': not found")
+            logger.error(f"Cannot reload plugin '{plugin_name}': not found")
             return False
 
         try:
@@ -388,13 +392,13 @@ class PluginManager:
                             temp_instance = obj({})
                             if temp_instance.plugin_name == plugin_name:
                                 self.plugins[plugin_name] = obj
-                                self.logger.info(f"Successfully reloaded plugin: {plugin_name}")
+                                logger.info(f"Successfully reloaded plugin: {plugin_name}")
                                 return True
                         except Exception:
                             continue
 
         except Exception as e:
-            self.logger.error(f"Failed to reload plugin {plugin_name}: {e}")
+            logger.error(f"Failed to reload plugin {plugin_name}: {e}")
             return False
 
         return False
@@ -439,7 +443,7 @@ class PluginManager:
 
         # Try with default config if provided
         if default_config is not None:
-            self.logger.info(f"Falling back to default config for plugin {plugin_name}")
+            logger.info(f"Falling back to default config for plugin {plugin_name}")
             return self.get_plugin(plugin_name, default_config)
 
         return None
@@ -461,7 +465,7 @@ class PluginManager:
                     streams_by_plugin[plugin_type] = []
                 streams_by_plugin[plugin_type].append(stream)
         except Exception as e:
-            self.logger.error(f"Could not fetch streams for health check: {e}")
+            logger.error(f"Could not fetch streams for health check: {e}")
             streams_by_plugin = {}
         
         for name, plugin_class in self.plugins.items():
@@ -489,7 +493,7 @@ class PluginManager:
                     health = {"status": "unconfigured", "details": "No streams configured for this plugin"}
                     
             except Exception as e:
-                self.logger.error(f"[PluginManager] Health check failed for plugin '{name}': {e}", exc_info=True)
+                logger.error(f"[PluginManager] Health check failed for plugin '{name}': {e}", exc_info=True)
                 health = {"status": "unhealthy", "details": str(e)}
             health_status[name] = health
         return health_status

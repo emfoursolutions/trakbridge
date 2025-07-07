@@ -3,10 +3,16 @@
 # Manages the HTTP sessions for all Stream Workers
 # =============================================================================
 
+# Standard library imports
 import asyncio
-import aiohttp
 import logging
 from typing import Optional
+
+# Third-party imports
+import aiohttp
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 
 class SessionManager:
@@ -14,14 +20,13 @@ class SessionManager:
 
     def __init__(self):
         self.session: Optional[aiohttp.ClientSession] = None
-        self.logger = logging.getLogger('SessionManager')
         self._session_lock = asyncio.Lock()
 
     async def initialize(self):
         """Initialize the HTTP session with better configuration"""
         async with self._session_lock:
             if self.session:
-                self.logger.info("HTTP session already initialized")
+                logger.info("HTTP session already initialized")
                 return
 
             try:
@@ -46,10 +51,10 @@ class SessionManager:
                     trust_env=True  # Use environment proxy settings if available
                 )
 
-                self.logger.info("HTTP session initialized successfully")
+                logger.info("HTTP session initialized successfully")
 
             except Exception as e:
-                self.logger.error(f"Failed to initialize HTTP session: {e}")
+                logger.error(f"Failed to initialize HTTP session: {e}")
                 raise
 
     async def cleanup(self):
@@ -58,9 +63,9 @@ class SessionManager:
             if self.session:
                 try:
                     await asyncio.wait_for(self.session.close(), timeout=10.0)
-                    self.logger.info("HTTP session closed")
+                    logger.info("HTTP session closed")
                 except Exception as e:
-                    self.logger.error(f"Error closing HTTP session: {e}")
+                    logger.error(f"Error closing HTTP session: {e}")
                 finally:
                     self.session = None
 

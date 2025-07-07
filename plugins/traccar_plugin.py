@@ -26,6 +26,7 @@ Version: {{VERSION}}
 
 # Standard library imports
 import asyncio
+import logging
 import json
 import ssl
 from datetime import datetime, timezone
@@ -38,6 +39,8 @@ import certifi
 # Local application imports
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
 
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 class TraccarPlugin(BaseGPSPlugin):
     """Plugin for fetching location data from Traccar GPS tracking platform"""
@@ -202,7 +205,7 @@ class TraccarPlugin(BaseGPSPlugin):
                 return await self._fetch_locations_with_session(session, config)
 
         except Exception as e:
-            self.logger.error(f"Error fetching Traccar positions: {e}")
+            logger.error(f"Error fetching Traccar positions: {e}")
             return []
         finally:
             # Clean up connector if we created one
@@ -210,7 +213,7 @@ class TraccarPlugin(BaseGPSPlugin):
                 try:
                     await connector.close()
                 except Exception as close_error:
-                    self.logger.debug(f"Error closing connector (non-critical): {close_error}")
+                    logger.debug(f"Error closing connector (non-critical): {close_error}")
 
     async def _fetch_locations_with_session(self, session: aiohttp.ClientSession,
                                             config: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -225,7 +228,7 @@ class TraccarPlugin(BaseGPSPlugin):
             return positions
 
         if not positions:
-            self.logger.warning("No position data received from Traccar API")
+            logger.warning("No position data received from Traccar API")
             return []
 
         # Get device information to enrich position data
@@ -265,7 +268,7 @@ class TraccarPlugin(BaseGPSPlugin):
             }
             locations.append(location)
 
-        self.logger.info(f"Successfully fetched {len(locations)} positions from Traccar")
+        logger.info(f"Successfully fetched {len(locations)} positions from Traccar")
         return locations
 
     async def _fetch_positions_from_api(self, session: aiohttp.ClientSession,
@@ -293,37 +296,37 @@ class TraccarPlugin(BaseGPSPlugin):
             async with session.get(url, auth=auth, timeout=timeout, ssl=ssl_context) as response:
                 if response.status == 200:
                     data = await response.json()
-                    self.logger.info(f"Successfully fetched {len(data)} positions from Traccar API")
+                    logger.info(f"Successfully fetched {len(data)} positions from Traccar API")
                     return data
                 elif response.status == 401:
                     error_text = await response.text()
-                    self.logger.error("Unauthorized access (401). Check Traccar credentials.")
+                    logger.error("Unauthorized access (401). Check Traccar credentials.")
                     # Return error indicator instead of empty list
                     return [{"_error": "401", "_error_message": "Unauthorized access"}]
                 elif response.status == 403:
                     error_text = await response.text()
-                    self.logger.error("Forbidden access (403). Check user permissions.")
+                    logger.error("Forbidden access (403). Check user permissions.")
                     return [{"_error": "403", "_error_message": "Forbidden access"}]
                 elif response.status == 404:
                     error_text = await response.text()
-                    self.logger.error("Resource not found (404). Check server URL and API endpoint.")
+                    logger.error("Resource not found (404). Check server URL and API endpoint.")
                     return [{"_error": "404", "_error_message": "Resource not found"}]
                 else:
                     error_text = await response.text()
-                    self.logger.error(f"API request failed with status {response.status}: {error_text}")
+                    logger.error(f"API request failed with status {response.status}: {error_text}")
                     return [{"_error": str(response.status), "_error_message": f"HTTP {response.status} error"}]
 
         except asyncio.TimeoutError:
-            self.logger.error("Request timed out while fetching positions")
+            logger.error("Request timed out while fetching positions")
             return []
         except aiohttp.ClientError as e:
-            self.logger.error(f"HTTP client error: {e}")
+            logger.error(f"HTTP client error: {e}")
             return []
         except json.JSONDecodeError as e:
-            self.logger.error(f"Invalid JSON response: {e}")
+            logger.error(f"Invalid JSON response: {e}")
             return []
         except Exception as e:
-            self.logger.error(f"Unexpected error fetching positions: {e}")
+            logger.error(f"Unexpected error fetching positions: {e}")
             return []
 
     async def _fetch_devices_from_api(self, session: aiohttp.ClientSession,
@@ -351,14 +354,14 @@ class TraccarPlugin(BaseGPSPlugin):
             async with session.get(url, auth=auth, timeout=timeout, ssl=ssl_context) as response:
                 if response.status == 200:
                     data = await response.json()
-                    self.logger.debug(f"Successfully fetched {len(data)} devices from Traccar API")
+                    logger.debug(f"Successfully fetched {len(data)} devices from Traccar API")
                     return data
                 else:
-                    self.logger.warning(f"Could not fetch devices: HTTP {response.status}")
+                    logger.warning(f"Could not fetch devices: HTTP {response.status}")
                     return []
 
         except Exception as e:
-            self.logger.warning(f"Error fetching devices (non-critical): {e}")
+            logger.warning(f"Error fetching devices (non-critical): {e}")
             return []
 
     def _parse_timestamp(self, timestamp_str: str) -> datetime:
@@ -389,7 +392,7 @@ class TraccarPlugin(BaseGPSPlugin):
                 return datetime.fromisoformat(timestamp_str)
 
         except Exception as e:
-            self.logger.debug(f"Could not parse timestamp '{timestamp_str}': {e}")
+            logger.debug(f"Could not parse timestamp '{timestamp_str}': {e}")
             return datetime.now(timezone.utc)
 
     def _build_description(self, position: Dict[str, Any], device_info: Dict[str, Any]) -> str:
@@ -488,7 +491,7 @@ class TraccarPlugin(BaseGPSPlugin):
 
         server_url = config.get("server_url", "")
         if not server_url:
-            self.logger.error("Server URL is required")
+            logger.error("Server URL is required")
             return False
 
         # Ensure timeout is properly typed
@@ -497,100 +500,18 @@ class TraccarPlugin(BaseGPSPlugin):
             try:
                 self.config["timeout"] = int(timeout)
             except ValueError:
-                self.logger.error("Timeout must be a valid integer")
+                logger.error("Timeout must be a valid integer")
                 return False
 
         # Validate verify_ssl setting
         verify_ssl = config.get("verify_ssl", True)
         if not isinstance(verify_ssl, bool):
-            self.logger.error("verify_ssl must be a boolean value")
+            logger.error("verify_ssl must be a boolean value")
             return False
 
         # Basic URL validation
         if not server_url.startswith(("http://", "https://")):
-            self.logger.error("Server URL must start with http:// or https://")
+            logger.error("Server URL must start with http:// or https://")
             return False
 
         return True
-"""
-    async def test_connection(self) -> Dict[str, Any]:
-
-        connector = None
-        try:
-            config = self.get_decrypted_config()
-            timeout = aiohttp.ClientTimeout(total=int(config.get("timeout", 30)))
-
-            # Create connector with SSL timeout fixes
-            connector = self._create_connector()
-
-            async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-                # Test API connectivity by fetching devices first
-                devices = await self._fetch_devices_from_api(session, config)
-
-                # Check if devices fetch failed (empty list could indicate auth error)
-                if devices is None or len(devices) == 0:
-                    # Try to fetch positions to see if it's an auth issue
-                    positions = await self._fetch_positions_from_api(session, config)
-                    if positions is None or len(positions) == 0:
-                        return {
-                            "success": False,
-                            "error": "Authentication failed or no devices found",
-                            "message": "Could not fetch devices or positions. Check credentials and permissions."
-                        }
-
-                # Test positions endpoint
-                positions = await self._fetch_positions_from_api(session, config)
-
-                if positions is None:
-                    return {
-                        "success": False,
-                        "error": "Failed to fetch positions from Traccar API",
-                        "message": "API connection successful but no position data available"
-                    }
-
-                # Apply device filter for count
-                device_filter = self._parse_device_filter(config.get("device_filter", ""))
-                if device_filter:
-                    device_map = {device['id']: device for device in devices}
-                    filtered_positions = [
-                        pos for pos in positions
-                        if self._device_matches_filter(
-                            device_map.get(pos.get('deviceId'), {}).get('name', ''),
-                            device_filter
-                        )
-                    ]
-                    position_count = len(filtered_positions)
-                    filter_info = f" (filtered from {len(positions)} total)"
-                else:
-                    position_count = len(positions)
-                    filter_info = ""
-
-                device_names = [device.get('name', f"Device {device.get('id')}") for device in devices]
-
-                return {
-                    "success": True,
-                    "message": f"Successfully connected to Traccar. Found {len(devices)} device(s) with {position_count} position(s){filter_info}",
-                    "device_count": len(devices),
-                    "position_count": position_count,
-                    "devices": device_names[:10],  # Limit to first 10 devices
-                    "server_url": config["server_url"]
-                }
-
-        except Exception as e:
-            self.logger.error(f"Connection test failed: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "message": "Connection test failed"
-            }
-        finally:
-            # Properly close the connector to prevent SSL shutdown timeouts
-            if connector and not connector.closed:
-                try:
-                    await connector.close()
-                except Exception as close_error:
-                    self.logger.debug(f"Error closing connector (non-critical): {close_error}")
-
-            # Small delay to allow cleanup
-            await asyncio.sleep(0.1)
-"""

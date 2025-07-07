@@ -1,9 +1,11 @@
-# =============================================================================
-# routes/main.py - Main Routes
-# =============================================================================
-
-from flask import Blueprint, render_template, jsonify
+# Standard library imports
 import logging
+
+# Third-party imports
+from flask import Blueprint, render_template, jsonify, current_app
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('main', __name__)
 

@@ -17,10 +17,13 @@ Version: {{VERSION}}
 # Standard library imports
 import logging
 from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional
 
 # Third-party imports
 import aiohttp
-from typing import Any, Dict, List, Optional
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 
 class PluginConfigField:
@@ -66,7 +69,6 @@ class BaseGPSPlugin(ABC):
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.logger = logging.getLogger(f'{self.__class__.__name__}')
         from services.encryption_service import EncryptionService
         self.encryption_service = EncryptionService()
 
@@ -138,7 +140,7 @@ class BaseGPSPlugin(ABC):
                     try:
                         decrypted_config[field_name] = self.encryption_service.decrypt_value(str(value))
                     except Exception as e:
-                        self.logger.error(f"Failed to decrypt field '{field_name}': {e}")
+                        logger.error(f"Failed to decrypt field '{field_name}': {e}")
                         # Keep original value if decryption fails
 
         return decrypted_config
@@ -235,7 +237,7 @@ class BaseGPSPlugin(ABC):
             stream: Stream model instance (must have tak_server_id, cot_type, cot_stale_time)
         """
         if not locations:
-            self.logger.debug("No locations to process")
+            logger.debug("No locations to process")
             return
 
         try:
@@ -260,14 +262,14 @@ class BaseGPSPlugin(ABC):
                     cot_service.enqueue_event(event, stream.tak_server_id)
                     enqueued_count += 1
                 else:
-                    self.logger.warning(f"Stream {getattr(stream, 'id', 'unknown')} has no TAK server ID")
+                    logger.warning(f"Stream {getattr(stream, 'id', 'unknown')} has no TAK server ID")
 
-            self.logger.info(
+            logger.info(
                 f"[{self.plugin_name}] Enqueued {enqueued_count} COT events for stream {getattr(stream, 'id', 'unknown')}"
             )
 
         except Exception as e:
-            self.logger.error(
+            logger.error(
                 f"[{self.plugin_name}] Error processing and enqueuing locations: {e}",
                 exc_info=True
             )
@@ -285,30 +287,30 @@ class BaseGPSPlugin(ABC):
 
             # Check required fields
             if field.required and (field_value is None or field_value == ""):
-                self.logger.error(f"Missing required configuration field: {field_name}")
+                logger.error(f"Missing required configuration field: {field_name}")
                 return False
 
             # Type-specific validation
             if field_value is not None and field_value != "":
                 if field.field_type in ["url"] and not str(field_value).startswith(("http://", "https://")):
-                    self.logger.error(f"Field '{field_name}' must be a valid URL")
+                    logger.error(f"Field '{field_name}' must be a valid URL")
                     return False
 
                 if field.field_type == "number":
                     try:
                         num_value = float(field_value)
                         if field.min_value is not None and num_value < field.min_value:
-                            self.logger.error(f"Field '{field_name}' must be at least {field.min_value}")
+                            logger.error(f"Field '{field_name}' must be at least {field.min_value}")
                             return False
                         if field.max_value is not None and num_value > field.max_value:
-                            self.logger.error(f"Field '{field_name}' must be at most {field.max_value}")
+                            logger.error(f"Field '{field_name}' must be at most {field.max_value}")
                             return False
                     except (ValueError, TypeError):
-                        self.logger.error(f"Field '{field_name}' must be a valid number")
+                        logger.error(f"Field '{field_name}' must be a valid number")
                         return False
 
                 if field.field_type == "email" and "@" not in str(field_value):
-                    self.logger.error(f"Field '{field_name}' must be a valid email address")
+                    logger.error(f"Field '{field_name}' must be a valid email address")
                     return False
 
         return True
@@ -326,7 +328,7 @@ class BaseGPSPlugin(ABC):
                 return {"status": status, "details": result}
             return {"status": "unknown", "details": "No health check implemented"}
         except Exception as e:
-            self.logger.error(f"[{self.__class__.__name__}] health_check failed: {e}", exc_info=True)
+            logger.error(f"[{self.__class__.__name__}] health_check failed: {e}", exc_info=True)
             return {"status": "unhealthy", "details": str(e)}
 
     async def test_connection(self) -> Dict[str, Any]:
@@ -358,7 +360,7 @@ class BaseGPSPlugin(ABC):
                     error_info = locations[0]
                     error_code = error_info.get("_error", "unknown")
                     error_message = error_info.get("_error_message", "Unknown error")
-                    
+
                     # Map error codes to specific messages
                     if error_code == "401":
                         return {
@@ -388,7 +390,7 @@ class BaseGPSPlugin(ABC):
                         return {
                             "success": False,
                             "error": "Invalid Feed ID or Password",
-                            "message": "SPOT API returned an error. Check your feed ID and password."
+                            "message": "API returned an error. Check your feed ID and password."
                         }
                     elif error_code == "connection_failed":
                         return {
@@ -400,7 +402,13 @@ class BaseGPSPlugin(ABC):
                         return {
                             "success": False,
                             "error": "Invalid URL or API End Point",
-                            "message": "Invalid KML feed URL. Check the URL and ensure it's a valid Garmin MapShare feed."
+                            "message": "Invalid KML feed URL. Check the URL and ensure it's a feed."
+                        }
+                    elif error_code == "no_devices":
+                        return {
+                            "success": False,
+                            "error": "No Devices Found",
+                            "message": "Successfully connected. No devices returned."
                         }
                     else:
                         return {
@@ -426,9 +434,9 @@ class BaseGPSPlugin(ABC):
                     "device_count": len(locations),
                     "devices": device_names
                 }
-        
+
         except Exception as e:
-            self.logger.error(
+            logger.error(
                 f"[{self.__class__.__name__}] Connection test failed: {e}",
                 exc_info=True,
                 extra={"plugin": self.__class__.__name__, "operation": "test_connection"}

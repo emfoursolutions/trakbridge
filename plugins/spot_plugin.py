@@ -23,8 +23,12 @@ Version: {{VERSION}}
 """
 
 # Standard library imports
+import asyncio
+import json
+import logging
+import re
 import ssl
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any
 
 # Third-party imports
@@ -33,6 +37,9 @@ import certifi
 
 # Local application imports
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 
 class SpotPlugin(BaseGPSPlugin):
@@ -135,7 +142,7 @@ class SpotPlugin(BaseGPSPlugin):
             if max_results:
                 params["limit"] = max_results
 
-            self.logger.info(f"Fetching SPOT data from feed ID: {feed_id}")
+            logger.info(f"Fetching SPOT data from feed ID: {feed_id}")
 
             async with session.get(url, params=params, ssl=ssl_context) as response:
                 if response.status == 200:
@@ -145,10 +152,24 @@ class SpotPlugin(BaseGPSPlugin):
                     if not messages:
                         # Check if this was due to a JSON error (like feed not found)
                         if "response" in data and "errors" in data.get("response", {}):
-                            self.logger.error("SPOT API returned error in JSON response")
-                            return [{"_error": "json_error", "_error_message": "SPOT API returned error in response"}]
+                            # Extract the actual error code from the response
+                            errors = data.get("response", {}).get("errors", {}).get("error", {})
+                            if isinstance(errors, dict):
+                                error_code = errors.get('code', 'Unknown')
+                                error_text = errors.get('text', 'Unknown error')
+                                
+                                # Handle E-0195 as success (no devices found)
+                                if error_code == 'E-0195':
+                                    logger.info(f"SPOT API: Authentication successful but no devices found ({error_text})")
+                                    return [{"_error": "no_devices", "_error_message": f"SPOT API error: {error_code} - {error_text}"}]
+                                
+                                # Map other error codes
+                                mapped_error_code = self._map_spot_error_code(error_code)
+                                return [{"_error": mapped_error_code, "_error_message": f"SPOT API error: {error_code} - {error_text}"}]
+                            else:
+                                return [{"_error": "json_error", "_error_message": "SPOT API returned error in response"}]
                         else:
-                            self.logger.info("No messages found from SPOT")
+                            logger.info("No messages found from SPOT")
                             return []
 
                     # Find the newest message by timestamp
@@ -171,25 +192,47 @@ class SpotPlugin(BaseGPSPlugin):
                         }
                     }
 
-                    self.logger.info(
+                    logger.info(
                         f"Successfully fetched newest location from SPOT (timestamp: {location['timestamp']})")
                     return [location]
 
                 elif response.status == 401:
-                    self.logger.error("Unauthorized access to SPOT feed. Check feed password.")
+                    logger.error("Unauthorized access to SPOT feed. Check feed password.")
                     return [{"_error": "401", "_error_message": "Unauthorized access"}]
                 elif response.status == 404:
-                    self.logger.error("SPOT feed not found. Check feed ID.")
+                    logger.error("SPOT feed not found. Check feed ID.")
                     return [{"_error": "404", "_error_message": "Resource not found"}]
                 else:
-                    self.logger.error(f"Error fetching SPOT data: HTTP {response.status}")
+                    logger.error(f"Error fetching SPOT data: HTTP {response.status}")
                     error_text = await response.text()
-                    self.logger.debug(f"Response: {error_text}")
+                    logger.debug(f"Response: {error_text}")
                     return [{"_error": str(response.status), "_error_message": f"HTTP {response.status} error"}]
 
         except Exception as e:
-            self.logger.error(f"Error fetching SPOT locations: {e}")
+            logger.error(f"Error fetching SPOT locations: {e}")
             return []
+
+    def _map_spot_error_code(self, spot_error_code: str) -> str:
+        """
+        Map SPOT API error codes to standard error codes used by the base plugin
+        
+        SPOT API Error Codes:
+        - E-0195: Authentication successful but no devices found -> treated as success (no mapping)
+        - E-0173: Authentication failed, incorrect password -> maps to '401'  
+        - E-0160: Feed ID not found -> maps to '404'
+        
+        Args:
+            spot_error_code: SPOT API error code (e.g., 'E-0195', 'E-0173', 'E-0160')
+            
+        Returns:
+            Standard error code that the base plugin understands ('401', '404', or 'json_error')
+        """
+        error_mapping = {
+            'E-0173': '401',  # Authentication failed, incorrect password
+            'E-0160': '404',  # Feed ID not found
+        }
+        
+        return error_mapping.get(spot_error_code, 'json_error')
 
     def _parse_spot_response(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
@@ -212,13 +255,21 @@ class SpotPlugin(BaseGPSPlugin):
                         error_code = error.get('code', 'Unknown')
                         error_text = error.get('text', 'Unknown error')
                         error_desc = error.get('description', 'Unknown error')
-                        self.logger.error(f"SPOT API error {error_code}: {error_text} - {error_desc}")
+                        logger.error(f"SPOT API error {error_code}: {error_text} - {error_desc}")
                 else:
                     error_code = errors.get('code', 'Unknown')
                     error_text = errors.get('text', 'Unknown error')
                     error_desc = errors.get('description', 'Unknown error')
-                    self.logger.error(f"SPOT API error {error_code}: {error_text} - {error_desc}")
-                return [{"_error": "json_error", "_error_message": f"SPOT API error: {error_code}"}]
+                    logger.error(f"SPOT API error {error_code}: {error_text} - {error_desc}")
+                
+                # Handle E-0195 as success (no devices found)
+                if error_code == 'E-0195':
+                    logger.info(f"SPOT API: Authentication successful but no devices found ({error_text})")
+                    return [{"_error": "no_devices", "_error_message": f"SPOT API error: {error_code} - {error_text}"}]
+                
+                # Map other error codes
+                mapped_error_code = self._map_spot_error_code(error_code)
+                return [{"_error": mapped_error_code, "_error_message": f"SPOT API error: {error_code} - {error_text}"}]
 
             messages_container = feed_response.get("messages", {})
             messages = messages_container.get("message", [])
@@ -230,11 +281,11 @@ class SpotPlugin(BaseGPSPlugin):
             # Sort by date (newest first)
             messages.sort(key=lambda x: x.get("dateTime", ""), reverse=True)
 
-            self.logger.info(f"Parsed {len(messages)} messages from SPOT response")
+            logger.info(f"Parsed {len(messages)} messages from SPOT response")
             return messages
 
         except Exception as e:
-            self.logger.error(f"Error parsing SPOT response: {e}")
+            logger.error(f"Error parsing SPOT response: {e}")
             return []
 
     def _build_description(self, message: Dict[str, Any]) -> str:
@@ -273,7 +324,7 @@ class SpotPlugin(BaseGPSPlugin):
         # Additional SPOT-specific validation
         feed_id = self.config.get("feed_id", "")
         if len(feed_id) < 32:  # SPOT feed IDs are typically 32+ characters
-            self.logger.warning("SPOT feed ID seems unusually short")
+            logger.warning("SPOT feed ID seems unusually short")
 
         # Validate max_results if provided
         max_results = self.config.get("max_results")
@@ -281,45 +332,12 @@ class SpotPlugin(BaseGPSPlugin):
             try:
                 max_results = int(max_results)
                 if max_results < 1 or max_results > 200:
-                    self.logger.error("max_results must be between 1 and 200")
+                    logger.error("max_results must be between 1 and 200")
                     return False
                 # Update config with validated integer value
                 self.config["max_results"] = max_results
             except (ValueError, TypeError):
-                self.logger.error("max_results must be a valid integer")
+                logger.error("max_results must be a valid integer")
                 return False
 
         return True
-"""
-    async def test_connection(self) -> Dict[str, Any]:
-
-        try:
-            timeout = aiohttp.ClientTimeout(total=30)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                locations = await self.fetch_locations(session)
-
-                if not locations:
-                    return {
-                        "success": False,
-                        "error": "No location data received from SPOT API",
-                        "message": "Connection test failed - no data received"
-                    }
-
-                devices = [{"name": loc["name"], "status": "active"} for loc in locations]
-
-                return {
-                    "success": True,
-                    "message": f"Successfully connected to SPOT feed and found {len(locations)} location points",
-                    "device_count": len(set(loc["name"] for loc in locations)),  # Unique devices
-                    "devices": devices[:5],  # Limit to first 5 for display
-                    "total_points": len(locations)
-                }
-
-        except Exception as e:
-            self.logger.error(f"Connection test failed: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "message": "Connection test failed"
-            }
-"""

@@ -24,17 +24,23 @@ Version: {{VERSION}}
 
 # Standard library imports
 import asyncio
+import logging
 import ssl
+import traceback
 from datetime import datetime, timezone
+from typing import List, Dict, Any, Optional
+from urllib.parse import urlparse
 
 # Third-party imports
 import aiohttp
 import certifi
 from fastkml import kml
-from typing import List, Dict, Any, Optional
 
 # Local application imports
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 
 class GarminPlugin(BaseGPSPlugin):
@@ -144,7 +150,7 @@ class GarminPlugin(BaseGPSPlugin):
             )
 
             if kml_data is None:
-                self.logger.warning("No KML data received from Garmin feed - likely authentication or connection error")
+                logger.warning("No KML data received from Garmin feed - likely authentication or connection error")
                 return [{"_error": "401", "_error_message": "Authentication failed"}]
             elif isinstance(kml_data, dict) and "_error" in kml_data:
                 # Return the error indicator as-is
@@ -168,7 +174,7 @@ class GarminPlugin(BaseGPSPlugin):
             for placemark in placemarks:
                 # Check if device is inactive and should be hidden
                 if hide_inactive and self._is_device_inactive(placemark):
-                    self.logger.debug(f"Skipping inactive device: {placemark.get('name', 'Unknown')}")
+                    logger.debug(f"Skipping inactive device: {placemark.get('name', 'Unknown')}")
                     continue
 
                 # Get the actual reporting time from ExtendedData/description
@@ -204,12 +210,12 @@ class GarminPlugin(BaseGPSPlugin):
                 }
                 locations.append(location)
 
-            self.logger.info(
+            logger.info(
                 f"Successfully fetched {len(locations)} locations from Garmin")
             return locations
 
         except Exception as e:
-            self.logger.error(f"Error fetching Garmin locations: {e}")
+            logger.error(f"Error fetching Garmin locations: {e}")
             return []
 
     def _is_device_inactive(self, placemark: Dict[str, Any]) -> bool:
@@ -227,11 +233,11 @@ class GarminPlugin(BaseGPSPlugin):
             if extended_data:
                 event_value = extended_data.get("Event", "")
                 if event_value and "tracking turned off" in event_value.lower():
-                    self.logger.debug(f"Device inactive - Event: {event_value}")
+                    logger.debug(f"Device inactive - Event: {event_value}")
                     return True
             return False
         except Exception as e:
-            self.logger.debug(f"Error checking device activity status: {e}")
+            logger.debug(f"Error checking device activity status: {e}")
             return False
 
     def _parse_timestamp(self, timestamp_str: str) -> datetime:
@@ -362,53 +368,53 @@ class GarminPlugin(BaseGPSPlugin):
 
                         # Validate content
                         if not content or content.isspace():
-                            self.logger.error("Received empty KML feed")
+                            logger.error("Received empty KML feed")
                             return {"_error": "invalid_url", "_error_message": "Empty response from server"}
 
                         if "<kml" not in content:
-                            self.logger.error("Received non-KML content")
+                            logger.error("Received non-KML content")
                             return {"_error": "invalid_url", "_error_message": "Invalid KML feed URL"}
 
-                        self.logger.info("KML Feed Successfully Fetched")
+                        logger.info("KML Feed Successfully Fetched")
                         return content
 
                     elif response.status == 401:
                         error_text = await response.text()
-                        self.logger.error("Unauthorized access (401). Check Garmin credentials.")
+                        logger.error("Unauthorized access (401). Check Garmin credentials.")
                         return None
                     elif response.status == 403:
                         error_text = await response.text()
-                        self.logger.error("Forbidden access (403). Check user permissions.")
+                        logger.error("Forbidden access (403). Check user permissions.")
                         return None
                     elif response.status == 404:
                         error_text = await response.text()
-                        self.logger.error("Resource not found (404). Check the KML feed URL.")
+                        logger.error("Resource not found (404). Check the KML feed URL.")
                         return None
                     else:
                         error_text = await response.text()
-                        self.logger.error(f"Error fetching KML feed: HTTP {response.status}: {error_text}")
+                        logger.error(f"Error fetching KML feed: HTTP {response.status}: {error_text}")
 
             except ssl.SSLError as ssl_err:
-                self.logger.warning(f"SSL Error on attempt {attempt + 1}: {ssl_err}")
+                logger.warning(f"SSL Error on attempt {attempt + 1}: {ssl_err}")
                 # Fallback to no SSL verification on SSL errors
                 try:
                     async with session.get(url, auth=auth, ssl=False) as response:
                         if response.status == 200:
                             content = await response.text()
                             if content and "<kml" in content:
-                                self.logger.warning("Using insecure SSL connection due to certificate issues")
+                                logger.warning("Using insecure SSL connection due to certificate issues")
                                 return content
                 except Exception as fallback_err:
-                    self.logger.error(f"Fallback attempt failed: {fallback_err}")
+                    logger.error(f"Fallback attempt failed: {fallback_err}")
 
             except Exception as e:
-                self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
+                logger.warning(f"Attempt {attempt + 1} failed: {e}")
 
             if attempt < retries - 1:
-                self.logger.info(f"Retrying in {delay} seconds...")
+                logger.info(f"Retrying in {delay} seconds...")
                 await asyncio.sleep(delay)
 
-        self.logger.error("Failed to fetch KML feed after multiple attempts")
+        logger.error("Failed to fetch KML feed after multiple attempts")
         return None
 
     def _parse_kml(self, kml_data):
@@ -424,31 +430,31 @@ class GarminPlugin(BaseGPSPlugin):
         try:
             k = kml.KML()
             k.from_string(kml_data.encode())
-            self.logger.debug(f"KML object created: {k}")
+            logger.debug(f"KML object created: {k}")
 
             # Debug the KML structure
-            self.logger.debug(f"KML features: {k.features}")
-            self.logger.debug(f"KML features length: {len(k.features) if k.features else 'None'}")
+            logger.debug(f"KML features: {k.features}")
+            logger.debug(f"KML features length: {len(k.features) if k.features else 'None'}")
 
             placemarks = []
 
             def extract_placemarks(feature):
                 """Recursively extract Point placemarks from any KML feature"""
-                self.logger.debug(f"Feature type: {type(feature)}, has features: {hasattr(feature, 'features')}")
+                logger.debug(f"Feature type: {type(feature)}, has features: {hasattr(feature, 'features')}")
 
                 if hasattr(feature, 'features') and feature.features:
                     # If it has sub-features, recurse into them
-                    self.logger.debug(f"Feature has {len(feature.features)} sub-features")
+                    logger.debug(f"Feature has {len(feature.features)} sub-features")
                     for sub_feature in feature.features:
                         extract_placemarks(sub_feature)
                 elif hasattr(feature, 'geometry') and feature.geometry:
                     # This is a placemark with geometry
                     geometry_type = type(feature.geometry).__name__
-                    self.logger.debug(f"Found placemark with geometry: {geometry_type}")
+                    logger.debug(f"Found placemark with geometry: {geometry_type}")
 
                     # Only process Point geometries, skip LineString and other geometry types
                     if 'Point' not in geometry_type:
-                        self.logger.debug(f"Skipping non-Point geometry: {geometry_type}")
+                        logger.debug(f"Skipping non-Point geometry: {geometry_type}")
                         return
 
                     try:
@@ -456,10 +462,10 @@ class GarminPlugin(BaseGPSPlugin):
                         coords = None
                         if hasattr(feature.geometry, 'coords'):
                             coords = feature.geometry.coords
-                            self.logger.debug(f"Coords from .coords: {coords}")
+                            logger.debug(f"Coords from .coords: {coords}")
                         elif hasattr(feature.geometry, 'coordinates'):
                             coords = feature.geometry.coordinates
-                            self.logger.debug(f"Coords from .coordinates: {coords}")
+                            logger.debug(f"Coords from .coordinates: {coords}")
 
                         if coords:
                             # Handle different coordinate formats
@@ -471,7 +477,7 @@ class GarminPlugin(BaseGPSPlugin):
                                     # Direct list format
                                     lon, lat = coords[0], coords[1]
                             else:
-                                self.logger.warning(f"Unexpected coordinate format: {coords}")
+                                logger.warning(f"Unexpected coordinate format: {coords}")
                                 return
 
                             # Extract timestamp from ExtendedData if available
@@ -495,19 +501,19 @@ class GarminPlugin(BaseGPSPlugin):
                                 "extended_data": extended_data
                             }
                             placemarks.append(placemark_data)
-                            self.logger.debug(f"Added Point placemark: {placemark_data}")
+                            logger.debug(f"Added Point placemark: {placemark_data}")
 
                     except (IndexError, AttributeError, TypeError) as e:
-                        self.logger.warning(f"Error parsing placemark {getattr(feature, 'name', 'Unknown')}: {e}")
+                        logger.warning(f"Error parsing placemark {getattr(feature, 'name', 'Unknown')}: {e}")
                 else:
-                    self.logger.debug(f"Feature has no geometry or sub-features: {getattr(feature, 'name', 'Unknown')}")
+                    logger.debug(f"Feature has no geometry or sub-features: {getattr(feature, 'name', 'Unknown')}")
 
             # Start extraction from root features
-            self.logger.debug(f"KML features type: {type(k.features)}")
+            logger.debug(f"KML features type: {type(k.features)}")
             if k.features:
                 # self.logger.debug(f"Number of root features: {len(k.features)}")
                 for feature in k.features:
-                    self.logger.debug(
+                    logger.debug(
                         f"Processing feature type: {type(feature)}, name: {getattr(feature, 'name', 'Unknown')}")
                     extract_placemarks(feature)
             else:
@@ -522,14 +528,14 @@ class GarminPlugin(BaseGPSPlugin):
                     namespaces = {'kml': 'http://www.opengis.net/kml/2.2'}
                     placemarks_xml = root.findall('.//kml:Placemark', namespaces)
 
-                    self.logger.debug(f"Found {len(placemarks_xml)} Placemark elements via XML")
+                    logger.debug(f"Found {len(placemarks_xml)} Placemark elements via XML")
 
                     for placemark_xml in placemarks_xml:
                         try:
                             # Check if this placemark has a Point (not LineString)
                             point_elem = placemark_xml.find('.//kml:Point', namespaces)
                             if point_elem is None:
-                                self.logger.debug("Skipping non-Point placemark")
+                                logger.debug("Skipping non-Point placemark")
                                 continue
 
                             # Get name
@@ -571,21 +577,21 @@ class GarminPlugin(BaseGPSPlugin):
                                         "extended_data": extended_data
                                     }
                                     placemarks.append(placemark_data)
-                                    self.logger.debug(f"Added Point placemark via XML: {placemark_data}")
+                                    logger.debug(f"Added Point placemark via XML: {placemark_data}")
 
                         except (ValueError, IndexError) as e:
-                            self.logger.warning(f"Error parsing XML placemark: {e}")
+                            logger.warning(f"Error parsing XML placemark: {e}")
 
                 except Exception as xml_e:
-                    self.logger.error(f"Alternative XML parsing failed: {xml_e}")
+                    logger.error(f"Alternative XML parsing failed: {xml_e}")
 
-            self.logger.debug(f"Parsed {len(placemarks)} Point placemarks from KML")
+            logger.debug(f"Parsed {len(placemarks)} Point placemarks from KML")
             return placemarks
 
         except Exception as e:
-            self.logger.error(f"Error parsing KML data: {e}")
+            logger.error(f"Error parsing KML data: {e}")
             import traceback
-            self.logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return []
 
     def _extract_timestamp_from_extended_data(self, feature):
@@ -612,7 +618,7 @@ class GarminPlugin(BaseGPSPlugin):
 
             return None
         except Exception as e:
-            self.logger.debug(f"Error extracting timestamp from extended data: {e}")
+            logger.debug(f"Error extracting timestamp from extended data: {e}")
             return None
 
     def _extract_timestamp_from_xml(self, placemark_xml, namespaces):
@@ -645,7 +651,7 @@ class GarminPlugin(BaseGPSPlugin):
 
             return None
         except Exception as e:
-            self.logger.debug(f"Error extracting timestamp from XML: {e}")
+            logger.debug(f"Error extracting timestamp from XML: {e}")
             return None
 
     def _extract_extended_data(self, feature):
@@ -657,7 +663,7 @@ class GarminPlugin(BaseGPSPlugin):
                     if hasattr(data, 'name') and hasattr(data, 'value'):
                         extended_data[data.name] = data.value
         except Exception as e:
-            self.logger.debug(f"Error extracting extended data: {e}")
+            logger.debug(f"Error extracting extended data: {e}")
         return extended_data
 
     def _extract_extended_data_from_xml(self, placemark_xml, namespaces):
@@ -672,7 +678,7 @@ class GarminPlugin(BaseGPSPlugin):
                     if name_attr and value_elem is not None:
                         extended_data[name_attr] = value_elem.text
         except Exception as e:
-            self.logger.debug(f"Error extracting extended data from XML: {e}")
+            logger.debug(f"Error extracting extended data from XML: {e}")
         return extended_data
 
     def validate_config(self) -> bool:
@@ -685,7 +691,7 @@ class GarminPlugin(BaseGPSPlugin):
         # Additional Garmin-specific validation
         url = self.config.get("url", "")
         if "garmin.com" not in url.lower():
-            self.logger.warning("URL does not appear to be a Garmin feed URL")
+            logger.warning("URL does not appear to be a Garmin feed URL")
 
         # Ensure retry_delay is properly typed
         retry_delay = self.config.get("retry_delay", 60)
@@ -693,7 +699,7 @@ class GarminPlugin(BaseGPSPlugin):
             try:
                 self.config["retry_delay"] = int(retry_delay)
             except ValueError:
-                self.logger.error("retry_delay must be a valid integer")
+                logger.error("retry_delay must be a valid integer")
                 return False
 
         return True

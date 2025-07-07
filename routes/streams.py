@@ -1,9 +1,11 @@
-# =============================================================================
-# routes/streams.py - Refactored Stream Management Routes
-# Business logic moved to service layer for better separation of concerns
-# =============================================================================
+# Standard library imports
+import logging
 
+# Third-party imports
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, current_app
+
+# Local application imports
+from database import db
 from models.tak_server import TakServer
 from services.stream_display_service import StreamDisplayService
 from services.stream_config_service import StreamConfigService
@@ -12,11 +14,10 @@ from services.connection_test_service import ConnectionTestService
 from services.stream_status_service import StreamStatusService
 from services.cot_type_service import cot_type_service
 
-from database import db
-import logging
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('streams', __name__)
-logger = logging.getLogger(__name__)
 
 
 def get_display_service():

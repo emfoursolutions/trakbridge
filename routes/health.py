@@ -1,18 +1,21 @@
-# =============================================================================
-# routes/health.py - Health Check Routes (Updated)
-# =============================================================================
-
-from flask import Blueprint, jsonify, current_app
-from datetime import datetime, timedelta, timezone
+# Standard library imports
 import logging
-import time
 import threading
-import psutil
+import time
+from datetime import datetime, timedelta, timezone
+
+# Third-party imports
 import asyncio
+import psutil
+from flask import Blueprint, jsonify, current_app
+
+# Local application imports
 from services.health_service import health_service
 
-bp = Blueprint('health', __name__)
+# Module-level logger
 logger = logging.getLogger(__name__)
+
+bp = Blueprint('health', __name__)
 
 # Cache for health check results to avoid excessive checks
 _health_cache = {}

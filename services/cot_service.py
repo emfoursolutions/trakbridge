@@ -124,6 +124,13 @@ class EnhancedCOTService:
 
         for location in locations:
             try:
+                # Check for error responses from plugins
+                if '_error' in location:
+                    error_code = location.get('_error', 'unknown')
+                    error_message = location.get('_error_message', 'Unknown error')
+                    logger.warning(f"Skipping error response from plugin: {error_code} - {error_message}")
+                    continue
+
                 # Validate and clean location data first
                 cleaned_location = EnhancedCOTService._validate_location_data(location)
 
@@ -266,6 +273,13 @@ class EnhancedCOTService:
 
         for location in locations:
             try:
+                # Check for error responses from plugins
+                if '_error' in location:
+                    error_code = location.get('_error', 'unknown')
+                    error_message = location.get('_error_message', 'Unknown error')
+                    logger.warning(f"Skipping error response from plugin: {error_code} - {error_message}")
+                    continue
+
                 # Use existing logic from your current implementation
                 if 'timestamp' in location and location['timestamp']:
                     if isinstance(location['timestamp'], str):
