@@ -8,7 +8,7 @@ app.db*
 config.py
 
 # Generated version file
-takbridge/_version.py
+_version.py
 
 # setuptools-scm artifacts
 *.egg-info/

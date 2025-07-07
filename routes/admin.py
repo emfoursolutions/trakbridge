@@ -2,7 +2,7 @@
 File: routes/admin.py
 
 Description:
-   Admin dashboard blueprint for the TAKBridge application. Provides comprehensive administrative
+   Admin dashboard blueprint for the TrakBridge application. Provides comprehensive administrative
    interface with system monitoring, key rotation management, and application status endpoints.
    Displays real-time metrics including uptime, stream counts, server statistics, and system
    information. Features secure key rotation capabilities with backup options and status tracking.
@@ -37,6 +37,7 @@ from flask import Blueprint, render_template, current_app, request, jsonify, fla
 
 # Local application imports
 from services.key_rotation_service import get_key_rotation_service
+from services.version import get_version
 
 # Module-level logger
 import logging
@@ -74,14 +75,8 @@ def admin_dashboard():
         python_version=platform.python_version(),
         system=platform.system(),
         release=platform.release(),
-        version=get_app_version()
+        version=get_version()
     )
-
-
-@bp.route('/version')
-def admin_version():
-    version = get_app_version()
-    return jsonify(app_version=version, uptime=str(get_uptime()))
 
 
 @bp.route('/about')
@@ -159,6 +154,6 @@ def get_uptime():
 
 def get_app_version():
     try:
-        return importlib.metadata.version("takbridge")
+        return importlib.metadata.version("trakbridge")
     except importlib.metadata.PackageNotFoundError:
-        return os.getenv("TAKBRIDGE_VERSION", "0.1.0")
+        return os.getenv("TRAKBRIDGE_VERSION", "0.1.0")

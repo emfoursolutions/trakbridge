@@ -44,6 +44,7 @@ from services.stream_config_service import StreamConfigService
 from services.stream_operations_service import StreamOperationsService
 from services.connection_test_service import ConnectionTestService
 from services.stream_status_service import StreamStatusService
+from services.version import get_version, format_version
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ bp = Blueprint('api', __name__)
 _health_cache = {}
 _cache_lock = threading.Lock()
 CACHE_DURATION = 30  # seconds
+
 
 def get_display_service():
     """Get the display service with current app context"""
@@ -115,6 +117,7 @@ def get_cached_health_check(check_name, check_function, *args, **kwargs):
 # System Health API Routes
 # =============================================================================
 
+
 @bp.route('/status')
 def api_status():
     """API endpoint for system status"""
@@ -145,7 +148,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.now(timezone.utc).isoformat(),
-        'version': '1.0.0',
+        'version': get_version(),
         'service': 'trakbridge'
     })
 
@@ -182,7 +185,7 @@ def detailed_health_check():
         'status': overall_status,
         'timestamp': datetime.now(timezone.utc).isoformat(),
         'response_time_ms': response_time,
-        'version': '1.0.0',
+        'version': get_version(),
         'service': 'trakbridge',
         'checks': checks
     }
@@ -359,6 +362,9 @@ def security_status():
         logger.error(f"Error getting security status: {e}")
         return jsonify({'error': 'Failed to get security status'}), 500
 
+@bp.route('/version')
+def version():
+    return {'version': format_version()}
 
 def check_stream_manager_health():
     """Check stream manager health"""

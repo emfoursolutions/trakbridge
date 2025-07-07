@@ -164,7 +164,7 @@ LOG_LEVEL=INFO
 DB_TYPE=postgresql
 DB_HOST=postgres
 DB_PORT=5432
-DB_NAME=takbridge_db
+DB_NAME=trakbridge_db
 DB_USER=postgres
 
 # Docker Compose
@@ -199,7 +199,7 @@ LOG_LEVEL=INFO
 DB_TYPE=postgresql
 DB_HOST=postgres
 DB_PORT=5432
-DB_NAME=takbridge_db_staging
+DB_NAME=trakbridge_db_staging
 DB_USER=postgres
 
 # Docker Compose

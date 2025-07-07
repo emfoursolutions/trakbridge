@@ -1,8 +1,7 @@
 [project]
-name = "takbridge"
-# Remove static version - now dynamic
+name = "trakbridge"
 dynamic = ["version"]
-description = "TakBridge External Feed Streaming Platform"
+description = "TrakBridge Feed Streaming Platform"
 authors = [{ name = "Emfour Solutions", email = "support@emfoursolutions.com.au" }]
 readme = "README.md"
 requires-python = ">=3.10"

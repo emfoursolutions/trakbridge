@@ -31,7 +31,7 @@ from sqlalchemy.pool import Pool
 # Local application imports
 from config.environments import get_config
 from database import db
-from __version__ import __version__, VERSION_INFO
+from services.version import get_version, format_version, get_version_info, get_build_info, is_development_version
 
 # Initialize extensions
 migrate = Migrate()
@@ -96,6 +96,9 @@ def create_app(config_name=None):
     # Set up logging
     setup_logging(app)
 
+    # Add version context processor
+    setup_version_context_processor(app)
+
     # Register cleanup handlers
     setup_cleanup_handlers()
 
@@ -119,6 +122,62 @@ def create_app(config_name=None):
     setup_error_handlers(app)
 
     return app
+
+
+def setup_version_context_processor(app):
+    """Set up version context processor for Flask app."""
+
+    # Add version info to startup logs
+    try:
+        app.logger.info(f"Starting {format_version(include_build_info=True)}")
+    except Exception as e:
+        app.logger.warning(f"Could not log version info: {e}")
+
+    @app.context_processor
+    def inject_version_info():
+        """Inject version information into all templates."""
+        try:
+
+            version_info = get_version_info()
+            build_info = get_build_info()
+
+            # Create a simplified version object for templates
+            app_version = {
+                'version': version_info.get('version', '0.0.0'),
+                'is_development': is_development_version(),
+                'git_commit': build_info.get('git_commit'),
+                'python_version': f"{version_info['python_version_info'].major}.{version_info['python_version_info'].minor}.{version_info['python_version_info'].micro}",
+                'platform': version_info.get('platform', 'unknown'),
+                'source': version_info.get('source', 'unknown')
+            }
+
+            return dict(app_version=app_version)
+
+        except Exception as e:
+            # Fallback in case of any errors
+            app.logger.warning(f"Failed to inject version info: {e}")
+            return dict(app_version={
+                'version': '0.0.0',
+                'is_development': True,
+                'git_commit': None,
+                'python_version': 'unknown',
+                'platform': 'unknown',
+                'source': 'error'
+            })
+
+    @app.context_processor
+    def inject_moment():
+        """Inject moment function for date handling in templates."""
+        from datetime import datetime
+
+        class MomentWrapper:
+            def format(self, fmt):
+                return datetime.now().strftime(fmt)
+
+            def __call__(self):
+                return self
+
+        return dict(moment=MomentWrapper())
 
 
 def configure_flask_app(app, config_instance):
@@ -149,17 +208,8 @@ def configure_flask_app(app, config_instance):
     app.config['LOG_LEVEL'] = config_instance.LOG_LEVEL
     app.config['LOG_DIR'] = config_instance.LOG_DIR
 
-    # Add version information to Flask config
-    app.config['VERSION'] = __version__
-    app.config['VERSION_INFO'] = VERSION_INFO
-
-    # Make version available in templates
-    @app.context_processor
-    def inject_version():
-        return dict(
-            app_version=__version__,
-            version_info=VERSION_INFO
-        )
+    # Import Version
+    app.config['VERSION'] = get_version()
 
     # Store the config instance for later use
     app.config_instance = config_instance
