@@ -38,6 +38,7 @@ python-dateutil
 python-dotenv
 PyYAML
 setuptools
+setuptools-scm
 six
 SQLAlchemy
 types-python-dateutil

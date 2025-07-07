@@ -31,6 +31,7 @@ from sqlalchemy.pool import Pool
 # Local application imports
 from config.environments import get_config
 from database import db
+from __version__ import __version__, VERSION_INFO
 
 # Initialize extensions
 migrate = Migrate()
@@ -147,6 +148,18 @@ def configure_flask_app(app, config_instance):
     # Logging settings
     app.config['LOG_LEVEL'] = config_instance.LOG_LEVEL
     app.config['LOG_DIR'] = config_instance.LOG_DIR
+
+    # Add version information to Flask config
+    app.config['VERSION'] = __version__
+    app.config['VERSION_INFO'] = VERSION_INFO
+
+    # Make version available in templates
+    @app.context_processor
+    def inject_version():
+        return dict(
+            app_version=__version__,
+            version_info=VERSION_INFO
+        )
 
     # Store the config instance for later use
     app.config_instance = config_instance

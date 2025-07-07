@@ -6,3 +6,14 @@ utils/
 app.db*
 .env*
 config.py
+
+# Generated version file
+takbridge/_version.py
+
+# setuptools-scm artifacts
+*.egg-info/
+dist/
+build/
+
+# Development version files
+.setuptools-scm-info.json
