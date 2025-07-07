@@ -1,3 +1,35 @@
+
+"""
+File: routes/streams.py
+
+Description:
+    Stream management blueprint providing comprehensive CRUD operations and real-time control
+    for GPS data streams in the TrakBridge application. This module serves as the primary
+    interface for managing stream configurations, monitoring stream status, and performing
+    operational tasks such as starting, stopping, and testing stream connections. The blueprint
+    integrates with multiple service layers to provide a complete stream management experience
+    through both web interface and API endpoints.
+
+Key features:
+    - Complete stream lifecycle management (create, read, update, delete)
+    - Real-time stream operations (start, stop, restart) with status monitoring
+    - Plugin-based stream configuration with dynamic metadata handling
+    - Connection testing for both new and existing stream configurations
+    - Stream listing with aggregated statistics and plugin metadata
+    - Detailed stream view with operational status and configuration display
+    - Form-based and JSON API support for flexible client integration
+    - Integration with TAK server management for stream deployment
+    - CoT (Cursor on Target) type configuration and management
+    - Comprehensive error handling and user feedback systems
+    - Service layer abstraction for maintainable architecture
+    - Runtime service resolution for proper Flask application context
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
 # Standard library imports
 import logging
 
@@ -285,138 +317,6 @@ def _render_edit_form(stream_id):
                            plugin_metadata=plugin_metadata,
                            cot_types=cot_types['cot_types'],
                            default_cot_type=cot_types['default_cot_type'])
-
-
-# =============================================================================
-# API Routes
-# =============================================================================
-
-@bp.route('/api/stats')
-def api_stats():
-    """Get statistics for all streams"""
-
-    # Get the correct status_service at runtime
-    services = get_stream_services()
-    status_service = services['status_service']
-
-    try:
-        stats = status_service.get_stream_statistics()
-        return jsonify(stats)
-
-    except Exception as e:
-        logger.error(f"Error getting stats: {e}")
-        return jsonify({'error': 'Failed to get statistics'}), 500
-
-
-@bp.route('/api/status')
-def api_status():
-    """Get detailed status of all streams"""
-
-    # Get the correct status_service at runtime
-    services = get_stream_services()
-    status_service = services['status_service']
-
-    try:
-        status_data = status_service.get_all_streams_status()
-        return jsonify({'streams': status_data})
-
-    except Exception as e:
-        logger.error(f"Error getting status: {e}")
-        return jsonify({'error': 'Failed to get status'}), 500
-
-
-@bp.route('/api/plugins/<plugin_name>/config')
-def get_plugin_config(plugin_name):
-    """Get plugin configuration metadata"""
-    try:
-        metadata = get_config_service().get_plugin_metadata(plugin_name)
-        if metadata:
-            metadata = get_config_service().serialize_plugin_metadata(metadata)
-            return jsonify(metadata)
-        return jsonify({"error": "Plugin not found"}), 404
-
-    except Exception as e:
-        logger.error(f"Error getting plugin config for {plugin_name}: {e}")
-        return jsonify({"error": "Failed to get plugin configuration"}), 500
-
-
-@bp.route('/<int:stream_id>/export-config')
-def export_stream_config(stream_id):
-    """Export stream configuration (sensitive fields masked)"""
-    try:
-        export_data = get_config_service().export_stream_config(stream_id, include_sensitive=False)
-        return jsonify(export_data)
-
-    except Exception as e:
-        logger.error(f"Error exporting stream config {stream_id}: {e}")
-        return jsonify({'error': 'Failed to export configuration'}), 500
-
-
-@bp.route('/security-status')
-def security_status():
-    """Get security status of all streams"""
-    try:
-        status = get_config_service().get_security_status()
-        return jsonify(status)
-
-    except Exception as e:
-        logger.error(f"Error getting security status: {e}")
-        return jsonify({'error': 'Failed to get security status'}), 500
-
-
-# =============================================================================
-# Bulk Operations
-# =============================================================================
-
-@bp.route('/health-check', methods=['POST'])
-def health_check():
-    """Trigger a health check on all streams"""
-
-    # Get the correct operations_service at runtime
-    services = get_stream_services()
-    operations_service = services['operations_service']
-
-    try:
-        result = operations_service.run_health_check()
-        return jsonify(result), 200 if result['success'] else 500
-
-    except Exception as e:
-        logger.error(f"Error during health check: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@bp.route('/start-all', methods=['POST'])
-def start_all_streams():
-    """Start all active streams"""
-
-    # Get the correct operations_service at runtime
-    services = get_stream_services()
-    operations_service = services['operations_service']
-
-    try:
-        result = operations_service.bulk_start_streams()
-        return jsonify(result)
-
-    except Exception as e:
-        logger.error(f"Error starting all streams: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@bp.route('/stop-all', methods=['POST'])
-def stop_all_streams():
-    """Stop all running streams"""
-
-    # Get the correct operations_service at runtime
-    services = get_stream_services()
-    operations_service = services['operations_service']
-
-    try:
-        result = operations_service.bulk_stop_streams()
-        return jsonify(result)
-
-    except Exception as e:
-        logger.error(f"Error stopping all streams: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @bp.route('/test-config', methods=['POST'])

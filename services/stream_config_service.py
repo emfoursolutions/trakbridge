@@ -1,11 +1,36 @@
-# =============================================================================
-# services/stream_config_service.py - Stream Configuration Management Service
-# =============================================================================
+"""
+File: services/stream_config_service.py
 
+Description:
+    Advanced stream configuration management service providing comprehensive plugin
+    metadata handling, security validation, and configuration export capabilities.
+    This service manages stream configurations with focus on security, validation,
+    and metadata-driven configuration management for the TrakBridge application.
+
+Key features:
+    - Comprehensive plugin configuration security validation with sensitive field detection
+    - Advanced security analysis including weak password detection and default credential identification
+    - Plugin metadata management with serialization support for JSON API responses
+    - Stream configuration export functionality with selective sensitive data inclusion
+    - Security status reporting across all stream configurations with issue categorization
+    - Plugin configuration extraction from HTTP request data with validation
+    - Encrypted field detection and tracking for security compliance monitoring
+    - Stream display preparation with plugin metadata enrichment
+    - Configuration field validation with type checking and format verification
+    - Comprehensive error handling with detailed logging and fallback mechanisms
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import logging
-from typing import Dict, Any, List, Optional, Union
+from typing import Any, Dict, Optional
+
+# Local application imports
 from models.stream import Stream
-from database import db
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,28 @@
-# =============================================================================
-# services/exceptions.py - Custom Exception Classes
-# =============================================================================
+"""
+File: services/exceptions.py
+
+Description:
+    Custom exception hierarchy providing structured error handling for the TrakBridge
+    application. This module defines specialized exception classes for different
+    subsystems and error conditions, enabling precise error categorization and
+    targeted exception handling throughout the application.
+
+Key features:
+    - Hierarchical exception structure with base classes for major subsystems
+    - Stream management exceptions for database, configuration, and runtime errors
+    - Plugin system exceptions for connection, configuration, and timeout scenarios
+    - TAK server communication exceptions for authentication and connectivity issues
+    - Encryption service exceptions for cryptographic operations and key management
+    - Configuration validation exceptions for application setup and validation
+    - Clear exception naming conventions for easy identification and handling
+
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
 
 class StreamManagerError(Exception):
     """Base exception for StreamManager errors"""

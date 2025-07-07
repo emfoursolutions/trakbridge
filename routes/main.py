@@ -1,3 +1,30 @@
+
+"""
+File: routes/main.py
+
+Description:
+    Main dashboard blueprint providing the primary user interface for the TrakBridge application.
+    This module serves as the entry point for users accessing the web interface, rendering the
+    main dashboard with real-time system overview including stream statistics, TAK server status,
+    and operational metrics. The route aggregates data from multiple sources to provide a
+    comprehensive system overview in a single view.
+
+Key features:
+    - Main dashboard route serving as the application's homepage
+    - Real-time system statistics aggregation (streams, TAK servers, workers)
+    - Stream status monitoring with active/inactive counts
+    - TAK server inventory and status display
+    - Worker thread monitoring for operational visibility
+    - Template rendering with dynamic data injection
+    - Circular import prevention with strategic model imports
+    - Integration with stream manager for live operational data
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
 # Standard library imports
 import logging
 

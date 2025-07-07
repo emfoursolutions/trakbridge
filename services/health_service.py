@@ -1,15 +1,43 @@
-# =============================================================================
-# services/health_service.py - Health Check Service
-# =============================================================================
+"""
+File: services/health_service.py
 
+Description:
+    Comprehensive health monitoring service providing detailed system health checks
+    and performance monitoring for the TrakBridge application. This service performs
+    database connectivity tests, connection pool monitoring, query performance analysis,
+    and resource utilization tracking to ensure optimal system operation.
+
+Key features:
+    - Multi-database support with PostgreSQL, MySQL, and SQLite compatibility
+    - Database connectivity and response time monitoring with connection pool analysis
+    - Query performance tracking with slow query detection and execution time metrics
+    - Lock monitoring and long-running transaction detection for database health
+    - Database size monitoring with growth tracking and threshold alerting
+    - Table-specific health checks for application entities and error detection
+    - Aggregated health reporting with status categorization and issue prioritization
+    - Real-time performance metrics with timestamp tracking and trend analysis
+
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import logging
 import time
 import os
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List
+
+# Third-party imports
 from sqlalchemy import text
-from database import db
 from flask import current_app
+
+# Local application imports
+from database import db
+
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +55,10 @@ class HealthService:
             self.db_type = current_app.config_instance.secret_manager.get_secret('DB_TYPE', 'sqlite')
         except Exception:
             self.db_type = 'sqlite'  # fallback
-    
+
+
     def check_database_connectivity(self) -> Dict[str, Any]:
-        """Check database connectivity and basic operations (moved from routes/health.py)"""
+        """Check database connectivity and basic operations (moved from routes/api.py)"""
         try:
             start_time = time.time()
 

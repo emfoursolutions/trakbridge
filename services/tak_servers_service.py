@@ -1,25 +1,46 @@
-# =============================================================================
-# services/tak_servers_service.py - TAK Server Business Logic Service
-# =============================================================================
+"""
+File: services/tak_servers_service.py
 
+Description:
+Comprehensive TAK server management service that handles server operations, certificate validation,
+and connection testing. Provides business logic for TAK server configuration, P12 certificate
+processing, and PyTAK-based connectivity verification with SSL/TLS support.
+
+Key features:
+- P12 certificate validation and information extraction
+- Server data validation and configuration management
+- Asynchronous TAK server connection testing with PyTAK integration
+- SSL/TLS certificate handling with expiration monitoring
+- Test COT message creation and transmission
+- Comprehensive error handling for network, SSL, and certificate issues
+- Temporary file management for certificate processing
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
+import asyncio
 import base64
 import logging
+import os
 import socket
 import ssl
 import tempfile
-import os
-import asyncio
 import uuid
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
 from configparser import ConfigParser
+from datetime import datetime, timezone
 
+# Third-party imports
+from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.serialization import pkcs12
-from cryptography import x509
 import pytak
 
-# Set up logging
+# Module level logging
 logger = logging.getLogger(__name__)
 
 

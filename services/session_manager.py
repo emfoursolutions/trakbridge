@@ -1,7 +1,29 @@
-# =============================================================================
-# services/session_manager.py - Session Manager Service
-# Manages the HTTP sessions for all Stream Workers
-# =============================================================================
+"""
+File: services/session_manager.py
+
+Description:
+    Robust HTTP session management service providing centralized session handling
+    for all stream workers with advanced connection pooling and error recovery.
+    This service ensures reliable HTTP connectivity across the application with
+    optimized timeout handling and resource management.
+
+Key features:
+    - Centralized HTTP session management with aiohttp ClientSession integration
+    - Advanced connection pooling with configurable limits and keepalive settings
+    - Intelligent timeout configuration with separate connect, read, and total timeouts
+    - DNS caching and connection reuse optimization for improved performance
+    - Thread-safe session initialization with async lock protection
+    - Graceful session cleanup with timeout handling and resource deallocation
+    - Environment proxy support with trust_env configuration
+    - Automatic session recovery and reinitialization on connection failures
+    - Comprehensive logging for session lifecycle events and error tracking
+    - Connection pool monitoring with per-host connection limiting
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
 
 # Standard library imports
 import asyncio

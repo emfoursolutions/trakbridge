@@ -1,7 +1,41 @@
-# =============================================================================
-# services/stream_manager.py - Enhanced Stream Management Service
-# Manages all streams
-# =============================================================================
+"""
+File: services/stream_manager.py
+
+Description:
+    Central stream management service providing comprehensive lifecycle management
+    for all data streams with robust database integration and persistent COT
+    service coordination. This service acts as the core orchestrator for stream
+    operations, managing concurrent stream workers and maintaining system health.
+
+Key features:
+    - Singleton pattern implementation with thread-safe initialization
+    - Asynchronous stream lifecycle management (start/stop/restart operations)
+    - Background event loop management with dedicated thread execution
+    - Persistent COT service initialization and coordination for TAK servers
+    - Comprehensive health monitoring with periodic checks and recovery
+    - Database synchronization validation and automatic correction
+    - Thread-safe public API for Flask route integration
+    - Graceful shutdown handling with proper cleanup and resource management
+    - Stream worker orchestration with timeout handling and error recovery
+    - Real-time status tracking with detailed health metrics
+    - Automatic stream restart on failure detection
+    - TAK server worker deduplication and persistent connection management
+    - Enhanced error handling with custom exception types
+    - Concurrent stream operations with proper resource locking
+    - Database status synchronization with active stream validation
+
+Dependencies:
+    - StreamWorker: Individual stream execution and management
+    - DatabaseManager: Persistent storage and stream configuration
+    - SessionManager: HTTP session management for plugin operations
+    - COT Service: Persistent TAK server connection management
+    - Custom exceptions: StreamManagerError, StreamNotFoundError, etc.
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
 
 # Standard library imports
 import asyncio
@@ -10,9 +44,6 @@ import threading
 import time
 from typing import Dict, List
 from datetime import datetime, timezone
-
-# Third-party imports
-# (none for this file)
 
 # Local application imports
 from services.cot_service import cot_service

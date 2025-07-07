@@ -1,3 +1,27 @@
+"""
+File: services/database_manager.py
+
+Description:
+    Thread-safe database manager providing robust database operations with proper error
+    handling and session management for the TrakBridge application. This service handles
+    database connections, transaction management, and entity operations with retry logic
+    and Flask app context management.
+
+Key features:
+    - Thread-safe database operations with Flask app context management
+    - Comprehensive error handling with SQLAlchemy exception management and retry logic
+    - Stream entity management with relationship loading and detached object creation
+    - Active stream monitoring and status update capabilities
+    - Database session lifecycle management with proper commit/rollback handling
+    - Detached entity copying to prevent lazy loading issues across thread boundaries
+
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
 # Standard library imports
 import logging
 import time

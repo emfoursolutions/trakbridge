@@ -1,13 +1,43 @@
-# =============================================================================
-# services/cot_type_service.py - CoT Type Service
-# Manages the CoT Types
-# =============================================================================
-import yaml
+"""
+File: services/cot_type_service.py
+
+Description:
+    Cursor-on-Target (COT) type management service providing comprehensive type definition
+    and categorization capabilities for the TrakBridge application. This service handles
+    COT type loading, validation, and organization from YAML configuration files.
+
+Key features:
+    - YAML-based COT type configuration loading with fallback to default types
+    - Comprehensive COT type data structure with value, SIDC, label, description, and category
+    - Category-based type filtering and organization (friendly, hostile, neutral, unknown)
+    - Default COT type management with configurable fallback behavior
+    - Type validation and lookup operations with efficient caching
+    - Template data formatting for web interface integration
+    - Statistical analysis and reporting of COT type distributions
+    - Lazy loading with reload capability for configuration changes
+    - Robust error handling with graceful fallback to default configurations
+    - Thread-safe operations with proper data encapsulation
+    - Support for military symbology standards (SIDC) integration
+    - Flexible architecture supporting extensible type definitions
+    - Comprehensive logging for configuration management and troubleshooting
+    - Backward compatibility functions for legacy code integration
+    - Efficient memory usage with on-demand loading and caching
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from collections import Counter
-import logging
+
+# Third-party imports
+import yaml
 
 logger = logging.getLogger(__name__)
 

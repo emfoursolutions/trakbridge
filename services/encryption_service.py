@@ -1,3 +1,29 @@
+"""
+File: services/encryption_service.py
+
+Description:
+    Enhanced encryption service providing comprehensive cryptographic operations for
+    sensitive data protection in the TrakBridge application. This service handles
+    encryption/decryption of configuration data, certificate passwords, and plugin
+    credentials using industry-standard cryptographic practices.
+
+Key features:
+    - Master key management with multiple source support (environment, file, generated)
+    - Fernet-based symmetric encryption with PBKDF2 key derivation (100k+ iterations)
+    - Versioned encryption format for future compatibility and migration support
+    - Configuration-based encryption with selective field processing
+    - Database key rotation capabilities for certificate and plugin password migration
+    - Password hashing with enhanced security using PBKDF2-HMAC-SHA256
+    - Health check and diagnostic capabilities for encryption system monitoring
+    - Mixin class for plugin configuration encryption support
+
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
 # Standard library imports
 import os
 import base64

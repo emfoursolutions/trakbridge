@@ -1,16 +1,35 @@
-# =============================================================================
-# services/stream_worker.py - Stream Worker Service (Updated for Persistent COT)
-# Manages the individual streams and is called by Stream Manager Service
-# =============================================================================
+"""
+File: services/stream_worker.py
 
+Description:
+Individual stream worker service that manages single feed processing with persistent COT integration.
+Handles plugin lifecycle, TAK server connections, location fetching, and event distribution through
+the persistent COT service architecture.
+
+Key features:
+- Asynchronous stream processing with configurable polling intervals
+- Persistent PyTAK server integration with automatic worker management
+- Plugin-based location fetching with timeout handling
+- Progressive backoff retry logic with consecutive error tracking
+- Health status monitoring and connection testing
+- Event queuing through persistent COT service
+- Graceful startup/shutdown with database synchronization
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import asyncio
 import logging
-from datetime import timezone, datetime
+from datetime import datetime, timezone
 from typing import Dict, List
 
-# Import the accessor function
+# Local application imports
 from plugins.plugin_manager import get_plugin_manager
-from services.cot_service import cot_service  # Import the PersistentCOTService singleton
+from services.cot_service import cot_service
 
 
 class StreamWorker:
@@ -23,7 +42,7 @@ class StreamWorker:
         self.task = None
         self.session_manager = session_manager
         self.db_manager = db_manager
-        self.logger = logging.getLogger(f'StreamWorker-{stream.name}')
+        self.logger = logging.getLogger(f'stream_worker.{stream.name}')
         self.reader = None
         self.writer = None
         self._stop_event = None

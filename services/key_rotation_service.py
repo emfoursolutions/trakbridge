@@ -1,33 +1,60 @@
-# =============================================================================
-# services/key_rotation_service.py - Key Rotation Service with Web Interface
-# =============================================================================
+"""
+File: services/key_rotation_service.py
 
+Description:
+    Enterprise-grade key rotation service providing secure encryption key management
+    with automated database backup and web interface integration. This service handles
+    the critical process of rotating encryption keys while maintaining data integrity
+    and providing comprehensive logging and monitoring capabilities.
+
+Key features:
+    - Multi-database backup support with PostgreSQL, MySQL, and SQLite compatibility
+    - Automated database backup creation before key rotation with size tracking
+    - Thread-safe key rotation process with background execution and progress monitoring
+    - Comprehensive key storage detection supporting environment variables and file-based storage
+    - Secure key validation and testing before rotation to prevent data corruption
+    - Real-time rotation progress logging with timestamp tracking and error reporting
+    - Automatic key storage method detection and seamless key file management
+    - Application restart detection with deployment-specific restart instructions
+    - Flask application context management for background thread operations
+    - Comprehensive error handling with rollback capabilities and audit trail
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import os
 import shutil
 import subprocess
-import tempfile
 import threading
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import logging
-import json
 
+# Third-party imports
 from flask import current_app
+
+# Local application imports
 from services.encryption_service import get_encryption_service, EncryptionService
+
+# Module level logging
+logger = logging.getLogger(__name__)
 
 
 class KeyRotationService:
     """Service for rotating encryption keys with database backup and web interface"""
 
     def __init__(self):
-        self.logger = logging.getLogger(__name__)
         self.rotation_log: List[Dict[str, Any]] = []
         self.is_rotating = False
         self.rotation_thread: Optional[threading.Thread] = None
 
-    def get_database_info(self) -> Dict[str, Any]:
+    @staticmethod
+    def get_database_info() -> Dict[str, Any]:
         """Get database type and connection information"""
         try:
             from database import db
@@ -61,7 +88,7 @@ class KeyRotationService:
                 'engine': str(db.engine)
             }
         except Exception as e:
-            self.logger.error(f"Error getting database info: {e}")
+            logger.error(f"Error getting database info: {e}")
             return {
                 'type': 'unknown',
                 'uri': 'unknown',
@@ -95,14 +122,15 @@ class KeyRotationService:
                 }
                 
         except Exception as e:
-            self.logger.error(f"Error creating database backup: {e}")
+            logger.error(f"Error creating database backup: {e}")
             return {
                 'success': False,
                 'error': str(e),
                 'backup_path': None
             }
 
-    def _backup_sqlite(self, db_info: Dict[str, Any], backup_dir: Path, timestamp: str) -> Dict[str, Any]:
+    @staticmethod
+    def _backup_sqlite(db_info: Dict[str, Any], backup_dir: Path, timestamp: str) -> Dict[str, Any]:
         """Backup SQLite database"""
         try:
             db_path = db_info['path']
@@ -124,7 +152,8 @@ class KeyRotationService:
                 'backup_path': None
             }
 
-    def _backup_mysql(self, db_info: Dict[str, Any], backup_dir: Path, timestamp: str) -> Dict[str, Any]:
+    @staticmethod
+    def _backup_mysql(db_info: Dict[str, Any], backup_dir: Path, timestamp: str) -> Dict[str, Any]:
         """Backup MySQL database"""
         try:
             # Extract database name from URI
@@ -176,7 +205,8 @@ class KeyRotationService:
                 'backup_path': None
             }
 
-    def _backup_postgresql(self, db_info: Dict[str, Any], backup_dir: Path, timestamp: str) -> Dict[str, Any]:
+    @staticmethod
+    def _backup_postgresql(db_info: Dict[str, Any], backup_dir: Path, timestamp: str) -> Dict[str, Any]:
         """Backup PostgreSQL database"""
         try:
             # Extract database name from URI
@@ -235,7 +265,8 @@ class KeyRotationService:
                 'backup_path': None
             }
 
-    def get_key_storage_info(self) -> Dict[str, Any]:
+    @staticmethod
+    def get_key_storage_info() -> Dict[str, Any]:
         """Detect current key storage method"""
         try:
             # Check environment variable
@@ -427,9 +458,10 @@ class KeyRotationService:
             'message': message
         }
         self.rotation_log.append(log_entry)
-        self.logger.info(f"Key Rotation: {message}")
+        logger.info(f"Key Rotation: {message}")
 
-    def restart_application(self) -> Dict[str, Any]:
+    @staticmethod
+    def restart_application() -> Dict[str, Any]:
         """Attempt to restart the application"""
         try:
             # This is a complex operation that depends on deployment method
@@ -446,7 +478,7 @@ class KeyRotationService:
             # Check if we're running with systemd
             try:
                 result = subprocess.run(['systemctl', 'is-active', 'trakbridge'], 
-                                      capture_output=True, text=True)
+                                    capture_output=True, text=True)
                 if result.returncode == 0:
                     return {
                         'success': True,
@@ -489,4 +521,4 @@ key_rotation_service = KeyRotationService()
 
 def get_key_rotation_service():
     """Get the key rotation service instance"""
-    return key_rotation_service 
+    return key_rotation_service

@@ -1,13 +1,40 @@
-# =============================================================================
-# services/connection_test_service.py
-# Connection Test Service - Handles all connection testing operations
-# Extracted from routes/streams.py for better separation of concerns
-# =============================================================================
+"""
+File: services/connection_test_service.py
 
+Description:
+    Connection testing service providing comprehensive validation and testing capabilities
+    for stream connections in the TrakBridge application. This service handles
+    both synchronous and asynchronous connection testing operations, supporting plugin-based
+    architecture for various stream providers.
+
+Key features:
+    - Asynchronous and synchronous connection testing for plugin configurations
+    - Individual and batch connection testing with concurrent execution support
+    - Comprehensive validation of plugin configurations before testing
+    - Integration with shared session manager for efficient resource utilization
+    - Detailed connection test reporting with recommendations and diagnostics
+    - Proper timeout handling and error management for robust operation
+    - Thread pool executor for handling synchronous wrapper operations
+    - Support for both new plugin configurations and existing stream testing
+    - Device count reporting for successful connections to assess data availability
+    - Clean resource management with proper cleanup and destructor patterns
+    - Extensive logging and error handling for troubleshooting and monitoring
+    - Flexible architecture supporting multiple plugin types and configurations
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import logging
 import asyncio
 import aiohttp
 from concurrent.futures import ThreadPoolExecutor
+
+# Module level logging
+logger = logging.getLogger(__name__)
 
 
 class ConnectionTestService:
@@ -301,5 +328,3 @@ class ConnectionTestService:
         except Exception as e:
             logger.debug(f"Destructor completed {e}")
 
-
-logger = logging.getLogger(__name__)

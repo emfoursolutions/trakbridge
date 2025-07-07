@@ -1,3 +1,33 @@
+"""
+File: routes/tak_servers.py
+
+Description:
+    TAK (Team Awareness Kit) server management blueprint providing comprehensive administration
+    capabilities for TAK server configurations in the TrakBridge application. This module handles
+    the complete lifecycle of TAK server management including creation, configuration, testing,
+    and maintenance of secure connections to TAK servers. The blueprint supports both traditional
+    web forms and JSON API endpoints for flexible integration with various client interfaces.
+
+Key features:
+    - Complete TAK server lifecycle management (create, read, update, delete)
+    - P12 certificate validation and secure storage with encrypted password handling
+    - Real-time connection testing using pytak integration for validation
+    - Support for multiple TAK protocols (TLS, TCP, UDP) with configurable SSL verification
+    - Base64 certificate handling for API integration and file upload support
+    - Comprehensive validation of server configurations before persistence
+    - Safety checks preventing deletion of servers with active stream associations
+    - Dual interface support (web forms and JSON API) for maximum compatibility
+    - Detailed error handling and user feedback for troubleshooting
+    - Certificate management with validation, storage, and removal capabilities
+    - Asynchronous connection testing with proper error handling
+    - Service layer integration for maintainable architecture and business logic separation
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
 # Standard library imports
 import base64
 import logging

@@ -1,15 +1,44 @@
-# =============================================================================
-# services/stream_display_service.py - Stream Display and Presentation Logic
-# Handles formatting and preparation of stream data for UI display
-# =============================================================================
+"""
+File: services/stream_display_service.py
 
+Description:
+    Comprehensive stream display and presentation service providing formatted data
+    preparation for UI components with advanced metadata integration and status
+    tracking. This service handles the complex task of preparing stream data for
+    various display contexts while maintaining performance and data integrity.
+
+Key features:
+    - Multi-context stream preparation for listing, detail, and edit views
+    - Advanced plugin metadata integration with automatic serialization
+    - Real-time running status integration with fallback mechanisms
+    - Intelligent COT type information enrichment with icon and category data
+    - Secure sensitive field masking for display configurations
+    - Comprehensive datetime formatting with ISO and localized formats
+    - Plugin usage statistics and metadata aggregation across all streams
+    - API response formatting with optimized data structures
+    - Stream summary generation for quick overview displays
+    - Plugin usage analysis with active/running stream tracking
+    - Eager loading optimization with SQLAlchemy joinedload for performance
+    - Comprehensive error handling with graceful degradation and logging
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import logging
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
-from models.stream import Stream
+from typing import Any, Dict, List, Optional, Tuple
+
+# Third-party imports
 from sqlalchemy.orm import joinedload
-from services.stream_status_service import StreamStatusService
+
+# Local application imports
+from models.stream import Stream
 from services.cot_type_service import cot_type_service
+from services.stream_status_service import StreamStatusService
 
 logger = logging.getLogger(__name__)
 

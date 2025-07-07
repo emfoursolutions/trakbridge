@@ -1,15 +1,45 @@
-# =============================================================================
-# services/cot_service_pytak.py - Fixed COT Service with PyTAK Integration
-# =============================================================================
+"""
+File: services/cot_service.py
 
+Description:
+    Enhanced Cursor-on-Target (COT) service providing comprehensive COT event generation
+    and transmission capabilities for the TrakBridge application. This service handles
+    both PyTAK-based and custom implementations for robust COT operations with TAK servers.
+
+Key features:
+    - Dual implementation support: PyTAK library integration with custom fallback
+    - Comprehensive COT event creation from location data with proper XML generation
+    - Multiple transmission methods: direct TCP/TLS connections and persistent queues
+    - P12 certificate handling and extraction for secure TAK server authentication
+    - Persistent worker management with automatic connection recovery and monitoring
+    - Asynchronous event processing with queue-based architecture for high throughput
+    - Proper SSL/TLS context management with configurable certificate verification
+    - Data validation and type safety with comprehensive error handling
+    - Temporary file management for certificate operations with automatic cleanup
+    - Support for various COT types including friendly, hostile, neutral, and unknown units
+    - Stale time management and proper timestamp handling for event lifecycle
+    - Connection pooling and resource management for efficient server communication
+    - Detailed logging and diagnostics for troubleshooting and monitoring
+    - Thread-safe operations with proper asyncio task management
+    - Flexible configuration support for different TAK server protocols and settings
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import asyncio
 import ssl
 import tempfile
 import os
-from lxml import etree
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional, Tuple
 import logging
+
+# Third-party imports
+from lxml import etree
 
 # Add this after the existing imports
 from typing import TYPE_CHECKING

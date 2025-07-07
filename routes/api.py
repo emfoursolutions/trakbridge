@@ -1,3 +1,30 @@
+"""
+File: routes/api.py
+
+Description:
+    Comprehensive API blueprint providing health monitoring, system status, and stream management endpoints
+    for the TrakBridge application. This module serves as the primary API interface for monitoring system
+    health, managing stream operations, and retrieving operational statistics. The blueprint implements
+    both basic and detailed health checks with caching mechanisms to optimize performance.
+
+Key features:
+    - System health monitoring with detailed component checks (database, encryption, stream manager, system resources)
+    - Kubernetes-compatible readiness and liveness probes for container orchestration
+    - Stream management APIs for statistics, status monitoring, and configuration export
+    - Plugin health checks and configuration metadata retrieval
+    - Bulk operations for starting/stopping all streams and running system-wide health checks
+    - Threaded caching system for health check results to reduce system load
+    - Comprehensive error handling with appropriate HTTP status codes
+    - Real-time system resource monitoring (CPU, memory, disk usage)
+    - Security status monitoring and configuration validation
+    - Background cache cleanup to prevent memory leaks
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
 # Standard library imports
 import logging
 import threading
@@ -10,17 +37,47 @@ import psutil
 from flask import Blueprint, jsonify, current_app
 
 # Local application imports
+from database import db
 from services.health_service import health_service
+from services.stream_display_service import StreamDisplayService
+from services.stream_config_service import StreamConfigService
+from services.stream_operations_service import StreamOperationsService
+from services.connection_test_service import ConnectionTestService
+from services.stream_status_service import StreamStatusService
 
 # Module-level logger
 logger = logging.getLogger(__name__)
 
-bp = Blueprint('health', __name__)
+bp = Blueprint('api', __name__)
 
 # Cache for health check results to avoid excessive checks
 _health_cache = {}
 _cache_lock = threading.Lock()
 CACHE_DURATION = 30  # seconds
+
+def get_display_service():
+    """Get the display service with current app context"""
+    return StreamDisplayService(current_app.plugin_manager)
+
+
+def get_config_service():
+    """Get the config service with current app context"""
+    return StreamConfigService(current_app.plugin_manager)
+
+
+def get_stream_services():
+    app_context_factory = getattr(current_app, "app_context_factory", None)
+    if app_context_factory is None:
+        # Fallback to the default Flask app context method
+        app_context_factory = current_app.app_context
+    stream_manager = getattr(current_app, "stream_manager", None)
+    if stream_manager is None:
+        raise ValueError("Stream manager not found in current_app")
+    return {
+        'operations_service': StreamOperationsService(stream_manager, db),
+        'test_service': ConnectionTestService(current_app.plugin_manager, stream_manager),
+        'status_service': StreamStatusService(stream_manager),
+    }
 
 
 def get_cached_health_check(check_name, check_function, *args, **kwargs):
@@ -54,6 +111,9 @@ def get_cached_health_check(check_name, check_function, *args, **kwargs):
             }
             return error_result
 
+# =============================================================================
+# System Health API Routes
+# =============================================================================
 
 @bp.route('/status')
 def api_status():
@@ -221,6 +281,83 @@ def plugin_health():
     )
     health_status = future.result()
     return jsonify(health_status)
+
+# =============================================================================
+# Stream API Routes
+# =============================================================================
+
+
+@bp.route('/streams/stats')
+def api_stats():
+    """Get statistics for all streams"""
+
+    # Get the correct status_service at runtime
+    services = get_stream_services()
+    status_service = services['status_service']
+
+    try:
+        stats = status_service.get_stream_statistics()
+        return jsonify(stats)
+
+    except Exception as e:
+        logger.error(f"Error getting stats: {e}")
+        return jsonify({'error': 'Failed to get statistics'}), 500
+
+
+@bp.route('/streams/status')
+def streams_status():
+    """Get detailed status of all streams"""
+
+    # Get the correct status_service at runtime
+    services = get_stream_services()
+    status_service = services['status_service']
+
+    try:
+        status_data = status_service.get_all_streams_status()
+        return jsonify({'streams': status_data})
+
+    except Exception as e:
+        logger.error(f"Error getting status: {e}")
+        return jsonify({'error': 'Failed to get status'}), 500
+
+
+@bp.route('/streams/plugins/<plugin_name>/config')
+def get_plugin_config(plugin_name):
+    """Get plugin configuration metadata"""
+    try:
+        metadata = get_config_service().get_plugin_metadata(plugin_name)
+        if metadata:
+            metadata = get_config_service().serialize_plugin_metadata(metadata)
+            return jsonify(metadata)
+        return jsonify({"error": "Plugin not found"}), 404
+
+    except Exception as e:
+        logger.error(f"Error getting plugin config for {plugin_name}: {e}")
+        return jsonify({"error": "Failed to get plugin configuration"}), 500
+
+
+@bp.route('/streams/<int:stream_id>/export-config')
+def export_stream_config(stream_id):
+    """Export stream configuration (sensitive fields masked)"""
+    try:
+        export_data = get_config_service().export_stream_config(stream_id, include_sensitive=False)
+        return jsonify(export_data)
+
+    except Exception as e:
+        logger.error(f"Error exporting stream config {stream_id}: {e}")
+        return jsonify({'error': 'Failed to export configuration'}), 500
+
+
+@bp.route('/streams/security-status')
+def security_status():
+    """Get security status of all streams"""
+    try:
+        status = get_config_service().get_security_status()
+        return jsonify(status)
+
+    except Exception as e:
+        logger.error(f"Error getting security status: {e}")
+        return jsonify({'error': 'Failed to get security status'}), 500
 
 
 def check_stream_manager_health():

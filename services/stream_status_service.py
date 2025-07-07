@@ -1,10 +1,34 @@
-# =============================================================================
-# services/stream_status_service.py - Stream Status Management Service
-# =============================================================================
+"""
+File: services/stream_status_service.py
 
+Description:
+Service for managing and retrieving comprehensive stream status information across the streaming system.
+Provides safe status retrieval, statistics generation, and health monitoring for individual streams
+and the entire stream ecosystem.
+
+Key features:
+- Safe stream status retrieval with error handling
+- Comprehensive statistics aggregation by plugin type and status
+- Detailed health monitoring and recent activity tracking
+- Time-based formatting for last poll information
+- Status validation and error reporting
+- Multi-stream overview with categorized counts
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import logging
-from typing import Dict, Any, List, Optional, Union
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Union
+
+# Third-party imports
+# (none in this snippet)
+
+# Local application imports
 from models.stream import Stream
 
 logger = logging.getLogger(__name__)

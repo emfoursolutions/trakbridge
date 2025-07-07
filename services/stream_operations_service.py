@@ -1,17 +1,53 @@
-# =============================================================================
-# services/stream_operations_service.py
-# Stream Operations Service - Handles all stream lifecycle operations
-# Extracted from routes/streams.py for better separation of concerns
-# =============================================================================
+"""
+File: services/stream_operations_service.py
 
-import logging
+Description:
+    Dedicated service for handling all stream lifecycle operations with proper
+    separation of concerns from route handlers. This service provides a clean
+    API layer between the web interface and the core stream management system,
+    ensuring consistent error handling and business logic enforcement.
+
+Key features:
+    - Stream creation with automatic plugin configuration validation
+    - Safe stream updates with stop/restart coordination to prevent data loss
+    - Comprehensive stream deletion with proper cleanup and dependency handling
+    - Bulk operations for starting/stopping multiple streams efficiently
+    - Health check orchestration with detailed reporting and recovery actions
+    - Auto-start functionality for newly created streams
+    - Plugin configuration management with checkbox field handling
+    - Database transaction management with rollback on errors
+    - Stream enable/disable operations with database synchronization
+    - Eager loading optimization for complex stream relationships
+    - Comprehensive error handling with categorized exception types
+    - Status validation and running state management
+    - Plugin metadata integration for configuration validation
+    - Thread-safe operations through StreamManager integration
+
+Business Logic:
+    - Enforces stream configuration validation before creation
+    - Manages stream state transitions (inactive -> active -> running)
+    - Handles plugin-specific configuration requirements
+    - Provides consistent error responses for API consumption
+    - Ensures proper cleanup during stream deletion operations
+    - Coordinates database updates with stream manager operations
+
+Author: {{AUTHOR}}
+Created: {{CREATED_DATE}}
+Last Modified: {{LASTMOD}}
+Version: {{VERSION}}
+"""
+
+# Standard library imports
 import asyncio
+import logging
 from datetime import datetime
-from typing import Dict, Any, Optional, Union
+from typing import Any, Dict, Optional
+
+# Local application imports
 from models.stream import Stream
 from services.exceptions import (
-    StreamManagerError, StreamNotFoundError, StreamConfigurationError,
-    StreamStartupError, StreamTimeoutError, DatabaseError
+    StreamConfigurationError,
+    DatabaseError,
 )
 
 logger = logging.getLogger(__name__)
