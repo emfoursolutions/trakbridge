@@ -46,7 +46,8 @@ def list_cot_types():
                                    cot_data={'cot_types': []},
                                    cot_stats={'friendly': 0, 'hostile': 0, 'neutral': 0, 'unknown': 0, 'other': 0,
                                               'categories': []},
-                                   error_message="Could not load COT types data. Please check the YAML configuration file.")
+                                   error_message="Could not load COT types data. "
+                                                 "Please check the YAML configuration file.")
 
         # Ensure cot_types exists
         if 'cot_types' not in cot_data:
@@ -59,7 +60,6 @@ def list_cot_types():
         logger.info(f"Loaded {len(cot_data['cot_types'])} COT types")
         logger.debug(f"COT statistics: {cot_stats}")
 
-        #cot_data = jsonify(cot_data)
         return render_template('cot_types.html',
                                cot_data=cot_data,
                                cot_stats=cot_stats)

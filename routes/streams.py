@@ -45,6 +45,7 @@ from services.stream_operations_service import StreamOperationsService
 from services.connection_test_service import ConnectionTestService
 from services.stream_status_service import StreamStatusService
 from services.cot_type_service import cot_type_service
+from utils.app_helpers import get_plugin_manager
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -54,12 +55,12 @@ bp = Blueprint('streams', __name__)
 
 def get_display_service():
     """Get the display service with current app context"""
-    return StreamDisplayService(current_app.plugin_manager)
+    return StreamDisplayService(get_plugin_manager())
 
 
 def get_config_service():
     """Get the config service with current app context"""
-    return StreamConfigService(current_app.plugin_manager)
+    return StreamConfigService(get_plugin_manager())
 
 
 def get_stream_services():
@@ -72,7 +73,7 @@ def get_stream_services():
         raise ValueError("Stream manager not found in current_app")
     return {
         'operations_service': StreamOperationsService(stream_manager, db),
-        'test_service': ConnectionTestService(current_app.plugin_manager, stream_manager),
+        'test_service': ConnectionTestService(get_plugin_manager(), stream_manager),
         'status_service': StreamStatusService(stream_manager),
     }
 

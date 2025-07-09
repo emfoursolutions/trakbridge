@@ -5,7 +5,7 @@ Description:
     Plugin implementation for fetching and processing location data from the Traccar GPS tracking platform.
     Connects to a Traccar server REST API using basic authentication, supports secure HTTPS connections,
     device filtering, and configurable request timeouts. Implements asynchronous fetching of device and position data,
-    normalizes and enriches GPS positions with detailed metadata including speed, altitude, battery, and ignition status.
+    normalizes and enriches GPS positions with detailed metadata including speed, altitude, and battery.
     Provides detailed metadata for UI integration, validates configuration parameters specific to Traccar,
     and supports enhanced async connection testing with comprehensive results and logging.
     Designed to integrate with the BaseGPSPlugin framework, supporting secure config handling and robust error handling.
@@ -41,6 +41,7 @@ from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
 
 # Module-level logger
 logger = logging.getLogger(__name__)
+
 
 class TraccarPlugin(BaseGPSPlugin):
     """Plugin for fetching location data from Traccar GPS tracking platform"""
@@ -141,7 +142,8 @@ class TraccarPlugin(BaseGPSPlugin):
             ]
         }
 
-    def _create_ssl_context(self) -> ssl.SSLContext:
+    @staticmethod
+    def _create_ssl_context() -> ssl.SSLContext:
         """
         Create SSL context with proper configuration to avoid timeout issues
 
@@ -271,7 +273,8 @@ class TraccarPlugin(BaseGPSPlugin):
         logger.info(f"Successfully fetched {len(locations)} positions from Traccar")
         return locations
 
-    async def _fetch_positions_from_api(self, session: aiohttp.ClientSession,
+    @staticmethod
+    async def _fetch_positions_from_api(session: aiohttp.ClientSession,
                                         config: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Fetch positions from Traccar API
@@ -329,7 +332,8 @@ class TraccarPlugin(BaseGPSPlugin):
             logger.error(f"Unexpected error fetching positions: {e}")
             return []
 
-    async def _fetch_devices_from_api(self, session: aiohttp.ClientSession,
+    @staticmethod
+    async def _fetch_devices_from_api(session: aiohttp.ClientSession,
                                       config: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Fetch device information from Traccar API
@@ -364,7 +368,8 @@ class TraccarPlugin(BaseGPSPlugin):
             logger.warning(f"Error fetching devices (non-critical): {e}")
             return []
 
-    def _parse_timestamp(self, timestamp_str: str) -> datetime:
+    @staticmethod
+    def _parse_timestamp(timestamp_str: str) -> datetime:
         """
         Parse timestamp from Traccar API response
 
@@ -447,7 +452,8 @@ class TraccarPlugin(BaseGPSPlugin):
 
         return " | ".join(parts) if parts else "No additional information"
 
-    def _parse_device_filter(self, filter_str: str) -> List[str]:
+    @staticmethod
+    def _parse_device_filter(filter_str: str) -> List[str]:
         """
         Parse device filter string into list of device names
 
@@ -462,7 +468,8 @@ class TraccarPlugin(BaseGPSPlugin):
 
         return [name.strip().lower() for name in filter_str.split(',') if name.strip()]
 
-    def _device_matches_filter(self, device_name: str, device_filter: List[str]) -> bool:
+    @staticmethod
+    def _device_matches_filter(device_name: str, device_filter: List[str]) -> bool:
         """
         Check if device name matches any filter criteria
 

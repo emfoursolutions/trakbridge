@@ -16,6 +16,7 @@ import logging
 import os
 from pathlib import Path
 from urllib.parse import urlparse
+import yaml
 
 # Third-party imports
 from typing import Any, Dict, List, Optional
@@ -304,7 +305,6 @@ def validate_config_file(file_path: str) -> List[str]:
     """Validate YAML configuration file syntax."""
     errors = []
     try:
-        import yaml
         with open(file_path, 'r') as f:
             yaml.safe_load(f)
     except yaml.YAMLError as e:

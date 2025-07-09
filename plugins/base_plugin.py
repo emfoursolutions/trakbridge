@@ -265,7 +265,8 @@ class BaseGPSPlugin(ABC):
                     logger.warning(f"Stream {getattr(stream, 'id', 'unknown')} has no TAK server ID")
 
             logger.info(
-                f"[{self.plugin_name}] Enqueued {enqueued_count} COT events for stream {getattr(stream, 'id', 'unknown')}"
+                f"[{self.plugin_name}] Enqueued {enqueued_count} "
+                f"COT events for stream {getattr(stream, 'id', 'unknown')}"
             )
 
         except Exception as e:

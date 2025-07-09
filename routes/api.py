@@ -45,6 +45,7 @@ from services.stream_operations_service import StreamOperationsService
 from services.connection_test_service import ConnectionTestService
 from services.stream_status_service import StreamStatusService
 from services.version import get_version, format_version
+from utils.app_helpers import get_plugin_manager
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -59,25 +60,32 @@ CACHE_DURATION = 30  # seconds
 
 def get_display_service():
     """Get the display service with current app context"""
-    return StreamDisplayService(current_app.plugin_manager)
+    return StreamDisplayService(get_plugin_manager())
 
 
 def get_config_service():
     """Get the config service with current app context"""
-    return StreamConfigService(current_app.plugin_manager)
+    return StreamConfigService(get_plugin_manager())
 
 
 def get_stream_services():
+    """Get stream services with safe attribute access"""
     app_context_factory = getattr(current_app, "app_context_factory", None)
     if app_context_factory is None:
         # Fallback to the default Flask app context method
         app_context_factory = current_app.app_context
+
     stream_manager = getattr(current_app, "stream_manager", None)
     if stream_manager is None:
         raise ValueError("Stream manager not found in current_app")
+
+    plugin_manager = getattr(current_app, "plugin_manager", None)
+    if plugin_manager is None:
+        raise ValueError("Plugin manager not found in current_app")
+
     return {
         'operations_service': StreamOperationsService(stream_manager, db),
-        'test_service': ConnectionTestService(current_app.plugin_manager, stream_manager),
+        'test_service': ConnectionTestService(plugin_manager, stream_manager),
         'status_service': StreamStatusService(stream_manager),
     }
 
@@ -270,8 +278,10 @@ def check_encryption_health():
 
 @bp.route('/health/plugins', methods=['GET'])
 def plugin_health():
+    """Plugin health check with safe attribute access"""
     plugin_manager = getattr(current_app, "plugin_manager", None)
     stream_manager = getattr(current_app, "stream_manager", None)
+
     if not plugin_manager:
         return jsonify({"error": "Plugin manager not available"}), 500
     if not stream_manager:
@@ -362,14 +372,16 @@ def security_status():
         logger.error(f"Error getting security status: {e}")
         return jsonify({'error': 'Failed to get security status'}), 500
 
+
 @bp.route('/version')
 def version():
     return {'version': format_version()}
 
+
 def check_stream_manager_health():
     """Check stream manager health"""
     try:
-        stream_manager = current_app.stream_manager
+        stream_manager = getattr(current_app, 'stream_manager', None)
         
         if stream_manager is None:
             return {
@@ -379,8 +391,8 @@ def check_stream_manager_health():
 
         # Check if background loop is running
         loop_running = (hasattr(stream_manager, '_loop') and
-                       stream_manager._loop and
-                       stream_manager._loop.is_running())
+                        stream_manager._loop and
+                        stream_manager._loop.is_running())
 
         # Count active workers
         worker_count = len(stream_manager.workers) if hasattr(stream_manager, 'workers') else 0

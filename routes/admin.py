@@ -26,11 +26,8 @@ Version: {{VERSION}}
 
 # Standard library imports
 import datetime
-import importlib.metadata
-import os
 import platform
 import time
-from typing import Dict, Any
 
 # Third-party imports
 from flask import Blueprint, render_template, current_app, request, jsonify, flash, redirect, url_for
@@ -61,7 +58,7 @@ def admin_dashboard():
     servers_count = db.session.query(TakServer).count()
 
     # Use the correct stream_manager instance
-    stream_manager = current_app.stream_manager
+    stream_manager = getattr(current_app, 'stream_manager', None)
     running_streams = sum(
         1 for status in stream_manager.get_all_stream_status().values() if status.get("running")
     )
@@ -116,7 +113,7 @@ def start_key_rotation():
             return jsonify({'success': False, 'error': 'New key is required'}), 400
         
         key_rotation_service = get_key_rotation_service()
-        result = key_rotation_service.start_rotation(new_key, create_backup, current_app._get_current_object())
+        result = key_rotation_service.start_rotation(new_key, create_backup, current_app)
         
         return jsonify(result)
         
@@ -150,10 +147,3 @@ def get_restart_info():
 
 def get_uptime():
     return datetime.timedelta(seconds=int(time.time() - start_time))
-
-
-def get_app_version():
-    try:
-        return importlib.metadata.version("trakbridge")
-    except importlib.metadata.PackageNotFoundError:
-        return os.getenv("TRAKBRIDGE_VERSION", "0.1.0")

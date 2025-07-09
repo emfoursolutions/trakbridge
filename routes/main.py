@@ -29,7 +29,7 @@ Version: {{VERSION}}
 import logging
 
 # Third-party imports
-from flask import Blueprint, render_template, jsonify, current_app
+from flask import Blueprint, render_template
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ def index():
     from models.tak_server import TakServer
 
     # Handle stream_manager import carefully
-    stream_manager = current_app.stream_manager
+    stream_manager = getattr(current_app, "stream_manager", None)
     running_workers = len(stream_manager.workers)
 
     streams = Stream.query.all()
@@ -60,8 +60,3 @@ def index():
                            tak_servers=tak_servers,
                            active_streams=active_streams,
                            total_streams=len(streams))
-
-
-
-
-

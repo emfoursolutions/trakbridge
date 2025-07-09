@@ -26,10 +26,8 @@ Version: {{VERSION}}
 import asyncio
 import logging
 import ssl
-import traceback
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
-from urllib.parse import urlparse
+from typing import List, Dict, Any
 
 # Third-party imports
 import aiohttp
@@ -116,7 +114,8 @@ class GarminPlugin(BaseGPSPlugin):
                     field_type="checkbox",
                     required=False,
                     default_value=True,
-                    help_text="When checked, hides devices that have tracking turned off. When unchecked, shows all devices including those with tracking disabled."
+                    help_text="When checked, hides devices that have tracking turned off. "
+                              "When unchecked, shows all devices including those with tracking disabled."
                 ),
                 PluginConfigField(
                     name="retry_delay",
@@ -218,7 +217,8 @@ class GarminPlugin(BaseGPSPlugin):
             logger.error(f"Error fetching Garmin locations: {e}")
             return []
 
-    def _is_device_inactive(self, placemark: Dict[str, Any]) -> bool:
+    @staticmethod
+    def _is_device_inactive(placemark: Dict[str, Any]) -> bool:
         """
         Check if a device is inactive based on the Event field in ExtendedData
 
@@ -240,7 +240,8 @@ class GarminPlugin(BaseGPSPlugin):
             logger.debug(f"Error checking device activity status: {e}")
             return False
 
-    def _parse_timestamp(self, timestamp_str: str) -> datetime:
+    @staticmethod
+    def _parse_timestamp(timestamp_str: str) -> datetime:
         """
         Parse timestamp from Garmin KML or other sources
         Args:
@@ -259,7 +260,8 @@ class GarminPlugin(BaseGPSPlugin):
         except Exception:
             return datetime.now(timezone.utc)
 
-    def _parse_time_string(self, time_str: str) -> datetime:
+    @staticmethod
+    def _parse_time_string(time_str: str) -> datetime:
         """
         Parse a time string to a datetime object. Return current UTC time if parsing fails.
         """
@@ -274,7 +276,8 @@ class GarminPlugin(BaseGPSPlugin):
         except Exception:
             return datetime.now(timezone.utc)
 
-    def _parse_time_from_description(self, description: str) -> datetime:
+    @staticmethod
+    def _parse_time_from_description(description: str) -> datetime:
         """
         Parse a datetime from a description string. Return current UTC time if not found.
         """
@@ -282,7 +285,8 @@ class GarminPlugin(BaseGPSPlugin):
         # Implement your parsing logic here, or just return now for safety
         return datetime.now(timezone.utc)
 
-    def _build_description(self, placemark: dict) -> str:
+    @staticmethod
+    def _build_description(placemark: dict) -> str:
         """
         Build description string from placemark data
         Args:
@@ -295,49 +299,9 @@ class GarminPlugin(BaseGPSPlugin):
             desc = ''
         return str(desc)
 
-    def _get_some_string_field(self, data: dict) -> str:
-        value = data.get('some_field')
-        if value is None:
-            return ''
-        return str(value)
-
-    def _another_string_method(self, value) -> str:
-        if value is None:
-            return ''
-        return str(value)
-
-    def _safe_strip(self, value) -> str:
-        if value is None:
-            return ''
-        return str(value).strip()
-
-    def _string_method_1(self, value) -> str:
-        if value is None:
-            return ''
-        return str(value)
-
-    def _string_method_2(self, value) -> str:
-        if value is None:
-            return ''
-        return str(value)
-
-    def _string_method_3(self, value) -> str:
-        if value is None:
-            return ''
-        return str(value)
-
-    def _string_method_4(self, value) -> str:
-        if value is None:
-            return ''
-        return str(value)
-
-    def _safe_strip_usage(self, value) -> str:
-        if value is None:
-            return ''
-        return str(value).strip()
-
     async def _fetch_kml_feed(self, session: aiohttp.ClientSession, url: str,
-                              username: str, password: str, retries: int = 3) -> Optional[str]:
+                              username: str, password: str, retries: int = 3) -> dict[str, str] | dict[
+                            str, str] | str | None:
         """
         Fetch Garmin KML feed with retry mechanism
 
@@ -515,7 +479,7 @@ class GarminPlugin(BaseGPSPlugin):
                 for feature in k.features:
                     logger.debug(
                         f"Processing feature type: {type(feature)}, name: {getattr(feature, 'name', 'Unknown')}")
-                    extract_placemarks(feature)
+                    extract_placemarks(feature)  # type: ignore[attr-defined]
             else:
                 # self.logger.warning("No features found in KML")
 
@@ -594,7 +558,8 @@ class GarminPlugin(BaseGPSPlugin):
             logger.error(f"Traceback: {traceback.format_exc()}")
             return []
 
-    def _extract_timestamp_from_extended_data(self, feature):
+    @staticmethod
+    def _extract_timestamp_from_extended_data(feature):
         """Extract timestamp from ExtendedData or TimeStamp element"""
         try:
             # Check for TimeStamp element first
@@ -621,7 +586,8 @@ class GarminPlugin(BaseGPSPlugin):
             logger.debug(f"Error extracting timestamp from extended data: {e}")
             return None
 
-    def _extract_timestamp_from_xml(self, placemark_xml, namespaces):
+    @staticmethod
+    def _extract_timestamp_from_xml(placemark_xml, namespaces):
         """Extract timestamp from XML TimeStamp or ExtendedData"""
         try:
             # Check for TimeStamp element
@@ -654,7 +620,8 @@ class GarminPlugin(BaseGPSPlugin):
             logger.debug(f"Error extracting timestamp from XML: {e}")
             return None
 
-    def _extract_extended_data(self, feature):
+    @staticmethod
+    def _extract_extended_data(feature):
         """Extract extended data from feature"""
         extended_data = {}
         try:
@@ -666,7 +633,8 @@ class GarminPlugin(BaseGPSPlugin):
             logger.debug(f"Error extracting extended data: {e}")
         return extended_data
 
-    def _extract_extended_data_from_xml(self, placemark_xml, namespaces):
+    @staticmethod
+    def _extract_extended_data_from_xml(placemark_xml, namespaces):
         """Extract extended data from XML"""
         extended_data = {}
         try:

@@ -23,12 +23,9 @@ Version: {{VERSION}}
 """
 
 # Standard library imports
-import asyncio
-import json
 import logging
-import re
 import ssl
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Dict, Any
 
 # Third-party imports
@@ -160,14 +157,22 @@ class SpotPlugin(BaseGPSPlugin):
                                 
                                 # Handle E-0195 as success (no devices found)
                                 if error_code == 'E-0195':
-                                    logger.info(f"SPOT API: Authentication successful but no devices found ({error_text})")
-                                    return [{"_error": "no_devices", "_error_message": f"SPOT API error: {error_code} - {error_text}"}]
+                                    logger.info(
+                                        f"SPOT API: Authentication successful but no devices found ({error_text})"
+                                    )
+                                    return [
+                                        {"_error": "no_devices", "_error_message":
+                                            f"SPOT API error: {error_code} - {error_text}"}]
                                 
                                 # Map other error codes
                                 mapped_error_code = self._map_spot_error_code(error_code)
-                                return [{"_error": mapped_error_code, "_error_message": f"SPOT API error: {error_code} - {error_text}"}]
+                                return [
+                                    {"_error": mapped_error_code, "_error_message":
+                                        f"SPOT API error: {error_code} - {error_text}"}]
                             else:
-                                return [{"_error": "json_error", "_error_message": "SPOT API returned error in response"}]
+                                return [
+                                    {"_error": "json_error", "_error_message":
+                                        "SPOT API returned error in response"}]
                         else:
                             logger.info("No messages found from SPOT")
                             return []
@@ -212,7 +217,8 @@ class SpotPlugin(BaseGPSPlugin):
             logger.error(f"Error fetching SPOT locations: {e}")
             return []
 
-    def _map_spot_error_code(self, spot_error_code: str) -> str:
+    @staticmethod
+    def _map_spot_error_code(spot_error_code: str) -> str:
         """
         Map SPOT API error codes to standard error codes used by the base plugin
         
@@ -288,7 +294,8 @@ class SpotPlugin(BaseGPSPlugin):
             logger.error(f"Error parsing SPOT response: {e}")
             return []
 
-    def _build_description(self, message: Dict[str, Any]) -> str:
+    @staticmethod
+    def _build_description(message: Dict[str, Any]) -> str:
         """Build a human-readable description for the location point"""
         parts = []
 

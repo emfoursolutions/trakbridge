@@ -15,9 +15,12 @@ Version: {{VERSION}}
 
 # Standard library imports
 import importlib
+import importlib.util
 import inspect
+import json
 import logging
 import os
+import sys
 import pkgutil
 from typing import (
     Dict,
@@ -73,7 +76,8 @@ class PluginManager:
         self.plugins[plugin_name] = plugin_class
         logger.info(f"Registered plugin: {plugin_name}")
 
-    def _validate_and_normalize_config(self, config: Union[Dict, str, None]) -> Dict:
+    @staticmethod
+    def _validate_and_normalize_config(config: Union[Dict, str, None]) -> Dict:
         """
         Validate and normalize configuration input
 
@@ -93,7 +97,6 @@ class PluginManager:
 
             # Try to parse as JSON
             try:
-                import json
                 return json.loads(config)
             except (json.JSONDecodeError, ValueError):
                 # If not JSON, treat as a configuration name or identifier
@@ -301,8 +304,8 @@ class PluginManager:
                 return
 
             # Add plugins directory to Python path if not already there
-            if plugins_path not in os.sys.path:
-                os.sys.path.insert(0, plugins_path)
+            if plugins_path not in sys.path:
+                sys.path.insert(0, plugins_path)
 
             # Import the plugins package
             plugins_package = importlib.import_module(directory)
@@ -485,7 +488,8 @@ class PluginManager:
                         else:
                             health["details"] = f"{health['details']} ({stream_count} stream(s) configured)"
                     else:
-                        health["details"] = f"{health.get('details', 'Health check completed')} ({stream_count} stream(s) configured)"
+                        health["details"] = (f"{health.get('details', 'Health check completed')} "
+                                             f"({stream_count} stream(s) configured)")
                     
                 else:
                     # No configured streams for this plugin
