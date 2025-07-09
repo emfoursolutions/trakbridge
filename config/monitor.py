@@ -43,7 +43,7 @@ class ConfigFileHandler(FileSystemEventHandler):
         # Debounce rapid file changes
         current_time = time.time()
         if (event.src_path in self.last_modified and 
-            current_time - self.last_modified[event.src_path] < 1.0):
+                current_time - self.last_modified[event.src_path] < 1.0):
             return
 
         self.last_modified[event.src_path] = current_time
@@ -126,9 +126,8 @@ class ConfigMonitor:
             logger.info("Reloading configuration...")
             
             # Reload the configuration instance
-            if hasattr(self.config_instance, '_load_configurations'):
-                self.config_instance._load_configurations()
-                logger.info("Configuration reloaded successfully")
+            if hasattr(self.config_instance, 'reload_config'):
+                self.config_instance.reload_config()
             else:
                 logger.warning("Configuration instance does not support reloading")
                 return
@@ -355,4 +354,4 @@ def create_config_monitor(config_instance, enable_monitoring: bool = True) -> Op
         return monitor
     except Exception as e:
         logger.error(f"Failed to create configuration monitor: {e}")
-        return None 
+        return None

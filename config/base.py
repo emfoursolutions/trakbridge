@@ -322,6 +322,10 @@ class BaseConfig:
                 return None
         return value
 
+    def reload_config(self):
+        """Public method to reload all configuration files."""
+        self._load_configurations()
+
     def validate_config(self) -> list:
         """Validate configuration and return list of issues."""
         issues = []

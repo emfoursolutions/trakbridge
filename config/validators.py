@@ -311,4 +311,4 @@ def validate_config_file(file_path: str) -> List[str]:
         errors.append(f"YAML syntax error in {file_path}: {e}")
     except Exception as e:
         errors.append(f"Error reading {file_path}: {e}")
-    return errors 
+    return errors
