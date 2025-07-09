@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrakBridge - Starting Up</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --primary-purple: #7c3aed;
+            --secondary-purple: #8b5cf6;
+            --accent-purple: #a855f7;
+            --light-purple: #e9d5ff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+            --syncopate-font: 'Syncopate', sans-serif;
+            --inter-font: 'Inter', sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--inter-font);
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .startup-container {
+            text-align: center;
+            max-width: 800px;
+            padding: 3rem 2rem;
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border-radius: 1.5rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--border-color);
+        }
+
+        .logo {
+            margin-bottom: 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .logo img {
+            filter: drop-shadow(0 4px 12px rgba(124, 58, 237, 0.2));
+            transition: all 0.3s ease;
+        }
+
+        .logo img:hover {
+            transform: translateY(-2px);
+            filter: drop-shadow(0 6px 16px rgba(124, 58, 237, 0.3));
+        }
+
+        .version-info {
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .version-badge {
+            background: linear-gradient(135deg, var(--light-purple) 0%, #f3e8ff 100%);
+            color: var(--primary-purple);
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            font-family: var(--syncopate-font);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .version-badge.dev {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            color: #92400e;
+        }
+
+        .git-commit {
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            background: linear-gradient(135deg, var(--light-purple) 0%, #f3e8ff 100%);
+            color: var(--primary-purple);
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-weight: 600;
+        }
+
+        .status-message {
+            font-size: 2rem;
+            font-family: var(--syncopate-font);
+            font-weight: 700;
+            margin-bottom: 2rem;
+            background: linear-gradient(135deg, var(--primary-purple) 0%, var(--secondary-purple) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .loading-spinner {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 2rem;
+            border: 4px solid var(--light-purple);
+            border-top: 4px solid var(--primary-purple);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .progress-container {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border-radius: 1rem;
+            padding: 2rem;
+            margin-top: 2rem;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .progress-title {
+            font-size: 1.25rem;
+            font-family: var(--syncopate-font);
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .progress-list {
+            max-height: 250px;
+            overflow-y: auto;
+            text-align: left;
+            border-radius: 0.75rem;
+            background: white;
+            border: 1px solid var(--border-color);
+        }
+
+        .progress-item {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            animation: fadeIn 0.5s ease-in;
+            transition: background-color 0.3s ease;
+        }
+
+        .progress-item:hover {
+            background-color: rgba(124, 58, 237, 0.05);
+        }
+
+        .progress-item:last-child {
+            border-bottom: none;
+        }
+
+        .progress-timestamp {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-right: 1rem;
+            min-width: 80px;
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, var(--light-purple) 0%, #f3e8ff 100%);
+            color: var(--primary-purple);
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+        }
+
+        .progress-message {
+            flex: 1;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .error-container {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            border: 1px solid #f87171;
+            border-radius: 1rem;
+            padding: 2rem;
+            margin-top: 2rem;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);
+        }
+
+        .error-title {
+            font-size: 1.25rem;
+            font-family: var(--syncopate-font);
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: #991b1b;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .error-message {
+            font-size: 0.9rem;
+            color: #991b1b;
+            text-align: left;
+            background: rgba(255, 255, 255, 0.5);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-family: 'Courier New', monospace;
+            line-height: 1.5;
+        }
+
+        .success-container {
+            background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+            border: 1px solid #4ade80;
+            border-radius: 1rem;
+            padding: 2rem;
+            margin-top: 2rem;
+            box-shadow: 0 4px 12px rgba(34, 197, 94, 0.1);
+        }
+
+        .success-title {
+            font-size: 1.25rem;
+            font-family: var(--syncopate-font);
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: #166534;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .redirect-message {
+            font-size: 0.9rem;
+            color: #166534;
+            margin-top: 1rem;
+            font-weight: 500;
+        }
+
+        .retry-button {
+            background: linear-gradient(135deg, var(--primary-purple) 0%, var(--secondary-purple) 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 2rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            margin-top: 1.5rem;
+            transition: all 0.3s ease;
+            font-family: var(--inter-font);
+            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+        }
+
+        .retry-button:hover {
+            background: linear-gradient(135deg, var(--secondary-purple) 0%, var(--accent-purple) 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(124, 58, 237, 0.4);
+        }
+
+        .retry-button:active {
+            transform: translateY(0);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .startup-container {
+                padding: 2rem 1rem;
+                margin: 1rem;
+            }
+
+            .logo img {
+                max-height: 60px;
+                max-width: 200px;
+            }
+
+            .version-info {
+                font-size: 1rem;
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .status-message {
+                font-size: 1.5rem;
+            }
+
+            .loading-spinner {
+                width: 60px;
+                height: 60px;
+            }
+
+            .progress-container {
+                padding: 1.5rem;
+            }
+
+            .progress-list {
+                max-height: 200px;
+            }
+
+            .progress-item {
+                padding: 0.75rem;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+
+            .progress-timestamp {
+                margin-right: 0;
+                min-width: auto;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .startup-container {
+                padding: 1.5rem 1rem;
+            }
+
+            .status-message {
+                font-size: 1.25rem;
+            }
+
+            .progress-title {
+                font-size: 1.1rem;
+            }
+
+            .version-badge,
+            .git-commit {
+                font-size: 0.7rem;
+                padding: 0.2rem 0.5rem;
+            }
+        }
+
+        /* Scrollbar styling */
+        .progress-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .progress-list::-webkit-scrollbar-track {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        .progress-list::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, var(--primary-purple) 0%, var(--secondary-purple) 100%);
+            border-radius: 4px;
+        }
+
+        .progress-list::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, var(--secondary-purple) 0%, var(--accent-purple) 100%);
+        }
+    </style>
+</head>
+<body>
+    <div class="startup-container">
+        <div class="logo">
+            <img src="{{ url_for('static', filename='large_logo.png') }}" alt="TrakBridge" style="max-height: 196px; max-width: 408px; height: auto;">
+        </div>
+        <div class="version-info">
+            {% if app_version %}
+                <span>v{{ app_version.version }}</span>
+                {% if app_version.is_development %}
+                    <span class="version-badge dev">
+                        <i class="fas fa-tools"></i> DEV
+                    </span>
+                {% endif %}
+                {% if app_version.git_commit %}
+                    <span class="git-commit">
+                        <i class="fas fa-code-branch"></i> {{ app_version.git_commit }}
+                    </span>
+                {% endif %}
+            {% else %}
+                <span>Loading version...</span>
+            {% endif %}
+        </div>
+        <div class="status-message" id="statusMessage">Starting up...</div>
+
+        <div class="loading-spinner" id="loadingSpinner"></div>
+
+        <div class="progress-container">
+            <div class="progress-title">
+                <i class="fas fa-cogs"></i>
+                Startup Progress
+            </div>
+            <div class="progress-list" id="progressList">
+                <div class="progress-item">
+                    <div class="progress-timestamp">--:--:--</div>
+                    <div class="progress-message">Initializing...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="error-container" id="errorContainer" style="display: none;">
+            <div class="error-title">
+                <i class="fas fa-exclamation-triangle"></i>
+                Startup Error
+            </div>
+            <div class="error-message" id="errorMessage"></div>
+            <button class="retry-button" onclick="location.reload()">
+                <i class="fas fa-redo"></i> Retry
+            </button>
+        </div>
+
+        <div class="success-container" id="successContainer" style="display: none;">
+            <div class="success-title">
+                <i class="fas fa-check-circle"></i>
+                Startup Complete!
+            </div>
+            <div class="redirect-message">
+                <i class="fas fa-arrow-right"></i> Redirecting to application...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let checkInterval;
+        let redirectTimeout;
+
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        function updateProgress(progressItems) {
+            const progressList = document.getElementById('progressList');
+
+            // Clear existing items
+            progressList.innerHTML = '';
+
+            // Add new items
+            progressItems.forEach(item => {
+                const progressItem = document.createElement('div');
+                progressItem.className = 'progress-item';
+                progressItem.innerHTML = `
+                    <div class="progress-timestamp">${formatTime(item.timestamp)}</div>
+                    <div class="progress-message">${item.message}</div>
+                `;
+                progressList.appendChild(progressItem);
+            });
+
+            // Scroll to bottom
+            progressList.scrollTop = progressList.scrollHeight;
+        }
+
+        function checkStartupStatus() {
+            fetch('/startup-status')
+                .then(response => response.json())
+                .then(data => {
+                    // Update progress
+                    if (data.progress && data.progress.length > 0) {
+                        updateProgress(data.progress);
+                    }
+
+                    // Check if startup is complete
+                    if (data.complete) {
+                        clearInterval(checkInterval);
+
+                        if (data.error) {
+                            // Show error
+                            document.getElementById('statusMessage').textContent = 'Startup Failed';
+                            document.getElementById('loadingSpinner').style.display = 'none';
+                            document.getElementById('errorContainer').style.display = 'block';
+                            document.getElementById('errorMessage').textContent = data.error;
+                        } else {
+                            // Show success and redirect
+                            document.getElementById('statusMessage').textContent = 'Startup Complete!';
+                            document.getElementById('loadingSpinner').style.display = 'none';
+                            document.getElementById('successContainer').style.display = 'block';
+
+                            // Redirect after 3 seconds
+                            redirectTimeout = setTimeout(() => {
+                                window.location.href = '/';
+                            }, 3000);
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking startup status:', error);
+                    // Continue checking - might be a temporary network issue
+                });
+        }
+
+        // Start checking startup status
+        checkStartupStatus(); // Check immediately
+        checkInterval = setInterval(checkStartupStatus, 2000); // Check every 2 seconds
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (checkInterval) {
+                clearInterval(checkInterval);
+            }
+            if (redirectTimeout) {
+                clearTimeout(redirectTimeout);
+            }
+        });
+    </script>
+</body>
+</html>

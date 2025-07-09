@@ -24,7 +24,7 @@ from typing import Optional
 
 # Third-party imports
 from dotenv import load_dotenv
-from flask import Flask, has_app_context, render_template
+from flask import Flask, has_app_context, render_template, jsonify
 from flask_migrate import Migrate
 from sqlalchemy import event
 from sqlalchemy.pool import Pool
@@ -43,10 +43,43 @@ migrate = Migrate()
 # Global reference to stream manager for cleanup
 _stream_manager_ref: Optional['StreamManager'] = None
 
+# Global reference for startup splash screen
+_startup_complete = False
+_startup_error = None
+_startup_progress = []
+
 load_dotenv()
 
 # Set up logger
 logger = logging.getLogger("main")
+
+
+def set_startup_complete(success=True, error=None):
+    """Mark startup as complete"""
+    global _startup_complete, _startup_error
+    _startup_complete = True
+    _startup_error = error if not success else None
+
+
+def add_startup_progress(message):
+    """Add a progress message to startup log"""
+    global _startup_progress
+    _startup_progress.append({
+        'timestamp': dt.now().isoformat(),
+        'message': message
+    })
+    # Keep only last 20 messages
+    if len(_startup_progress) > 20:
+        _startup_progress = _startup_progress[-20:]
+
+
+def get_startup_status():
+    """Get current startup status"""
+    return {
+        'complete': _startup_complete,
+        'error': _startup_error,
+        'progress': _startup_progress
+    }
 
 
 def create_app(config_name=None):
@@ -138,6 +171,43 @@ def create_app(config_name=None):
     setup_template_helpers(app)
     setup_error_handlers(app)
 
+    # Splash screen routes
+    def setup_startup_routes(app):
+        """Set up startup-related routes"""
+
+        @app.route('/startup-status')
+        def startup_status():
+            """API endpoint to check startup status"""
+            return jsonify(get_startup_status())
+
+        @app.route('/startup')
+        def startup_page():
+            """Display startup/loading page"""
+            return render_template('startup.html')
+
+        @app.before_request
+        def check_startup():
+            """Check if startup is complete before processing requests"""
+            from flask import request
+
+            # Allow startup-related routes and static files
+            if request.endpoint in ['startup_page', 'startup_status', 'static']:
+                return None
+
+            # Allow API health checks
+            if request.path.startswith('/api/health'):
+                return None
+
+            # Redirect to startup page if not ready
+            if not _startup_complete and request.endpoint:
+                if request.is_json:
+                    return jsonify({'status': 'starting', 'message': 'Application is starting up'}), 503
+                else:
+                    return render_template('startup.html')
+
+            return None
+
+    setup_startup_routes(app)
     return app
 
 
@@ -283,16 +353,19 @@ def start_active_streams():
     stream_manager = getattr(current_app, "stream_manager", None)
     if stream_manager is None:
         logger.error("Stream manager not initialized")
+        add_startup_progress("Error: Stream manager not initialized")
         return
 
     from models.stream import Stream
 
     try:
         logger.info("Initializing stream startup process...")
+        add_startup_progress("Initializing stream startup process...")
         logger.info(f"TrakBridge Version: {get_version()}")
 
         # Wait for stream manager to be ready with longer timeout
         logger.info("Waiting for stream manager to be ready...")
+        add_startup_progress("Waiting for stream manager to be ready...")
         max_wait = 200  # 20 seconds
         wait_count = 0
 
@@ -311,14 +384,17 @@ def start_active_streams():
 
         if wait_count >= max_wait:
             logger.error("Stream manager not ready after extended wait")
+            add_startup_progress("Error: Stream manager not ready after extended wait")
             return
 
         logger.info("Stream manager ready, fetching active streams")
+        add_startup_progress("Stream manager ready, fetching active streams")
 
         # Fetch active streams with proper error handling
         try:
             active_streams = Stream.query.filter_by(is_active=True).all()
             logger.info(f"Found {len(active_streams)} active streams to start")
+            add_startup_progress(f"Found {len(active_streams)} active streams to start")
 
             if active_streams:
                 for stream in active_streams:
@@ -326,10 +402,12 @@ def start_active_streams():
 
         except Exception as db_e:
             logger.error(f"Failed to fetch active streams from database: {db_e}")
+            add_startup_progress(f"Error: Failed to fetch active streams from database: {db_e}")
             return
 
         if not active_streams:
-            logger.info(" No active streams found to start")
+            logger.info("No active streams found to start")
+            add_startup_progress("No active streams found to start")
             return
 
         # Start streams with better logging
@@ -339,6 +417,7 @@ def start_active_streams():
         for stream in active_streams:
             try:
                 logger.info(f"Starting stream {stream.id} ({stream.name})...")
+                add_startup_progress(f"Starting stream {stream.id} ({stream.name})...")
 
                 # Add retry logic
                 max_retries = 3
@@ -350,6 +429,7 @@ def start_active_streams():
                         success = stream_manager.start_stream_sync(stream.id)
                         if success:
                             logger.info(f"Successfully started stream {stream.id} ({stream.name})")
+                            add_startup_progress(f"✓ Successfully started stream {stream.id} ({stream.name})")
                             # Clear any previous error
                             fresh_stream = db.session.get(Stream, stream.id)
                             fresh_stream.last_error = None
@@ -361,9 +441,12 @@ def start_active_streams():
                             if retry_count < max_retries:
                                 logger.warning(
                                     f"Failed to start stream {stream.id}, retrying ({retry_count}/{max_retries})")
+                                add_startup_progress(
+                                    f"Failed to start stream {stream.id}, retrying ({retry_count}/{max_retries})")
                                 time.sleep(2)
                             else:
                                 logger.error(f"Failed to start stream {stream.id} after {max_retries} attempts")
+                                add_startup_progress(f"✗ Failed to start stream {stream.id} after {max_retries} attempts")
                                 failed_count += 1
 
                     except Exception as start_e:
@@ -373,10 +456,16 @@ def start_active_streams():
                                 f"Exception starting stream {stream.id}, "
                                 f"retrying ({retry_count}/{max_retries}): {start_e}"
                             )
+                            add_startup_progress(
+                                f"Exception starting stream {stream.id}, "
+                                f"retrying ({retry_count}/{max_retries}): {start_e}"
+                            )
                             time.sleep(2)
                         else:
                             logger.error(
                                 f"Exception starting stream {stream.id} after {max_retries} attempts: {start_e}")
+                            add_startup_progress(
+                                f"✗ Exception starting stream {stream.id} after {max_retries} attempts: {start_e}")
                             failed_count += 1
 
                 # Update stream status if failed
@@ -400,6 +489,7 @@ def start_active_streams():
 
             except Exception as e:
                 logger.error(f"Unexpected error starting stream {stream.id}: {e}", exc_info=True)
+                add_startup_progress(f"✗ Unexpected error starting stream {stream.id}: {e}")
                 failed_count += 1
 
         # Log final results
@@ -411,8 +501,11 @@ def start_active_streams():
         logger.info(f"Success Rate: {(started_count / len(active_streams) * 100):.1f}%")
         logger.info("=" * 50)
 
+        add_startup_progress(f"Stream startup complete: {started_count} started, {failed_count} failed")
+
     except Exception as e:
         logger.error(f"Error in start_active_streams: {e}", exc_info=True)
+        add_startup_progress(f"Error in start_active_streams: {e}")
 
 
 def setup_database_events():
@@ -552,36 +645,53 @@ app = create_app()
 # Delayed startup function that runs in a separate thread
 def delayed_startup():
     """Run startup tasks after Flask is fully initialized with enhanced logging."""
+    global _startup_complete, _startup_error
+
     startup_start_time = dt.now()
 
-    # Wait a bit for Flask to fully initialize
-    time.sleep(5)
+    try:
+        # Wait a bit for Flask to fully initialize
+        add_startup_progress("Flask application initialized, starting services...")
+        time.sleep(5)
 
-    with app.app_context():
-        logger.info("Running delayed startup tasks...")
+        with app.app_context():
+            logger.info("Running delayed startup tasks...")
+            add_startup_progress("Checking system components...")
 
-        # Log system status
-        try:
-            logger.info("System Status Check:")
-            logger.info(f"Stream Manager: {'Ready' if hasattr(app, 'stream_manager') else 'Not Ready'}")
-            logger.info(f"Plugin Manager: {'Ready' if hasattr(app, 'plugin_manager') else 'Not Ready'}")
-            logger.info(f"Database: {'Ready' if db.engine else 'Not Ready'}")
-            logger.info(f"Encryption Service: {'Ready' if hasattr(app, 'encryption_service') else 'Not Ready'}")
-        except Exception as e:
-            logger.warning(f"Could not log system status: {e}")
+            # Log system status
+            try:
+                logger.info("System Status Check:")
+                logger.info(f"Stream Manager: {'Ready' if hasattr(app, 'stream_manager') else 'Not Ready'}")
+                logger.info(f"Plugin Manager: {'Ready' if hasattr(app, 'plugin_manager') else 'Not Ready'}")
+                logger.info(f"Database: {'Ready' if db.engine else 'Not Ready'}")
+                logger.info(f"Encryption Service: {'Ready' if hasattr(app, 'encryption_service') else 'Not Ready'}")
 
-        # Start active streams
-        start_active_streams()
+                add_startup_progress("System components verified")
+            except Exception as e:
+                logger.warning(f"Could not log system status: {e}")
+                add_startup_progress(f"Warning: Could not verify all system components: {e}")
 
-        # Calculate startup time
-        startup_time = (dt.now() - startup_start_time).total_seconds()
+            # Start active streams
+            add_startup_progress("Starting active streams...")
+            start_active_streams()
 
-        # Log startup completion
-        logger.info("=" * 60)
-        logger.info("TrakBridge Application Startup Complete!")
-        logger.info(f"Total Startup Time: {startup_time:.2f} seconds")
-        logger.info(f"Ready at: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        logger.info("=" * 60)
+            # Calculate startup time
+            startup_time = (dt.now() - startup_start_time).total_seconds()
+
+            # Log startup completion
+            logger.info("=" * 60)
+            logger.info("TrakBridge Application Startup Complete!")
+            logger.info(f"Total Startup Time: {startup_time:.2f} seconds")
+            logger.info(f"Ready at: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info("=" * 60)
+
+            add_startup_progress(f"Startup complete! Ready in {startup_time:.2f} seconds")
+            set_startup_complete(True)
+
+    except Exception as e:
+        logger.error(f"Error during startup: {e}", exc_info=True)
+        add_startup_progress(f"Startup failed: {str(e)}")
+        set_startup_complete(False, str(e))
 
 
 # Call start_active_streams ONCE during application startup

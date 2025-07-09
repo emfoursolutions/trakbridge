@@ -409,4 +409,4 @@ def validate_config_against_schema(config: Dict[str, Any], schema: Dict[str, Any
                 if "maxLength" in field_schema and len(value) > field_schema["maxLength"]:
                     errors.append(f"{field_name} must be at most {field_schema['maxLength']} characters")
     
-    return errors 
+    return errors

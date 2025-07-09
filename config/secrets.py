@@ -95,6 +95,7 @@ class DockerSecretProvider(SecretProvider):
 
     print(f"Secrets path: {SECRETS_PATH}")
     print(f"Path exists: {SECRETS_PATH.exists()}")
+
     @property
     def name(self) -> str:
         return "Docker Secrets"
