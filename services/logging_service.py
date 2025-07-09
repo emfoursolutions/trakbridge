@@ -17,7 +17,7 @@ import os
 import datetime
 
 # Local application imports
-from services.version import get_version, format_version, get_version_info, get_build_info, is_development_version
+from services.version import get_version, get_version_info, get_build_info, is_development_build
 
 logger = logging.getLogger(__name__)
 
@@ -85,15 +85,15 @@ def log_startup_banner(app):
         banner_lines = [
             "",
             "=" * 80,
-            "🚀 TrakBridge Application Starting",
+            " TrakBridge Application Starting",
             "=" * 80,
-            f"📦 Version: {version_info.get('version', 'unknown')}",
-            f"🏗️  Build Source: {version_info.get('source', 'unknown')}",
-            f"🌍 Environment: {os.getenv('FLASK_ENV', 'unknown')}",
-            f"🐛 Debug Mode: {'ON' if app.debug else 'OFF'}",
-            f"🔧 Development: {'YES' if is_development_version() else 'NO'}",
+            f" Version: {version_info.get('version', 'unknown')}",
+            f"  Build Source: {version_info.get('source', 'unknown')}",
+            f" Environment: {os.getenv('FLASK_ENV', 'unknown')}",
+            f" Debug Mode: {'ON' if app.debug else 'OFF'}",
+            f" Development: {'YES' if is_development_build() else 'NO'}",
             "",
-            "💻 System Information:",
+            " System Information:",
             f"   Python: {version_info.get('python_version', 'unknown')}",
             f"   Platform: {version_info.get('platform', 'unknown')}",
             f"   Working Directory: {os.getcwd()}",
@@ -108,7 +108,7 @@ def log_startup_banner(app):
         # Add configuration details
         banner_lines.extend([
             "",
-            "⚙️  Configuration:",
+            "  Configuration:",
             f"   Database: {str(app.config.get('SQLALCHEMY_DATABASE_URI', 'not configured'))[:50]}...",
             f"   Max Worker Threads: {app.config.get('MAX_WORKER_THREADS', 'not set')}",
             f"   Max Concurrent Streams: {app.config.get('MAX_CONCURRENT_STREAMS', 'not set')}",
@@ -119,7 +119,7 @@ def log_startup_banner(app):
         # Add timestamp
         banner_lines.extend([
             "",
-            f"⏰ Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f" Started at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             "=" * 80,
             ""
         ])

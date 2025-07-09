@@ -126,4 +126,4 @@ class ConfigurationValidationError(ConfigurationError):
 
 class ConfigurationMissingError(ConfigurationError):
     """Raised when required configuration is missing"""
-    pass 
+    pass

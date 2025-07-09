@@ -20,6 +20,7 @@ import os
 import signal
 import threading
 import time
+from typing import Optional
 
 # Third-party imports
 from dotenv import load_dotenv
@@ -31,11 +32,16 @@ from sqlalchemy.pool import Pool
 # Local application imports
 from config.environments import get_config
 from database import db
+from services.cli.version_commands import register_version_commands
 from services.logging_service import log_startup_banner, setup_logging
-from services.version import get_version, is_development_version
+from services.stream_manager import StreamManager
+from services.version import get_version, is_development_build
 
 # Initialize extensions
 migrate = Migrate()
+
+# Global reference to stream manager for cleanup
+_stream_manager_ref: Optional['StreamManager'] = None
 
 load_dotenv()
 
@@ -44,6 +50,8 @@ logger = logging.getLogger("main")
 
 
 def create_app(config_name=None):
+    global _stream_manager_ref
+
     app = Flask(__name__)
 
     def app_context_factory():
@@ -91,6 +99,11 @@ def create_app(config_name=None):
         from services.encryption_service import EncryptionService
         app.encryption_service = EncryptionService()
 
+        # Initialize stream manager and store global reference
+        from services.stream_manager import StreamManager
+        app.stream_manager = StreamManager(app_context_factory=app_context_factory)
+        _stream_manager_ref = app.stream_manager  # Store global reference
+
     # Set up database event listeners
     setup_database_events()
 
@@ -102,6 +115,9 @@ def create_app(config_name=None):
 
     # Register cleanup handlers
     setup_cleanup_handlers()
+
+    # Register version CLI commands
+    register_version_commands(app)
 
     # Register blueprints
     from routes.main import bp as main_bp
@@ -145,7 +161,7 @@ def setup_version_context_processor(app):
         app.logger.info(f"Application: {format_version(include_build_info=True)}")
         app.logger.info(f"Version: {version_info.get('version', 'unknown')}")
         app.logger.info(f"Version Source: {version_info.get('source', 'unknown')}")
-        app.logger.info(f"Development Build: {'YES' if is_development_version() else 'NO'}")
+        app.logger.info(f"Development Build: {'YES' if is_development_build() else 'NO'}")
 
         if build_info.get('git_commit'):
             app.logger.info(f"Git Commit: {build_info['git_commit']}")
@@ -175,14 +191,14 @@ def setup_version_context_processor(app):
             # Create a simplified version object for templates
             app_version = {
                 'version': version_info.get('version', '0.0.0'),
-                'is_development': is_development_version(),
-                'git_commit': build_info.get('git_commit'),
+                'is_development': is_development_build(),
+                'git_commit': version_info.get('git', {}).get('commit_short'),
                 'python_version': (
-                    f"{version_info['python_version_info'].major}."
-                    f"{version_info['python_version_info'].minor}."
-                    f"{version_info['python_version_info'].micro}"
+                    f"{version_info['environment']['python_version_info'].major}."
+                    f"{version_info['environment']['python_version_info'].minor}."
+                    f"{version_info['environment']['python_version_info'].micro}"
                 ),
-                'platform': version_info.get('platform', 'unknown'),
+                'platform': version_info.get('environment', {}).get('platform', 'unknown'),
                 'source': version_info.get('source', 'unknown')
             }
 
@@ -433,21 +449,18 @@ def setup_cleanup_handlers():
 
     def cleanup():
         """Clean up resources on application shutdown"""
+        global _stream_manager_ref
+
         try:
-            # Try to get current_app, but handle case where context is not available
-            try:
-                from flask import current_app
-                stream_manager = getattr(current_app, "stream_manager", None)
-                if hasattr(current_app, 'stream_manager') and stream_manager is not None:
-                    current_app.stream_manager.shutdown()
+            # Use global reference instead of current_app
+            if _stream_manager_ref is not None:
+                try:
+                    _stream_manager_ref.shutdown()
                     logger.info("Stream manager shutdown completed")
-            except RuntimeError as e:
-                if "Working outside of application context" in str(e):
-                    logger.debug("Application context not available during shutdown, skipping stream manager cleanup")
-                else:
-                    logger.error(f"Error during stream cleanup: {e}")
-            except Exception as e:
-                logger.error(f"Error during stream cleanup: {e}")
+                except Exception as e:
+                    logger.error(f"Error during stream manager shutdown: {e}")
+            else:
+                logger.info("No stream manager reference available for cleanup")
 
             # Close database connections
             try:
@@ -464,20 +477,17 @@ def setup_cleanup_handlers():
 
     def safe_stream_manager_shutdown():
         """Safely shutdown stream manager during application exit"""
+        global _stream_manager_ref
+
         try:
-            # Try to get current_app, but handle case where context is not available
-            try:
-                from flask import current_app
-                stream_manager = getattr(current_app, "stream_manager", None)
-                if hasattr(current_app, 'stream_manager') and stream_manager is not None:
-                    current_app.stream_manager.shutdown()
-            except RuntimeError as e:
-                if "Working outside of application context" in str(e):
-                    logger.info("Application context not available during shutdown, skipping stream manager shutdown")
-                else:
+            if _stream_manager_ref is not None:
+                try:
+                    _stream_manager_ref.shutdown()
+                    logger.info("Stream manager shutdown completed via atexit")
+                except Exception as e:
                     logger.error(f"Error during stream manager shutdown: {e}")
-            except Exception as e:
-                logger.error(f"Error during stream manager shutdown: {e}")
+            else:
+                logger.info("No stream manager reference available for atexit cleanup")
         except Exception as e:
             logger.error(f"Error during stream manager shutdown: {e}")
 

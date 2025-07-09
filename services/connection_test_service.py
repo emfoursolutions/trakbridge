@@ -327,4 +327,3 @@ class ConnectionTestService:
             self.cleanup()
         except Exception as e:
             logger.debug(f"Destructor completed {e}")
-

@@ -160,7 +160,8 @@ class TakServerService:
                 except Exception:
                     return {
                         'success': False,
-                        'error': f'Failed to parse PKCS#12 certificate. Invalid password or corrupted certificate: {str(pkcs12_error)}'
+                        'error': f'Failed to parse PKCS#12 certificate. '
+                                 f'Invalid password or corrupted certificate: {str(pkcs12_error)}'
                     }
 
             # Extract certificate information
@@ -219,7 +220,8 @@ class TakServerService:
 
                 # Certificate chain information
                 cert_info['has_private_key'] = private_key is not None
-                cert_info['additional_certificates_count'] = len(additional_certificates) if additional_certificates else 0
+                cert_info['additional_certificates_count'] \
+                    = len(additional_certificates) if additional_certificates else 0
 
                 # Fingerprint (SHA-256)
                 fingerprint = certificate.fingerprint(hashes.SHA256())

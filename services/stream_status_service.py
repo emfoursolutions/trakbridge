@@ -23,10 +23,7 @@ Version: {{VERSION}}
 # Standard library imports
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Union
-
-# Third-party imports
-# (none in this snippet)
+from typing import Any, Dict, List, Optional
 
 # Local application imports
 from models.stream import Stream
@@ -246,7 +243,8 @@ class StreamStatusService:
             logger.error(f"Error getting running stream IDs: {e}")
             return []
 
-    def _format_last_poll(self, stream: Stream) -> Optional[str]:
+    @staticmethod
+    def _format_last_poll(stream: Stream) -> Optional[str]:
         """Format last poll time for display"""
         if not stream.last_poll:
             return None

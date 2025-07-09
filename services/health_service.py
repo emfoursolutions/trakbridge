@@ -28,8 +28,8 @@ Version: {{VERSION}}
 import logging
 import time
 import os
-from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, List
+from datetime import datetime, timezone
+from typing import Dict, Any
 
 # Third-party imports
 from sqlalchemy import text
@@ -56,8 +56,8 @@ class HealthService:
         except Exception:
             self.db_type = 'sqlite'  # fallback
 
-
-    def check_database_connectivity(self) -> Dict[str, Any]:
+    @staticmethod
+    def check_database_connectivity() -> Dict[str, Any]:
         """Check database connectivity and basic operations (moved from routes/api.py)"""
         try:
             start_time = time.time()
@@ -94,7 +94,8 @@ class HealthService:
                 'timestamp': datetime.now(timezone.utc).isoformat()
             }
     
-    def check_connection_pool_health(self) -> Dict[str, Any]:
+    @staticmethod
+    def check_connection_pool_health() -> Dict[str, Any]:
         """Monitor connection pool status and performance"""
         try:
             pool = db.engine.pool
@@ -130,7 +131,8 @@ class HealthService:
                 'timestamp': datetime.now(timezone.utc).isoformat()
             }
     
-    def check_query_performance(self) -> Dict[str, Any]:
+    @staticmethod
+    def check_query_performance() -> Dict[str, Any]:
         """Monitor slow queries and performance metrics"""
         try:
             start_time = time.time()
@@ -318,7 +320,8 @@ class HealthService:
                 'timestamp': datetime.now(timezone.utc).isoformat()
             }
     
-    def check_table_health(self) -> Dict[str, Any]:
+    @staticmethod
+    def check_table_health() -> Dict[str, Any]:
         """Check health of specific application tables"""
         try:
             tables = {
@@ -380,7 +383,8 @@ class HealthService:
         # Aggregate results
         return self._aggregate_database_health(checks)
     
-    def _aggregate_database_health(self, checks: Dict[str, Any]) -> Dict[str, Any]:
+    @staticmethod
+    def _aggregate_database_health(checks: Dict[str, Any]) -> Dict[str, Any]:
         """Aggregate individual health check results"""
         db_status = 'healthy'
         issues = []

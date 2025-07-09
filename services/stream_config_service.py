@@ -102,7 +102,8 @@ class StreamConfigService:
                 "security_issues": []
             }
 
-    def extract_plugin_config_from_request(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    @staticmethod
+    def extract_plugin_config_from_request(data: Dict[str, Any]) -> Dict[str, Any]:
         """Extract plugin configuration from request data"""
         plugin_config: Dict[str, Any] = {}
 
@@ -114,7 +115,8 @@ class StreamConfigService:
 
         return plugin_config
 
-    def export_stream_config(self, stream_id: int, include_sensitive: bool = False) -> Dict[str, Any]:
+    @staticmethod
+    def export_stream_config(stream_id: int, include_sensitive: bool = False) -> Dict[str, Any]:
         """Export stream configuration for backup or migration"""
         try:
             stream = Stream.query.get_or_404(stream_id)
@@ -210,7 +212,8 @@ class StreamConfigService:
             logger.error(f"Error getting all plugin metadata: {e}")
             return {}
 
-    def serialize_plugin_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    @staticmethod
+    def serialize_plugin_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Serialize plugin metadata for JSON response"""
         try:
             serialized: Dict[str, Any] = {

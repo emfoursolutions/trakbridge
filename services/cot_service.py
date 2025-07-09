@@ -763,7 +763,9 @@ class PersistentCOTService:
 
                 # Create connection using PyTAK's protocol factory with timeout
                 try:
-                    logger.debug(f"Attempting to connect to TAK server {tak_server.name} at {tak_server.host}:{tak_server.port}")
+                    logger.debug(
+                        f"Attempting to connect to TAK server {tak_server.name} at {tak_server.host}:{tak_server.port}"
+                    )
                     # Add timeout to prevent hanging
                     connection_result = await asyncio.wait_for(
                         pytak.protocol_factory(config),
@@ -833,7 +835,8 @@ class PersistentCOTService:
             logger.error(f"Connection error for TAK server {tak_server_id}: {connection_error}")
             return False
 
-    async def _transmission_worker(self, queue: asyncio.Queue, connection, tak_server):
+    @staticmethod
+    async def _transmission_worker(queue: asyncio.Queue, connection, tak_server):
         """Handle transmission of COT events from queue"""
         logger.info(f"Starting transmission worker for TAK server {tak_server.name}")
         
@@ -905,7 +908,8 @@ class PersistentCOTService:
                 except Exception as e:
                     logger.debug(f"Error closing reader: {e}")
 
-    async def _create_pytak_config(self, tak_server):
+    @staticmethod
+    async def _create_pytak_config(tak_server):
         """Create PyTAK configuration from TAK server settings"""
         from configparser import ConfigParser
 
@@ -991,7 +995,10 @@ class PersistentCOTService:
             queue_size_before = queue.qsize()
             await queue.put(event)
             queue_size_after = queue.qsize()
-            logger.info(f"Enqueued COT event for TAK server {tak_server_id}. Queue size: {queue_size_before} -> {queue_size_after}")
+            logger.info(
+                f"Enqueued COT event for TAK server {tak_server_id}. "
+                f"Queue size: {queue_size_before} -> {queue_size_after}"
+            )
             return True
         except Exception as e:
             logger.error(f"Failed to enqueue event for TAK server {tak_server_id}: {e}")

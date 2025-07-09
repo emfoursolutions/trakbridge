@@ -40,7 +40,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.exceptions import InvalidKey
 
 # Local application imports
-from services.exceptions import EncryptionError, EncryptionKeyError, EncryptionDataError
+from services.exceptions import EncryptionError, EncryptionDataError
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -53,7 +53,8 @@ class EncryptionService:
         self._master_key = master_key or self._get_or_create_master_key()
         self._cipher_suite = None
 
-    def _get_or_create_master_key(self) -> str:
+    @staticmethod
+    def _get_or_create_master_key() -> str:
         """Get master key from environment, file, or create a new one"""
         # Priority order: ENV variable -> config file -> generate new
 
@@ -371,7 +372,8 @@ class EncryptionService:
         hashed = kdf.derive(password.encode())
         return base64.urlsafe_b64encode(hashed).decode(), base64.urlsafe_b64encode(salt).decode()
 
-    def verify_password(self, password: str, hashed_password: str, salt: str) -> bool:
+    @staticmethod
+    def verify_password(password: str, hashed_password: str, salt: str) -> bool:
         """
         Verify a password against its hash with timing attack protection
         """
@@ -419,7 +421,8 @@ class EncryptionService:
                 "encryption_working": False
             }
 
-    def _get_key_source(self) -> str:
+    @staticmethod
+    def _get_key_source() -> str:
         """Identify where the master key came from"""
         if os.environ.get('TB_MASTER_KEY'):
             return "environment_variable"
