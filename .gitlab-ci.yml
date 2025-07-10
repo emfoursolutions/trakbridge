@@ -7,7 +7,7 @@
 
 stages:
   - validate
-  # - test
+  - test
   - security
   - build
   - deploy
@@ -24,8 +24,7 @@ variables:
   
   # Application configuration
   APP_NAME: "trakbridge"
-  APP_VERSION: "0.1.0"
-  
+
   # Test configuration
   PYTEST_ADDOPTS: "--strict-markers --strict-config --tb=short"
   COVERAGE_FILE: "$CI_PROJECT_DIR/.coverage"
@@ -260,12 +259,12 @@ build-docker-latest:
     - docker:24.0.5-dind
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
   script:
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    - echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USER" --password-stdin
-    - docker build -t $CI_REGISTRY_IMAGE:latest .
-    - docker tag $CI_REGISTRY_IMAGE:latest docker.io/$DOCKERHUB_USER/$APP_NAME:latest
-    - docker push $CI_REGISTRY_IMAGE:latest
+    - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USER" --password-stdin
+    - docker build -t docker.io/$DOCKERHUB_USER/$APP_NAME:latest .
     - docker push docker.io/$DOCKERHUB_USER/$APP_NAME:latest
 
 build-docker-tag:
@@ -275,12 +274,12 @@ build-docker-tag:
     - docker:24.0.5-dind
   rules:
     - if: '$CI_COMMIT_TAG'
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
   script:
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    - echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USER" --password-stdin
-    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG .
-    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG docker.io/$DOCKERHUB_USER/$APP_NAME:$CI_COMMIT_TAG
-    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+    - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USER" --password-stdin
+    - docker build -t docker.io/$DOCKERHUB_USER/$APP_NAME:$CI_COMMIT_TAG .
     - docker push docker.io/$DOCKERHUB_USER/$APP_NAME:$CI_COMMIT_TAG
 
 
