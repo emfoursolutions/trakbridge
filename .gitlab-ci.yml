@@ -225,6 +225,8 @@ security-safety:
 lint-black:
   stage: test
   image: python:${PYTHON_VERSION}-slim
+  tags:
+    - python
   before_script:
     - pip install black
   script:
@@ -255,6 +257,8 @@ lint-flake8:
 build-docker-latest:
   stage: build
   image: docker:24.0.5
+  tags:
+    - python
   services:
     - docker:24.0.5-dind
   rules:
