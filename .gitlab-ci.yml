@@ -1,0 +1,364 @@
+# =============================================================================
+# .gitlab-ci.yml - GitLab CI/CD Pipeline Configuration
+# =============================================================================
+
+# Pipeline configuration for TrakBridge application
+# This pipeline includes: testing, linting, security scanning, and deployment
+
+stages:
+  - validate
+  # - test
+  - security
+  - build
+  - deploy
+
+# Global variables
+variables:
+  # Python configuration
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  PYTHON_VERSION: "3.10"
+  
+  # Docker configuration
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  
+  # Application configuration
+  APP_NAME: "trakbridge"
+  APP_VERSION: "0.1.0"
+  
+  # Test configuration
+  PYTEST_ADDOPTS: "--strict-markers --strict-config --tb=short"
+  COVERAGE_FILE: "$CI_PROJECT_DIR/.coverage"
+  
+  # Security scanning
+  SAST_EXCLUDED_PATHS: "tests, docs, scripts"
+  SECURE_LOG_LEVEL: "debug"
+
+# Cache configuration
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .pip-cache/
+    - .coverage
+    - .pytest_cache/
+    - node_modules/
+
+# =============================================================================
+# VALIDATE STAGE
+# =============================================================================
+
+validate-yaml:
+  stage: validate
+  image: python:${PYTHON_VERSION}-slim
+  script:
+    - pip install pyyaml
+    - python -c "import yaml; yaml.safe_load(open('config/settings/app.yaml'))"
+    - python -c "import yaml; yaml.safe_load(open('config/settings/database.yaml'))"
+    - python -c "import yaml; yaml.safe_load(open('config/settings/logging.yaml'))"
+    - python -c "import yaml; yaml.safe_load(open('config/settings/threading.yaml'))"
+    - python -c "import yaml; yaml.safe_load(open('config/settings/cot_types.yaml'))"
+    - echo "✅ All YAML configuration files are valid"
+  rules:
+    - changes:
+        - "config/**/*.yaml"
+        - "config/**/*.yml"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+validate-requirements:
+  stage: validate
+  image: python:${PYTHON_VERSION}-slim
+  script:
+    - pip install pip-tools
+    - pip-compile --check-only requirements.txt
+    - echo "✅ Requirements are up to date"
+  rules:
+    - changes:
+        - "requirements.txt"
+        - "pyproject.toml"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# =============================================================================
+# TEST STAGE
+# =============================================================================
+
+#test-unit:
+#  stage: test
+#  image: python:${PYTHON_VERSION}-slim
+#  services:
+#    - postgres:13
+#  variables:
+#    POSTGRES_DB: trakbridge_test
+#    POSTGRES_USER: test_user
+#    POSTGRES_PASSWORD: test_password
+#    SQLALCHEMY_DATABASE_URI: "postgresql://test_user:test_password@postgres:5432/trakbridge_test"
+#  before_script:
+#    - apt-get update -qq && apt-get install -y -qq gcc libpq-dev
+#    - pip install -r requirements.txt
+#    - pip install pytest pytest-cov pytest-asyncio pytest-mock
+#    - pip install black flake8 bandit safety
+#    - pip install -e ".[dev]"
+#  script:
+#    - echo "Running unit tests..."
+#    - pytest tests/unit/ -v --cov=app --cov=services --cov=plugins --cov=models --cov-report=xml --cov-report=term-missing
+#    - echo "✅ Unit tests completed"
+#  coverage: '/TOTAL.*\s+(\d+%)$/'
+#  artifacts:
+#    reports:
+#      coverage_report:
+#        coverage_format: cobertura
+#        path: coverage.xml
+#    paths:
+#      - coverage.xml
+#      - .coverage
+#    expire_in: 1 week
+#  rules:
+#    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+#    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+#
+#test-integration:
+#  stage: test
+#  image: python:${PYTHON_VERSION}-slim
+#  services:
+#    - postgres:13
+#  variables:
+#    POSTGRES_DB: trakbridge_test
+#    POSTGRES_USER: test_user
+#    POSTGRES_PASSWORD: test_password
+#    SQLALCHEMY_DATABASE_URI: "postgresql://test_user:test_password@postgres:5432/trakbridge_test"
+#  before_script:
+#    - apt-get update -qq && apt-get install -y -qq gcc libpq-dev
+#    - pip install -r requirements.txt
+#    - pip install pytest pytest-cov pytest-asyncio pytest-mock
+#  script:
+#    - echo "Running integration tests..."
+#    - pytest tests/integration/ -v --cov=app --cov=services --cov=plugins --cov=models --cov-report=xml --cov-report=term-missing
+#    - echo "✅ Integration tests completed"
+#  artifacts:
+#    reports:
+#      coverage_report:
+#        coverage_format: cobertura
+#        path: coverage.xml
+#    paths:
+#      - coverage.xml
+#      - .coverage
+#    expire_in: 1 week
+#  rules:
+#    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+#    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+#
+#test-e2e:
+#  stage: test
+#  image: python:${PYTHON_VERSION}-slim
+#  services:
+#    - postgres:13
+#  variables:
+#    POSTGRES_DB: trakbridge_test
+#    POSTGRES_USER: test_user
+#    POSTGRES_PASSWORD: test_password
+#    SQLALCHEMY_DATABASE_URI: "postgresql://test_user:test_password@postgres:5432/trakbridge_test"
+#  before_script:
+#    - apt-get update -qq && apt-get install -y -qq gcc libpq-dev
+#    - pip install -r requirements.txt
+#    - pip install pytest pytest-cov pytest-asyncio pytest-mock
+#  script:
+#    - echo "Running end-to-end tests..."
+#    - pytest tests/e2e/ -v --cov=app --cov=services --cov=plugins --cov=models --cov-report=xml --cov-report=term-missing
+#    - echo "✅ End-to-end tests completed"
+#  artifacts:
+#    reports:
+#      coverage_report:
+#        coverage_format: cobertura
+#        path: coverage.xml
+#    paths:
+#      - coverage.xml
+#      - .coverage
+#    expire_in: 1 week
+#  rules:
+#    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+#  allow_failure: true
+
+# =============================================================================
+# SECURITY STAGE
+# =============================================================================
+
+security-bandit:
+  stage: security
+  image: python:${PYTHON_VERSION}-slim
+  before_script:
+    - pip install bandit
+  script:
+    - echo "Running security scan with Bandit..."
+    - bandit -r app/ services/ plugins/ -f json -o bandit-report.json || true
+    - echo "✅ Security scan completed"
+  artifacts:
+    reports:
+      sast: bandit-report.json
+    paths:
+      - bandit-report.json
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+security-safety:
+  stage: security
+  image: python:${PYTHON_VERSION}-slim
+  before_script:
+    - pip install safety
+  script:
+    - echo "Checking for known security vulnerabilities..."
+    - safety check --json --output safety-report.json || true
+    - echo "✅ Security vulnerability check completed"
+  artifacts:
+    reports:
+      sast: safety-report.json
+    paths:
+      - safety-report.json
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# =============================================================================
+# CODE QUALITY STAGE
+# =============================================================================
+
+lint-black:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  before_script:
+    - pip install black
+  script:
+    - echo "Running Black code formatter check..."
+    - black --check --diff app/ services/ plugins/ models/ tests/
+    - echo "✅ Black formatting check passed"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+lint-flake8:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  before_script:
+    - pip install flake8
+  script:
+    - echo "Running Flake8 linting..."
+    - flake8 app/ services/ plugins/ models/ tests/ --max-line-length=100 --extend-ignore=E203,W503
+    - echo "✅ Flake8 linting passed"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# =============================================================================
+# BUILD STAGE
+# =============================================================================
+
+build-docker-latest:
+  stage: build
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USER" --password-stdin
+    - docker build -t $CI_REGISTRY_IMAGE:latest .
+    - docker tag $CI_REGISTRY_IMAGE:latest docker.io/$DOCKERHUB_USER/$APP_NAME:latest
+    - docker push $CI_REGISTRY_IMAGE:latest
+    - docker push docker.io/$DOCKERHUB_USER/$APP_NAME:latest
+
+build-docker-tag:
+  stage: build
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USER" --password-stdin
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG .
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG docker.io/$DOCKERHUB_USER/$APP_NAME:$CI_COMMIT_TAG
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+    - docker push docker.io/$DOCKERHUB_USER/$APP_NAME:$CI_COMMIT_TAG
+
+
+
+# =============================================================================
+# DEPLOY STAGE
+# =============================================================================
+
+deploy-staging:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Deploying to staging environment..."
+    - echo "Staging deployment would happen here"
+    - echo "✅ Staging deployment completed"
+  environment:
+    name: staging
+    url: https://staging.trakbridge.example.com
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  when: manual
+
+deploy-production:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Deploying to production environment..."
+    - echo "Production deployment would happen here"
+    - echo "✅ Production deployment completed"
+  environment:
+    name: production
+    url: https://trakbridge.example.com
+  rules:
+    - if: $CI_COMMIT_TAG
+  when: manual
+
+# =============================================================================
+# NOTIFICATION STAGE
+# =============================================================================
+
+notify-success:
+  stage: .post
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Pipeline completed successfully!"
+    - |
+      if [ -n "$SLACK_WEBHOOK_URL" ]; then
+        curl -X POST -H 'Content-type: application/json' \
+          --data "{\"text\":\"✅ Pipeline for $CI_PROJECT_NAME succeeded! Branch: $CI_COMMIT_REF_NAME, Commit: $CI_COMMIT_SHORT_SHA\"}" \
+          $SLACK_WEBHOOK_URL
+      fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+  when: on_success
+
+notify-failure:
+  stage: .post
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Pipeline failed!"
+    - |
+      if [ -n "$SLACK_WEBHOOK_URL" ]; then
+        curl -X POST -H 'Content-type: application/json' \
+          --data "{\"text\":\"❌ Pipeline for $CI_PROJECT_NAME failed! Branch: $CI_COMMIT_REF_NAME, Commit: $CI_COMMIT_SHORT_SHA\"}" \
+          $SLACK_WEBHOOK_URL
+      fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+  when: on_failure 

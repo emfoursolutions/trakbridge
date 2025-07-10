@@ -1,5 +1,5 @@
 # =============================================================================
-# Multi-stage Dockerfile for TrakBridge
+# Multi-stage Dockerfile for TrakBridge (pyproject.toml-based)
 # =============================================================================
 
 # ===============================
@@ -7,7 +7,6 @@
 # ===============================
 FROM python:3.12-slim AS builder
 
-# Set build arguments
 ARG BUILD_ENV=production
 
 # Install system dependencies for building
@@ -16,23 +15,29 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     default-libmysqlclient-dev \
     libpq-dev \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt /tmp/
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r /tmp/requirements.txt
+# Install build tools and setuptools-scm
+COPY pyproject.toml .
+COPY requirements.txt .  # Optional, may contain dev-only deps
+RUN pip install --no-cache-dir --upgrade pip setuptools build setuptools-scm
+
+# Copy app source for install
+COPY . .
+
+# Install package (build from pyproject.toml)
+RUN pip install .
 
 # ===============================
 # Stage 2 — Final Production Image
 # ===============================
 FROM python:3.12-slim AS production
 
-# Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
@@ -52,38 +57,27 @@ RUN apt-get update && apt-get install -y \
 RUN groupadd -g ${GROUP_ID} appuser && \
     useradd -r -u ${USER_ID} -g appuser -d /app -s /bin/bash appuser
 
-# Copy virtual environment from builder
+# Copy virtualenv from builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Create app directory and set permissions
+# Create app directories
 WORKDIR /app
 RUN mkdir -p /app/logs /app/data /app/tmp && \
     chown -R appuser:appuser /app
 
-# Copy application code
+# Copy runtime files
 COPY --chown=appuser:appuser . /app/
-
-# Copy Hypercorn configuration
 COPY --chown=appuser:appuser hypercorn.toml /app/hypercorn.toml
-
-# Create entrypoint script
 COPY --chown=appuser:appuser docker/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-# Switch to non-root user
 USER appuser
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT:-5000}/api/health || exit 1
 
-# Expose port
 EXPOSE 5000
-
-# Use entrypoint script
 ENTRYPOINT ["/app/entrypoint.sh"]
-
-# Default command - let entrypoint decide the server
 CMD []
 
 # ===============================
@@ -95,13 +89,11 @@ ENV FLASK_ENV=development
 
 USER root
 
-# Install development dependencies
 RUN apt-get update && apt-get install -y \
     git \
     vim \
     && rm -rf /var/lib/apt/lists/*
 
-# Install development Python packages
 RUN pip install --no-cache-dir \
     flask-debugtoolbar \
     pytest \
@@ -110,4 +102,3 @@ RUN pip install --no-cache-dir \
     flake8
 
 USER appuser
-
