@@ -275,9 +275,9 @@ build-docker-latest:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_DRIVER: overlay2
   script:
-    - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USER" --password-stdin
-    - docker build -t docker.io/$DOCKERHUB_USER/$APP_NAME:latest .
-    - docker push docker.io/$DOCKERHUB_USER/$APP_NAME:latest
+    - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+    - docker build -t docker.io/$DOCKERHUB_USERNAME/$APP_NAME:latest .
+    - docker push docker.io/$DOCKERHUB_USERNAME/$APP_NAME:latest
 
 build-docker-tag:
   stage: build
@@ -339,6 +339,8 @@ deploy-production:
 notify-success:
   stage: .post
   image: alpine:latest
+  tags:
+    - python
   before_script:
     - apk add --no-cache curl
   script:
@@ -358,6 +360,8 @@ notify-success:
 notify-failure:
   stage: .post
   image: alpine:latest
+  tags:
+    - python
   before_script:
     - apk add --no-cache curl
   script:
