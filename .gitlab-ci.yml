@@ -191,7 +191,7 @@ security-bandit:
     - pip install bandit
   script:
     - echo "Running security scan with Bandit..."
-    - bandit -r app/ services/ plugins/ -f json -o bandit-report.json || true
+    - bandit -r services/ plugins/ routes/ models/ config/ -f json -o bandit-report.json || true
     - echo "✅ Security scan completed"
   artifacts:
     reports:
@@ -210,7 +210,7 @@ security-safety:
     - pip install safety
   script:
     - echo "Checking for known security vulnerabilities..."
-    - safety check --json --output safety-report.json || true
+    - safety scan --output json > safety-report.json || true
     - echo "✅ Security vulnerability check completed"
   artifacts:
     reports:
