@@ -142,7 +142,7 @@ class TraccarPlugin(BaseGPSPlugin):
                     required=False,
                     placeholder="vehicle,tracker",
                     help_text="Comma-separated list of device names to include "
-                              "(leave empty for all devices)",
+                    "(leave empty for all devices)",
                 ),
             ],
         }

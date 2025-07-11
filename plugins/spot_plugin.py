@@ -99,7 +99,7 @@ class SpotPlugin(BaseGPSPlugin):
                     required=False,
                     sensitive=True,
                     help_text="Password if your SPOT feed is password protected "
-                              "(leave blank if not protected)",
+                    "(leave blank if not protected)",
                 ),
                 PluginConfigField(
                     name="max_results",

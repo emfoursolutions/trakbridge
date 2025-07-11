@@ -323,9 +323,9 @@ def export(output, output_format, include_git, include_env):
             click.echo("tomli-w not installed. Install with: pip install tomli-w")
             sys.exit(1)
     elif output_format == "env":
-        dev_version = version_data.get('development_version', version_data['version'])
-        is_dev = str(version_data.get('is_development', False)).lower()
-        version_source = version_data.get('source', 'unknown')
+        dev_version = version_data.get("development_version", version_data["version"])
+        is_dev = str(version_data.get("is_development", False)).lower()
+        version_source = version_data.get("source", "unknown")
 
         env_lines = [
             f"TRAKBRIDGE_VERSION={version_data['version']}",
@@ -475,12 +475,12 @@ def debug():
     base_version = version_instance._get_base_version()
 
     # Extract styled values
-    styled_base_version = click.style(base_version['version'], fg='green', bold=True)
+    styled_base_version = click.style(base_version["version"], fg="green", bold=True)
     styled_dev_version = click.style(
-        version_instance.get_development_version(), fg='blue', bold=True
+        version_instance.get_development_version(), fg="blue", bold=True
     )
     styled_is_dev = click.style(
-        str(version_instance.is_development_build()), fg='yellow'
+        str(version_instance.is_development_build()), fg="yellow"
     )
 
     click.echo(f"Selected base version: {styled_base_version}")
@@ -492,8 +492,8 @@ def debug():
     git_info = version_instance._get_git_info()
 
     # Extract the git status styling
-    git_status = 'Available' if git_info['available'] else 'Not available'
-    git_color = 'green' if git_info['available'] else 'red'
+    git_status = "Available" if git_info["available"] else "Not available"
+    git_color = "green" if git_info["available"] else "red"
     styled_git_status = click.style(git_status, fg=git_color)
 
     click.echo(f"\nGit repository: {styled_git_status}")
@@ -503,8 +503,8 @@ def debug():
         click.echo(f"  Commit: {git_info.get('commit_short', 'unknown')}")
 
         # Format dirty status with appropriate color
-        is_dirty = git_info.get('is_dirty', False)
-        dirty_color = 'red' if is_dirty else 'green'
+        is_dirty = git_info.get("is_dirty", False)
+        dirty_color = "red" if is_dirty else "green"
         styled_dirty = click.style(str(is_dirty), fg=dirty_color)
 
         click.echo(f"  Dirty: {styled_dirty}")

@@ -272,8 +272,10 @@ class EnhancedCOTService:
                 )
 
             except Exception as e:
-                location_name = location.get('name', 'Unknown')
-                logger.error(f"Error creating PyTAK COT event for location {location_name}: {e}")
+                location_name = location.get("name", "Unknown")
+                logger.error(
+                    f"Error creating PyTAK COT event for location {location_name}: {e}"
+                )
                 logger.error(f"Location data: {location}")
                 continue
 

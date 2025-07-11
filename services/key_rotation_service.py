@@ -318,8 +318,8 @@ class KeyRotationService:
                     return {
                         "success": True,
                         "method": "environment_variable",
-                        "instruction": f'Set environment variable: '
-                                       f'export TB_MASTER_KEY="{new_key}"',
+                        "instruction": f"Set environment variable: "
+                        f'export TB_MASTER_KEY="{new_key}"',
                     }
 
                 elif method == "file":

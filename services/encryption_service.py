@@ -273,8 +273,10 @@ class EncryptionService:
                     rotated_count += 1
 
                 except Exception as e:
-                    error_msg = (f"Failed to rotate certificate password for server {server.name} "
-                                 f"(ID: {server.id}): {e}")
+                    error_msg = (
+                        f"Failed to rotate certificate password for server {server.name} "
+                        f"(ID: {server.id}): {e}"
+                    )
                     errors.append(error_msg)
                     logger.error(error_msg)
 
@@ -316,8 +318,10 @@ class EncryptionService:
                     rotated_count += 1
 
                 except Exception as e:
-                    error_msg = (f"Failed to rotate plugin passwords for stream {stream.name} "
-                                 f"(ID: {stream.id}): {e}")
+                    error_msg = (
+                        f"Failed to rotate plugin passwords for stream {stream.name} "
+                        f"(ID: {stream.id}): {e}"
+                    )
                     errors.append(error_msg)
                     logger.error(error_msg)
 

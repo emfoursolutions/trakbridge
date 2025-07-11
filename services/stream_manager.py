@@ -353,9 +353,7 @@ class StreamManager:
             if success:
                 # The StreamWorker already ensures the persistent PyTAK worker is running
                 # No need to call cot_service.start_worker() again here
-                logger.debug(
-                    f"Stream {stream_id} started successfully."
-                )
+                logger.debug(f"Stream {stream_id} started successfully.")
 
                 self.workers[stream_id] = worker
                 logger.debug(f"Successfully started stream {stream_id}")
