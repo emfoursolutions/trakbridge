@@ -206,6 +206,8 @@ security-bandit:
 security-safety:
   stage: security
   image: python:${PYTHON_VERSION}-slim
+  tags:
+    - python
   before_script:
     - pip install safety
   script:
