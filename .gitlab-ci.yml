@@ -275,7 +275,7 @@ build-docker-latest:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_DRIVER: overlay2
   script:
-    - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+    - echo $DOCKERHUB_TOKEN | docker login -u $DOCKERHUB_USERNAME --password-stdin
     - docker build -t docker.io/$DOCKERHUB_USERNAME/$APP_NAME:latest .
     - docker push docker.io/$DOCKERHUB_USERNAME/$APP_NAME:latest
 
@@ -290,7 +290,7 @@ build-docker-tag:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_DRIVER: overlay2
   script:
-    - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USER" --password-stdin
+    - echo $DOCKERHUB_TOKEN | docker login -u $DOCKERHUB_USER --password-stdin
     - docker build -t docker.io/$DOCKERHUB_USER/$APP_NAME:$CI_COMMIT_TAG .
     - docker push docker.io/$DOCKERHUB_USER/$APP_NAME:$CI_COMMIT_TAG
 
