@@ -239,6 +239,8 @@ lint-black:
 
 lint-flake8:
   stage: test
+  tags:
+    - python
   image: python:${PYTHON_VERSION}-slim
   before_script:
     - pip install flake8
