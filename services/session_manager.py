@@ -55,7 +55,7 @@ class SessionManager:
                 timeout = aiohttp.ClientTimeout(
                     total=120,  # Increased total timeout
                     connect=30,  # Increased connect timeout
-                    sock_read=30  # Increased read timeout
+                    sock_read=30,  # Increased read timeout
                 )
 
                 connector = aiohttp.TCPConnector(
@@ -64,13 +64,13 @@ class SessionManager:
                     use_dns_cache=True,
                     keepalive_timeout=60,  # Increased keepalive
                     enable_cleanup_closed=True,
-                    limit_per_host=10  # Limit per host
+                    limit_per_host=10,  # Limit per host
                 )
 
                 self.session = aiohttp.ClientSession(
                     timeout=timeout,
                     connector=connector,
-                    trust_env=True  # Use environment proxy settings if available
+                    trust_env=True,  # Use environment proxy settings if available
                 )
 
                 logger.info("HTTP session initialized successfully")

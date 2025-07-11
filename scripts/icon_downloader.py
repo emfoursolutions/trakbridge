@@ -16,7 +16,7 @@ import time
 def load_yaml_config(yaml_file):
     """Load the YAML configuration file."""
     try:
-        with open(yaml_file, 'r') as file:
+        with open(yaml_file, "r") as file:
             return yaml.safe_load(file)
     except FileNotFoundError:
         print(f"Error: YAML file '{yaml_file}' not found.")
@@ -29,7 +29,7 @@ def load_yaml_config(yaml_file):
 def download_icon(base_url, sidc_code, output_dir, cot_type, label, timeout=10):
     """Download a single SVG icon using requests."""
     # Remove .svg extension from SIDC code for URL
-    clean_sidc = sidc_code.replace('.svg', '')
+    clean_sidc = sidc_code.replace(".svg", "")
 
     # Construct URL and output filename (keep .svg extension for saved file)
     url = f"{base_url}/{sidc_code}"
@@ -41,43 +41,43 @@ def download_icon(base_url, sidc_code, output_dir, cot_type, label, timeout=10):
         response.raise_for_status()  # Raises an HTTPError for bad responses
 
         # Check if response contains SVG content
-        content_type = response.headers.get('content-type', '').lower()
-        if 'svg' not in content_type and '<svg' not in response.text[:100]:
+        content_type = response.headers.get("content-type", "").lower()
+        if "svg" not in content_type and "<svg" not in response.text[:100]:
             return {
-                'success': False,
-                'sidc': sidc_code,
-                'cot_type': cot_type,
-                'label': label,
-                'error': 'Response does not appear to be SVG content'
+                "success": False,
+                "sidc": sidc_code,
+                "cot_type": cot_type,
+                "label": label,
+                "error": "Response does not appear to be SVG content",
             }
 
         # Save the SVG file
-        with open(output_file, 'w', encoding='utf-8') as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             f.write(response.text)
 
         return {
-            'success': True,
-            'sidc': sidc_code,
-            'cot_type': cot_type,
-            'label': label,
-            'size': len(response.text)
+            "success": True,
+            "sidc": sidc_code,
+            "cot_type": cot_type,
+            "label": label,
+            "size": len(response.text),
         }
 
     except requests.exceptions.RequestException as e:
         return {
-            'success': False,
-            'sidc': sidc_code,
-            'cot_type': cot_type,
-            'label': label,
-            'error': str(e)
+            "success": False,
+            "sidc": sidc_code,
+            "cot_type": cot_type,
+            "label": label,
+            "error": str(e),
         }
     except IOError as e:
         return {
-            'success': False,
-            'sidc': sidc_code,
-            'cot_type': cot_type,
-            'label': label,
-            'error': f'File write error: {str(e)}'
+            "success": False,
+            "sidc": sidc_code,
+            "cot_type": cot_type,
+            "label": label,
+            "error": f"File write error: {str(e)}",
         }
 
 
@@ -91,11 +91,13 @@ def download_icons_parallel(base_url, symbols, output_dir, max_workers=5):
             executor.submit(
                 download_icon,
                 base_url,
-                symbol.get('sidc'),
+                symbol.get("sidc"),
                 output_dir,
-                symbol.get('cot_type', 'Unknown'),
-                symbol.get('label', 'Unknown')
-            ): symbol for symbol in symbols if symbol.get('sidc')
+                symbol.get("cot_type", "Unknown"),
+                symbol.get("label", "Unknown"),
+            ): symbol
+            for symbol in symbols
+            if symbol.get("sidc")
         }
 
         # Process completed tasks
@@ -103,8 +105,10 @@ def download_icons_parallel(base_url, symbols, output_dir, max_workers=5):
             result = future.result()
             results.append(result)
 
-            if result['success']:
-                print(f"✓ {result['label']} ({result['cot_type']}) - {result['size']} bytes")
+            if result["success"]:
+                print(
+                    f"✓ {result['label']} ({result['cot_type']}) - {result['size']} bytes"
+                )
             else:
                 print(f"✗ {result['label']} ({result['cot_type']}) - {result['error']}")
 
@@ -116,9 +120,9 @@ def download_icons_sequential(base_url, symbols, output_dir):
     results = []
 
     for i, symbol in enumerate(symbols, 1):
-        sidc_code = symbol.get('sidc')
-        cot_type = symbol.get('cot_type', 'Unknown')
-        label = symbol.get('label', 'Unknown')
+        sidc_code = symbol.get("sidc")
+        cot_type = symbol.get("cot_type", "Unknown")
+        label = symbol.get("label", "Unknown")
 
         if not sidc_code:
             print(f"Warning: No SIDC code found for symbol: {symbol}")
@@ -129,7 +133,7 @@ def download_icons_sequential(base_url, symbols, output_dir):
         result = download_icon(base_url, sidc_code, output_dir, cot_type, label)
         results.append(result)
 
-        if result['success']:
+        if result["success"]:
             print(f"  ✓ Downloaded successfully - {result['size']} bytes")
         else:
             print(f"  ✗ Download failed: {result['error']}")
@@ -148,7 +152,7 @@ def test_server_connection(base_url):
         response = requests.get(test_url, timeout=5)
         response.raise_for_status()
 
-        if '<svg' in response.text[:100]:
+        if "<svg" in response.text[:100]:
             print(f"✓ Server connection successful")
             return True
         else:
@@ -355,24 +359,24 @@ def generate_html_report(symbols, results, output_dir, base_url):
 """
 
     # Create a lookup for results
-    result_lookup = {r['sidc']: r for r in results}
+    result_lookup = {r["sidc"]: r for r in results}
 
     # Generate symbol cards
     for symbol in symbols:
-        sidc = symbol.get('sidc', '')
-        cot_type = symbol.get('cot_type', 'Unknown')
-        label = symbol.get('label', 'Unknown')
-        description = symbol.get('description', 'No description')
-        category = symbol.get('category', 'unknown')
+        sidc = symbol.get("sidc", "")
+        cot_type = symbol.get("cot_type", "Unknown")
+        label = symbol.get("label", "Unknown")
+        description = symbol.get("description", "No description")
+        category = symbol.get("category", "unknown")
 
-        result = result_lookup.get(sidc, {'success': False, 'error': 'Not processed'})
-        status_class = 'success' if result['success'] else 'failed'
+        result = result_lookup.get(sidc, {"success": False, "error": "Not processed"})
+        status_class = "success" if result["success"] else "failed"
 
         # SVG content or error icon
-        if result['success']:
+        if result["success"]:
             svg_path = os.path.join(output_dir, sidc)
             if os.path.exists(svg_path):
-                with open(svg_path, 'r', encoding='utf-8') as f:
+                with open(svg_path, "r", encoding="utf-8") as f:
                     svg_content = f.read()
             else:
                 svg_content = '<div class="error-icon">?</div>'
@@ -463,8 +467,8 @@ def generate_html_report(symbols, results, output_dir, base_url):
 """
 
     # Save HTML file
-    html_file = os.path.join(output_dir, 'military_symbols_reference.html')
-    with open(html_file, 'w', encoding='utf-8') as f:
+    html_file = os.path.join(output_dir, "military_symbols_reference.html")
+    with open(html_file, "w", encoding="utf-8") as f:
         f.write(html_content)
 
     return html_file
@@ -500,14 +504,16 @@ def main():
     # Test server connection
     print("Testing server connection...")
     if not test_server_connection(BASE_URL):
-        print("Cannot connect to server. Please check the URL and ensure the server is running.")
+        print(
+            "Cannot connect to server. Please check the URL and ensure the server is running."
+        )
         sys.exit(1)
     print()
 
     # Load YAML configuration
     config = load_yaml_config(YAML_FILE)
 
-    if 'military_symbols' not in config:
+    if "military_symbols" not in config:
         print("Error: 'military_symbols' key not found in YAML file.")
         sys.exit(1)
 
@@ -515,7 +521,7 @@ def main():
     Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
     # Download icons
-    symbols = config['military_symbols']
+    symbols = config["military_symbols"]
     total_symbols = len(symbols)
 
     print(f"Found {total_symbols} symbols to download...")
@@ -531,7 +537,7 @@ def main():
     end_time = time.time()
 
     # Calculate results
-    successful_downloads = sum(1 for r in results if r['success'])
+    successful_downloads = sum(1 for r in results if r["success"])
     failed_downloads = len(results) - successful_downloads
 
     # Summary
@@ -548,7 +554,7 @@ def main():
     if failed_downloads > 0:
         print("\nFailed Downloads:")
         for result in results:
-            if not result['success']:
+            if not result["success"]:
                 print(f"  - {result['label']}: {result['error']}")
 
     # Generate HTML report

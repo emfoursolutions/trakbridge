@@ -15,4 +15,4 @@ from .tak_server import TakServer
 from .stream import Stream
 from database import db, TimestampMixin
 
-__all__ = ['db', 'TimestampMixin', 'TakServer', 'Stream']
+__all__ = ["db", "TimestampMixin", "TakServer", "Stream"]

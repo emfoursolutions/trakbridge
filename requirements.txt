@@ -8,12 +8,14 @@ aiosignal
 alembic
 arrow
 attrs
+black
 blinker
 certifi
 cffi
 click
 cryptography
 fastkml
+flake8
 Flask
 Flask-Migrate
 Flask-SQLAlchemy

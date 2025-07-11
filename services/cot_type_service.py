@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CotType:
     """Data class representing a single CoT type."""
+
     value: str
     sidc: str
     label: str
@@ -69,7 +70,7 @@ class CotTypesService:
                 logger.warning(f"CoT types file not found: {self.yaml_file_path}")
                 return CotTypesService._get_default_data()
 
-            with open(yaml_path, 'r', encoding='utf-8') as file:
+            with open(yaml_path, "r", encoding="utf-8") as file:
                 data = yaml.safe_load(file)
                 logger.info(f"Loaded CoT types from {self.yaml_file_path}")
                 return data
@@ -85,37 +86,37 @@ class CotTypesService:
     def _get_default_data() -> Dict[str, Any]:
         """Get default CoT types as fallback."""
         return {
-            'cot_types': [
+            "cot_types": [
                 {
-                    'value': 'a-f-G-F-U',
-                    'sidc': 'SFGPU------.svg',
-                    'label': 'Friendly Ground Unit - Generic',
-                    'description': 'Friendly ground unit or personnel',
-                    'category': 'friendly'
+                    "value": "a-f-G-F-U",
+                    "sidc": "SFGPU------.svg",
+                    "label": "Friendly Ground Unit - Generic",
+                    "description": "Friendly ground unit or personnel",
+                    "category": "friendly",
                 },
                 {
-                    'value': 'a-h-G-F-U',
-                    'sidc': 'SHGPU------.svg',
-                    'label': 'Hostile Ground Unit - Generic',
-                    'description': 'Hostile ground unit or personnel',
-                    'category': 'hostile'
+                    "value": "a-h-G-F-U",
+                    "sidc": "SHGPU------.svg",
+                    "label": "Hostile Ground Unit - Generic",
+                    "description": "Hostile ground unit or personnel",
+                    "category": "hostile",
                 },
                 {
-                    'value': 'a-n-G-F-U',
-                    'sidc': 'SNGPU------.svg',
-                    'label': 'Neutral Ground Unit - Generic',
-                    'description': 'Neutral ground unit or personnel',
-                    'category': 'neutral'
+                    "value": "a-n-G-F-U",
+                    "sidc": "SNGPU------.svg",
+                    "label": "Neutral Ground Unit - Generic",
+                    "description": "Neutral ground unit or personnel",
+                    "category": "neutral",
                 },
                 {
-                    'value': 'a-u-G-F-U',
-                    'sidc': 'SNGPU------.svg',
-                    'label': 'Unknown Ground Unit - Generic',
-                    'description': 'Unknown ground unit or personnel',
-                    'category': 'unknown'
+                    "value": "a-u-G-F-U",
+                    "sidc": "SNGPU------.svg",
+                    "label": "Unknown Ground Unit - Generic",
+                    "description": "Unknown ground unit or personnel",
+                    "category": "unknown",
                 },
             ],
-            'default_cot_type': 'a-f-G-F-U'
+            "default_cot_type": "a-f-G-F-U",
         }
 
     def _ensure_loaded(self):
@@ -128,16 +129,16 @@ class CotTypesService:
         # Convert raw data to CotType objects
         self._cot_types = [
             CotType(
-                value=item['value'],
-                sidc=item['sidc'],
-                label=item['label'],
-                description=item['description'],
-                category=item['category']
+                value=item["value"],
+                sidc=item["sidc"],
+                label=item["label"],
+                description=item["description"],
+                category=item["category"],
             )
-            for item in data.get('cot_types', [])
+            for item in data.get("cot_types", [])
         ]
 
-        self._default_cot_type = data.get('default_cot_type', 'a-f-G-U-C')
+        self._default_cot_type = data.get("default_cot_type", "a-f-G-U-C")
         self._loaded = True
 
     def get_all_cot_types(self) -> List[CotType]:
@@ -175,38 +176,38 @@ class CotTypesService:
         """Get data formatted for template rendering."""
         self._ensure_loaded()
         return {
-            'cot_types': [
+            "cot_types": [
                 {
-                    'value': cot.value,
-                    'sidc': cot.sidc,
-                    'label': cot.label,
-                    'description': cot.description,
-                    'category': cot.category
+                    "value": cot.value,
+                    "sidc": cot.sidc,
+                    "label": cot.label,
+                    "description": cot.description,
+                    "category": cot.category,
                 }
                 for cot in self._cot_types
             ],
-            'default_cot_type': self._default_cot_type
+            "default_cot_type": self._default_cot_type,
         }
 
     @staticmethod
     def calculate_cot_statistics(cot_data):
         """Calculate statistics for COT types"""
 
-        cot_types = cot_data.get('cot_types', [])
+        cot_types = cot_data.get("cot_types", [])
         # Count by category
-        categories = [symbol.get('category', 'unknown') for symbol in cot_types]
+        categories = [symbol.get("category", "unknown") for symbol in cot_types]
         category_counts = Counter(categories)
 
         stats = {
-            'friendly': category_counts.get('friendly', 0),
-            'hostile': category_counts.get('hostile', 0),
-            'neutral': category_counts.get('neutral', 0),
-            'unknown': category_counts.get('unknown', 0),
-            'categories': sorted(list(set(categories)))
+            "friendly": category_counts.get("friendly", 0),
+            "hostile": category_counts.get("hostile", 0),
+            "neutral": category_counts.get("neutral", 0),
+            "unknown": category_counts.get("unknown", 0),
+            "categories": sorted(list(set(categories))),
         }
 
         # Calculate 'other' as everything that's not friendly or hostile
-        stats['other'] = len(cot_types) - stats['friendly'] - stats['hostile']
+        stats["other"] = len(cot_types) - stats["friendly"] - stats["hostile"]
 
         return stats
 
@@ -216,7 +217,9 @@ cot_type_service = CotTypesService()
 
 
 # Convenience functions for backward compatibility
-def load_cot_types(yaml_file_path: str = "config/settings/cot_types.yaml") -> Dict[str, Any]:
+def load_cot_types(
+    yaml_file_path: str = "config/settings/cot_types.yaml",
+) -> Dict[str, Any]:
     """Legacy function - use CotTypesService instead."""
     service = CotTypesService(yaml_file_path)
     return service.get_template_data()

@@ -46,7 +46,9 @@ logger = logging.getLogger(__name__)
 class StreamDisplayService:
     """Service for handling stream display and presentation logic"""
 
-    def __init__(self, plugin_manager, status_service: Optional[StreamStatusService] = None):
+    def __init__(
+        self, plugin_manager, status_service: Optional[StreamStatusService] = None
+    ):
         self.plugin_manager = plugin_manager
         self.status_service = status_service
 
@@ -69,7 +71,11 @@ class StreamDisplayService:
     def get_stream_for_detail_view(self, stream_id: int) -> Stream:
         """Get a single stream prepared for detail view"""
         # Use joinedload to eagerly load the tak_server relationship
-        stream = Stream.query.options(joinedload(Stream.tak_server)).filter_by(id=stream_id).first_or_404()
+        stream = (
+            Stream.query.options(joinedload(Stream.tak_server))
+            .filter_by(id=stream_id)
+            .first_or_404()
+        )
 
         # Prepare stream for detail display
         self._prepare_stream_for_detail(stream)
@@ -80,7 +86,11 @@ class StreamDisplayService:
     def get_stream_for_edit_form(stream_id: int) -> Stream:
         """Get a stream prepared for the edit form"""
         # Use joinedload to eagerly load the tak_server relationship
-        stream = Stream.query.options(joinedload(Stream.tak_server)).filter_by(id=stream_id).first_or_404()
+        stream = (
+            Stream.query.options(joinedload(Stream.tak_server))
+            .filter_by(id=stream_id)
+            .first_or_404()
+        )
 
         # No special preparation needed for edit form beyond basic loading
         return stream
@@ -122,20 +132,29 @@ class StreamDisplayService:
             plugin_class = self.plugin_manager.plugins.get(stream.plugin_type)
             if plugin_class:
                 temp_instance = plugin_class({})
-                stream.plugin_metadata = self._serialize_plugin_metadata(temp_instance.plugin_metadata)
+                stream.plugin_metadata = self._serialize_plugin_metadata(
+                    temp_instance.plugin_metadata
+                )
             else:
                 stream.plugin_metadata = None
         except Exception as e:
-            logger.warning(f"Could not load metadata for plugin {stream.plugin_type}: {e}")
+            logger.warning(
+                f"Could not load metadata for plugin {stream.plugin_type}: {e}"
+            )
             stream.plugin_metadata = None
 
     def _add_running_status(self, stream: Stream) -> None:
         """Add running status to stream"""
         if self.status_service:
-            stream.running_status = self.status_service.get_safe_stream_status(stream.id)
+            stream.running_status = self.status_service.get_safe_stream_status(
+                stream.id
+            )
         else:
             # Fallback if no status service provided
-            stream.running_status = {'running': False, 'error': 'Status service not available'}
+            stream.running_status = {
+                "running": False,
+                "error": "Status service not available",
+            }
 
     @staticmethod
     def _add_cot_type_info(stream: Stream) -> None:
@@ -154,29 +173,33 @@ class StreamDisplayService:
                 # Fallback for unknown COT types
                 stream.cot_type_info = None
                 stream.cot_type_label = stream.cot_type
-                stream.cot_type_description = 'Unknown COT type'
-                stream.cot_type_sidc = ''
-                stream.cot_type_category = 'unknown'
-                logger.warning(f"Unknown COT type: {stream.cot_type} for stream {stream.id}")
+                stream.cot_type_description = "Unknown COT type"
+                stream.cot_type_sidc = ""
+                stream.cot_type_category = "unknown"
+                logger.warning(
+                    f"Unknown COT type: {stream.cot_type} for stream {stream.id}"
+                )
         except Exception as e:
             logger.error(f"Error adding COT type info for stream {stream.id}: {e}")
             # Set safe defaults
             stream.cot_type_info = None
             stream.cot_type_label = stream.cot_type
-            stream.cot_type_description = 'Error loading COT type info'
-            stream.cot_type_sidc = ''
-            stream.cot_type_category = 'unknown'
+            stream.cot_type_description = "Error loading COT type info"
+            stream.cot_type_sidc = ""
+            stream.cot_type_category = "unknown"
 
     @staticmethod
     def _format_datetime_fields(stream: Stream) -> None:
         """Format datetime fields for template display"""
         if stream.last_poll and isinstance(stream.last_poll, datetime):
             try:
-                stream.last_poll_date = stream.last_poll.strftime('%Y-%m-%d')
-                stream.last_poll_time = stream.last_poll.strftime('%H:%M:%S')
+                stream.last_poll_date = stream.last_poll.strftime("%Y-%m-%d")
+                stream.last_poll_time = stream.last_poll.strftime("%H:%M:%S")
                 stream.last_poll_iso = stream.last_poll.isoformat()
             except Exception as e:
-                logger.warning(f"Error formatting last_poll for stream {stream.id}: {e}")
+                logger.warning(
+                    f"Error formatting last_poll for stream {stream.id}: {e}"
+                )
                 stream.last_poll_date = None
                 stream.last_poll_time = None
                 stream.last_poll_iso = None
@@ -195,14 +218,20 @@ class StreamDisplayService:
                 return
 
             # Use the stream's to_dict method that masks sensitive data
-            stream.display_config = stream.to_dict(include_sensitive=False)['plugin_config']
+            stream.display_config = stream.to_dict(include_sensitive=False)[
+                "plugin_config"
+            ]
 
         except Exception as e:
-            logger.warning(f"Could not prepare display config for stream {stream.id}: {e}")
+            logger.warning(
+                f"Could not prepare display config for stream {stream.id}: {e}"
+            )
             stream.display_config = {}
 
     @staticmethod
-    def calculate_plugin_statistics(streams: List[Stream]) -> Tuple[Dict[str, int], Dict[str, Any]]:
+    def calculate_plugin_statistics(
+        streams: List[Stream],
+    ) -> Tuple[Dict[str, int], Dict[str, Any]]:
         """Calculate plugin statistics and metadata"""
         plugin_stats = {}
         plugin_metadata = {}
@@ -214,7 +243,11 @@ class StreamDisplayService:
             plugin_stats[plugin_type] = plugin_stats.get(plugin_type, 0) + 1
 
             # Collect plugin metadata (only need one instance per plugin type)
-            if plugin_type not in plugin_metadata and hasattr(stream, 'plugin_metadata') and stream.plugin_metadata:
+            if (
+                plugin_type not in plugin_metadata
+                and hasattr(stream, "plugin_metadata")
+                and stream.plugin_metadata
+            ):
                 plugin_metadata[plugin_type] = stream.plugin_metadata
 
         return plugin_stats, plugin_metadata
@@ -234,19 +267,23 @@ class StreamDisplayService:
             return result
         elif isinstance(metadata, list):
             return [self._serialize_plugin_metadata(item) for item in metadata]
-        elif hasattr(metadata, '__dict__'):
+        elif hasattr(metadata, "__dict__"):
             # This is likely a PluginConfigField or similar object
             # Convert to dictionary
             result = {}
             for attr_name in dir(metadata):
-                if not attr_name.startswith('_'):  # Skip private attributes
+                if not attr_name.startswith("_"):  # Skip private attributes
                     try:
                         attr_value = getattr(metadata, attr_name)
                         # Skip methods
                         if not callable(attr_value):
-                            result[attr_name] = self._serialize_plugin_metadata(attr_value)
+                            result[attr_name] = self._serialize_plugin_metadata(
+                                attr_value
+                            )
                     except Exception as e:
-                        logging.debug(f"Attributes: {e} skipped")  # Skip attributes that can't be accessed
+                        logging.debug(
+                            f"Attributes: {e} skipped"
+                        )  # Skip attributes that can't be accessed
             return result
         else:
             # Return as-is for basic types (str, int, bool, etc.)
@@ -258,30 +295,30 @@ class StreamDisplayService:
 
         for stream in streams:
             # Ensure stream is prepared for display
-            if not hasattr(stream, 'running_status'):
+            if not hasattr(stream, "running_status"):
                 self._add_running_status(stream)
 
-            if not hasattr(stream, 'last_poll_iso'):
+            if not hasattr(stream, "last_poll_iso"):
                 self._format_datetime_fields(stream)
 
-            if not hasattr(stream, 'cot_type_info'):
+            if not hasattr(stream, "cot_type_info"):
                 self._add_cot_type_info(stream)
 
             formatted_stream = {
-                'id': stream.id,
-                'name': stream.name,
-                'plugin_type': stream.plugin_type,
-                'is_active': stream.is_active,
-                'running': getattr(stream, 'running_status', {}).get('running', False),
-                'last_poll': getattr(stream, 'last_poll_iso', None),
-                'last_error': stream.last_error,
-                'total_messages_sent': stream.total_messages_sent or 0,
-                'tak_server': stream.tak_server.name if stream.tak_server else None,
-                'poll_interval': stream.poll_interval,
-                'cot_type': stream.cot_type,
-                'cot_type_label': getattr(stream, 'cot_type_label', stream.cot_type),
-                'cot_type_sidc': getattr(stream, 'cot_type_sidc', ''),
-                'cot_stale_time': stream.cot_stale_time
+                "id": stream.id,
+                "name": stream.name,
+                "plugin_type": stream.plugin_type,
+                "is_active": stream.is_active,
+                "running": getattr(stream, "running_status", {}).get("running", False),
+                "last_poll": getattr(stream, "last_poll_iso", None),
+                "last_error": stream.last_error,
+                "total_messages_sent": stream.total_messages_sent or 0,
+                "tak_server": stream.tak_server.name if stream.tak_server else None,
+                "poll_interval": stream.poll_interval,
+                "cot_type": stream.cot_type,
+                "cot_type_label": getattr(stream, "cot_type_label", stream.cot_type),
+                "cot_type_sidc": getattr(stream, "cot_type_sidc", ""),
+                "cot_stale_time": stream.cot_stale_time,
             }
 
             formatted_streams.append(formatted_stream)
@@ -295,17 +332,17 @@ class StreamDisplayService:
         self._add_cot_type_info(stream)
 
         return {
-            'id': stream.id,
-            'name': stream.name,
-            'plugin_type': stream.plugin_type,
-            'is_active': stream.is_active,
-            'running': getattr(stream, 'running_status', {}).get('running', False),
-            'last_poll': getattr(stream, 'last_poll_iso', None),
-            'message_count': stream.total_messages_sent or 0,
-            'has_error': bool(stream.last_error),
-            'tak_server_name': stream.tak_server.name if stream.tak_server else None,
-            'cot_type_label': getattr(stream, 'cot_type_label', stream.cot_type),
-            'cot_type_sidc': getattr(stream, 'cot_type_sidc', '')
+            "id": stream.id,
+            "name": stream.name,
+            "plugin_type": stream.plugin_type,
+            "is_active": stream.is_active,
+            "running": getattr(stream, "running_status", {}).get("running", False),
+            "last_poll": getattr(stream, "last_poll_iso", None),
+            "message_count": stream.total_messages_sent or 0,
+            "has_error": bool(stream.last_error),
+            "tak_server_name": stream.tak_server.name if stream.tak_server else None,
+            "cot_type_label": getattr(stream, "cot_type_label", stream.cot_type),
+            "cot_type_sidc": getattr(stream, "cot_type_sidc", ""),
         }
 
     def get_plugin_usage_summary(self) -> Dict[str, Dict[str, Any]]:
@@ -324,26 +361,26 @@ class StreamDisplayService:
 
                 if plugin_type not in plugin_summary:
                     plugin_summary[plugin_type] = {
-                        'total_streams': 0,
-                        'active_streams': 0,
-                        'running_streams': 0,
-                        'total_messages': 0,
-                        'error_streams': 0
+                        "total_streams": 0,
+                        "active_streams": 0,
+                        "running_streams": 0,
+                        "total_messages": 0,
+                        "error_streams": 0,
                     }
 
                 summary = plugin_summary[plugin_type]
-                summary['total_streams'] += 1
+                summary["total_streams"] += 1
 
                 if stream.is_active:
-                    summary['active_streams'] += 1
+                    summary["active_streams"] += 1
 
-                if getattr(stream, 'running_status', {}).get('running', False):
-                    summary['running_streams'] += 1
+                if getattr(stream, "running_status", {}).get("running", False):
+                    summary["running_streams"] += 1
 
                 if stream.last_error:
-                    summary['error_streams'] += 1
+                    summary["error_streams"] += 1
 
-                summary['total_messages'] += stream.total_messages_sent or 0
+                summary["total_messages"] += stream.total_messages_sent or 0
 
             return plugin_summary
 

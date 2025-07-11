@@ -73,8 +73,8 @@ class TraccarPlugin(BaseGPSPlugin):
                         "Create a user account in Traccar with appropriate permissions",
                         "Note your Traccar server URL (e.g., http://localhost:8082)",
                         "Ensure your user has read access to device positions",
-                        "API endpoint used: /api/positions"
-                    ]
+                        "API endpoint used: /api/positions",
+                    ],
                 },
                 {
                     "title": "API Information",
@@ -83,8 +83,8 @@ class TraccarPlugin(BaseGPSPlugin):
                         "Requires basic authentication with username/password",
                         "Returns latest position for each device",
                         "Position data includes coordinates, timestamp, and device info",
-                        "Supports both HTTP and HTTPS connections"
-                    ]
+                        "Supports both HTTP and HTTPS connections",
+                    ],
                 },
                 {
                     "title": "Security Notes",
@@ -92,9 +92,9 @@ class TraccarPlugin(BaseGPSPlugin):
                         "Use HTTPS for production deployments",
                         "Create dedicated API user with minimal required permissions",
                         "Regularly rotate API credentials",
-                        "Monitor API access logs for suspicious activity"
-                    ]
-                }
+                        "Monitor API access logs for suspicious activity",
+                    ],
+                },
             ],
             "config_fields": [
                 PluginConfigField(
@@ -103,14 +103,14 @@ class TraccarPlugin(BaseGPSPlugin):
                     field_type="url",
                     required=True,
                     placeholder="http://localhost:8082",
-                    help_text="Complete URL to your Traccar server (including port if needed)"
+                    help_text="Complete URL to your Traccar server (including port if needed)",
                 ),
                 PluginConfigField(
                     name="username",
                     label="Username",
                     field_type="text",
                     required=True,
-                    help_text="Traccar username with device access permissions"
+                    help_text="Traccar username with device access permissions",
                 ),
                 PluginConfigField(
                     name="password",
@@ -118,7 +118,7 @@ class TraccarPlugin(BaseGPSPlugin):
                     field_type="password",
                     required=True,
                     sensitive=True,
-                    help_text="Traccar user password"
+                    help_text="Traccar user password",
                 ),
                 PluginConfigField(
                     name="timeout",
@@ -128,7 +128,7 @@ class TraccarPlugin(BaseGPSPlugin):
                     default_value=30,
                     min_value=5,
                     max_value=120,
-                    help_text="HTTP request timeout in seconds"
+                    help_text="HTTP request timeout in seconds",
                 ),
                 PluginConfigField(
                     name="device_filter",
@@ -136,10 +136,9 @@ class TraccarPlugin(BaseGPSPlugin):
                     field_type="text",
                     required=False,
                     placeholder="vehicle,tracker",
-                    help_text="Comma-separated list of device names to include (leave empty for all devices)"
+                    help_text="Comma-separated list of device names to include (leave empty for all devices)",
                 ),
-
-            ]
+            ],
         }
 
     @staticmethod
@@ -181,7 +180,9 @@ class TraccarPlugin(BaseGPSPlugin):
             ssl_shutdown_timeout=5,  # Set SSL shutdown timeout to prevent hanging
         )
 
-    async def fetch_locations(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
+    async def fetch_locations(
+        self, session: aiohttp.ClientSession
+    ) -> List[Dict[str, Any]]:
         """
         Fetch location data from Traccar API
 
@@ -194,15 +195,16 @@ class TraccarPlugin(BaseGPSPlugin):
             config = self.get_decrypted_config()
 
             # Create a new session with proper SSL configuration if needed
-            if not hasattr(session, '_connector') or session._connector is None:
+            if not hasattr(session, "_connector") or session._connector is None:
                 connector = self._create_connector()
                 timeout = aiohttp.ClientTimeout(total=int(config.get("timeout", 30)))
 
                 async with aiohttp.ClientSession(
-                        connector=connector,
-                        timeout=timeout
+                    connector=connector, timeout=timeout
                 ) as custom_session:
-                    return await self._fetch_locations_with_session(custom_session, config)
+                    return await self._fetch_locations_with_session(
+                        custom_session, config
+                    )
             else:
                 return await self._fetch_locations_with_session(session, config)
 
@@ -215,17 +217,25 @@ class TraccarPlugin(BaseGPSPlugin):
                 try:
                     await connector.close()
                 except Exception as close_error:
-                    logger.debug(f"Error closing connector (non-critical): {close_error}")
+                    logger.debug(
+                        f"Error closing connector (non-critical): {close_error}"
+                    )
 
-    async def _fetch_locations_with_session(self, session: aiohttp.ClientSession,
-                                            config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def _fetch_locations_with_session(
+        self, session: aiohttp.ClientSession, config: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """
         Internal method to fetch locations with a given session
         """
         positions = await self._fetch_positions_from_api(session, config)
 
         # Check for error indicators first
-        if positions and len(positions) > 0 and isinstance(positions[0], dict) and "_error" in positions[0]:
+        if (
+            positions
+            and len(positions) > 0
+            and isinstance(positions[0], dict)
+            and "_error" in positions[0]
+        ):
             # Return the error indicator as-is for the base plugin to handle
             return positions
 
@@ -235,38 +245,44 @@ class TraccarPlugin(BaseGPSPlugin):
 
         # Get device information to enrich position data
         devices = await self._fetch_devices_from_api(session, config)
-        device_map = {device['id']: device for device in devices} if devices else {}
+        device_map = {device["id"]: device for device in devices} if devices else {}
 
         # Convert positions to standardized location format
         locations = []
         device_filter = self._parse_device_filter(config.get("device_filter", ""))
 
         for position in positions:
-            device_info = device_map.get(position.get('deviceId'), {})
-            device_name = device_info.get('name', f"Device {position.get('deviceId', 'Unknown')}")
+            device_info = device_map.get(position.get("deviceId"), {})
+            device_name = device_info.get(
+                "name", f"Device {position.get('deviceId', 'Unknown')}"
+            )
 
             # Apply device filter if specified
-            if device_filter and not self._device_matches_filter(device_name, device_filter):
+            if device_filter and not self._device_matches_filter(
+                device_name, device_filter
+            ):
                 continue
 
             location = {
                 "name": device_name,
-                "lat": float(position.get('latitude', 0)),
-                "lon": float(position.get('longitude', 0)),
-                "timestamp": self._parse_timestamp(position.get('deviceTime') or position.get('fixTime')),
+                "lat": float(position.get("latitude", 0)),
+                "lon": float(position.get("longitude", 0)),
+                "timestamp": self._parse_timestamp(
+                    position.get("deviceTime") or position.get("fixTime")
+                ),
                 "description": self._build_description(position, device_info),
                 "uid": f"traccar-{position.get('deviceId', 'unknown')}",
                 "additional_data": {
                     "source": "traccar",
-                    "device_id": position.get('deviceId'),
-                    "position_id": position.get('id'),
-                    "speed": position.get('speed'),
-                    "course": position.get('course'),
-                    "altitude": position.get('altitude'),
-                    "accuracy": position.get('accuracy'),
-                    "attributes": position.get('attributes', {}),
-                    "device_info": device_info
-                }
+                    "device_id": position.get("deviceId"),
+                    "position_id": position.get("id"),
+                    "speed": position.get("speed"),
+                    "course": position.get("course"),
+                    "altitude": position.get("altitude"),
+                    "accuracy": position.get("accuracy"),
+                    "attributes": position.get("attributes", {}),
+                    "device_info": device_info,
+                },
             }
             locations.append(location)
 
@@ -274,8 +290,9 @@ class TraccarPlugin(BaseGPSPlugin):
         return locations
 
     @staticmethod
-    async def _fetch_positions_from_api(session: aiohttp.ClientSession,
-                                        config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def _fetch_positions_from_api(
+        session: aiohttp.ClientSession, config: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """
         Fetch positions from Traccar API
 
@@ -286,7 +303,7 @@ class TraccarPlugin(BaseGPSPlugin):
         Returns:
             List of position dictionaries
         """
-        server_url = config["server_url"].rstrip('/')
+        server_url = config["server_url"].rstrip("/")
         url = f"{server_url}/api/positions"
 
         auth = aiohttp.BasicAuth(config["username"], config["password"])
@@ -296,14 +313,20 @@ class TraccarPlugin(BaseGPSPlugin):
         ssl_context = ssl.create_default_context(cafile=certifi.where())
 
         try:
-            async with session.get(url, auth=auth, timeout=timeout, ssl=ssl_context) as response:
+            async with session.get(
+                url, auth=auth, timeout=timeout, ssl=ssl_context
+            ) as response:
                 if response.status == 200:
                     data = await response.json()
-                    logger.info(f"Successfully fetched {len(data)} positions from Traccar API")
+                    logger.info(
+                        f"Successfully fetched {len(data)} positions from Traccar API"
+                    )
                     return data
                 elif response.status == 401:
                     error_text = await response.text()
-                    logger.error("Unauthorized access (401). Check Traccar credentials.")
+                    logger.error(
+                        "Unauthorized access (401). Check Traccar credentials."
+                    )
                     # Return error indicator instead of empty list
                     return [{"_error": "401", "_error_message": "Unauthorized access"}]
                 elif response.status == 403:
@@ -312,12 +335,21 @@ class TraccarPlugin(BaseGPSPlugin):
                     return [{"_error": "403", "_error_message": "Forbidden access"}]
                 elif response.status == 404:
                     error_text = await response.text()
-                    logger.error("Resource not found (404). Check server URL and API endpoint.")
+                    logger.error(
+                        "Resource not found (404). Check server URL and API endpoint."
+                    )
                     return [{"_error": "404", "_error_message": "Resource not found"}]
                 else:
                     error_text = await response.text()
-                    logger.error(f"API request failed with status {response.status}: {error_text}")
-                    return [{"_error": str(response.status), "_error_message": f"HTTP {response.status} error"}]
+                    logger.error(
+                        f"API request failed with status {response.status}: {error_text}"
+                    )
+                    return [
+                        {
+                            "_error": str(response.status),
+                            "_error_message": f"HTTP {response.status} error",
+                        }
+                    ]
 
         except asyncio.TimeoutError:
             logger.error("Request timed out while fetching positions")
@@ -333,8 +365,9 @@ class TraccarPlugin(BaseGPSPlugin):
             return []
 
     @staticmethod
-    async def _fetch_devices_from_api(session: aiohttp.ClientSession,
-                                      config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def _fetch_devices_from_api(
+        session: aiohttp.ClientSession, config: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """
         Fetch device information from Traccar API
 
@@ -345,7 +378,7 @@ class TraccarPlugin(BaseGPSPlugin):
         Returns:
             List of device dictionaries
         """
-        server_url = config["server_url"].rstrip('/')
+        server_url = config["server_url"].rstrip("/")
         url = f"{server_url}/api/devices"
 
         auth = aiohttp.BasicAuth(config["username"], config["password"])
@@ -355,10 +388,14 @@ class TraccarPlugin(BaseGPSPlugin):
         ssl_context = ssl.create_default_context(cafile=certifi.where())
 
         try:
-            async with session.get(url, auth=auth, timeout=timeout, ssl=ssl_context) as response:
+            async with session.get(
+                url, auth=auth, timeout=timeout, ssl=ssl_context
+            ) as response:
                 if response.status == 200:
                     data = await response.json()
-                    logger.debug(f"Successfully fetched {len(data)} devices from Traccar API")
+                    logger.debug(
+                        f"Successfully fetched {len(data)} devices from Traccar API"
+                    )
                     return data
                 else:
                     logger.warning(f"Could not fetch devices: HTTP {response.status}")
@@ -385,10 +422,14 @@ class TraccarPlugin(BaseGPSPlugin):
         try:
             # Traccar typically returns ISO 8601 format
             # Handle both with and without timezone info
-            if timestamp_str.endswith('Z'):
+            if timestamp_str.endswith("Z"):
                 # UTC timezone
-                return datetime.fromisoformat(timestamp_str.replace('Z', '+00:00')).replace(tzinfo=None)
-            elif '+' in timestamp_str[-6:] or timestamp_str.endswith(('00', '30', '45')):
+                return datetime.fromisoformat(
+                    timestamp_str.replace("Z", "+00:00")
+                ).replace(tzinfo=None)
+            elif "+" in timestamp_str[-6:] or timestamp_str.endswith(
+                ("00", "30", "45")
+            ):
                 # Has timezone offset
                 dt = datetime.fromisoformat(timestamp_str)
                 return dt.astimezone(timezone.utc).replace(tzinfo=None)
@@ -400,7 +441,9 @@ class TraccarPlugin(BaseGPSPlugin):
             logger.debug(f"Could not parse timestamp '{timestamp_str}': {e}")
             return datetime.now(timezone.utc)
 
-    def _build_description(self, position: Dict[str, Any], device_info: Dict[str, Any]) -> str:
+    def _build_description(
+        self, position: Dict[str, Any], device_info: Dict[str, Any]
+    ) -> str:
         """
         Build description string from position and device data
 
@@ -414,40 +457,42 @@ class TraccarPlugin(BaseGPSPlugin):
         parts = []
 
         # Add device model/type if available
-        if device_info.get('model'):
+        if device_info.get("model"):
             parts.append(f"Model: {device_info['model']}")
 
         # Add speed if available
-        speed = position.get('speed')
+        speed = position.get("speed")
         if speed is not None:
             # Convert from knots to km/h (Traccar default is knots)
             speed_kmh = speed * 1.852
             parts.append(f"Speed: {speed_kmh:.1f} km/h")
 
         # Add course/heading if available
-        course = position.get('course')
+        course = position.get("course")
         if course is not None:
             parts.append(f"Heading: {course:.0f}°")
 
         # Add altitude if available
-        altitude = position.get('altitude')
+        altitude = position.get("altitude")
         if altitude is not None:
             parts.append(f"Altitude: {altitude:.0f}m")
 
         # Add accuracy if available
-        accuracy = position.get('accuracy')
+        accuracy = position.get("accuracy")
         if accuracy is not None:
             parts.append(f"Accuracy: {accuracy:.0f}m")
 
         # Add timestamp
-        timestamp = self._parse_timestamp(position.get('deviceTime') or position.get('fixTime'))
+        timestamp = self._parse_timestamp(
+            position.get("deviceTime") or position.get("fixTime")
+        )
         parts.append(f"Time: {timestamp.strftime('%Y-%m-%d %H:%M:%S')} UTC")
 
         # Add any notable attributes
-        attributes = position.get('attributes', {})
-        if attributes.get('battery'):
+        attributes = position.get("attributes", {})
+        if attributes.get("battery"):
             parts.append(f"Battery: {attributes['battery']}%")
-        if attributes.get('ignition') is not None:
+        if attributes.get("ignition") is not None:
             parts.append(f"Ignition: {'On' if attributes['ignition'] else 'Off'}")
 
         return " | ".join(parts) if parts else "No additional information"
@@ -466,7 +511,7 @@ class TraccarPlugin(BaseGPSPlugin):
         if not filter_str or not filter_str.strip():
             return []
 
-        return [name.strip().lower() for name in filter_str.split(',') if name.strip()]
+        return [name.strip().lower() for name in filter_str.split(",") if name.strip()]
 
     @staticmethod
     def _device_matches_filter(device_name: str, device_filter: List[str]) -> bool:

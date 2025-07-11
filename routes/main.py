@@ -1,4 +1,3 @@
-
 """
 File: routes/main.py
 
@@ -34,14 +33,14 @@ from flask import Blueprint, render_template
 # Module-level logger
 logger = logging.getLogger(__name__)
 
-bp = Blueprint('main', __name__)
+bp = Blueprint("main", __name__)
 
 
-@bp.route('/')
+@bp.route("/")
 def index():
     """Main dashboard page"""
     from flask import current_app
-    
+
     # Import models inside the route to avoid circular imports
     from models.stream import Stream
     from models.tak_server import TakServer
@@ -55,8 +54,10 @@ def index():
 
     active_streams = sum(1 for s in streams if s.is_active)
 
-    return render_template('index.html',
-                           streams=streams,
-                           tak_servers=tak_servers,
-                           active_streams=active_streams,
-                           total_streams=len(streams))
+    return render_template(
+        "index.html",
+        streams=streams,
+        tak_servers=tak_servers,
+        active_streams=active_streams,
+        total_streams=len(streams),
+    )

@@ -30,7 +30,16 @@ import platform
 import time
 
 # Third-party imports
-from flask import Blueprint, render_template, current_app, request, jsonify, flash, redirect, url_for
+from flask import (
+    Blueprint,
+    render_template,
+    current_app,
+    request,
+    jsonify,
+    flash,
+    redirect,
+    url_for,
+)
 
 # Local application imports
 from services.key_rotation_service import get_key_rotation_service
@@ -38,15 +47,16 @@ from services.version import get_version
 
 # Module-level logger
 import logging
+
 logger = logging.getLogger(__name__)
 
-bp = Blueprint('admin', __name__)
+bp = Blueprint("admin", __name__)
 
 # Capture app start time for uptime display
 start_time = time.time()
 
 
-@bp.route('/system_info')
+@bp.route("/system_info")
 def admin_dashboard():
     from models.stream import Stream
     from models.tak_server import TakServer
@@ -58,13 +68,15 @@ def admin_dashboard():
     servers_count = db.session.query(TakServer).count()
 
     # Use the correct stream_manager instance
-    stream_manager = getattr(current_app, 'stream_manager', None)
+    stream_manager = getattr(current_app, "stream_manager", None)
     running_streams = sum(
-        1 for status in stream_manager.get_all_stream_status().values() if status.get("running")
+        1
+        for status in stream_manager.get_all_stream_status().values()
+        if status.get("running")
     )
 
     return render_template(
-        'admin/dashboard.html',
+        "admin/dashboard.html",
         uptime=uptime,
         streams_count=streams_count,
         servers_count=servers_count,
@@ -72,77 +84,81 @@ def admin_dashboard():
         python_version=platform.python_version(),
         system=platform.system(),
         release=platform.release(),
-        version=get_version()
+        version=get_version(),
     )
 
 
-@bp.route('/about')
+@bp.route("/about")
 def admin_about():
-    return render_template('admin/about.html')
+    return render_template("admin/about.html")
 
 
-@bp.route('/key-rotation')
+@bp.route("/key-rotation")
 def key_rotation_page():
     """Key rotation management page"""
     try:
         key_rotation_service = get_key_rotation_service()
-        
+
         # Get current system information
         db_info = key_rotation_service.get_database_info()
         storage_info = key_rotation_service.get_key_storage_info()
         rotation_status = key_rotation_service.get_rotation_status()
-        
-        return render_template('admin/key_rotation.html',
-                             db_info=db_info,
-                             storage_info=storage_info,
-                             rotation_status=rotation_status)
+
+        return render_template(
+            "admin/key_rotation.html",
+            db_info=db_info,
+            storage_info=storage_info,
+            rotation_status=rotation_status,
+        )
     except Exception as e:
-        flash(f'Error loading key rotation page: {e}', 'error')
-        return redirect(url_for('admin.admin_dashboard'))
+        flash(f"Error loading key rotation page: {e}", "error")
+        return redirect(url_for("admin.admin_dashboard"))
 
 
-@bp.route('/key-rotation/start', methods=['POST'])
+@bp.route("/key-rotation/start", methods=["POST"])
 def start_key_rotation():
     """Start key rotation process"""
     try:
         data = request.get_json()
-        new_key = data.get('new_key')
-        create_backup = data.get('create_backup', True)
-        
+        new_key = data.get("new_key")
+        create_backup = data.get("create_backup", True)
+
         if not new_key:
-            return jsonify({'success': False, 'error': 'New key is required'}), 400
-        
+            return jsonify({"success": False, "error": "New key is required"}), 400
+
         key_rotation_service = get_key_rotation_service()
-        result = key_rotation_service.start_rotation(new_key, create_backup, current_app)
-        
+        result = key_rotation_service.start_rotation(
+            new_key, create_backup, current_app
+        )
+
         return jsonify(result)
-        
+
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
-@bp.route('/key-rotation/status')
+@bp.route("/key-rotation/status")
 def get_rotation_status():
     """Get current rotation status"""
     try:
         key_rotation_service = get_key_rotation_service()
         status = key_rotation_service.get_rotation_status()
         return jsonify(status)
-        
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@bp.route('/key-rotation/restart-info')
+@bp.route("/key-rotation/restart-info")
 def get_restart_info():
     """Get application restart information"""
     try:
         key_rotation_service = get_key_rotation_service()
         restart_info = key_rotation_service.restart_application()
         return jsonify(restart_info)
-        
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 def get_uptime():

@@ -50,7 +50,7 @@ from utils.app_helpers import get_plugin_manager
 # Module-level logger
 logger = logging.getLogger(__name__)
 
-bp = Blueprint('api', __name__)
+bp = Blueprint("api", __name__)
 
 # Cache for health check results to avoid excessive checks
 _health_cache = {}
@@ -84,9 +84,9 @@ def get_stream_services():
         raise ValueError("Plugin manager not found in current_app")
 
     return {
-        'operations_service': StreamOperationsService(stream_manager, db),
-        'test_service': ConnectionTestService(plugin_manager, stream_manager),
-        'status_service': StreamStatusService(stream_manager),
+        "operations_service": StreamOperationsService(stream_manager, db),
+        "test_service": ConnectionTestService(plugin_manager, stream_manager),
+        "status_service": StreamStatusService(stream_manager),
     }
 
 
@@ -97,36 +97,33 @@ def get_cached_health_check(check_name, check_function, *args, **kwargs):
         cache_key = check_name
 
         # Check if we have a valid cached result
-        if (cache_key in _health_cache and
-                now - _health_cache[cache_key]['timestamp'] < CACHE_DURATION):
-            return _health_cache[cache_key]['result']
+        if (
+            cache_key in _health_cache
+            and now - _health_cache[cache_key]["timestamp"] < CACHE_DURATION
+        ):
+            return _health_cache[cache_key]["result"]
 
         # Run fresh check
         try:
             result = check_function(*args, **kwargs)
-            _health_cache[cache_key] = {
-                'result': result,
-                'timestamp': now
-            }
+            _health_cache[cache_key] = {"result": result, "timestamp": now}
             return result
         except Exception as e:
             error_result = {
-                'status': 'unhealthy',
-                'error': str(e),
-                'timestamp': datetime.now(timezone.utc).isoformat()
+                "status": "unhealthy",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
-            _health_cache[cache_key] = {
-                'result': error_result,
-                'timestamp': now
-            }
+            _health_cache[cache_key] = {"result": error_result, "timestamp": now}
             return error_result
+
 
 # =============================================================================
 # System Health API Routes
 # =============================================================================
 
 
-@bp.route('/status')
+@bp.route("/status")
 def api_status():
     """API endpoint for system status"""
     # Import models inside the route to avoid circular imports
@@ -138,121 +135,138 @@ def api_status():
     # Handle stream_manager import carefully
     try:
         from services.stream_manager import stream_manager
+
         running_workers = len(stream_manager.workers)
     except ImportError:
         running_workers = 0
 
-    return jsonify({
-        'total_streams': len(streams),
-        'active_streams': sum(1 for s in streams if s.is_active),
-        'tak_servers': TakServer.query.count(),
-        'running_workers': running_workers
-    })
+    return jsonify(
+        {
+            "total_streams": len(streams),
+            "active_streams": sum(1 for s in streams if s.is_active),
+            "tak_servers": TakServer.query.count(),
+            "running_workers": running_workers,
+        }
+    )
 
 
-@bp.route('/health')
+@bp.route("/health")
 def health_check():
     """Basic health check endpoint"""
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.now(timezone.utc).isoformat(),
-        'version': get_version(),
-        'service': 'trakbridge'
-    })
+    return jsonify(
+        {
+            "status": "healthy",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "version": get_version(),
+            "service": "trakbridge",
+        }
+    )
 
 
-@bp.route('/health/detailed')
+@bp.route("/health/detailed")
 def detailed_health_check():
     """Detailed health check with all components"""
     start_time = time.time()
 
     checks = {
-        'database': get_cached_health_check('database', health_service.run_all_database_checks),
-        'encryption': get_cached_health_check('encryption', check_encryption_health),
-        'stream_manager': get_cached_health_check('stream_manager', check_stream_manager_health),
-        'system': get_cached_health_check('system', check_system_health),
-        'streams': get_cached_health_check('streams', check_streams_health),
-        'tak_servers': get_cached_health_check('tak_servers', check_tak_servers_health)
+        "database": get_cached_health_check(
+            "database", health_service.run_all_database_checks
+        ),
+        "encryption": get_cached_health_check("encryption", check_encryption_health),
+        "stream_manager": get_cached_health_check(
+            "stream_manager", check_stream_manager_health
+        ),
+        "system": get_cached_health_check("system", check_system_health),
+        "streams": get_cached_health_check("streams", check_streams_health),
+        "tak_servers": get_cached_health_check("tak_servers", check_tak_servers_health),
     }
 
     # Determine overall status
-    overall_status = 'healthy'
+    overall_status = "healthy"
     critical_failures = []
 
     for check_name, check_result in checks.items():
-        if check_result.get('status') == 'unhealthy':
-            if check_name in ['database', 'encryption']:  # Critical components
-                overall_status = 'unhealthy'
+        if check_result.get("status") == "unhealthy":
+            if check_name in ["database", "encryption"]:  # Critical components
+                overall_status = "unhealthy"
                 critical_failures.append(check_name)
-            elif overall_status != 'unhealthy':
-                overall_status = 'degraded'
+            elif overall_status != "unhealthy":
+                overall_status = "degraded"
 
     response_time = round((time.time() - start_time) * 1000, 2)  # ms
 
     result = {
-        'status': overall_status,
-        'timestamp': datetime.now(timezone.utc).isoformat(),
-        'response_time_ms': response_time,
-        'version': get_version(),
-        'service': 'trakbridge',
-        'checks': checks
+        "status": overall_status,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "response_time_ms": response_time,
+        "version": get_version(),
+        "service": "trakbridge",
+        "checks": checks,
     }
 
     if critical_failures:
-        result['critical_failures'] = critical_failures
+        result["critical_failures"] = critical_failures
 
     # Return appropriate HTTP status code
     status_code = 200
-    if overall_status == 'unhealthy':
+    if overall_status == "unhealthy":
         status_code = 503  # Service Unavailable
-    elif overall_status == 'degraded':
+    elif overall_status == "degraded":
         status_code = 200  # OK but with warnings
 
     return jsonify(result), status_code
 
 
-@bp.route('/health/ready')
+@bp.route("/health/ready")
 def readiness_check():
     """Kubernetes readiness probe - checks if app is ready to serve traffic"""
-    checks = ['database', 'encryption']
+    checks = ["database", "encryption"]
 
     for check_name in checks:
-        if check_name == 'database':
-            result = get_cached_health_check('database', health_service.check_database_connectivity)
-        elif check_name == 'encryption':
-            result = get_cached_health_check('encryption', check_encryption_health)
+        if check_name == "database":
+            result = get_cached_health_check(
+                "database", health_service.check_database_connectivity
+            )
+        elif check_name == "encryption":
+            result = get_cached_health_check("encryption", check_encryption_health)
 
-        if result.get('status') != 'healthy':
-            return jsonify({
-                'status': 'not_ready',
-                'failed_check': check_name,
-                'error': result.get('error', 'Unknown error'),
-                'timestamp': datetime.now(timezone.utc).isoformat()
-            }), 503
+        if result.get("status") != "healthy":
+            return (
+                jsonify(
+                    {
+                        "status": "not_ready",
+                        "failed_check": check_name,
+                        "error": result.get("error", "Unknown error"),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                ),
+                503,
+            )
 
-    return jsonify({
-        'status': 'ready',
-        'timestamp': datetime.now(timezone.utc).isoformat()
-    })
+    return jsonify(
+        {"status": "ready", "timestamp": datetime.now(timezone.utc).isoformat()}
+    )
 
 
-@bp.route('/health/live')
+@bp.route("/health/live")
 def liveness_check():
     """Kubernetes liveness probe - basic check if app is alive"""
-    return jsonify({
-        'status': 'alive',
-        'timestamp': datetime.now(timezone.utc).isoformat(),
-        'uptime_seconds': get_uptime_seconds()
-    })
+    return jsonify(
+        {
+            "status": "alive",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "uptime_seconds": get_uptime_seconds(),
+        }
+    )
 
 
-@bp.route('/health/database')
+@bp.route("/health/database")
 def database_health():
     """Database-specific health check"""
-    result = get_cached_health_check('database', health_service.run_all_database_checks)
-    
+    result = get_cached_health_check("database", health_service.run_all_database_checks)
+
     # Return appropriate HTTP status code
-    status_code = 503 if result.get('status') == 'unhealthy' else 200
+    status_code = 503 if result.get("status") == "unhealthy" else 200
     return jsonify(result), status_code
 
 
@@ -266,17 +280,14 @@ def check_encryption_health():
     """Check encryption service health"""
     try:
         from services.encryption_service import encryption_service
+
         return encryption_service.health_check()
     except Exception as e:
         logger.error(f"Encryption health check failed: {e}")
-        return {
-            'status': 'unhealthy',
-            'error': str(e),
-            'error_type': type(e).__name__
-        }
+        return {"status": "unhealthy", "error": str(e), "error_type": type(e).__name__}
 
 
-@bp.route('/health/plugins', methods=['GET'])
+@bp.route("/health/plugins", methods=["GET"])
 def plugin_health():
     """Plugin health check with safe attribute access"""
     plugin_manager = getattr(current_app, "plugin_manager", None)
@@ -289,24 +300,24 @@ def plugin_health():
 
     # Use the background event loop from stream_manager
     future = asyncio.run_coroutine_threadsafe(
-        plugin_manager.check_all_plugins_health(),
-        stream_manager.loop
+        plugin_manager.check_all_plugins_health(), stream_manager.loop
     )
     health_status = future.result()
     return jsonify(health_status)
+
 
 # =============================================================================
 # Stream API Routes
 # =============================================================================
 
 
-@bp.route('/streams/stats')
+@bp.route("/streams/stats")
 def api_stats():
     """Get statistics for all streams"""
 
     # Get the correct status_service at runtime
     services = get_stream_services()
-    status_service = services['status_service']
+    status_service = services["status_service"]
 
     try:
         stats = status_service.get_stream_statistics()
@@ -314,27 +325,27 @@ def api_stats():
 
     except Exception as e:
         logger.error(f"Error getting stats: {e}")
-        return jsonify({'error': 'Failed to get statistics'}), 500
+        return jsonify({"error": "Failed to get statistics"}), 500
 
 
-@bp.route('/streams/status')
+@bp.route("/streams/status")
 def streams_status():
     """Get detailed status of all streams"""
 
     # Get the correct status_service at runtime
     services = get_stream_services()
-    status_service = services['status_service']
+    status_service = services["status_service"]
 
     try:
         status_data = status_service.get_all_streams_status()
-        return jsonify({'streams': status_data})
+        return jsonify({"streams": status_data})
 
     except Exception as e:
         logger.error(f"Error getting status: {e}")
-        return jsonify({'error': 'Failed to get status'}), 500
+        return jsonify({"error": "Failed to get status"}), 500
 
 
-@bp.route('/streams/plugins/<plugin_name>/config')
+@bp.route("/streams/plugins/<plugin_name>/config")
 def get_plugin_config(plugin_name):
     """Get plugin configuration metadata"""
     try:
@@ -349,19 +360,21 @@ def get_plugin_config(plugin_name):
         return jsonify({"error": "Failed to get plugin configuration"}), 500
 
 
-@bp.route('/streams/<int:stream_id>/export-config')
+@bp.route("/streams/<int:stream_id>/export-config")
 def export_stream_config(stream_id):
     """Export stream configuration (sensitive fields masked)"""
     try:
-        export_data = get_config_service().export_stream_config(stream_id, include_sensitive=False)
+        export_data = get_config_service().export_stream_config(
+            stream_id, include_sensitive=False
+        )
         return jsonify(export_data)
 
     except Exception as e:
         logger.error(f"Error exporting stream config {stream_id}: {e}")
-        return jsonify({'error': 'Failed to export configuration'}), 500
+        return jsonify({"error": "Failed to export configuration"}), 500
 
 
-@bp.route('/streams/security-status')
+@bp.route("/streams/security-status")
 def security_status():
     """Get security status of all streams"""
     try:
@@ -370,53 +383,54 @@ def security_status():
 
     except Exception as e:
         logger.error(f"Error getting security status: {e}")
-        return jsonify({'error': 'Failed to get security status'}), 500
+        return jsonify({"error": "Failed to get security status"}), 500
 
 
-@bp.route('/version')
+@bp.route("/version")
 def version():
-    return {'version': format_version()}
+    return {"version": format_version()}
 
 
 def check_stream_manager_health():
     """Check stream manager health"""
     try:
-        stream_manager = getattr(current_app, 'stream_manager', None)
-        
+        stream_manager = getattr(current_app, "stream_manager", None)
+
         if stream_manager is None:
-            return {
-                'status': 'unhealthy',
-                'error': 'Stream manager not initialized'
-            }
+            return {"status": "unhealthy", "error": "Stream manager not initialized"}
 
         # Check if background loop is running
-        loop_running = (hasattr(stream_manager, '_loop') and
-                        stream_manager._loop and
-                        stream_manager._loop.is_running())
+        loop_running = (
+            hasattr(stream_manager, "_loop")
+            and stream_manager._loop
+            and stream_manager._loop.is_running()
+        )
 
         # Count active workers
-        worker_count = len(stream_manager.workers) if hasattr(stream_manager, 'workers') else 0
+        worker_count = (
+            len(stream_manager.workers) if hasattr(stream_manager, "workers") else 0
+        )
 
         # Check session manager
-        session_manager_healthy = getattr(stream_manager, 'session_manager', None) is not None
+        session_manager_healthy = (
+            getattr(stream_manager, "session_manager", None) is not None
+        )
 
-        status = 'healthy' if (loop_running and session_manager_healthy) else 'unhealthy'
+        status = (
+            "healthy" if (loop_running and session_manager_healthy) else "unhealthy"
+        )
 
         return {
-            'status': status,
-            'event_loop_running': loop_running,
-            'worker_count': worker_count,
-            'session_manager_initialized': session_manager_healthy,
-            'max_workers': getattr(current_app.config, 'MAX_WORKER_THREADS', 'unknown')
+            "status": status,
+            "event_loop_running": loop_running,
+            "worker_count": worker_count,
+            "session_manager_initialized": session_manager_healthy,
+            "max_workers": getattr(current_app.config, "MAX_WORKER_THREADS", "unknown"),
         }
 
     except Exception as e:
         logger.error(f"Stream manager health check failed: {e}")
-        return {
-            'status': 'unhealthy',
-            'error': str(e),
-            'error_type': type(e).__name__
-        }
+        return {"status": "unhealthy", "error": str(e), "error_type": type(e).__name__}
 
 
 def check_system_health():
@@ -429,71 +443,67 @@ def check_system_health():
         memory = psutil.virtual_memory()
 
         # Disk usage
-        disk = psutil.disk_usage('/')
+        disk = psutil.disk_usage("/")
 
         # Process info
         process = psutil.Process()
         process_memory = process.memory_info()
 
         # Determine status based on thresholds
-        status = 'healthy'
+        status = "healthy"
         warnings = []
 
         if cpu_percent > 90:
-            status = 'unhealthy'
-            warnings.append(f'High CPU usage: {cpu_percent}%')
+            status = "unhealthy"
+            warnings.append(f"High CPU usage: {cpu_percent}%")
         elif cpu_percent > 75:
-            if status == 'healthy':
-                status = 'degraded'
-            warnings.append(f'Elevated CPU usage: {cpu_percent}%')
+            if status == "healthy":
+                status = "degraded"
+            warnings.append(f"Elevated CPU usage: {cpu_percent}%")
 
         if memory.percent > 90:
-            status = 'unhealthy'
-            warnings.append(f'High memory usage: {memory.percent}%')
+            status = "unhealthy"
+            warnings.append(f"High memory usage: {memory.percent}%")
         elif memory.percent > 75:
-            if status == 'healthy':
-                status = 'degraded'
-            warnings.append(f'Elevated memory usage: {memory.percent}%')
+            if status == "healthy":
+                status = "degraded"
+            warnings.append(f"Elevated memory usage: {memory.percent}%")
 
         if disk.percent > 90:
-            status = 'unhealthy'
-            warnings.append(f'High disk usage: {disk.percent}%')
+            status = "unhealthy"
+            warnings.append(f"High disk usage: {disk.percent}%")
         elif disk.percent > 80:
-            if status == 'healthy':
-                status = 'degraded'
-            warnings.append(f'Elevated disk usage: {disk.percent}%')
+            if status == "healthy":
+                status = "degraded"
+            warnings.append(f"Elevated disk usage: {disk.percent}%")
 
         result = {
-            'status': status,
-            'cpu_percent': cpu_percent,
-            'memory': {
-                'total_gb': round(memory.total / (1024 ** 3), 2),
-                'available_gb': round(memory.available / (1024 ** 3), 2),
-                'percent': memory.percent
+            "status": status,
+            "cpu_percent": cpu_percent,
+            "memory": {
+                "total_gb": round(memory.total / (1024**3), 2),
+                "available_gb": round(memory.available / (1024**3), 2),
+                "percent": memory.percent,
             },
-            'disk': {
-                'total_gb': round(disk.total / (1024 ** 3), 2),
-                'free_gb': round(disk.free / (1024 ** 3), 2),
-                'percent': disk.percent
+            "disk": {
+                "total_gb": round(disk.total / (1024**3), 2),
+                "free_gb": round(disk.free / (1024**3), 2),
+                "percent": disk.percent,
             },
-            'process': {
-                'memory_mb': round(process_memory.rss / (1024 ** 2), 2),
-                'pid': process.pid
-            }
+            "process": {
+                "memory_mb": round(process_memory.rss / (1024**2), 2),
+                "pid": process.pid,
+            },
         }
 
         if warnings:
-            result['warnings'] = warnings
+            result["warnings"] = warnings
 
         return result
 
     except Exception as e:
         logger.error(f"System health check failed: {e}")
-        return {
-            'status': 'unhealthy',
-            'error': str(e),
-            'error_type': type(e).__name__
-        }
+        return {"status": "unhealthy", "error": str(e), "error_type": type(e).__name__}
 
 
 def check_streams_health():
@@ -510,38 +520,36 @@ def check_streams_health():
         error_threshold = datetime.now(timezone.utc) - timedelta(minutes=15)
 
         for stream in streams:
-            if (stream.last_error and
-                    stream.updated_at and
-                    stream.updated_at > error_threshold):
+            if (
+                stream.last_error
+                and stream.updated_at
+                and stream.updated_at > error_threshold
+            ):
                 recent_errors += 1
 
         # Determine status
-        status = 'healthy'
+        status = "healthy"
         warnings = []
 
         if recent_errors > 0:
             if recent_errors >= total_streams * 0.5:  # More than 50% have errors
-                status = 'unhealthy'
+                status = "unhealthy"
             else:
-                status = 'degraded'
-            warnings.append(f'{recent_errors} streams with recent errors')
+                status = "degraded"
+            warnings.append(f"{recent_errors} streams with recent errors")
 
         return {
-            'status': status,
-            'total_streams': total_streams,
-            'active_streams': active_streams,
-            'inactive_streams': total_streams - active_streams,
-            'recent_errors': recent_errors,
-            'warnings': warnings if warnings else None
+            "status": status,
+            "total_streams": total_streams,
+            "active_streams": active_streams,
+            "inactive_streams": total_streams - active_streams,
+            "recent_errors": recent_errors,
+            "warnings": warnings if warnings else None,
         }
 
     except Exception as e:
         logger.error(f"Streams health check failed: {e}")
-        return {
-            'status': 'unhealthy',
-            'error': str(e),
-            'error_type': type(e).__name__
-        }
+        return {"status": "unhealthy", "error": str(e), "error_type": type(e).__name__}
 
 
 def check_tak_servers_health():
@@ -552,25 +560,17 @@ def check_tak_servers_health():
         tak_servers = TakServer.query.all()
 
         return {
-            'status': 'healthy',
-            'total_tak_servers': len(tak_servers),
-            'servers': [
-                {
-                    'name': server.name,
-                    'host': server.host,
-                    'port': server.port
-                }
+            "status": "healthy",
+            "total_tak_servers": len(tak_servers),
+            "servers": [
+                {"name": server.name, "host": server.host, "port": server.port}
                 for server in tak_servers
-            ]
+            ],
         }
 
     except Exception as e:
         logger.error(f"TAK servers health check failed: {e}")
-        return {
-            'status': 'unhealthy',
-            'error': str(e),
-            'error_type': type(e).__name__
-        }
+        return {"status": "unhealthy", "error": str(e), "error_type": type(e).__name__}
 
 
 def get_uptime_seconds():
@@ -588,8 +588,10 @@ def clear_expired_cache():
     with _cache_lock:
         now = time.time()
         expired_keys = [
-            key for key, value in _health_cache.items()
-            if now - value['timestamp'] > CACHE_DURATION * 2  # Clear after 2x cache duration
+            key
+            for key, value in _health_cache.items()
+            if now - value["timestamp"]
+            > CACHE_DURATION * 2  # Clear after 2x cache duration
         ]
         for key in expired_keys:
             del _health_cache[key]
@@ -607,7 +609,9 @@ def start_cache_cleanup():
             except:
                 pass
 
-    cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True, name="HealthCacheCleanup")
+    cleanup_thread = threading.Thread(
+        target=cleanup_loop, daemon=True, name="HealthCacheCleanup"
+    )
     cleanup_thread.start()
 
 

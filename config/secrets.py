@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SecretMetadata:
     """Metadata about a retrieved secret."""
+
     provider: str
     retrieved_at: float
     ttl: Optional[int] = None  # Time to live in seconds
@@ -171,18 +172,20 @@ class DotEnvSecretProvider(SecretProvider):
 
         try:
             self._secrets.clear()
-            with open(env_path, 'r', encoding='utf-8') as f:
+            with open(env_path, "r", encoding="utf-8") as f:
                 for line_num, line in enumerate(f, 1):
                     line = line.strip()
-                    if line and not line.startswith('#') and '=' in line:
+                    if line and not line.startswith("#") and "=" in line:
                         try:
-                            key, value = line.split('=', 1)
+                            key, value = line.split("=", 1)
                             key = key.strip()
                             value = value.strip().strip('"').strip("'")
                             if key:  # Ignore empty keys
                                 self._secrets[key] = value
                         except ValueError:
-                            logger.warning(f"Invalid line {line_num} in {self.env_file}: {line}")
+                            logger.warning(
+                                f"Invalid line {line_num} in {self.env_file}: {line}"
+                            )
 
             logger.debug(f"Loaded {len(self._secrets)} secrets from {self.env_file}")
         except Exception as e:
@@ -264,10 +267,17 @@ class SecretManager:
         self.providers.sort(key=lambda x: x.priority)
 
         for provider in self.providers:
-            logger.info(f"Secret provider available: {provider.name} (priority: {provider.priority})")
+            logger.info(
+                f"Secret provider available: {provider.name} (priority: {provider.priority})"
+            )
 
-    def get_secret(self, key: str, default: Optional[str] = None, required: bool = False,
-                   ttl: Optional[int] = None) -> Optional[str]:
+    def get_secret(
+        self,
+        key: str,
+        default: Optional[str] = None,
+        required: bool = False,
+        ttl: Optional[int] = None,
+    ) -> Optional[str]:
         """
         Retrieve a secret from available providers in priority order.
 
@@ -287,7 +297,9 @@ class SecretManager:
         if self.enable_caching and key in self._cache:
             cached_value, metadata = self._cache[key]
             if not metadata.is_expired():
-                logger.debug(f"Retrieved secret '{key}' from cache (provider: {metadata.provider})")
+                logger.debug(
+                    f"Retrieved secret '{key}' from cache (provider: {metadata.provider})"
+                )
                 return cached_value
             else:
                 # Remove expired entry
@@ -302,15 +314,15 @@ class SecretManager:
                     # Cache the result if caching is enabled
                     if self.enable_caching:
                         metadata = SecretMetadata(
-                            provider=provider.name,
-                            retrieved_at=time.time(),
-                            ttl=ttl
+                            provider=provider.name, retrieved_at=time.time(), ttl=ttl
                         )
                         self._cache[key] = (value, metadata)
 
                     return value
             except Exception as e:
-                logger.warning(f"Provider '{provider.name}' failed for key '{key}': {e}")
+                logger.warning(
+                    f"Provider '{provider.name}' failed for key '{key}': {e}"
+                )
                 continue
 
         # Third: check _FILE secret convention (Docker/Kubernetes)
@@ -322,15 +334,15 @@ class SecretManager:
                     value = f.read().strip()
                     if self.enable_caching:
                         metadata = SecretMetadata(
-                            provider="FileEnv",
-                            retrieved_at=time.time(),
-                            ttl=ttl
+                            provider="FileEnv", retrieved_at=time.time(), ttl=ttl
                         )
                         self._cache[key] = (value, metadata)
                     logger.debug(f"Loaded secret '{key}' from file '{file_path}'")
                     return value
             except Exception as e:
-                logger.warning(f"Failed to read secret file '{file_path}' for key '{key}': {e}")
+                logger.warning(
+                    f"Failed to read secret file '{file_path}' for key '{key}': {e}"
+                )
         if required and default is None:
             available_providers = [p.name for p in self.providers]
             raise ValueError(
@@ -363,7 +375,9 @@ class SecretManager:
                         logger.info(f"Refreshed secret '{key}' from {provider.name}")
                         return True
                 except Exception as e:
-                    logger.warning(f"Failed to refresh secret '{key}' from {provider.name}: {e}")
+                    logger.warning(
+                        f"Failed to refresh secret '{key}' from {provider.name}: {e}"
+                    )
 
         return False
 
@@ -375,7 +389,7 @@ class SecretManager:
     def get_database_secrets(self) -> Dict[str, Optional[str]]:
         """Retrieve all database-related secrets."""
         secrets = {}
-        db_keys = ['DB_PASSWORD', 'DB_USER', 'DB_HOST', 'DB_PORT', 'DB_NAME']
+        db_keys = ["DB_PASSWORD", "DB_USER", "DB_HOST", "DB_PORT", "DB_NAME"]
 
         for key in db_keys:
             secrets[key] = self.get_secret(key)
@@ -385,39 +399,39 @@ class SecretManager:
     def get_app_secrets(self) -> Dict[str, Optional[str]]:
         """Retrieve all application-related secrets."""
         secrets = {
-            'SECRET_KEY': self.get_secret('SECRET_KEY', required=True),
-            'JWT_SECRET_KEY': self.get_secret('JWT_SECRET_KEY'),
-            'ENCRYPTION_KEY': self.get_secret('ENCRYPTION_KEY'),
+            "SECRET_KEY": self.get_secret("SECRET_KEY", required=True),
+            "JWT_SECRET_KEY": self.get_secret("JWT_SECRET_KEY"),
+            "ENCRYPTION_KEY": self.get_secret("ENCRYPTION_KEY"),
         }
         return secrets
 
     def health_check(self) -> Dict[str, Any]:
         """Check the health of all secret providers."""
         health = {
-            'providers': [],
-            'total_providers': len(self.providers),
-            'available_providers': 0,
-            'cache_enabled': self.enable_caching,
-            'cached_secrets': len(self._cache) if self.enable_caching else 0
+            "providers": [],
+            "total_providers": len(self.providers),
+            "available_providers": 0,
+            "cache_enabled": self.enable_caching,
+            "cached_secrets": len(self._cache) if self.enable_caching else 0,
         }
 
         for provider in self.providers:
             provider_health = {
-                'name': provider.name,
-                'priority': provider.priority,
-                'available': False,
-                'supports_refresh': provider.supports_refresh(),
-                'error': None
+                "name": provider.name,
+                "priority": provider.priority,
+                "available": False,
+                "supports_refresh": provider.supports_refresh(),
+                "error": None,
             }
 
             try:
-                provider_health['available'] = provider.is_available()
-                if provider_health['available']:
-                    health['available_providers'] += 1
+                provider_health["available"] = provider.is_available()
+                if provider_health["available"]:
+                    health["available_providers"] += 1
             except Exception as e:
-                provider_health['error'] = str(e)
+                provider_health["error"] = str(e)
 
-            health['providers'].append(provider_health)
+            health["providers"].append(provider_health)
 
         return health
 
@@ -426,17 +440,23 @@ class SecretManager:
 _secret_manager: Optional[SecretManager] = None
 
 
-def get_secret_manager(environment: str = None, enable_caching: bool = True) -> SecretManager:
+def get_secret_manager(
+    environment: str = None, enable_caching: bool = True
+) -> SecretManager:
     """Get or create the global secret manager instance."""
     global _secret_manager
 
-    if _secret_manager is None or (environment and _secret_manager.environment != environment):
-        env = environment or os.environ.get('FLASK_ENV', 'development')
+    if _secret_manager is None or (
+        environment and _secret_manager.environment != environment
+    ):
+        env = environment or os.environ.get("FLASK_ENV", "development")
         _secret_manager = SecretManager(env, enable_caching)
 
     return _secret_manager
 
 
-def get_secret(key: str, default: Optional[str] = None, required: bool = False) -> Optional[str]:
+def get_secret(
+    key: str, default: Optional[str] = None, required: bool = False
+) -> Optional[str]:
     """Convenience function to get a secret."""
     return get_secret_manager().get_secret(key, default, required)

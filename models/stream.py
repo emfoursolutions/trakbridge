@@ -19,15 +19,17 @@ from plugins.base_plugin import BaseGPSPlugin
 
 
 class Stream(db.Model, TimestampMixin):
-    __tablename__ = 'streams'
+    __tablename__ = "streams"
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     plugin_type = db.Column(db.String(50), nullable=False)
     plugin_config = db.Column(db.Text)  # JSON string of plugin configuration
-    tak_server_id = db.Column(db.Integer, db.ForeignKey('tak_servers.id'), nullable=True)
+    tak_server_id = db.Column(
+        db.Integer, db.ForeignKey("tak_servers.id"), nullable=True
+    )
     poll_interval = db.Column(db.Integer, default=120)  # seconds
-    cot_type = db.Column(db.String(50), default='a-f-G-U-C')  # COT type identifier
+    cot_type = db.Column(db.String(50), default="a-f-G-U-C")  # COT type identifier
     cot_stale_time = db.Column(db.Integer, default=300)  # seconds until stale
     is_active = db.Column(db.Boolean, default=False)
     last_poll = db.Column(db.DateTime)
@@ -35,17 +37,17 @@ class Stream(db.Model, TimestampMixin):
     total_messages_sent = db.Column(db.Integer, default=0)  # Statistics
 
     # Relationship to TAK server
-    tak_server = db.relationship('TakServer', back_populates='streams')
+    tak_server = db.relationship("TakServer", back_populates="streams")
 
     def __init__(
         self,
         name: str,
         plugin_type: str,
         poll_interval: int = 120,
-        cot_type: str = 'a-f-G-U-C',
+        cot_type: str = "a-f-G-U-C",
         cot_stale_time: int = 300,
         tak_server_id: int = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.name = name
@@ -56,7 +58,7 @@ class Stream(db.Model, TimestampMixin):
         self.tak_server_id = tak_server_id
 
     def __repr__(self):
-        return f'<Stream {self.name}>'
+        return f"<Stream {self.name}>"
 
     def get_plugin_config(self):
         """Parse plugin configuration from JSON with decryption for sensitive fields"""
@@ -73,7 +75,9 @@ class Stream(db.Model, TimestampMixin):
         """Store plugin configuration as JSON with encryption for sensitive fields"""
         if config_dict:
             # Encrypt sensitive fields before storage
-            encrypted_config = BaseGPSPlugin.encrypt_config_for_storage(self.plugin_type, config_dict)
+            encrypted_config = BaseGPSPlugin.encrypt_config_for_storage(
+                self.plugin_type, config_dict
+            )
             self.plugin_config = json.dumps(encrypted_config)
         else:
             self.plugin_config = None
@@ -90,8 +94,8 @@ class Stream(db.Model, TimestampMixin):
     def is_field_encrypted(self, field_name):
         """Check if a specific field is encrypted in storage"""
         raw_config = self.get_raw_plugin_config()
-        value = raw_config.get(field_name, '')
-        return isinstance(value, str) and value.startswith('ENC:')
+        value = raw_config.get(field_name, "")
+        return isinstance(value, str) and value.startswith("ENC:")
 
     def update_stats(self, messages_sent=0, error=None):
         """Update stream statistics and error state"""
@@ -119,27 +123,28 @@ class Stream(db.Model, TimestampMixin):
             plugin_config = self._get_masked_plugin_config()
 
         return {
-            'id': self.id,
-            'name': self.name,
-            'plugin_type': self.plugin_type,
-            'plugin_config': plugin_config,
-            'poll_interval': self.poll_interval,
-            'cot_type': self.cot_type,
-            'cot_stale_time': self.cot_stale_time,
-            'is_active': self.is_active,
-            'last_poll': self.last_poll.isoformat() if self.last_poll else None,
-            'last_error': self.last_error,
-            'total_messages_sent': self.total_messages_sent,
-            'tak_server_id': self.tak_server_id,
-            'tak_server_name': self.tak_server.name if self.tak_server else None,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat()
+            "id": self.id,
+            "name": self.name,
+            "plugin_type": self.plugin_type,
+            "plugin_config": plugin_config,
+            "poll_interval": self.poll_interval,
+            "cot_type": self.cot_type,
+            "cot_stale_time": self.cot_stale_time,
+            "is_active": self.is_active,
+            "last_poll": self.last_poll.isoformat() if self.last_poll else None,
+            "last_error": self.last_error,
+            "total_messages_sent": self.total_messages_sent,
+            "tak_server_id": self.tak_server_id,
+            "tak_server_name": self.tak_server.name if self.tak_server else None,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
         }
 
     def _get_masked_plugin_config(self):
         """Get plugin configuration with sensitive fields masked for display"""
         # Import inside method to avoid circular imports
         from plugins.plugin_manager import get_plugin_manager
+
         plugin_manager = get_plugin_manager()
         metadata = plugin_manager.get_plugin_metadata(self.plugin_type)
 
@@ -151,7 +156,7 @@ class Stream(db.Model, TimestampMixin):
         for field_data in metadata.get("config_fields", []):
             if isinstance(field_data, dict) and field_data.get("sensitive"):
                 sensitive_fields.append(field_data["name"])
-            elif hasattr(field_data, 'sensitive') and field_data.sensitive:
+            elif hasattr(field_data, "sensitive") and field_data.sensitive:
                 sensitive_fields.append(field_data.name)
 
         # Mask sensitive fields
@@ -169,8 +174,8 @@ class Stream(db.Model, TimestampMixin):
     def status(self):
         """Get current status of the stream"""
         if not self.is_active:
-            return 'inactive'
+            return "inactive"
         elif self.last_error:
-            return 'error'
+            return "error"
         else:
-            return 'active'
+            return "active"

@@ -29,12 +29,20 @@ logger = logging.getLogger(__name__)
 class PluginConfigField:
     """Configuration field definition for plugin UI generation"""
 
-    def __init__(self, name: str, label: str, field_type: str = "text",
-                 required: bool = False, placeholder: str = "",
-                 help_text: str = "", default_value: Any = None,
-                 options: Optional[List[Dict[str, str]]] = None,
-                 min_value: Optional[int] = None, max_value: Optional[int] = None,
-                 sensitive: bool = False):
+    def __init__(
+        self,
+        name: str,
+        label: str,
+        field_type: str = "text",
+        required: bool = False,
+        placeholder: str = "",
+        help_text: str = "",
+        default_value: Any = None,
+        options: Optional[List[Dict[str, str]]] = None,
+        min_value: Optional[int] = None,
+        max_value: Optional[int] = None,
+        sensitive: bool = False,
+    ):
         self.name = name
         self.label = label
         self.field_type = field_type  # text, password, url, number, select, email
@@ -60,7 +68,7 @@ class PluginConfigField:
             "options": self.options,
             "min": self.min_value,
             "max": self.max_value,
-            "sensitive": self.sensitive
+            "sensitive": self.sensitive,
         }
 
 
@@ -70,6 +78,7 @@ class BaseGPSPlugin(ABC):
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         from services.encryption_service import EncryptionService
+
         self.encryption_service = EncryptionService()
 
     @property
@@ -138,7 +147,9 @@ class BaseGPSPlugin(ABC):
                 value = decrypted_config[field_name]
                 if value:
                     try:
-                        decrypted_config[field_name] = self.encryption_service.decrypt_value(str(value))
+                        decrypted_config[field_name] = (
+                            self.encryption_service.decrypt_value(str(value))
+                        )
                     except Exception as e:
                         logger.error(f"Failed to decrypt field '{field_name}': {e}")
                         # Keep original value if decryption fails
@@ -146,7 +157,9 @@ class BaseGPSPlugin(ABC):
         return decrypted_config
 
     @staticmethod
-    def encrypt_config_for_storage(plugin_type: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    def encrypt_config_for_storage(
+        plugin_type: str, config: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Encrypt sensitive fields in configuration before storing in database
 
@@ -159,6 +172,7 @@ class BaseGPSPlugin(ABC):
         """
         from services.encryption_service import EncryptionService
         from plugins.plugin_manager import get_plugin_manager
+
         plugin_manager = get_plugin_manager()
         metadata = plugin_manager.get_plugin_metadata(plugin_type)
         if not metadata:
@@ -168,7 +182,7 @@ class BaseGPSPlugin(ABC):
         for field_data in metadata.get("config_fields", []):
             if isinstance(field_data, dict) and field_data.get("sensitive"):
                 sensitive_fields.append(field_data["name"])
-            elif hasattr(field_data, 'sensitive') and field_data.sensitive:
+            elif hasattr(field_data, "sensitive") and field_data.sensitive:
                 sensitive_fields.append(field_data.name)
 
         if sensitive_fields:
@@ -178,7 +192,9 @@ class BaseGPSPlugin(ABC):
         return config
 
     @staticmethod
-    def decrypt_config_from_storage(plugin_type: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    def decrypt_config_from_storage(
+        plugin_type: str, config: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Decrypt sensitive fields in configuration after loading from database
 
@@ -191,6 +207,7 @@ class BaseGPSPlugin(ABC):
         """
         from services.encryption_service import EncryptionService
         from plugins.plugin_manager import get_plugin_manager
+
         plugin_manager = get_plugin_manager()
         metadata = plugin_manager.get_plugin_metadata(plugin_type)
         if not metadata:
@@ -200,7 +217,7 @@ class BaseGPSPlugin(ABC):
         for field_data in metadata.get("config_fields", []):
             if isinstance(field_data, dict) and field_data.get("sensitive"):
                 sensitive_fields.append(field_data["name"])
-            elif hasattr(field_data, 'sensitive') and field_data.sensitive:
+            elif hasattr(field_data, "sensitive") and field_data.sensitive:
                 sensitive_fields.append(field_data.name)
 
         if sensitive_fields:
@@ -210,7 +227,9 @@ class BaseGPSPlugin(ABC):
         return config
 
     @abstractmethod
-    async def fetch_locations(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
+    async def fetch_locations(
+        self, session: aiohttp.ClientSession
+    ) -> List[Dict[str, Any]]:
         """
         Fetch location data from the GPS service
 
@@ -225,7 +244,9 @@ class BaseGPSPlugin(ABC):
         """
         pass
 
-    async def process_and_enqueue_locations(self, locations: List[Dict[str, Any]], stream) -> None:
+    async def process_and_enqueue_locations(
+        self, locations: List[Dict[str, Any]], stream
+    ) -> None:
         """
         Process locations and enqueue COT events using persistent COT service.
 
@@ -245,24 +266,26 @@ class BaseGPSPlugin(ABC):
             from services.cot_service import cot_service, EnhancedCOTService
 
             # Ensure persistent worker is running for this TAK server
-            if hasattr(stream, 'tak_server_id') and stream.tak_server_id:
+            if hasattr(stream, "tak_server_id") and stream.tak_server_id:
                 await cot_service.ensure_worker_running(stream.tak_server_id)
 
             # Create COT events from locations
             cot_events = await EnhancedCOTService().create_cot_events(
                 locations,
-                cot_type=getattr(stream, 'cot_type', 'a-f-G-U-C'),
-                stale_time=getattr(stream, 'cot_stale_time', 300)
+                cot_type=getattr(stream, "cot_type", "a-f-G-U-C"),
+                stale_time=getattr(stream, "cot_stale_time", 300),
             )
 
             # Enqueue events to persistent worker
             enqueued_count = 0
             for event in cot_events:
-                if hasattr(stream, 'tak_server_id') and stream.tak_server_id:
+                if hasattr(stream, "tak_server_id") and stream.tak_server_id:
                     cot_service.enqueue_event(event, stream.tak_server_id)
                     enqueued_count += 1
                 else:
-                    logger.warning(f"Stream {getattr(stream, 'id', 'unknown')} has no TAK server ID")
+                    logger.warning(
+                        f"Stream {getattr(stream, 'id', 'unknown')} has no TAK server ID"
+                    )
 
             logger.info(
                 f"[{self.plugin_name}] Enqueued {enqueued_count} "
@@ -272,7 +295,7 @@ class BaseGPSPlugin(ABC):
         except Exception as e:
             logger.error(
                 f"[{self.plugin_name}] Error processing and enqueuing locations: {e}",
-                exc_info=True
+                exc_info=True,
             )
 
     def validate_config(self) -> bool:
@@ -293,7 +316,9 @@ class BaseGPSPlugin(ABC):
 
             # Type-specific validation
             if field_value is not None and field_value != "":
-                if field.field_type in ["url"] and not str(field_value).startswith(("http://", "https://")):
+                if field.field_type in ["url"] and not str(field_value).startswith(
+                    ("http://", "https://")
+                ):
                     logger.error(f"Field '{field_name}' must be a valid URL")
                     return False
 
@@ -301,10 +326,14 @@ class BaseGPSPlugin(ABC):
                     try:
                         num_value = float(field_value)
                         if field.min_value is not None and num_value < field.min_value:
-                            logger.error(f"Field '{field_name}' must be at least {field.min_value}")
+                            logger.error(
+                                f"Field '{field_name}' must be at least {field.min_value}"
+                            )
                             return False
                         if field.max_value is not None and num_value > field.max_value:
-                            logger.error(f"Field '{field_name}' must be at most {field.max_value}")
+                            logger.error(
+                                f"Field '{field_name}' must be at most {field.max_value}"
+                            )
                             return False
                     except (ValueError, TypeError):
                         logger.error(f"Field '{field_name}' must be a valid number")
@@ -329,7 +358,9 @@ class BaseGPSPlugin(ABC):
                 return {"status": status, "details": result}
             return {"status": "unknown", "details": "No health check implemented"}
         except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] health_check failed: {e}", exc_info=True)
+            logger.error(
+                f"[{self.__class__.__name__}] health_check failed: {e}", exc_info=True
+            )
             return {"status": "unhealthy", "details": str(e)}
 
     async def test_connection(self) -> Dict[str, Any]:
@@ -353,78 +384,86 @@ class BaseGPSPlugin(ABC):
                     return {
                         "success": False,
                         "error": "Failed: Unable to fetch location data",
-                        "message": "Connection test failed"
+                        "message": "Connection test failed",
                     }
 
                 # Check if the plugin returned an error indicator
-                if locations and len(locations) > 0 and isinstance(locations[0], dict) and "_error" in locations[0]:
+                if (
+                    locations
+                    and len(locations) > 0
+                    and isinstance(locations[0], dict)
+                    and "_error" in locations[0]
+                ):
                     error_info = locations[0]
                     error_code = error_info.get("_error", "unknown")
-                    error_message = error_info.get("_error_message", "Unknown error")
+                    # error_message = error_info.get("_error_message", "Unknown error")
 
                     # Map error codes to specific messages
                     if error_code == "401":
                         return {
                             "success": False,
                             "error": "Invalid Credentials",
-                            "message": "Authentication failed. Check your username and password."
+                            "message": "Authentication failed. Check your username and password.",
                         }
                     elif error_code == "403":
                         return {
                             "success": False,
                             "error": "Unauthorised Access",
-                            "message": "Access forbidden. Check your user permissions."
+                            "message": "Access forbidden. Check your user permissions.",
                         }
                     elif error_code == "404":
                         return {
                             "success": False,
                             "error": "Invalid URL or API End Point",
-                            "message": "Resource not found. Check the server URL and API endpoint."
+                            "message": "Resource not found. Check the server URL and API endpoint.",
                         }
                     elif error_code == "500":
                         return {
                             "success": False,
                             "error": "Server Error",
-                            "message": "Server error occurred. Please try again later."
+                            "message": "Server error occurred. Please try again later.",
                         }
                     elif error_code == "json_error":
                         return {
                             "success": False,
                             "error": "Invalid Feed ID or Password",
-                            "message": "API returned an error. Check your feed ID and password."
+                            "message": "API returned an error. Check your feed ID and password.",
                         }
                     elif error_code == "connection_failed":
                         return {
                             "success": False,
                             "error": "Connection Failed - Unknown Error",
-                            "message": "Failed to fetch KML feed. Check your credentials and feed URL."
+                            "message": "Failed to fetch KML feed. "
+                                       "Check your credentials and feed URL.",
                         }
                     elif error_code == "invalid_url":
                         return {
                             "success": False,
                             "error": "Invalid URL or API End Point",
-                            "message": "Invalid KML feed URL. Check the URL and ensure it's a feed."
+                            "message": "Invalid KML feed URL. "
+                                       "Check the URL and ensure it's a feed.",
                         }
                     elif error_code == "no_devices":
                         return {
                             "success": False,
                             "error": "No Devices Found",
-                            "message": "Successfully connected. No devices returned."
+                            "message": "Successfully connected. "
+                                       "No devices returned.",
                         }
                     else:
                         return {
                             "success": False,
                             "error": f"HTTP {error_code} Error",
-                            "message": f"HTTP error occurred: {error_code}"
+                            "message": f"HTTP error occurred: {error_code}",
                         }
 
                 # Check if we got an empty list - this could indicate authentication failure
                 if len(locations) == 0:
-                    # Since we're in a test_connection context, empty list likely means auth/permission error
                     return {
                         "success": False,
                         "error": "Invalid Credentials or No Devices Found",
-                        "message": "No devices found. This usually indicates authentication or permission issues."
+                        "message": "No devices found. "
+                                   "This usually indicates authentication or permission issues.",
                     }
 
                 device_names = [loc.get("name", "Unknown") for loc in locations]
@@ -433,17 +472,20 @@ class BaseGPSPlugin(ABC):
                     "success": True,
                     "message": f"Successfully connected and found {len(locations)} device(s)",
                     "device_count": len(locations),
-                    "devices": device_names
+                    "devices": device_names,
                 }
 
         except Exception as e:
             logger.error(
                 f"[{self.__class__.__name__}] Connection test failed: {e}",
                 exc_info=True,
-                extra={"plugin": self.__class__.__name__, "operation": "test_connection"}
+                extra={
+                    "plugin": self.__class__.__name__,
+                    "operation": "test_connection",
+                },
             )
             return {
                 "success": False,
                 "error": f"{str(e)}",
-                "message": "Connection test failed"
+                "message": "Connection test failed",
             }

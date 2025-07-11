@@ -41,7 +41,7 @@ from services.version import get_version, is_development_build
 migrate = Migrate()
 
 # Global reference to stream manager for cleanup
-_stream_manager_ref: Optional['StreamManager'] = None
+_stream_manager_ref: Optional["StreamManager"] = None
 
 # Global reference for startup splash screen
 _startup_complete = False
@@ -64,10 +64,7 @@ def set_startup_complete(success=True, error=None):
 def add_startup_progress(message):
     """Add a progress message to startup log"""
     global _startup_progress
-    _startup_progress.append({
-        'timestamp': dt.now().isoformat(),
-        'message': message
-    })
+    _startup_progress.append({"timestamp": dt.now().isoformat(), "message": message})
     # Keep only last 20 messages
     if len(_startup_progress) > 20:
         _startup_progress = _startup_progress[-20:]
@@ -76,9 +73,9 @@ def add_startup_progress(message):
 def get_startup_status():
     """Get current startup status"""
     return {
-        'complete': _startup_complete,
-        'error': _startup_error,
-        'progress': _startup_progress
+        "complete": _startup_complete,
+        "error": _startup_error,
+        "progress": _startup_progress,
     }
 
 
@@ -94,7 +91,7 @@ def create_app(config_name=None):
     app.app_context_factory = app_context_factory
 
     # Determine environment and get configuration
-    flask_env = config_name or os.environ.get('FLASK_ENV', 'development')
+    flask_env = config_name or os.environ.get("FLASK_ENV", "development")
 
     # Get configuration instance using the new system
     config_instance = get_config(flask_env)
@@ -121,19 +118,23 @@ def create_app(config_name=None):
 
         # Initialize stream manager and attach to Flask app
         from services.stream_manager import StreamManager
+
         app.stream_manager = StreamManager(app_context_factory=app_context_factory)
 
         # Initialize plugin manager and attach to Flask app
         from plugins.plugin_manager import PluginManager
+
         app.plugin_manager = PluginManager()
         app.plugin_manager.load_plugins_from_directory()
 
         # Initialize encryption service and attach to Flask app
         from services.encryption_service import EncryptionService
+
         app.encryption_service = EncryptionService()
 
         # Initialize stream manager and store global reference
         from services.stream_manager import StreamManager
+
         app.stream_manager = StreamManager(app_context_factory=app_context_factory)
         _stream_manager_ref = app.stream_manager  # Store global reference
 
@@ -161,11 +162,11 @@ def create_app(config_name=None):
     from routes.cot_types import bp as cot_types_bp
 
     app.register_blueprint(main_bp)
-    app.register_blueprint(streams_bp, url_prefix='/streams')
-    app.register_blueprint(tak_servers_bp, url_prefix='/tak-servers')
-    app.register_blueprint(admin_bp, url_prefix='/admin')
-    app.register_blueprint(cot_types_bp, url_prefix='/admin')
-    app.register_blueprint(api_bp, url_prefix='/api')
+    app.register_blueprint(streams_bp, url_prefix="/streams")
+    app.register_blueprint(tak_servers_bp, url_prefix="/tak-servers")
+    app.register_blueprint(admin_bp, url_prefix="/admin")
+    app.register_blueprint(cot_types_bp, url_prefix="/admin")
+    app.register_blueprint(api_bp, url_prefix="/api")
 
     # Add context processors and error handlers
     setup_template_helpers(app)
@@ -175,15 +176,15 @@ def create_app(config_name=None):
     def setup_startup_routes(app):
         """Set up startup-related routes"""
 
-        @app.route('/startup-status')
+        @app.route("/startup-status")
         def startup_status():
             """API endpoint to check startup status"""
             return jsonify(get_startup_status())
 
-        @app.route('/startup')
+        @app.route("/startup")
         def startup_page():
             """Display startup/loading page"""
-            return render_template('startup.html')
+            return render_template("startup.html")
 
         @app.before_request
         def check_startup():
@@ -191,19 +192,27 @@ def create_app(config_name=None):
             from flask import request
 
             # Allow startup-related routes and static files
-            if request.endpoint in ['startup_page', 'startup_status', 'static']:
+            if request.endpoint in ["startup_page", "startup_status", "static"]:
                 return None
 
             # Allow API health checks
-            if request.path.startswith('/api/health'):
+            if request.path.startswith("/api/health"):
                 return None
 
             # Redirect to startup page if not ready
             if not _startup_complete and request.endpoint:
                 if request.is_json:
-                    return jsonify({'status': 'starting', 'message': 'Application is starting up'}), 503
+                    return (
+                        jsonify(
+                            {
+                                "status": "starting",
+                                "message": "Application is starting up",
+                            }
+                        ),
+                        503,
+                    )
                 else:
-                    return render_template('startup.html')
+                    return render_template("startup.html")
 
             return None
 
@@ -231,12 +240,16 @@ def setup_version_context_processor(app):
         app.logger.info(f"Application: {format_version(include_build_info=True)}")
         app.logger.info(f"Version: {version_info.get('version', 'unknown')}")
         app.logger.info(f"Version Source: {version_info.get('source', 'unknown')}")
-        app.logger.info(f"Development Build: {'YES' if is_development_build() else 'NO'}")
+        app.logger.info(
+            f"Development Build: {'YES' if is_development_build() else 'NO'}"
+        )
 
-        if build_info.get('git_commit'):
+        if build_info.get("git_commit"):
             app.logger.info(f"Git Commit: {build_info['git_commit']}")
 
-        app.logger.info(f"Python Version: {version_info.get('python_version', 'unknown')}")
+        app.logger.info(
+            f"Python Version: {version_info.get('python_version', 'unknown')}"
+        )
         app.logger.info(f"Platform: {version_info.get('platform', 'unknown')}")
         app.logger.info(f"Process ID: {os.getpid()}")
         app.logger.info(f"Working Directory: {os.getcwd()}")
@@ -247,6 +260,7 @@ def setup_version_context_processor(app):
         # Fallback to basic logging
         try:
             from services.version import format_version
+
             app.logger.info(f"Starting {format_version(include_build_info=True)}")
         except Exception as fallback_e:
             app.logger.warning(f"Could not log even basic version info: {fallback_e}")
@@ -260,16 +274,18 @@ def setup_version_context_processor(app):
 
             # Create a simplified version object for templates
             app_version = {
-                'version': version_info.get('version', '0.0.0'),
-                'is_development': is_development_build(),
-                'git_commit': version_info.get('git', {}).get('commit_short'),
-                'python_version': (
+                "version": version_info.get("version", "0.0.0"),
+                "is_development": is_development_build(),
+                "git_commit": version_info.get("git", {}).get("commit_short"),
+                "python_version": (
                     f"{version_info['environment']['python_version_info'].major}."
                     f"{version_info['environment']['python_version_info'].minor}."
                     f"{version_info['environment']['python_version_info'].micro}"
                 ),
-                'platform': version_info.get('environment', {}).get('platform', 'unknown'),
-                'source': version_info.get('source', 'unknown')
+                "platform": version_info.get("environment", {}).get(
+                    "platform", "unknown"
+                ),
+                "source": version_info.get("source", "unknown"),
             }
 
             return dict(app_version=app_version)
@@ -277,14 +293,16 @@ def setup_version_context_processor(app):
         except Exception as e:
             # Fallback in case of any errors
             app.logger.warning(f"Failed to inject version info: {e}")
-            return dict(app_version={
-                'version': '0.0.0',
-                'is_development': True,
-                'git_commit': None,
-                'python_version': 'unknown',
-                'platform': 'unknown',
-                'source': 'error'
-            })
+            return dict(
+                app_version={
+                    "version": "0.0.0",
+                    "is_development": True,
+                    "git_commit": None,
+                    "python_version": "unknown",
+                    "platform": "unknown",
+                    "source": "error",
+                }
+            )
 
     @app.context_processor
     def inject_moment():
@@ -304,32 +322,38 @@ def configure_flask_app(app, config_instance):
     """Configure Flask app with the configuration system."""
 
     # Core Flask settings
-    app.config['SECRET_KEY'] = config_instance.SECRET_KEY
-    app.config['DEBUG'] = config_instance.DEBUG
-    app.config['TESTING'] = config_instance.TESTING
+    app.config["SECRET_KEY"] = config_instance.SECRET_KEY
+    app.config["DEBUG"] = config_instance.DEBUG
+    app.config["TESTING"] = config_instance.TESTING
 
     # SQLAlchemy settings
-    app.config['SQLALCHEMY_DATABASE_URI'] = config_instance.SQLALCHEMY_DATABASE_URI
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = config_instance.SQLALCHEMY_TRACK_MODIFICATIONS
-    app.config['SQLALCHEMY_RECORD_QUERIES'] = config_instance.SQLALCHEMY_RECORD_QUERIES
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = config_instance.SQLALCHEMY_ENGINE_OPTIONS
-    app.config['SQLALCHEMY_SESSION_OPTIONS'] = config_instance.SQLALCHEMY_SESSION_OPTIONS
+    app.config["SQLALCHEMY_DATABASE_URI"] = config_instance.SQLALCHEMY_DATABASE_URI
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = (
+        config_instance.SQLALCHEMY_TRACK_MODIFICATIONS
+    )
+    app.config["SQLALCHEMY_RECORD_QUERIES"] = config_instance.SQLALCHEMY_RECORD_QUERIES
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = config_instance.SQLALCHEMY_ENGINE_OPTIONS
+    app.config["SQLALCHEMY_SESSION_OPTIONS"] = (
+        config_instance.SQLALCHEMY_SESSION_OPTIONS
+    )
 
     # Application-specific settings
-    app.config['MAX_WORKER_THREADS'] = config_instance.MAX_WORKER_THREADS
-    app.config['DEFAULT_POLL_INTERVAL'] = config_instance.DEFAULT_POLL_INTERVAL
-    app.config['MAX_CONCURRENT_STREAMS'] = config_instance.MAX_CONCURRENT_STREAMS
-    app.config['HTTP_TIMEOUT'] = config_instance.HTTP_TIMEOUT
-    app.config['HTTP_MAX_CONNECTIONS'] = config_instance.HTTP_MAX_CONNECTIONS
-    app.config['HTTP_MAX_CONNECTIONS_PER_HOST'] = config_instance.HTTP_MAX_CONNECTIONS_PER_HOST
-    app.config['ASYNC_TIMEOUT'] = config_instance.ASYNC_TIMEOUT
+    app.config["MAX_WORKER_THREADS"] = config_instance.MAX_WORKER_THREADS
+    app.config["DEFAULT_POLL_INTERVAL"] = config_instance.DEFAULT_POLL_INTERVAL
+    app.config["MAX_CONCURRENT_STREAMS"] = config_instance.MAX_CONCURRENT_STREAMS
+    app.config["HTTP_TIMEOUT"] = config_instance.HTTP_TIMEOUT
+    app.config["HTTP_MAX_CONNECTIONS"] = config_instance.HTTP_MAX_CONNECTIONS
+    app.config["HTTP_MAX_CONNECTIONS_PER_HOST"] = (
+        config_instance.HTTP_MAX_CONNECTIONS_PER_HOST
+    )
+    app.config["ASYNC_TIMEOUT"] = config_instance.ASYNC_TIMEOUT
 
     # Logging settings
-    app.config['LOG_LEVEL'] = config_instance.LOG_LEVEL
-    app.config['LOG_DIR'] = config_instance.LOG_DIR
+    app.config["LOG_LEVEL"] = config_instance.LOG_LEVEL
+    app.config["LOG_DIR"] = config_instance.LOG_DIR
 
     # Import Version
-    app.config['VERSION'] = get_version()
+    app.config["VERSION"] = get_version()
 
     # Store the config instance for later use
     app.config_instance = config_instance
@@ -341,7 +365,7 @@ def configure_flask_app(app, config_instance):
     issues = config_instance.validate_config()
     if issues:
         logger.warning(f"Configuration issues found: {issues}")
-        if config_instance.environment == 'production':
+        if config_instance.environment == "production":
             raise ValueError(f"Configuration validation failed: {issues}")
 
 
@@ -373,12 +397,12 @@ def start_active_streams():
             time.sleep(0.1)
             wait_count += 1
             if (
-                    hasattr(stream_manager, '_loop') and
-                    stream_manager.loop and
-                    stream_manager.loop.is_running() and
-                    hasattr(stream_manager, 'session_manager') and
-                    stream_manager.session_manager and
-                    getattr(stream_manager.session_manager, 'session', None)
+                hasattr(stream_manager, "_loop")
+                and stream_manager.loop
+                and stream_manager.loop.is_running()
+                and hasattr(stream_manager, "session_manager")
+                and stream_manager.session_manager
+                and getattr(stream_manager.session_manager, "session", None)
             ):
                 break
 
@@ -398,11 +422,15 @@ def start_active_streams():
 
             if active_streams:
                 for stream in active_streams:
-                    logger.info(f"Stream {stream.id}: {stream.name} ({stream.plugin_type})")
+                    logger.info(
+                        f"Stream {stream.id}: {stream.name} ({stream.plugin_type})"
+                    )
 
         except Exception as db_e:
             logger.error(f"Failed to fetch active streams from database: {db_e}")
-            add_startup_progress(f"Error: Failed to fetch active streams from database: {db_e}")
+            add_startup_progress(
+                f"Error: Failed to fetch active streams from database: {db_e}"
+            )
             return
 
         if not active_streams:
@@ -428,8 +456,12 @@ def start_active_streams():
                     try:
                         success = stream_manager.start_stream_sync(stream.id)
                         if success:
-                            logger.info(f"Successfully started stream {stream.id} ({stream.name})")
-                            add_startup_progress(f"✓ Successfully started stream {stream.id} ({stream.name})")
+                            logger.info(
+                                f"Successfully started stream {stream.id} ({stream.name})"
+                            )
+                            add_startup_progress(
+                                f"✓ Successfully started stream {stream.id} ({stream.name})"
+                            )
                             # Clear any previous error
                             fresh_stream = db.session.get(Stream, stream.id)
                             fresh_stream.last_error = None
@@ -440,13 +472,19 @@ def start_active_streams():
                             retry_count += 1
                             if retry_count < max_retries:
                                 logger.warning(
-                                    f"Failed to start stream {stream.id}, retrying ({retry_count}/{max_retries})")
+                                    f"Failed to start stream {stream.id}, retrying ({retry_count}/{max_retries})"
+                                )
                                 add_startup_progress(
-                                    f"Failed to start stream {stream.id}, retrying ({retry_count}/{max_retries})")
+                                    f"Failed to start stream {stream.id}, retrying ({retry_count}/{max_retries})"
+                                )
                                 time.sleep(2)
                             else:
-                                logger.error(f"Failed to start stream {stream.id} after {max_retries} attempts")
-                                add_startup_progress(f"✗ Failed to start stream {stream.id} after {max_retries} attempts")
+                                logger.error(
+                                    f"Failed to start stream {stream.id} after {max_retries} attempts"
+                                )
+                                add_startup_progress(
+                                    f"✗ Failed to start stream {stream.id} after {max_retries} attempts"
+                                )
                                 failed_count += 1
 
                     except Exception as start_e:
@@ -463,9 +501,11 @@ def start_active_streams():
                             time.sleep(2)
                         else:
                             logger.error(
-                                f"Exception starting stream {stream.id} after {max_retries} attempts: {start_e}")
+                                f"Exception starting stream {stream.id} after {max_retries} attempts: {start_e}"
+                            )
                             add_startup_progress(
-                                f"✗ Exception starting stream {stream.id} after {max_retries} attempts: {start_e}")
+                                f"✗ Exception starting stream {stream.id} after {max_retries} attempts: {start_e}"
+                            )
                             failed_count += 1
 
                 # Update stream status if failed
@@ -474,11 +514,17 @@ def start_active_streams():
                         fresh_stream = Stream.query.get(stream.id)
                         if fresh_stream:
                             fresh_stream.is_active = False
-                            fresh_stream.last_error = "Failed to start during app startup"
+                            fresh_stream.last_error = (
+                                "Failed to start during app startup"
+                            )
                             db.session.commit()
-                            logger.info(f"Marked stream {stream.id} as inactive due to startup failure")
+                            logger.info(
+                                f"Marked stream {stream.id} as inactive due to startup failure"
+                            )
                     except Exception as db_e:
-                        logger.error(f"Failed to update stream {stream.id} status: {db_e}")
+                        logger.error(
+                            f"Failed to update stream {stream.id} status: {db_e}"
+                        )
                         try:
                             db.session.rollback()
                         except Exception:
@@ -488,8 +534,12 @@ def start_active_streams():
                 time.sleep(3)
 
             except Exception as e:
-                logger.error(f"Unexpected error starting stream {stream.id}: {e}", exc_info=True)
-                add_startup_progress(f"✗ Unexpected error starting stream {stream.id}: {e}")
+                logger.error(
+                    f"Unexpected error starting stream {stream.id}: {e}", exc_info=True
+                )
+                add_startup_progress(
+                    f"✗ Unexpected error starting stream {stream.id}: {e}"
+                )
                 failed_count += 1
 
         # Log final results
@@ -501,7 +551,9 @@ def start_active_streams():
         logger.info(f"Success Rate: {(started_count / len(active_streams) * 100):.1f}%")
         logger.info("=" * 50)
 
-        add_startup_progress(f"Stream startup complete: {started_count} started, {failed_count} failed")
+        add_startup_progress(
+            f"Stream startup complete: {started_count} started, {failed_count} failed"
+        )
 
     except Exception as e:
         logger.error(f"Error in start_active_streams: {e}", exc_info=True)
@@ -514,7 +566,7 @@ def setup_database_events():
     @event.listens_for(Pool, "connect")
     def set_sqlite_pragma(dbapi_conn, connection_record):
         """Set SQLite pragmas for better performance and concurrency"""
-        if 'sqlite' in str(dbapi_conn):
+        if "sqlite" in str(dbapi_conn):
             cursor = dbapi_conn.cursor()
             # Enable WAL mode for better concurrency
             cursor.execute("PRAGMA journal_mode=WAL")
@@ -602,11 +654,7 @@ def setup_template_helpers(app):
     @app.context_processor
     def utility_processor():
         """Add utility functions to template context"""
-        return dict(
-            enumerate=enumerate,
-            len=len,
-            str=str
-        )
+        return dict(enumerate=enumerate, len=len, str=str)
 
 
 def setup_error_handlers(app):
@@ -614,17 +662,17 @@ def setup_error_handlers(app):
 
     @app.errorhandler(404)
     def not_found_error(error):
-        return render_template('errors/404.html'), 404
+        return render_template("errors/404.html"), 404
 
     @app.errorhandler(500)
     def internal_error(error):
         db.session.rollback()
-        return render_template('errors/500.html'), 500
+        return render_template("errors/500.html"), 500
 
     @app.errorhandler(503)
     def service_unavailable_error(error):
         db.session.rollback()
-        return render_template('errors/503.html'), 503
+        return render_template("errors/503.html"), 503
 
     @app.errorhandler(Exception)
     def handle_exception(e):
@@ -635,7 +683,7 @@ def setup_error_handlers(app):
         if app.debug:
             raise e
 
-        return render_template('errors/500.html'), 500
+        return render_template("errors/500.html"), 500
 
 
 # Create the application instance
@@ -661,15 +709,23 @@ def delayed_startup():
             # Log system status
             try:
                 logger.info("System Status Check:")
-                logger.info(f"Stream Manager: {'Ready' if hasattr(app, 'stream_manager') else 'Not Ready'}")
-                logger.info(f"Plugin Manager: {'Ready' if hasattr(app, 'plugin_manager') else 'Not Ready'}")
+                logger.info(
+                    f"Stream Manager: {'Ready' if hasattr(app, 'stream_manager') else 'Not Ready'}"
+                )
+                logger.info(
+                    f"Plugin Manager: {'Ready' if hasattr(app, 'plugin_manager') else 'Not Ready'}"
+                )
                 logger.info(f"Database: {'Ready' if db.engine else 'Not Ready'}")
-                logger.info(f"Encryption Service: {'Ready' if hasattr(app, 'encryption_service') else 'Not Ready'}")
+                logger.info(
+                    f"Encryption Service: {'Ready' if hasattr(app, 'encryption_service') else 'Not Ready'}"
+                )
 
                 add_startup_progress("System components verified")
             except Exception as e:
                 logger.warning(f"Could not log system status: {e}")
-                add_startup_progress(f"Warning: Could not verify all system components: {e}")
+                add_startup_progress(
+                    f"Warning: Could not verify all system components: {e}"
+                )
 
             # Start active streams
             add_startup_progress("Starting active streams...")
@@ -685,7 +741,9 @@ def delayed_startup():
             logger.info(f"Ready at: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
             logger.info("=" * 60)
 
-            add_startup_progress(f"Startup complete! Ready in {startup_time:.2f} seconds")
+            add_startup_progress(
+                f"Startup complete! Ready in {startup_time:.2f} seconds"
+            )
             set_startup_complete(True)
 
     except Exception as e:
@@ -695,14 +753,16 @@ def delayed_startup():
 
 
 # Call start_active_streams ONCE during application startup
-if __name__ == "__main__" or not hasattr(start_active_streams, '_called'):
+if __name__ == "__main__" or not hasattr(start_active_streams, "_called"):
     start_active_streams._called = True
 
     # Run startup in a separate thread to avoid blocking Flask initialization
-    startup_thread = threading.Thread(target=delayed_startup, daemon=True, name="StartupThread")
+    startup_thread = threading.Thread(
+        target=delayed_startup, daemon=True, name="StartupThread"
+    )
     startup_thread.start()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Create tables within app context
     with app.app_context():
         db.create_all()

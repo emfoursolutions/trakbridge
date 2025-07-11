@@ -59,7 +59,7 @@ class EncryptionService:
         # Priority order: ENV variable -> config file -> generate new
 
         # Try environment variable first
-        master_key = os.environ.get('TB_MASTER_KEY')
+        master_key = os.environ.get("TB_MASTER_KEY")
         if master_key:
             logger.debug("Master key loaded from environment variable")
             return master_key
@@ -67,6 +67,7 @@ class EncryptionService:
         # Try to get Flask app root path if available
         try:
             from flask import current_app
+
             app_root = current_app.root_path
         except (ImportError, RuntimeError):
             # Fallback to calculating from current file
@@ -74,12 +75,12 @@ class EncryptionService:
 
         # Try plain text key file first (most common)
         key_file_paths = [
-            os.path.join(app_root, 'secrets', 'tb_master_key'),
+            os.path.join(app_root, "secrets", "tb_master_key"),
         ]
         for key_file_path in key_file_paths:
             if os.path.exists(key_file_path):
                 try:
-                    with open(key_file_path, 'r') as f:
+                    with open(key_file_path, "r") as f:
                         master_key = f.read().strip()
                         if master_key:
                             logger.debug(f"Master key loaded from {key_file_path}")
@@ -113,7 +114,7 @@ class EncryptionService:
         """Get or create the cipher suite for encryption/decryption"""
         if self._cipher_suite is None:
             # Use dynamic salt based on application context
-            app_context = os.environ.get('TB_ID', 'tb_default')
+            app_context = os.environ.get("TB_ID", "tb_default")
             salt = hashlib.sha256(f"{app_context}_salt_2024".encode()).digest()[:16]
 
             master_key_bytes = self._master_key.encode()
@@ -191,7 +192,9 @@ class EncryptionService:
         """Check if a value is encrypted"""
         return isinstance(value, str) and value.startswith("ENC:")
 
-    def encrypt_config(self, config: Dict[str, Any], sensitive_fields: list) -> Dict[str, Any]:
+    def encrypt_config(
+        self, config: Dict[str, Any], sensitive_fields: list
+    ) -> Dict[str, Any]:
         """
         Encrypt sensitive fields in a configuration dictionary with validation
         """
@@ -213,7 +216,9 @@ class EncryptionService:
 
         return encrypted_config
 
-    def decrypt_config(self, config: Dict[str, Any], sensitive_fields: list) -> Dict[str, Any]:
+    def decrypt_config(
+        self, config: Dict[str, Any], sensitive_fields: list
+    ) -> Dict[str, Any]:
         """
         Decrypt sensitive fields in a configuration dictionary with validation
         """
@@ -291,7 +296,7 @@ class EncryptionService:
                     for field_data in metadata.get("config_fields", []):
                         if isinstance(field_data, dict) and field_data.get("sensitive"):
                             sensitive_fields.append(field_data["name"])
-                        elif hasattr(field_data, 'sensitive') and field_data.sensitive:
+                        elif hasattr(field_data, "sensitive") and field_data.sensitive:
                             sensitive_fields.append(field_data.name)
 
                     if not sensitive_fields:
@@ -301,7 +306,9 @@ class EncryptionService:
                     current_config = stream.get_plugin_config()
 
                     # Re-encrypt sensitive fields with new key
-                    rotated_config = new_service.encrypt_config(current_config, sensitive_fields)
+                    rotated_config = new_service.encrypt_config(
+                        current_config, sensitive_fields
+                    )
 
                     # Update the stream's plugin config
                     stream.plugin_config = json.dumps(rotated_config)
@@ -320,7 +327,7 @@ class EncryptionService:
                 "success": True,
                 "message": f"Successfully rotated {rotated_count} encrypted passwords (certificates + plugin configs)",
                 "rotated_count": rotated_count,
-                "errors": errors
+                "errors": errors,
             }
 
         except Exception as e:
@@ -329,10 +336,12 @@ class EncryptionService:
                 "success": False,
                 "error": str(e),
                 "rotated_count": 0,
-                "errors": [str(e)]
+                "errors": [str(e)],
             }
 
-    def rotate_key(self, new_master_key: str, config_data: Dict[str, Any], sensitive_fields: list) -> Dict[str, Any]:
+    def rotate_key(
+        self, new_master_key: str, config_data: Dict[str, Any], sensitive_fields: list
+    ) -> Dict[str, Any]:
         """
         Rotate encryption key by decrypting with old key and encrypting with new key
         """
@@ -370,7 +379,10 @@ class EncryptionService:
         )
 
         hashed = kdf.derive(password.encode())
-        return base64.urlsafe_b64encode(hashed).decode(), base64.urlsafe_b64encode(salt).decode()
+        return (
+            base64.urlsafe_b64encode(hashed).decode(),
+            base64.urlsafe_b64encode(salt).decode(),
+        )
 
     @staticmethod
     def verify_password(password: str, hashed_password: str, salt: str) -> bool:
@@ -411,25 +423,26 @@ class EncryptionService:
                 "status": "healthy" if decrypted == test_value else "unhealthy",
                 "has_master_key": bool(self._master_key),
                 "encryption_working": decrypted == test_value,
-                "key_source": self._get_key_source()
+                "key_source": self._get_key_source(),
             }
         except Exception as e:
             return {
                 "status": "unhealthy",
                 "error": str(e),
                 "has_master_key": bool(self._master_key),
-                "encryption_working": False
+                "encryption_working": False,
             }
 
     @staticmethod
     def _get_key_source() -> str:
         """Identify where the master key came from"""
-        if os.environ.get('TB_MASTER_KEY'):
+        if os.environ.get("TB_MASTER_KEY"):
             return "environment_variable"
 
         # Try to get Flask app root path if available
         try:
             from flask import current_app
+
             app_root = current_app.root_path
         except (ImportError, RuntimeError):
             # Fallback to calculating from current file
@@ -437,12 +450,12 @@ class EncryptionService:
 
         # Try plain text key file first (most common)
         key_file_paths = [
-            os.path.join(app_root, 'secrets', 'master_key.txt'),
+            os.path.join(app_root, "secrets", "master_key.txt"),
         ]
         for key_file_path in key_file_paths:
             if os.path.exists(key_file_path):
                 try:
-                    with open(key_file_path, 'r') as f:
+                    with open(key_file_path, "r") as f:
                         master_key = f.read().strip()
                         if master_key:
                             logger.debug(f"Master key loaded from {key_file_path}")
@@ -461,12 +474,13 @@ def get_encryption_service():
     """Get the encryption service instance - check Flask app context first, then fall back to global"""
     try:
         from flask import current_app, has_app_context
-        if has_app_context() and hasattr(current_app, 'encryption_service'):
+
+        if has_app_context() and hasattr(current_app, "encryption_service"):
             return current_app.encryption_service
     except (ImportError, RuntimeError):
         # Flask not available or no app context
         pass
-    
+
     # Fallback to global instance for CLI/standalone use
     return encryption_service
 
@@ -487,7 +501,7 @@ class EncryptedConfigMixin:
         config_fields = self.get_config_fields()
 
         for field in config_fields:
-            if hasattr(field, 'sensitive') and field.sensitive:
+            if hasattr(field, "sensitive") and field.sensitive:
                 sensitive_fields.append(field.name)
 
         return sensitive_fields
@@ -504,6 +518,6 @@ class EncryptedConfigMixin:
 
     def get_plugin_config(self) -> Dict[str, Any]:
         """Get plugin configuration with sensitive fields decrypted"""
-        if hasattr(self, 'config'):
+        if hasattr(self, "config"):
             return self.decrypt_config(self.config)
         return {}

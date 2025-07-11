@@ -37,17 +37,19 @@ class ConfigFileHandler(FileSystemEventHandler):
         if event.is_directory:
             return
 
-        if not event.src_path.endswith(('.yaml', '.yml', '.env')):
+        if not event.src_path.endswith((".yaml", ".yml", ".env")):
             return
 
         # Debounce rapid file changes
         current_time = time.time()
-        if (event.src_path in self.last_modified and 
-                current_time - self.last_modified[event.src_path] < 1.0):
+        if (
+            event.src_path in self.last_modified
+            and current_time - self.last_modified[event.src_path] < 1.0
+        ):
             return
 
         self.last_modified[event.src_path] = current_time
-        
+
         logger.info(f"Configuration file changed: {event.src_path}")
         self.config_monitor.reload_config()
 
@@ -57,12 +59,14 @@ class ConfigMonitor:
 
     def __init__(self, config_instance, config_dir: str = None):
         self.config_instance = config_instance
-        self.config_dir = Path(config_dir) if config_dir else Path(__file__).parent / "settings"
+        self.config_dir = (
+            Path(config_dir) if config_dir else Path(__file__).parent / "settings"
+        )
         self.observer = None
         self.is_monitoring = False
         self.reload_callbacks: List[Callable] = []
         self.file_hashes: Dict[str, str] = {}
-        
+
         # Validate config directory exists
         if not self.config_dir.exists():
             logger.warning(f"Configuration directory does not exist: {self.config_dir}")
@@ -75,26 +79,30 @@ class ConfigMonitor:
             return
 
         if not self.config_dir.exists():
-            logger.error(f"Cannot start monitoring: config directory does not exist: {self.config_dir}")
+            logger.error(
+                f"Cannot start monitoring: config directory does not exist: {self.config_dir}"
+            )
             return
 
         try:
             self.observer = Observer()
             event_handler = ConfigFileHandler(self)
-            
+
             # Monitor the config directory
             self.observer.schedule(event_handler, str(self.config_dir), recursive=False)
-            
+
             # Also monitor .env file if it exists
-            env_file = Path('.env')
+            env_file = Path(".env")
             if env_file.exists():
-                self.observer.schedule(event_handler, str(env_file.parent), recursive=False)
-            
+                self.observer.schedule(
+                    event_handler, str(env_file.parent), recursive=False
+                )
+
             self.observer.start()
             self.is_monitoring = True
-            
+
             logger.info(f"Started monitoring configuration files in: {self.config_dir}")
-            
+
         except Exception as e:
             logger.error(f"Failed to start configuration monitoring: {e}")
 
@@ -124,9 +132,9 @@ class ConfigMonitor:
         """Reload configuration and notify callbacks."""
         try:
             logger.info("Reloading configuration...")
-            
+
             # Reload the configuration instance
-            if hasattr(self.config_instance, 'reload_config'):
+            if hasattr(self.config_instance, "reload_config"):
                 self.config_instance.reload_config()
             else:
                 logger.warning("Configuration instance does not support reloading")
@@ -147,22 +155,26 @@ class ConfigMonitor:
     def get_config_status(self) -> Dict[str, Any]:
         """Get the current status of configuration monitoring."""
         config_files = []
-        
+
         if self.config_dir.exists():
             for file_path in self.config_dir.glob("*.yaml"):
-                config_files.append({
-                    "name": file_path.name,
-                    "path": str(file_path),
-                    "exists": file_path.exists(),
-                    "size": file_path.stat().st_size if file_path.exists() else 0,
-                    "modified": file_path.stat().st_mtime if file_path.exists() else 0
-                })
+                config_files.append(
+                    {
+                        "name": file_path.name,
+                        "path": str(file_path),
+                        "exists": file_path.exists(),
+                        "size": file_path.stat().st_size if file_path.exists() else 0,
+                        "modified": (
+                            file_path.stat().st_mtime if file_path.exists() else 0
+                        ),
+                    }
+                )
 
         return {
             "is_monitoring": self.is_monitoring,
             "config_directory": str(self.config_dir),
             "config_files": config_files,
-            "reload_callbacks_count": len(self.reload_callbacks)
+            "reload_callbacks_count": len(self.reload_callbacks),
         }
 
 
@@ -178,7 +190,7 @@ class ConfigHealthChecker:
             "status": "healthy",
             "checks": {},
             "issues": [],
-            "warnings": []
+            "warnings": [],
         }
 
         # Check database configuration
@@ -231,7 +243,9 @@ class ConfigHealthChecker:
                 db_path = db_uri.replace("sqlite:///", "")
                 if db_path and not Path(db_path).parent.exists():
                     health["status"] = "unhealthy"
-                    health["issues"].append(f"Database directory does not exist: {Path(db_path).parent}")
+                    health["issues"].append(
+                        f"Database directory does not exist: {Path(db_path).parent}"
+                    )
 
             # Check engine options
             engine_options = self.config_instance.SQLALCHEMY_ENGINE_OPTIONS
@@ -264,13 +278,15 @@ class ConfigHealthChecker:
                 health["status"] = "unhealthy"
                 health["issues"].append("MAX_CONCURRENT_STREAMS must be at least 1")
             elif max_streams > 1000:
-                health["warnings"].append("MAX_CONCURRENT_STREAMS is very large (>1000)")
+                health["warnings"].append(
+                    "MAX_CONCURRENT_STREAMS is very large (>1000)"
+                )
 
             # Check timeouts
             timeouts = [
                 ("HTTP_TIMEOUT", self.config_instance.HTTP_TIMEOUT),
                 ("ASYNC_TIMEOUT", self.config_instance.ASYNC_TIMEOUT),
-                ("DEFAULT_POLL_INTERVAL", self.config_instance.DEFAULT_POLL_INTERVAL)
+                ("DEFAULT_POLL_INTERVAL", self.config_instance.DEFAULT_POLL_INTERVAL),
             ]
 
             for name, value in timeouts:
@@ -297,13 +313,19 @@ class ConfigHealthChecker:
                 health["issues"].append("SECRET_KEY is required")
             elif len(secret_key) < 16:
                 health["status"] = "unhealthy"
-                health["issues"].append("SECRET_KEY must be at least 16 characters long")
-            elif secret_key == 'dev-secret-key-change-in-production':
-                if self.config_instance.environment == 'production':
+                health["issues"].append(
+                    "SECRET_KEY must be at least 16 characters long"
+                )
+            elif secret_key == "dev-secret-key-change-in-production":
+                if self.config_instance.environment == "production":
                     health["status"] = "unhealthy"
-                    health["issues"].append("SECRET_KEY must be changed from default in production")
+                    health["issues"].append(
+                        "SECRET_KEY must be changed from default in production"
+                    )
                 else:
-                    health["warnings"].append("Using default SECRET_KEY - change for production")
+                    health["warnings"].append(
+                        "Using default SECRET_KEY - change for production"
+                    )
 
         except Exception as e:
             health["status"] = "unhealthy"
@@ -317,10 +339,12 @@ class ConfigHealthChecker:
 
         try:
             log_level = self.config_instance.LOG_LEVEL
-            valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+            valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
             if log_level not in valid_levels:
                 health["status"] = "unhealthy"
-                health["issues"].append(f"LOG_LEVEL must be one of: {', '.join(valid_levels)}")
+                health["issues"].append(
+                    f"LOG_LEVEL must be one of: {', '.join(valid_levels)}"
+                )
 
             log_dir = self.config_instance.LOG_DIR
             if log_dir:
@@ -330,7 +354,9 @@ class ConfigHealthChecker:
                         log_path.mkdir(parents=True, exist_ok=True)
                     except Exception as e:
                         health["status"] = "unhealthy"
-                        health["issues"].append(f"Cannot create log directory {log_dir}: {e}")
+                        health["issues"].append(
+                            f"Cannot create log directory {log_dir}: {e}"
+                        )
                 elif not os.access(log_path, os.W_OK):
                     health["status"] = "unhealthy"
                     health["issues"].append(f"Log directory is not writable: {log_dir}")
@@ -342,7 +368,9 @@ class ConfigHealthChecker:
         return health
 
 
-def create_config_monitor(config_instance, enable_monitoring: bool = True) -> Optional[ConfigMonitor]:
+def create_config_monitor(
+    config_instance, enable_monitoring: bool = True
+) -> Optional[ConfigMonitor]:
     """Create and optionally start a configuration monitor."""
     if not enable_monitoring:
         return None

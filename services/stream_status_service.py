@@ -49,7 +49,7 @@ class StreamStatusService:
                 "status": "error",
                 "error": str(e),
                 "last_poll": None,
-                "total_messages_sent": 0
+                "total_messages_sent": 0,
             }
 
     def get_all_streams_status(self) -> Dict[str, Any]:
@@ -62,12 +62,12 @@ class StreamStatusService:
                 "inactive_streams": 0,
                 "running_streams": 0,
                 "error_streams": 0,
-                "streams": []
+                "streams": [],
             }
 
             for stream in streams:
                 stream_status = self.get_safe_stream_status(stream.id)
-                
+
                 if stream.is_active:
                     status_data["active_streams"] += 1
                 else:
@@ -79,17 +79,19 @@ class StreamStatusService:
                 if stream.last_error:
                     status_data["error_streams"] += 1
 
-                status_data["streams"].append({
-                    "id": stream.id,
-                    "name": stream.name,
-                    "plugin_type": stream.plugin_type,
-                    "is_active": stream.is_active,
-                    "running": stream_status.get("running", False),
-                    "status": stream_status.get("status", "unknown"),
-                    "last_poll": self._format_last_poll(stream),
-                    "last_error": stream.last_error,
-                    "total_messages_sent": stream.total_messages_sent
-                })
+                status_data["streams"].append(
+                    {
+                        "id": stream.id,
+                        "name": stream.name,
+                        "plugin_type": stream.plugin_type,
+                        "is_active": stream.is_active,
+                        "running": stream_status.get("running", False),
+                        "status": stream_status.get("status", "unknown"),
+                        "last_poll": self._format_last_poll(stream),
+                        "last_error": stream.last_error,
+                        "total_messages_sent": stream.total_messages_sent,
+                    }
+                )
 
             return status_data
 
@@ -102,7 +104,7 @@ class StreamStatusService:
                 "inactive_streams": 0,
                 "running_streams": 0,
                 "error_streams": 0,
-                "streams": []
+                "streams": [],
             }
 
     def get_stream_statistics(self) -> Dict[str, Any]:
@@ -112,20 +114,12 @@ class StreamStatusService:
             stats: Dict[str, Any] = {
                 "total_streams": len(streams),
                 "by_plugin_type": {},
-                "by_status": {
-                    "active": 0,
-                    "inactive": 0,
-                    "running": 0,
-                    "error": 0
-                },
-                "message_totals": {
-                    "total_messages": 0,
-                    "avg_messages_per_stream": 0
-                },
+                "by_status": {"active": 0, "inactive": 0, "running": 0, "error": 0},
+                "message_totals": {"total_messages": 0, "avg_messages_per_stream": 0},
                 "recent_activity": {
                     "streams_polled_today": 0,
-                    "streams_with_errors": 0
-                }
+                    "streams_with_errors": 0,
+                },
             }
 
             total_messages = 0
@@ -139,12 +133,14 @@ class StreamStatusService:
                         "count": 0,
                         "active": 0,
                         "running": 0,
-                        "total_messages": 0
+                        "total_messages": 0,
                     }
-                
+
                 stats["by_plugin_type"][plugin_type]["count"] += 1
                 total_messages += stream.total_messages_sent
-                stats["by_plugin_type"][plugin_type]["total_messages"] += stream.total_messages_sent
+                stats["by_plugin_type"][plugin_type][
+                    "total_messages"
+                ] += stream.total_messages_sent
 
                 # Status statistics
                 if stream.is_active:
@@ -167,7 +163,9 @@ class StreamStatusService:
             # Calculate averages
             if streams:
                 stats["message_totals"]["total_messages"] = total_messages
-                stats["message_totals"]["avg_messages_per_stream"] = total_messages / len(streams)
+                stats["message_totals"]["avg_messages_per_stream"] = (
+                    total_messages / len(streams)
+                )
 
             return stats
 
@@ -179,7 +177,10 @@ class StreamStatusService:
                 "by_plugin_type": {},
                 "by_status": {"active": 0, "inactive": 0, "running": 0, "error": 0},
                 "message_totals": {"total_messages": 0, "avg_messages_per_stream": 0},
-                "recent_activity": {"streams_polled_today": 0, "streams_with_errors": 0}
+                "recent_activity": {
+                    "streams_polled_today": 0,
+                    "streams_with_errors": 0,
+                },
             }
 
     def get_detailed_stream_status(self, stream_id: int) -> Dict[str, Any]:
@@ -200,43 +201,45 @@ class StreamStatusService:
                     "cot_type": stream.cot_type,
                     "cot_stale_time": stream.cot_stale_time,
                     "tak_server_id": stream.tak_server_id,
-                    "tak_server_name": stream.tak_server.name if stream.tak_server else None
+                    "tak_server_name": (
+                        stream.tak_server.name if stream.tak_server else None
+                    ),
                 },
                 "statistics": {
                     "total_messages_sent": stream.total_messages_sent,
                     "last_poll": self._format_last_poll(stream),
                     "last_error": stream.last_error,
-                    "created_at": stream.created_at.isoformat() if stream.created_at else None,
-                    "updated_at": stream.updated_at.isoformat() if stream.updated_at else None
+                    "created_at": (
+                        stream.created_at.isoformat() if stream.created_at else None
+                    ),
+                    "updated_at": (
+                        stream.updated_at.isoformat() if stream.updated_at else None
+                    ),
                 },
                 "health": {
                     "has_error": bool(stream.last_error),
                     "is_healthy": not bool(stream.last_error) and stream.is_active,
-                    "last_successful_poll": self._get_last_successful_poll(stream)
-                }
+                    "last_successful_poll": self._get_last_successful_poll(stream),
+                },
             }
 
             return detailed_status
 
         except Exception as e:
             logger.error(f"Error getting detailed stream status for {stream_id}: {e}")
-            return {
-                "error": str(e),
-                "stream_id": stream_id,
-                "status": "error"
-            }
+            return {"error": str(e), "stream_id": stream_id, "status": "error"}
 
     def get_running_stream_ids(self) -> List[int]:
         """Get list of currently running stream IDs"""
         try:
             streams = Stream.query.filter_by(is_active=True).all()
             running_ids: List[int] = []
-            
+
             for stream in streams:
                 stream_status = self.get_safe_stream_status(stream.id)
                 if stream_status.get("running", False):
                     running_ids.append(stream.id)
-            
+
             return running_ids
 
         except Exception as e:
@@ -248,10 +251,10 @@ class StreamStatusService:
         """Format last poll time for display"""
         if not stream.last_poll:
             return None
-        
+
         now = datetime.now()
         time_diff = now - stream.last_poll
-        
+
         if time_diff < timedelta(minutes=1):
             return "Just now"
         elif time_diff < timedelta(hours=1):
@@ -278,10 +281,10 @@ def format_stream_last_poll(stream: Stream) -> str:
     """Utility function to format stream last poll time"""
     if not stream.last_poll:
         return "Never"
-    
+
     now = datetime.now()
     time_diff = now - stream.last_poll
-    
+
     if time_diff < timedelta(minutes=1):
         return "Just now"
     elif time_diff < timedelta(hours=1):
@@ -298,22 +301,30 @@ def format_stream_last_poll(stream: Stream) -> str:
 def validate_stream_status_format(status: Dict[str, Any], stream_id: int) -> bool:
     """Validate that a stream status dictionary has the correct format"""
     required_fields = ["stream_id", "running", "status"]
-    
+
     for field in required_fields:
         if field not in status:
-            logger.error(f"Missing required field '{field}' in stream status for {stream_id}")
+            logger.error(
+                f"Missing required field '{field}' in stream status for {stream_id}"
+            )
             return False
-    
+
     if not isinstance(status["stream_id"], int):
-        logger.error(f"stream_id must be int, got {type(status['stream_id'])} for {stream_id}")
+        logger.error(
+            f"stream_id must be int, got {type(status['stream_id'])} for {stream_id}"
+        )
         return False
-    
+
     if not isinstance(status["running"], bool):
-        logger.error(f"running must be bool, got {type(status['running'])} for {stream_id}")
+        logger.error(
+            f"running must be bool, got {type(status['running'])} for {stream_id}"
+        )
         return False
-    
+
     if not isinstance(status["status"], str):
-        logger.error(f"status must be str, got {type(status['status'])} for {stream_id}")
+        logger.error(
+            f"status must be str, got {type(status['status'])} for {stream_id}"
+        )
         return False
-    
+
     return True

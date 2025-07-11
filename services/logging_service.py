@@ -17,7 +17,12 @@ import os
 import datetime
 
 # Local application imports
-from services.version import get_version, get_version_info, get_build_info, is_development_build
+from services.version import (
+    get_version,
+    get_version_info,
+    get_build_info,
+    is_development_build,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +31,12 @@ def setup_logging(app):
     """Set up application logging with version information."""
 
     # Create logs directory if it doesn't exist
-    log_dir = app.config.get('LOG_DIR', 'logs')
+    log_dir = app.config.get("LOG_DIR", "logs")
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
     # Get log level
-    log_level = getattr(logging, app.config.get('LOG_LEVEL', 'INFO'))
+    log_level = getattr(logging, app.config.get("LOG_LEVEL", "INFO"))
 
     # Get version for log formatting
     try:
@@ -41,7 +46,7 @@ def setup_logging(app):
 
     # Create formatters with version information
     detailed_formatter = logging.Formatter(
-        f'%(asctime)s [%(levelname)s] TrakBridge-v{version} %(name)s: %(message)s'
+        f"%(asctime)s [%(levelname)s] TrakBridge-v{version} %(name)s: %(message)s"
     )
 
     # Set up file handler with version in filename
@@ -68,10 +73,10 @@ def setup_logging(app):
     root_logger.addHandler(console_handler)
 
     # Set specific logger levels
-    logging.getLogger('sqlalchemy.engine').setLevel(
-        logging.INFO if app.config.get('SQLALCHEMY_RECORD_QUERIES') else logging.WARNING
+    logging.getLogger("sqlalchemy.engine").setLevel(
+        logging.INFO if app.config.get("SQLALCHEMY_RECORD_QUERIES") else logging.WARNING
     )
-    logging.getLogger('sqlalchemy.pool').setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
 
     app.logger.info(f"Enhanced logging configured - Version: {version}")
 
@@ -102,27 +107,31 @@ def log_startup_banner(app):
         ]
 
         # Add Git information if available
-        if build_info.get('git_commit'):
+        if build_info.get("git_commit"):
             banner_lines.append(f"   Git Commit: {build_info['git_commit']}")
 
         # Add configuration details
-        banner_lines.extend([
-            "",
-            "  Configuration:",
-            f"   Database: {str(app.config.get('SQLALCHEMY_DATABASE_URI', 'not configured'))[:50]}...",
-            f"   Max Worker Threads: {app.config.get('MAX_WORKER_THREADS', 'not set')}",
-            f"   Max Concurrent Streams: {app.config.get('MAX_CONCURRENT_STREAMS', 'not set')}",
-            f"   Log Level: {app.config.get('LOG_LEVEL', 'not set')}",
-            f"   Log Directory: {app.config.get('LOG_DIR', 'not set')}",
-        ])
+        banner_lines.extend(
+            [
+                "",
+                "  Configuration:",
+                f"   Database: {str(app.config.get('SQLALCHEMY_DATABASE_URI', 'not configured'))[:50]}...",
+                f"   Max Worker Threads: {app.config.get('MAX_WORKER_THREADS', 'not set')}",
+                f"   Max Concurrent Streams: {app.config.get('MAX_CONCURRENT_STREAMS', 'not set')}",
+                f"   Log Level: {app.config.get('LOG_LEVEL', 'not set')}",
+                f"   Log Directory: {app.config.get('LOG_DIR', 'not set')}",
+            ]
+        )
 
         # Add timestamp
-        banner_lines.extend([
-            "",
-            f" Started at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            "=" * 80,
-            ""
-        ])
+        banner_lines.extend(
+            [
+                "",
+                f" Started at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                "=" * 80,
+                "",
+            ]
+        )
 
         # Log each line
         for line in banner_lines:
@@ -132,4 +141,5 @@ def log_startup_banner(app):
         app.logger.error(f"Failed to log startup banner: {e}")
         # Fallback to basic logging
         from services.version import get_version
+
         app.logger.info(f"TrakBridge starting - Version: {get_version()}")

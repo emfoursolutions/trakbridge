@@ -41,20 +41,24 @@ class StreamConfigService:
     def __init__(self, plugin_manager: Any) -> None:
         self.plugin_manager = plugin_manager
 
-    def validate_plugin_config_security(self, plugin_type: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    def validate_plugin_config_security(
+        self, plugin_type: str, config: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Validate plugin configuration for security issues"""
         try:
             validation_result: Dict[str, Any] = {
                 "valid": True,
                 "warnings": [],
                 "errors": [],
-                "security_issues": []
+                "security_issues": [],
             }
 
             # Get plugin metadata to identify sensitive fields
             metadata = self.plugin_manager.get_plugin_metadata(plugin_type)
             if not metadata:
-                validation_result["errors"].append(f"Plugin type '{plugin_type}' not found")
+                validation_result["errors"].append(
+                    f"Plugin type '{plugin_type}' not found"
+                )
                 validation_result["valid"] = False
                 return validation_result
 
@@ -63,7 +67,7 @@ class StreamConfigService:
             for field_data in metadata.get("config_fields", []):
                 if isinstance(field_data, dict) and field_data.get("sensitive"):
                     sensitive_fields.append(field_data["name"])
-                elif hasattr(field_data, 'sensitive') and field_data.sensitive:
+                elif hasattr(field_data, "sensitive") and field_data.sensitive:
                     sensitive_fields.append(field_data.name)
 
             # Validate sensitive fields
@@ -74,7 +78,11 @@ class StreamConfigService:
                         validation_result["warnings"].append(
                             f"Password '{field_name}' is very short (less than 8 characters)"
                         )
-                    if isinstance(value, str) and value.lower() in ['password', '123456', 'admin']:
+                    if isinstance(value, str) and value.lower() in [
+                        "password",
+                        "123456",
+                        "admin",
+                    ]:
                         validation_result["security_issues"].append(
                             f"Password '{field_name}' appears to be weak"
                         )
@@ -82,11 +90,13 @@ class StreamConfigService:
             # Check for common security issues
             for key, value in config.items():
                 if isinstance(value, str):
-                    if 'password' in key.lower() and value == 'password':
+                    if "password" in key.lower() and value == "password":
                         validation_result["security_issues"].append(
                             f"Field '{key}' contains default password value"
                         )
-                    if 'url' in key.lower() and not value.startswith(('http://', 'https://')):
+                    if "url" in key.lower() and not value.startswith(
+                        ("http://", "https://")
+                    ):
                         validation_result["warnings"].append(
                             f"URL field '{key}' may not be properly formatted"
                         )
@@ -99,7 +109,7 @@ class StreamConfigService:
                 "valid": False,
                 "warnings": [],
                 "errors": [f"Validation error: {str(e)}"],
-                "security_issues": []
+                "security_issues": [],
             }
 
     @staticmethod
@@ -108,7 +118,7 @@ class StreamConfigService:
         plugin_config: Dict[str, Any] = {}
 
         for key, value in data.items():
-            if key.startswith('plugin_'):
+            if key.startswith("plugin_"):
                 # Remove 'plugin_' prefix
                 config_key = key[7:]
                 plugin_config[config_key] = value
@@ -116,7 +126,9 @@ class StreamConfigService:
         return plugin_config
 
     @staticmethod
-    def export_stream_config(stream_id: int, include_sensitive: bool = False) -> Dict[str, Any]:
+    def export_stream_config(
+        stream_id: int, include_sensitive: bool = False
+    ) -> Dict[str, Any]:
         """Export stream configuration for backup or migration"""
         try:
             stream = Stream.query.get_or_404(stream_id)
@@ -130,14 +142,20 @@ class StreamConfigService:
                     "cot_type": stream.cot_type,
                     "cot_stale_time": stream.cot_stale_time,
                     "tak_server_id": stream.tak_server_id,
-                    "is_active": stream.is_active
+                    "is_active": stream.is_active,
                 },
-                "plugin_config": stream.to_dict(include_sensitive=include_sensitive)["plugin_config"],
+                "plugin_config": stream.to_dict(include_sensitive=include_sensitive)[
+                    "plugin_config"
+                ],
                 "metadata": {
-                    "created_at": stream.created_at.isoformat() if stream.created_at else None,
-                    "updated_at": stream.updated_at.isoformat() if stream.updated_at else None,
-                    "total_messages_sent": stream.total_messages_sent
-                }
+                    "created_at": (
+                        stream.created_at.isoformat() if stream.created_at else None
+                    ),
+                    "updated_at": (
+                        stream.updated_at.isoformat() if stream.updated_at else None
+                    ),
+                    "total_messages_sent": stream.total_messages_sent,
+                },
             }
 
             # Add TAK server information if available
@@ -146,17 +164,14 @@ class StreamConfigService:
                     "id": stream.tak_server.id,
                     "name": stream.tak_server.name,
                     "host": stream.tak_server.host,
-                    "port": stream.tak_server.port
+                    "port": stream.tak_server.port,
                 }
 
             return export_data
 
         except Exception as e:
             logger.error(f"Error exporting stream config for {stream_id}: {e}")
-            return {
-                "error": str(e),
-                "stream_id": stream_id
-            }
+            return {"error": str(e), "stream_id": stream_id}
 
     def get_security_status(self) -> Dict[str, Any]:
         """Get security status of all stream configurations"""
@@ -168,7 +183,7 @@ class StreamConfigService:
                 "encrypted_fields": 0,
                 "weak_passwords": 0,
                 "default_passwords": 0,
-                "stream_details": []
+                "stream_details": [],
             }
 
             for stream in streams:
@@ -178,9 +193,13 @@ class StreamConfigService:
                 if stream_security["has_issues"]:
                     security_status["streams_with_issues"] += 1
 
-                security_status["encrypted_fields"] += stream_security["encrypted_fields"]
+                security_status["encrypted_fields"] += stream_security[
+                    "encrypted_fields"
+                ]
                 security_status["weak_passwords"] += stream_security["weak_passwords"]
-                security_status["default_passwords"] += stream_security["default_passwords"]
+                security_status["default_passwords"] += stream_security[
+                    "default_passwords"
+                ]
 
             return security_status
 
@@ -193,7 +212,7 @@ class StreamConfigService:
                 "encrypted_fields": 0,
                 "weak_passwords": 0,
                 "default_passwords": 0,
-                "stream_details": []
+                "stream_details": [],
             }
 
     def get_plugin_metadata(self, plugin_name: str) -> Optional[Dict[str, Any]]:
@@ -221,12 +240,12 @@ class StreamConfigService:
                 "description": metadata.get("description", ""),
                 "icon": metadata.get("icon", ""),
                 "category": metadata.get("category", ""),
-                "config_fields": []
+                "config_fields": [],
             }
 
             # Serialize config fields
             for field in metadata.get("config_fields", []):
-                if hasattr(field, 'to_dict'):
+                if hasattr(field, "to_dict"):
                     serialized["config_fields"].append(field.to_dict())
                 elif isinstance(field, dict):
                     serialized["config_fields"].append(field)
@@ -247,7 +266,7 @@ class StreamConfigService:
                 "description": "",
                 "icon": "",
                 "category": "",
-                "config_fields": []
+                "config_fields": [],
             }
 
     def prepare_stream_for_display(self, stream: Stream) -> Stream:
@@ -257,11 +276,15 @@ class StreamConfigService:
             metadata = self.get_plugin_metadata(stream.plugin_type)
             if metadata:
                 # Add metadata as a property to the stream object
-                setattr(stream, '_plugin_metadata', metadata)
-                setattr(stream, 'plugin_display_name', metadata.get("display_name", stream.plugin_type))
-                setattr(stream, 'plugin_description', metadata.get("description", ""))
-                setattr(stream, 'plugin_icon', metadata.get("icon", ""))
-                setattr(stream, 'plugin_category', metadata.get("category", ""))
+                setattr(stream, "_plugin_metadata", metadata)
+                setattr(
+                    stream,
+                    "plugin_display_name",
+                    metadata.get("display_name", stream.plugin_type),
+                )
+                setattr(stream, "plugin_description", metadata.get("description", ""))
+                setattr(stream, "plugin_icon", metadata.get("icon", ""))
+                setattr(stream, "plugin_category", metadata.get("category", ""))
 
             return stream
 
@@ -280,7 +303,7 @@ class StreamConfigService:
                 "encrypted_fields": 0,
                 "weak_passwords": 0,
                 "default_passwords": 0,
-                "issues": []
+                "issues": [],
             }
 
             # Get plugin metadata
@@ -293,7 +316,7 @@ class StreamConfigService:
             # Check for encrypted fields
             raw_config = stream.get_raw_plugin_config()
             for key, value in raw_config.items():
-                if isinstance(value, str) and value.startswith('ENC:'):
+                if isinstance(value, str) and value.startswith("ENC:"):
                     analysis["encrypted_fields"] += 1
 
             # Check for weak passwords
@@ -301,7 +324,7 @@ class StreamConfigService:
             for field_data in metadata.get("config_fields", []):
                 if isinstance(field_data, dict) and field_data.get("sensitive"):
                     sensitive_fields.append(field_data["name"])
-                elif hasattr(field_data, 'sensitive') and field_data.sensitive:
+                elif hasattr(field_data, "sensitive") and field_data.sensitive:
                     sensitive_fields.append(field_data.name)
 
             decrypted_config = stream.get_plugin_config()
@@ -311,10 +334,14 @@ class StreamConfigService:
                     if isinstance(value, str):
                         if len(value) < 8:
                             analysis["weak_passwords"] += 1
-                            analysis["issues"].append(f"Weak password in field '{field_name}'")
-                        if value.lower() in ['password', '123456', 'admin']:
+                            analysis["issues"].append(
+                                f"Weak password in field '{field_name}'"
+                            )
+                        if value.lower() in ["password", "123456", "admin"]:
                             analysis["default_passwords"] += 1
-                            analysis["issues"].append(f"Default password in field '{field_name}'")
+                            analysis["issues"].append(
+                                f"Default password in field '{field_name}'"
+                            )
 
             analysis["has_issues"] = len(analysis["issues"]) > 0
             return analysis
@@ -329,5 +356,5 @@ class StreamConfigService:
                 "encrypted_fields": 0,
                 "weak_passwords": 0,
                 "default_passwords": 0,
-                "issues": [f"Analysis error: {str(e)}"]
+                "issues": [f"Analysis error: {str(e)}"],
             }

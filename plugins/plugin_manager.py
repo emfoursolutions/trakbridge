@@ -55,7 +55,7 @@ class PluginManager:
         plugin_name = None
 
         # Try to get plugin name from class method first
-        if hasattr(plugin_class, 'get_plugin_name'):
+        if hasattr(plugin_class, "get_plugin_name"):
             try:
                 plugin_name = plugin_class.get_plugin_name()
             except (AttributeError, TypeError) as e:
@@ -67,10 +67,14 @@ class PluginManager:
                 temp_instance = plugin_class({})
                 plugin_name = temp_instance.plugin_name
             except (TypeError, ValueError) as e:
-                logger.error(f"Failed to create temporary instance for {plugin_class.__name__}: {e}")
+                logger.error(
+                    f"Failed to create temporary instance for {plugin_class.__name__}: {e}"
+                )
                 return
             except Exception as e:
-                logger.error(f"Failed to get plugin name for {plugin_class.__name__}: {e}")
+                logger.error(
+                    f"Failed to get plugin name for {plugin_class.__name__}: {e}"
+                )
                 return
 
         self.plugins[plugin_name] = plugin_class
@@ -100,7 +104,9 @@ class PluginManager:
                 return json.loads(config)
             except (json.JSONDecodeError, ValueError):
                 # If not JSON, treat as a configuration name or identifier
-                logger.warning(f"String config '{config}' could not be parsed as JSON, using empty config")
+                logger.warning(
+                    f"String config '{config}' could not be parsed as JSON, using empty config"
+                )
                 return {}
 
         if isinstance(config, dict):
@@ -110,7 +116,9 @@ class PluginManager:
         logger.warning(f"Unexpected config type {type(config)}, using empty config")
         return {}
 
-    def get_plugin(self, plugin_name: str, config: Union[Dict, str, None] = None) -> Optional["BaseGPSPlugin"]:
+    def get_plugin(
+        self, plugin_name: str, config: Union[Dict, str, None] = None
+    ) -> Optional["BaseGPSPlugin"]:
         """
         Create an instance of a plugin with the given configuration
 
@@ -167,7 +175,9 @@ class PluginManager:
                 metadata[plugin_name] = plugin_metadata
         return metadata
 
-    def get_plugin_config_schema(self, plugin_name: str) -> Optional[List[Dict[str, Any]]]:
+    def get_plugin_config_schema(
+        self, plugin_name: str
+    ) -> Optional[List[Dict[str, Any]]]:
         """Get configuration schema for a specific plugin"""
         if plugin_name not in self.plugins:
             return None
@@ -181,7 +191,9 @@ class PluginManager:
             logger.error(f"Failed to get config schema for plugin {plugin_name}: {e}")
             return None
 
-    def validate_plugin_config(self, plugin_name: str, config: Union[Dict[str, Any], str, None]) -> Dict[str, Any]:
+    def validate_plugin_config(
+        self, plugin_name: str, config: Union[Dict[str, Any], str, None]
+    ) -> Dict[str, Any]:
         """
         Validate configuration for a specific plugin
 
@@ -199,7 +211,7 @@ class PluginManager:
             return {
                 "valid": False,
                 "errors": [f"Plugin '{plugin_name}' not found"],
-                "warnings": []
+                "warnings": [],
             }
 
         # Normalize configuration
@@ -217,17 +229,18 @@ class PluginManager:
             return {
                 "valid": is_valid,
                 "errors": [] if is_valid else ["Configuration validation failed"],
-                "warnings": warnings
+                "warnings": warnings,
             }
         except Exception as e:
             return {
                 "valid": False,
                 "errors": [f"Validation error: {str(e)}"],
-                "warnings": []
+                "warnings": [],
             }
 
-    async def test_plugin_connection(self, plugin_name: str, config: Union[Dict[str, Any], str, None]) -> Dict[
-            str, Any]:
+    async def test_plugin_connection(
+        self, plugin_name: str, config: Union[Dict[str, Any], str, None]
+    ) -> Dict[str, Any]:
         """
         Test connection for a specific plugin configuration
 
@@ -242,7 +255,7 @@ class PluginManager:
             return {
                 "success": False,
                 "error": f"Plugin '{plugin_name}' not found",
-                "message": "Plugin not found"
+                "message": "Plugin not found",
             }
 
         # Normalize configuration
@@ -257,7 +270,7 @@ class PluginManager:
                 return {
                     "success": False,
                     "error": "Configuration validation failed",
-                    "message": "Invalid configuration"
+                    "message": "Invalid configuration",
                 }
 
             # Test connection
@@ -268,7 +281,7 @@ class PluginManager:
             return {
                 "success": False,
                 "error": str(e),
-                "message": "Connection test error"
+                "message": "Connection test error",
             }
 
     def get_plugins_by_category(self, category: str) -> List[str]:
@@ -289,12 +302,13 @@ class PluginManager:
                 categories.add(metadata["category"])
         return sorted(list(categories))
 
-    def load_plugins_from_directory(self, directory: str = 'plugins'):
+    def load_plugins_from_directory(self, directory: str = "plugins"):
         """
         Automatically load plugins from a directory
         """
 
         from plugins.base_plugin import BaseGPSPlugin
+
         try:
             # Get absolute path of the plugins directory
             plugins_path = os.path.abspath(directory)
@@ -311,10 +325,11 @@ class PluginManager:
             plugins_package = importlib.import_module(directory)
 
             # Iterate through all modules in the plugins package
-            for importer, modname, ispkg in pkgutil.iter_modules(plugins_package.__path__,
-                                                                 plugins_package.__name__ + "."):
+            for importer, modname, ispkg in pkgutil.iter_modules(
+                plugins_package.__path__, plugins_package.__name__ + "."
+            ):
                 # Skip the base_plugin module
-                if modname.endswith('.base_plugin'):
+                if modname.endswith(".base_plugin"):
                     continue
 
                 try:
@@ -324,8 +339,7 @@ class PluginManager:
                     # Look for classes that inherit from BaseGPSPlugin
                     for name, obj in inspect.getmembers(module, inspect.isclass):
                         # Check if it's a subclass of BaseGPSPlugin but not BaseGPSPlugin itself
-                        if (issubclass(obj, BaseGPSPlugin) and
-                                obj is not BaseGPSPlugin):
+                        if issubclass(obj, BaseGPSPlugin) and obj is not BaseGPSPlugin:
                             self.register_plugin(obj)
 
                 except Exception as e:
@@ -334,12 +348,13 @@ class PluginManager:
         except Exception as e:
             logger.error(f"Failed to load plugins from directory {directory}: {e}")
 
-    def auto_discover_and_load_plugins(self, directory: str = 'plugins'):
+    def auto_discover_and_load_plugins(self, directory: str = "plugins"):
         """
         Alternative method that discovers Python files and loads them
         """
 
         from plugins.base_plugin import BaseGPSPlugin
+
         try:
             plugins_path = os.path.abspath(directory)
 
@@ -349,22 +364,27 @@ class PluginManager:
 
             # Get all Python files in the directory
             for filename in os.listdir(plugins_path):
-                if filename.endswith('.py') and not filename.startswith('__') and filename != 'base_plugin.py':
+                if (
+                    filename.endswith(".py")
+                    and not filename.startswith("__")
+                    and filename != "base_plugin.py"
+                ):
                     module_name = filename[:-3]  # Remove .py extension
 
                     try:
                         # Import the module
                         spec = importlib.util.spec_from_file_location(
-                            module_name,
-                            os.path.join(plugins_path, filename)
+                            module_name, os.path.join(plugins_path, filename)
                         )
                         module = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(module)
 
                         # Look for plugin classes
                         for name, obj in inspect.getmembers(module, inspect.isclass):
-                            if (issubclass(obj, BaseGPSPlugin) and
-                                    obj is not BaseGPSPlugin):
+                            if (
+                                issubclass(obj, BaseGPSPlugin)
+                                and obj is not BaseGPSPlugin
+                            ):
                                 self.register_plugin(obj)
 
                     except Exception as e:
@@ -376,6 +396,7 @@ class PluginManager:
     def reload_plugin(self, plugin_name: str) -> bool:
         """Reload a specific plugin (useful for development)"""
         from plugins.base_plugin import BaseGPSPlugin
+
         if plugin_name not in self.plugins:
             logger.error(f"Cannot reload plugin '{plugin_name}': not found")
             return False
@@ -388,14 +409,15 @@ class PluginManager:
                 importlib.reload(module)
                 # Re-register the plugin
                 for name, obj in inspect.getmembers(module, inspect.isclass):
-                    if (issubclass(obj, BaseGPSPlugin) and
-                            obj is not BaseGPSPlugin):
+                    if issubclass(obj, BaseGPSPlugin) and obj is not BaseGPSPlugin:
                         # Check if this is the plugin we want to reload
                         try:
                             temp_instance = obj({})
                             if temp_instance.plugin_name == plugin_name:
                                 self.plugins[plugin_name] = obj
-                                logger.info(f"Successfully reloaded plugin: {plugin_name}")
+                                logger.info(
+                                    f"Successfully reloaded plugin: {plugin_name}"
+                                )
                                 return True
                         except Exception:
                             continue
@@ -411,7 +433,7 @@ class PluginManager:
         summary = {
             "total_plugins": len(self.plugins),
             "plugins": {},
-            "categories": self.get_plugin_categories()
+            "categories": self.get_plugin_categories(),
         }
 
         for plugin_name in self.plugins:
@@ -421,13 +443,17 @@ class PluginManager:
                     "display_name": metadata.get("display_name", plugin_name),
                     "description": metadata.get("description", "No description"),
                     "category": metadata.get("category", "uncategorized"),
-                    "config_fields_count": len(metadata.get("config_fields", []))
+                    "config_fields_count": len(metadata.get("config_fields", [])),
                 }
 
         return summary
 
-    def safe_get_plugin(self, plugin_name: str, config: Union[Dict, str, None] = None,
-                        default_config: Optional[Dict] = None) -> Optional["BaseGPSPlugin"]:
+    def safe_get_plugin(
+        self,
+        plugin_name: str,
+        config: Union[Dict, str, None] = None,
+        default_config: Optional[Dict] = None,
+    ) -> Optional["BaseGPSPlugin"]:
         """
         Safely get a plugin with fallback configuration
 
@@ -450,14 +476,14 @@ class PluginManager:
             return self.get_plugin(plugin_name, default_config)
 
         return None
-    
+
     async def check_all_plugins_health(self):
         health_status = {}
-        
+
         # Get existing stream configurations from the database
         from models.stream import Stream
         from database import db
-        
+
         # Get all streams grouped by plugin type
         streams_by_plugin = {}
         try:
@@ -470,34 +496,46 @@ class PluginManager:
         except Exception as e:
             logger.error(f"Could not fetch streams for health check: {e}")
             streams_by_plugin = {}
-        
+
         for name, plugin_class in self.plugins.items():
             try:
                 if name in streams_by_plugin and streams_by_plugin[name]:
                     # Test with actual stream configuration
                     stream = streams_by_plugin[name][0]  # Use first stream's config
-                    config = stream.get_plugin_config()  # Use the method, not the attribute
+                    config = (
+                        stream.get_plugin_config()
+                    )  # Use the method, not the attribute
                     plugin_instance = plugin_class(config)
                     health = await plugin_instance.health_check()
-                    
+
                     # Add stream count info to health details
                     stream_count = len(streams_by_plugin[name])
                     if isinstance(health, dict) and "details" in health:
                         if isinstance(health["details"], dict):
                             health["details"]["configured_streams"] = stream_count
                         else:
-                            health["details"] = f"{health['details']} ({stream_count} stream(s) configured)"
+                            health["details"] = (
+                                f"{health['details']} ({stream_count} stream(s) configured)"
+                            )
                     else:
-                        health["details"] = (f"{health.get('details', 'Health check completed')} "
-                                             f"({stream_count} stream(s) configured)")
-                    
+                        health["details"] = (
+                            f"{health.get('details', 'Health check completed')} "
+                            f"({stream_count} stream(s) configured)"
+                        )
+
                 else:
                     # No configured streams for this plugin
                     plugin_instance = plugin_class({})
-                    health = {"status": "unconfigured", "details": "No streams configured for this plugin"}
-                    
+                    health = {
+                        "status": "unconfigured",
+                        "details": "No streams configured for this plugin",
+                    }
+
             except Exception as e:
-                logger.error(f"[PluginManager] Health check failed for plugin '{name}': {e}", exc_info=True)
+                logger.error(
+                    f"[PluginManager] Health check failed for plugin '{name}': {e}",
+                    exc_info=True,
+                )
                 health = {"status": "unhealthy", "details": str(e)}
             health_status[name] = health
         return health_status
@@ -514,11 +552,12 @@ def get_plugin_manager():
     """Get the plugin manager instance - check Flask app context first, then fall back to global"""
     try:
         from flask import current_app, has_app_context
-        if has_app_context() and hasattr(current_app, 'plugin_manager'):
+
+        if has_app_context() and hasattr(current_app, "plugin_manager"):
             return current_app.plugin_manager
     except (ImportError, RuntimeError):
         # Flask not available or no app context
         pass
-    
+
     # Fallback to global instance for CLI/standalone use
     return plugin_manager

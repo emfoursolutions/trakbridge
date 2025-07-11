@@ -51,7 +51,9 @@ from services.database_manager import DatabaseManager
 from services.stream_worker import StreamWorker
 from services.session_manager import SessionManager
 from services.exceptions import (
-    StreamManagerError, StreamNotFoundError, StreamConfigurationError,
+    StreamManagerError,
+    StreamNotFoundError,
+    StreamConfigurationError,
 )
 
 # Global stream manager instance - use singleton pattern to prevent multiple instances
@@ -94,7 +96,7 @@ class StreamManager:
         """Initialize persistent COT service for all TAK servers"""
         if self._cot_service_initialized:
             return
-            
+
         try:
             logger.info("Initializing persistent COT service")
 
@@ -108,20 +110,28 @@ class StreamManager:
                 if stream.tak_server:
                     # Use tak_server.id as key for deduplication
                     # If tak_server doesn't have an id, use name as fallback
-                    key = getattr(stream.tak_server, 'id', None) or getattr(stream.tak_server, 'name', None)
+                    key = getattr(stream.tak_server, "id", None) or getattr(
+                        stream.tak_server, "name", None
+                    )
                     if key:
                         tak_servers[key] = stream.tak_server
 
             # Start persistent workers for each unique TAK server
             for tak_server in tak_servers.values():
-                logger.info(f"Starting persistent worker for TAK server: {tak_server.name}")
+                logger.info(
+                    f"Starting persistent worker for TAK server: {tak_server.name}"
+                )
                 await cot_service.start_worker(tak_server)
 
-            logger.info(f"Initialized persistent COT service for {len(tak_servers)} TAK servers")
+            logger.info(
+                f"Initialized persistent COT service for {len(tak_servers)} TAK servers"
+            )
             self._cot_service_initialized = True
 
         except Exception as e:
-            logger.error(f"Error initializing persistent COT service: {e}", exc_info=True)
+            logger.error(
+                f"Error initializing persistent COT service: {e}", exc_info=True
+            )
 
     def _start_background_loop(self):
         """Start the background event loop in a separate thread"""
@@ -141,7 +151,9 @@ class StreamManager:
                 self._loop.run_until_complete(self.session_manager.initialize())
 
                 # Start health check task
-                self._health_check_task = self._loop.create_task(self._periodic_health_check())
+                self._health_check_task = self._loop.create_task(
+                    self._periodic_health_check()
+                )
 
                 # Run the background loop
                 self._loop.run_until_complete(self._background_loop())
@@ -174,20 +186,20 @@ class StreamManager:
                         )
                     except (OSError, RuntimeError) as e:
                         logger.error(
-                            f"System error while gathering pending tasks during cleanup: {e}", exc_info=True
+                            f"System error while gathering pending tasks during cleanup: {e}",
+                            exc_info=True,
                         )
                     except Exception as e:
                         logger.error(
-                            f"Unexpected error while gathering pending tasks during cleanup: {e}", exc_info=True
+                            f"Unexpected error while gathering pending tasks during cleanup: {e}",
+                            exc_info=True,
                         )
 
                 self._loop.close()
                 logger.info("Background event loop closed")
 
         self._loop_thread = threading.Thread(
-            target=run_loop,
-            daemon=True,
-            name="StreamManager-Loop"
+            target=run_loop, daemon=True, name="StreamManager-Loop"
         )
         self._loop_thread.start()
 
@@ -205,10 +217,10 @@ class StreamManager:
     async def _background_loop(self):
         """Background loop that keeps the event loop alive"""
         logger.info("StreamManager background loop started")
-        
+
         # Initialize persistent COT service after loop starts
         await self._initialize_persistent_cot_service()
-        
+
         try:
             while not self._shutdown_event.is_set():
                 await asyncio.sleep(5)  # Check every 5 seconds
@@ -238,9 +250,11 @@ class StreamManager:
                     health = worker.get_health_status()
 
                     # Check if worker is unhealthy
-                    if (not health['running'] or
-                            (health['task_done'] and not health['task_cancelled']) or
-                            health['consecutive_errors'] >= 3):
+                    if (
+                        not health["running"]
+                        or (health["task_done"] and not health["task_cancelled"])
+                        or health["consecutive_errors"] >= 3
+                    ):
                         unhealthy_workers.append((stream_id, health))
 
                 if unhealthy_workers:
@@ -275,10 +289,10 @@ class StreamManager:
                 worker = self.workers[stream_id]
                 health = worker.get_health_status()
 
-                if health['running'] and health['startup_complete']:
+                if health["running"] and health["startup_complete"]:
                     logger.info(f"Stream {stream_id} is already running")
                     return True
-                elif health['running'] and not health['startup_complete']:
+                elif health["running"] and not health["startup_complete"]:
                     logger.warning(f"Stream {stream_id} is currently starting up")
                     return False
                 else:
@@ -287,7 +301,9 @@ class StreamManager:
                     try:
                         await asyncio.wait_for(worker.stop(), timeout=15)
                     except asyncio.TimeoutError:
-                        logger.error(f"Timeout cleaning up worker for stream {stream_id}")
+                        logger.error(
+                            f"Timeout cleaning up worker for stream {stream_id}"
+                        )
                     del self.workers[stream_id]
 
             # Get fresh stream data from database
@@ -296,7 +312,8 @@ class StreamManager:
                 stream = await asyncio.wait_for(
                     asyncio.get_event_loop().run_in_executor(
                         None, self.db_manager.get_stream, stream_id
-                    ), timeout=15
+                    ),
+                    timeout=15,
                 )
             except asyncio.TimeoutError:
                 logger.error(f"Timeout fetching stream {stream_id} from database")
@@ -327,7 +344,9 @@ class StreamManager:
                 try:
                     await asyncio.wait_for(worker.stop(), timeout=15)
                 except Exception as cleanup_error:
-                    logger.error(f"Error stopping worker for stream {stream_id} after timeout: {cleanup_error}")
+                    logger.error(
+                        f"Error stopping worker for stream {stream_id} after timeout: {cleanup_error}"
+                    )
                 return False
 
             if success:
@@ -336,7 +355,7 @@ class StreamManager:
                 logger.debug(
                     f"Stream {stream_id} started successfully, persistent worker already ensured by StreamWorker"
                 )
-                
+
                 self.workers[stream_id] = worker
                 logger.debug(f"Successfully started stream {stream_id}")
             else:
@@ -354,10 +373,14 @@ class StreamManager:
             logger.error(f"Stream {stream_id} configuration error: {e}")
             return False
         except (OSError, RuntimeError) as e:
-            logger.error(f"System error starting stream {stream_id}: {e}", exc_info=True)
+            logger.error(
+                f"System error starting stream {stream_id}: {e}", exc_info=True
+            )
             return False
         except Exception as e:
-            logger.error(f"Unexpected error starting stream {stream_id}: {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error starting stream {stream_id}: {e}", exc_info=True
+            )
             return False
 
     async def stop_stream(self, stream_id: int, skip_db_update=False) -> bool:
@@ -368,7 +391,9 @@ class StreamManager:
                 return True
 
             worker = self.workers[stream_id]
-            await asyncio.wait_for(worker.stop(skip_db_update=skip_db_update), timeout=20)
+            await asyncio.wait_for(
+                worker.stop(skip_db_update=skip_db_update), timeout=20
+            )
             del self.workers[stream_id]
 
             logger.info(f"Successfully stopped stream {stream_id}")
@@ -378,10 +403,14 @@ class StreamManager:
             logger.error(f"Timeout stopping stream {stream_id}: {e}")
             return False
         except (OSError, RuntimeError) as e:
-            logger.error(f"System error stopping stream {stream_id}: {e}", exc_info=True)
+            logger.error(
+                f"System error stopping stream {stream_id}: {e}", exc_info=True
+            )
             return False
         except Exception as e:
-            logger.error(f"Unexpected error stopping stream {stream_id}: {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error stopping stream {stream_id}: {e}", exc_info=True
+            )
             return False
 
     async def restart_stream(self, stream_id: int) -> bool:
@@ -426,12 +455,16 @@ class StreamManager:
             # If not skipping database updates, and we have failures,
             # try to update database status for failed streams
             if not skip_db_update and failed_stops:
-                logger.warning(f"Attempting database cleanup for {len(failed_stops)} failed stops")
+                logger.warning(
+                    f"Attempting database cleanup for {len(failed_stops)} failed stops"
+                )
                 await self._cleanup_failed_stream_stops(failed_stops)
 
         logger.info("All streams stop operations completed")
 
-    async def _stop_stream_with_flag(self, stream_id: int, skip_db_update: bool) -> bool:
+    async def _stop_stream_with_flag(
+        self, stream_id: int, skip_db_update: bool
+    ) -> bool:
         """Stop a specific stream with optional database update skip and enhanced error handling"""
         try:
             if stream_id not in self.workers:
@@ -443,26 +476,31 @@ class StreamManager:
                 return True
 
             worker = self.workers[stream_id]
-            stream_name = getattr(worker.stream, 'name', f'Stream-{stream_id}')
+            stream_name = getattr(worker.stream, "name", f"Stream-{stream_id}")
 
             logger.info(f"Stopping worker for stream {stream_id} ({stream_name})")
 
             # Stop the worker with timeout and error handling
             try:
                 await asyncio.wait_for(
-                    worker.stop(skip_db_update=skip_db_update),
-                    timeout=30.0
+                    worker.stop(skip_db_update=skip_db_update), timeout=30.0
                 )
             except asyncio.TimeoutError:
-                logger.error(f"Timeout stopping worker for stream {stream_id}, forcing cleanup")
+                logger.error(
+                    f"Timeout stopping worker for stream {stream_id}, forcing cleanup"
+                )
                 # Force cleanup even on timeout
                 if not skip_db_update:
-                    await self._force_stream_cleanup_in_db(stream_id, "Forced stop due to timeout")
+                    await self._force_stream_cleanup_in_db(
+                        stream_id, "Forced stop due to timeout"
+                    )
             except Exception as e:
                 logger.error(f"Error stopping worker for stream {stream_id}: {e}")
                 # Still try to update database even if worker stop failed
                 if not skip_db_update:
-                    await self._force_stream_cleanup_in_db(stream_id, f"Worker stop error: {str(e)}")
+                    await self._force_stream_cleanup_in_db(
+                        stream_id, f"Worker stop error: {str(e)}"
+                    )
                 raise
 
             # Remove from workers dictionary
@@ -472,14 +510,21 @@ class StreamManager:
             return True
 
         except Exception as e:
-            logger.error(f"Error in _stop_stream_with_flag for stream {stream_id}: {e}", exc_info=True)
+            logger.error(
+                f"Error in _stop_stream_with_flag for stream {stream_id}: {e}",
+                exc_info=True,
+            )
 
             # Attempt cleanup even on exception if not skipping database updates
             if not skip_db_update:
                 try:
-                    await self._force_stream_cleanup_in_db(stream_id, f"Exception during stop: {str(e)}")
+                    await self._force_stream_cleanup_in_db(
+                        stream_id, f"Exception during stop: {str(e)}"
+                    )
                 except Exception as cleanup_error:
-                    logger.error(f"Failed to cleanup stream {stream_id} in database: {cleanup_error}")
+                    logger.error(
+                        f"Failed to cleanup stream {stream_id} in database: {cleanup_error}"
+                    )
 
             return False
 
@@ -493,13 +538,17 @@ class StreamManager:
                 False,  # is_active = False
                 None,  # last_error = None (clear any previous error)
                 None,  # messages_sent = None
-                datetime.now(timezone.utc)  # last_poll_time
+                datetime.now(timezone.utc),  # last_poll_time
             )
 
             if success:
-                logger.info(f"Successfully updated database status for stream {stream_id} to stopped")
+                logger.info(
+                    f"Successfully updated database status for stream {stream_id} to stopped"
+                )
             else:
-                logger.warning(f"Failed to update database status for stream {stream_id}")
+                logger.warning(
+                    f"Failed to update database status for stream {stream_id}"
+                )
 
         except Exception as e:
             logger.error(f"Error ensuring stream {stream_id} stopped in database: {e}")
@@ -514,27 +563,32 @@ class StreamManager:
                 False,  # is_active = False
                 error_message,  # last_error
                 None,  # messages_sent = None
-                datetime.now(timezone.utc)  # last_poll_time
+                datetime.now(timezone.utc),  # last_poll_time
             )
 
             if success:
-                logger.info(f"Successfully force-cleaned database status for stream {stream_id}")
+                logger.info(
+                    f"Successfully force-cleaned database status for stream {stream_id}"
+                )
             else:
-                logger.error(f"Failed to force-clean database status for stream {stream_id}")
+                logger.error(
+                    f"Failed to force-clean database status for stream {stream_id}"
+                )
 
         except Exception as e:
             logger.error(f"Error in force cleanup for stream {stream_id}: {e}")
 
     async def _cleanup_failed_stream_stops(self, failed_stream_ids: List[int]):
         """Cleanup database status for streams that failed to stop properly"""
-        logger.info(f"Cleaning up database status for {len(failed_stream_ids)} failed stream stops")
+        logger.info(
+            f"Cleaning up database status for {len(failed_stream_ids)} failed stream stops"
+        )
 
         cleanup_tasks = []
         for stream_id in failed_stream_ids:
             cleanup_tasks.append(
                 self._force_stream_cleanup_in_db(
-                    stream_id,
-                    "Stream stop operation failed, marked inactive"
+                    stream_id, "Stream stop operation failed, marked inactive"
                 )
             )
 
@@ -545,23 +599,29 @@ class StreamManager:
             for i, result in enumerate(results):
                 stream_id = failed_stream_ids[i]
                 if isinstance(result, Exception):
-                    logger.error(f"Failed to cleanup stream {stream_id} in database: {result}")
+                    logger.error(
+                        f"Failed to cleanup stream {stream_id} in database: {result}"
+                    )
 
     def _cleanup_persistent_cot_service(self):
         """Clean up persistent COT service during shutdown"""
         try:
-            if hasattr(self, 'cot_service') and self.cot_service:
+            if hasattr(self, "cot_service") and self.cot_service:
                 # Check if the service has the method before calling it
-                if hasattr(self.cot_service, 'get_running_workers'):
+                if hasattr(self.cot_service, "get_running_workers"):
                     running_workers = self.cot_service.get_running_workers()
                     if running_workers:
-                        logger.info(f"Stopping {len(running_workers)} persistent COT workers")
+                        logger.info(
+                            f"Stopping {len(running_workers)} persistent COT workers"
+                        )
                         for worker in running_workers:
-                            if hasattr(worker, 'stop'):
+                            if hasattr(worker, "stop"):
                                 worker.stop()
                 else:
                     # Fallback: just log that we're cleaning up
-                    logger.info("Cleaning up persistent COT service (no running workers method)")
+                    logger.info(
+                        "Cleaning up persistent COT service (no running workers method)"
+                    )
 
         except Exception as e:
             logger.error(f"Error cleaning up persistent COT service: {e}")
@@ -576,17 +636,23 @@ class StreamManager:
             health_status = worker.get_health_status()
 
             return {
-                'running': worker.running,
-                'startup_complete': worker.startup_complete,
-                'stream_name': worker.stream.name,
-                'plugin_type': worker.stream.plugin_type,
-                'last_poll': worker.stream.last_poll.isoformat() if worker.stream.last_poll else None,
-                'last_error': worker.stream.last_error,
-                'tak_server': worker.stream.tak_server.name if worker.stream.tak_server else None,
-                'consecutive_errors': health_status.get('consecutive_errors', 0),
-                'last_successful_poll': health_status.get('last_successful_poll'),
-                'has_tak_connection': health_status.get('has_tak_connection', False),
-                'worker_health': health_status
+                "running": worker.running,
+                "startup_complete": worker.startup_complete,
+                "stream_name": worker.stream.name,
+                "plugin_type": worker.stream.plugin_type,
+                "last_poll": (
+                    worker.stream.last_poll.isoformat()
+                    if worker.stream.last_poll
+                    else None
+                ),
+                "last_error": worker.stream.last_error,
+                "tak_server": (
+                    worker.stream.tak_server.name if worker.stream.tak_server else None
+                ),
+                "consecutive_errors": health_status.get("consecutive_errors", 0),
+                "last_successful_poll": health_status.get("last_successful_poll"),
+                "has_tak_connection": health_status.get("has_tak_connection", False),
+                "worker_health": health_status,
             }
         else:
             # Stream not in workers, check database for last known status
@@ -595,31 +661,37 @@ class StreamManager:
                 stream = self.db_manager.get_stream_with_relationships(stream_id)
                 if stream:
                     return {
-                        'running': False,
-                        'startup_complete': False,
-                        'stream_name': stream.name,
-                        'plugin_type': stream.plugin_type,
-                        'last_poll': stream.last_poll.isoformat() if stream.last_poll else None,
-                        'last_error': stream.last_error,
-                        'tak_server': stream.tak_server.name if stream.tak_server else None,
-                        'is_active_in_db': stream.is_active,
-                        'consecutive_errors': 0,
-                        'last_successful_poll': None,
-                        'has_tak_connection': False,
-                        'worker_health': None
+                        "running": False,
+                        "startup_complete": False,
+                        "stream_name": stream.name,
+                        "plugin_type": stream.plugin_type,
+                        "last_poll": (
+                            stream.last_poll.isoformat() if stream.last_poll else None
+                        ),
+                        "last_error": stream.last_error,
+                        "tak_server": (
+                            stream.tak_server.name if stream.tak_server else None
+                        ),
+                        "is_active_in_db": stream.is_active,
+                        "consecutive_errors": 0,
+                        "last_successful_poll": None,
+                        "has_tak_connection": False,
+                        "worker_health": None,
                     }
                 else:
                     return {
-                        'running': False,
-                        'startup_complete': False,
-                        'error': 'Stream not found in database'
+                        "running": False,
+                        "startup_complete": False,
+                        "error": "Stream not found in database",
                     }
             except Exception as e:
-                logger.error(f"Error getting stream {stream_id} status from database: {e}")
+                logger.error(
+                    f"Error getting stream {stream_id} status from database: {e}"
+                )
                 return {
-                    'running': False,
-                    'startup_complete': False,
-                    'error': f'Database error: {str(e)}'
+                    "running": False,
+                    "startup_complete": False,
+                    "error": f"Database error: {str(e)}",
                 }
 
     def get_all_stream_status(self) -> Dict[int, Dict]:
@@ -637,24 +709,28 @@ class StreamManager:
                 if stream.id not in status:
                     # Stream is marked active in DB but not running
                     status[stream.id] = {
-                        'running': False,
-                        'startup_complete': False,
-                        'stream_name': stream.name,
-                        'plugin_type': stream.plugin_type,
-                        'last_poll': stream.last_poll.isoformat() if stream.last_poll else None,
-                        'last_error': stream.last_error,
-                        'tak_server': stream.tak_server.name if stream.tak_server else None,
-                        'is_active_in_db': True,
-                        'discrepancy': 'Marked active in DB but not running',
-                        'consecutive_errors': 0,
-                        'last_successful_poll': None,
-                        'has_tak_connection': False,
-                        'worker_health': None
+                        "running": False,
+                        "startup_complete": False,
+                        "stream_name": stream.name,
+                        "plugin_type": stream.plugin_type,
+                        "last_poll": (
+                            stream.last_poll.isoformat() if stream.last_poll else None
+                        ),
+                        "last_error": stream.last_error,
+                        "tak_server": (
+                            stream.tak_server.name if stream.tak_server else None
+                        ),
+                        "is_active_in_db": True,
+                        "discrepancy": "Marked active in DB but not running",
+                        "consecutive_errors": 0,
+                        "last_successful_poll": None,
+                        "has_tak_connection": False,
+                        "worker_health": None,
                     }
         except Exception as e:
             logger.error(f"Error getting active streams from database: {e}")
             # Add error info to status
-            status['_database_error'] = str(e)
+            status["_database_error"] = str(e)
 
         return status
 
@@ -671,7 +747,9 @@ class StreamManager:
 
             for stream in active_streams:
                 if stream.tak_server:
-                    key = getattr(stream.tak_server, 'id', None) or getattr(stream.tak_server, 'name', None)
+                    key = getattr(stream.tak_server, "id", None) or getattr(
+                        stream.tak_server, "name", None
+                    )
                     if key:
                         required_tak_servers[key] = stream.tak_server
 
@@ -682,7 +760,9 @@ class StreamManager:
             running_tak_server_keys = set()
             if running_workers:
                 for tak_server in running_workers.keys():
-                    key = getattr(tak_server, 'id', None) or getattr(tak_server, 'name', None)
+                    key = getattr(tak_server, "id", None) or getattr(
+                        tak_server, "name", None
+                    )
                     if key:
                         running_tak_server_keys.add(key)
 
@@ -692,7 +772,9 @@ class StreamManager:
 
             for key in missing_keys:
                 tak_server = required_tak_servers[key]
-                logger.info(f"Starting missing persistent worker for TAK server: {tak_server.name}")
+                logger.info(
+                    f"Starting missing persistent worker for TAK server: {tak_server.name}"
+                )
                 cot_service.start_worker(tak_server)
 
             if missing_keys:
@@ -713,9 +795,11 @@ class StreamManager:
             health_status = worker.get_health_status()
 
             # Check if worker is unhealthy
-            if (not health_status['running'] or
-                    (health_status['task_done'] and not health_status['task_cancelled']) or
-                    health_status['consecutive_errors'] >= 3):
+            if (
+                not health_status["running"]
+                or (health_status["task_done"] and not health_status["task_cancelled"])
+                or health_status["consecutive_errors"] >= 3
+            ):
                 unhealthy_streams.append(stream_id)
                 logger.warning(f"Stream {stream_id} appears unhealthy: {health_status}")
 
@@ -748,11 +832,15 @@ class StreamManager:
                             True,  # is_active = True
                             None,  # clear any error
                             None,  # messages_sent
-                            datetime.now(timezone.utc)  # last_poll_time
+                            datetime.now(timezone.utc),  # last_poll_time
                         )
-                        logger.info(f"Updated database to mark stream {stream_id} as active")
+                        logger.info(
+                            f"Updated database to mark stream {stream_id} as active"
+                        )
                     except Exception as e:
-                        logger.error(f"Failed to update database for stream {stream_id}: {e}")
+                        logger.error(
+                            f"Failed to update database for stream {stream_id}: {e}"
+                        )
 
         except Exception as e:
             logger.error(f"Error checking database synchronization: {e}")
@@ -764,23 +852,31 @@ class StreamManager:
             restart_tasks.append(self.restart_stream(stream_id))
 
         if restart_tasks:
-            restart_results = await asyncio.gather(*restart_tasks, return_exceptions=True)
+            restart_results = await asyncio.gather(
+                *restart_tasks, return_exceptions=True
+            )
             for i, result in enumerate(restart_results):
                 stream_id = unhealthy_streams[i]
                 if isinstance(result, Exception):
                     logger.error(f"Failed to restart stream {stream_id}: {result}")
                 elif not result:
-                    logger.error(f"Failed to restart stream {stream_id} (returned False)")
+                    logger.error(
+                        f"Failed to restart stream {stream_id} (returned False)"
+                    )
                 else:
                     logger.info(f"Successfully restarted stream {stream_id}")
 
         # Handle database synchronization issues
         for stream_id in database_sync_issues:
-            logger.info(f"Attempting to start stream {stream_id} (active in DB but not running)")
+            logger.info(
+                f"Attempting to start stream {stream_id} (active in DB but not running)"
+            )
             try:
                 success = await self.start_stream(stream_id)
                 if not success:
-                    logger.warning(f"Failed to start stream {stream_id}, marking inactive in DB")
+                    logger.warning(
+                        f"Failed to start stream {stream_id}, marking inactive in DB"
+                    )
                     await asyncio.get_event_loop().run_in_executor(
                         None,
                         self.db_manager.update_stream_status,
@@ -788,10 +884,12 @@ class StreamManager:
                         False,  # is_active = False
                         "Failed to start during health check",  # last_error
                         None,  # messages_sent
-                        datetime.now(timezone.utc)  # last_poll_time
+                        datetime.now(timezone.utc),  # last_poll_time
                     )
             except Exception as e:
-                logger.error(f"Error handling database sync issue for stream {stream_id}: {e}")
+                logger.error(
+                    f"Error handling database sync issue for stream {stream_id}: {e}"
+                )
         try:
             logger.debug("Checking persistent COT service health")
 
@@ -801,12 +899,19 @@ class StreamManager:
             # Check worker health status
             running_workers = cot_service.get_running_workers()
             if running_workers:
-                logger.debug(f"Persistent COT service has {len(running_workers)} running workers")
+                logger.debug(
+                    f"Persistent COT service has {len(running_workers)} running workers"
+                )
 
                 # Optional: Check individual worker health
                 for tak_server, worker_info in running_workers.items():
-                    if hasattr(worker_info, 'is_healthy') and not worker_info.is_healthy():
-                        logger.warning(f"Persistent worker for {tak_server.name} appears unhealthy")
+                    if (
+                        hasattr(worker_info, "is_healthy")
+                        and not worker_info.is_healthy()
+                    ):
+                        logger.warning(
+                            f"Persistent worker for {tak_server.name} appears unhealthy"
+                        )
                         # Optionally restart the worker
                         cot_service.restart_worker(tak_server)
 
@@ -841,7 +946,9 @@ class StreamManager:
             self._cleanup_persistent_cot_service()
             logger.info("Persistent COT service cleaned up during shutdown")
         except Exception as e:
-            logger.error(f"Error cleaning up persistent COT service during shutdown: {e}")
+            logger.error(
+                f"Error cleaning up persistent COT service during shutdown: {e}"
+            )
 
         # Cancel health check task
         if self._health_check_task and not self._health_check_task.done():
@@ -873,7 +980,9 @@ class StreamManager:
                 if stream_id in self.workers:
                     worker = self.workers[stream_id]
                     if worker.running and worker.startup_complete:
-                        logger.info(f"Stream {stream_id} is already running (sync check)")
+                        logger.info(
+                            f"Stream {stream_id} is already running (sync check)"
+                        )
                         return True
 
                 # Validate stream exists in database before attempting to start
@@ -884,14 +993,18 @@ class StreamManager:
                         return False
 
                     if not stream.is_active:
-                        logger.warning(f"Stream {stream_id} is not marked as active in database")
+                        logger.warning(
+                            f"Stream {stream_id} is not marked as active in database"
+                        )
                         # Could optionally activate it here or return False
 
                 except Exception as e:
                     logger.error(f"Database error checking stream {stream_id}: {e}")
                     return False
 
-                return self._run_coroutine_threadsafe(self.start_stream(stream_id), timeout=120)
+                return self._run_coroutine_threadsafe(
+                    self.start_stream(stream_id), timeout=120
+                )
 
             except Exception as e:
                 logger.error(f"Error in start_stream_sync for stream {stream_id}: {e}")
@@ -901,7 +1014,9 @@ class StreamManager:
         """Thread-safe wrapper for stopping a stream from Flask routes"""
         with self._manager_lock:
             try:
-                return self._run_coroutine_threadsafe(self.stop_stream(stream_id), timeout=60)
+                return self._run_coroutine_threadsafe(
+                    self.stop_stream(stream_id), timeout=60
+                )
             except Exception as e:
                 logger.error(f"Error in stop_stream_sync for stream {stream_id}: {e}")
                 return False
@@ -914,15 +1029,23 @@ class StreamManager:
                 try:
                     stream = self.db_manager.get_stream(stream_id)
                     if not stream:
-                        logger.error(f"Cannot restart stream {stream_id}: not found in database")
+                        logger.error(
+                            f"Cannot restart stream {stream_id}: not found in database"
+                        )
                         return False
                 except Exception as e:
-                    logger.error(f"Database error checking stream {stream_id} for restart: {e}")
+                    logger.error(
+                        f"Database error checking stream {stream_id} for restart: {e}"
+                    )
                     return False
 
-                return self._run_coroutine_threadsafe(self.restart_stream(stream_id), timeout=180)
+                return self._run_coroutine_threadsafe(
+                    self.restart_stream(stream_id), timeout=180
+                )
             except Exception as e:
-                logger.error(f"Error in restart_stream_sync for stream {stream_id}: {e}")
+                logger.error(
+                    f"Error in restart_stream_sync for stream {stream_id}: {e}"
+                )
                 return False
 
     @property
@@ -934,18 +1057,21 @@ def get_stream_manager(app_context_factory=None):
     """Get the stream manager instance - check Flask app context first, then fall back to global"""
     try:
         from flask import current_app, has_app_context
-        if has_app_context() and hasattr(current_app, 'stream_manager'):
+
+        if has_app_context() and hasattr(current_app, "stream_manager"):
             return current_app.stream_manager
     except (ImportError, RuntimeError):
         # Flask not available or no app context
         pass
-    
+
     # Fallback to global instance for CLI/standalone use
     global _stream_manager_instance
 
     with _stream_manager_lock:
         if _stream_manager_instance is None:
-            _stream_manager_instance = StreamManager(app_context_factory=app_context_factory)
+            _stream_manager_instance = StreamManager(
+                app_context_factory=app_context_factory
+            )
         return _stream_manager_instance
 
 

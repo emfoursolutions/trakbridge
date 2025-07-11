@@ -70,8 +70,8 @@ class SpotPlugin(BaseGPSPlugin):
                         "Go to 'Shared Page' settings in your account",
                         "Enable the shared page for your SPOT device",
                         "Copy the Feed ID from the shared page URL",
-                        "Set a password if you want to protect your feed (optional)"
-                    ]
+                        "Set a password if you want to protect your feed (optional)",
+                    ],
                 },
                 {
                     "title": "Important Notes",
@@ -79,9 +79,9 @@ class SpotPlugin(BaseGPSPlugin):
                         "Feed updates depend on your SPOT device tracking settings",
                         "Connection may take 15-30 seconds to establish",
                         "Maximum 200 location points can be fetched per request",
-                        "Feed password is only required if you've set one in your SPOT account"
-                    ]
-                }
+                        "Feed password is only required if you've set one in your SPOT account",
+                    ],
+                },
             ],
             "config_fields": [
                 PluginConfigField(
@@ -90,7 +90,7 @@ class SpotPlugin(BaseGPSPlugin):
                     field_type="text",
                     required=True,
                     placeholder="0abcdef1234567890abcdef123456789",
-                    help_text="Your SPOT device feed ID from your SPOT account shared page"
+                    help_text="Your SPOT device feed ID from your SPOT account shared page",
                 ),
                 PluginConfigField(
                     name="feed_password",
@@ -98,7 +98,7 @@ class SpotPlugin(BaseGPSPlugin):
                     field_type="password",
                     required=False,
                     sensitive=True,
-                    help_text="Password if your SPOT feed is password protected (leave blank if not protected)"
+                    help_text="Password if your SPOT feed is password protected (leave blank if not protected)",
                 ),
                 PluginConfigField(
                     name="max_results",
@@ -108,12 +108,14 @@ class SpotPlugin(BaseGPSPlugin):
                     default_value=50,
                     min_value=1,
                     max_value=200,
-                    help_text="Maximum number of location points to fetch per request"
-                )
-            ]
+                    help_text="Maximum number of location points to fetch per request",
+                ),
+            ],
         }
 
-    async def fetch_locations(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
+    async def fetch_locations(
+        self, session: aiohttp.ClientSession
+    ) -> List[Dict[str, Any]]:
         """
         Fetch location data from SPOT API
 
@@ -150,59 +152,85 @@ class SpotPlugin(BaseGPSPlugin):
                         # Check if this was due to a JSON error (like feed not found)
                         if "response" in data and "errors" in data.get("response", {}):
                             # Extract the actual error code from the response
-                            errors = data.get("response", {}).get("errors", {}).get("error", {})
+                            errors = (
+                                data.get("response", {})
+                                .get("errors", {})
+                                .get("error", {})
+                            )
                             if isinstance(errors, dict):
-                                error_code = errors.get('code', 'Unknown')
-                                error_text = errors.get('text', 'Unknown error')
-                                
+                                error_code = errors.get("code", "Unknown")
+                                error_text = errors.get("text", "Unknown error")
+
                                 # Handle E-0195 as success (no devices found)
-                                if error_code == 'E-0195':
+                                if error_code == "E-0195":
                                     logger.info(
                                         f"SPOT API: Authentication successful but no devices found ({error_text})"
                                     )
                                     return [
-                                        {"_error": "no_devices", "_error_message":
-                                            f"SPOT API error: {error_code} - {error_text}"}]
-                                
+                                        {
+                                            "_error": "no_devices",
+                                            "_error_message": f"SPOT API error: {error_code} - {error_text}",
+                                        }
+                                    ]
+
                                 # Map other error codes
-                                mapped_error_code = self._map_spot_error_code(error_code)
+                                mapped_error_code = self._map_spot_error_code(
+                                    error_code
+                                )
                                 return [
-                                    {"_error": mapped_error_code, "_error_message":
-                                        f"SPOT API error: {error_code} - {error_text}"}]
+                                    {
+                                        "_error": mapped_error_code,
+                                        "_error_message": f"SPOT API error: {error_code} - {error_text}",
+                                    }
+                                ]
                             else:
                                 return [
-                                    {"_error": "json_error", "_error_message":
-                                        "SPOT API returned error in response"}]
+                                    {
+                                        "_error": "json_error",
+                                        "_error_message": "SPOT API returned error in response",
+                                    }
+                                ]
                         else:
                             logger.info("No messages found from SPOT")
                             return []
 
                     # Find the newest message by timestamp
-                    newest_message = max(messages,
-                                         key=lambda msg: datetime.fromisoformat(msg["dateTime"].replace('Z', '+00:00')))
+                    newest_message = max(
+                        messages,
+                        key=lambda msg: datetime.fromisoformat(
+                            msg["dateTime"].replace("Z", "+00:00")
+                        ),
+                    )
 
                     # Convert to standardized location format
                     location = {
                         "uid": f"{newest_message.get('messengerName', f'SPOT-{feed_id[:8]}')}-{newest_message['id']}",
-                        "name": newest_message.get("messengerName", f"SPOT-{feed_id[:8]}"),
+                        "name": newest_message.get(
+                            "messengerName", f"SPOT-{feed_id[:8]}"
+                        ),
                         "lat": float(newest_message["latitude"]),
                         "lon": float(newest_message["longitude"]),
-                        "timestamp": datetime.fromisoformat(newest_message["dateTime"].replace('Z', '+00:00')),
+                        "timestamp": datetime.fromisoformat(
+                            newest_message["dateTime"].replace("Z", "+00:00")
+                        ),
                         "description": self._build_description(newest_message),
                         "additional_data": {
                             "source": "spot",
                             "message_type": newest_message.get("messageType"),
                             "battery_state": newest_message.get("batteryState"),
-                            "raw_message": newest_message
-                        }
+                            "raw_message": newest_message,
+                        },
                     }
 
                     logger.info(
-                        f"Successfully fetched newest location from SPOT (timestamp: {location['timestamp']})")
+                        f"Successfully fetched newest location from SPOT (timestamp: {location['timestamp']})"
+                    )
                     return [location]
 
                 elif response.status == 401:
-                    logger.error("Unauthorized access to SPOT feed. Check feed password.")
+                    logger.error(
+                        "Unauthorized access to SPOT feed. Check feed password."
+                    )
                     return [{"_error": "401", "_error_message": "Unauthorized access"}]
                 elif response.status == 404:
                     logger.error("SPOT feed not found. Check feed ID.")
@@ -211,7 +239,12 @@ class SpotPlugin(BaseGPSPlugin):
                     logger.error(f"Error fetching SPOT data: HTTP {response.status}")
                     error_text = await response.text()
                     logger.debug(f"Response: {error_text}")
-                    return [{"_error": str(response.status), "_error_message": f"HTTP {response.status} error"}]
+                    return [
+                        {
+                            "_error": str(response.status),
+                            "_error_message": f"HTTP {response.status} error",
+                        }
+                    ]
 
         except Exception as e:
             logger.error(f"Error fetching SPOT locations: {e}")
@@ -221,24 +254,24 @@ class SpotPlugin(BaseGPSPlugin):
     def _map_spot_error_code(spot_error_code: str) -> str:
         """
         Map SPOT API error codes to standard error codes used by the base plugin
-        
+
         SPOT API Error Codes:
         - E-0195: Authentication successful but no devices found -> treated as success (no mapping)
-        - E-0173: Authentication failed, incorrect password -> maps to '401'  
+        - E-0173: Authentication failed, incorrect password -> maps to '401'
         - E-0160: Feed ID not found -> maps to '404'
-        
+
         Args:
             spot_error_code: SPOT API error code (e.g., 'E-0195', 'E-0173', 'E-0160')
-            
+
         Returns:
             Standard error code that the base plugin understands ('401', '404', or 'json_error')
         """
         error_mapping = {
-            'E-0173': '401',  # Authentication failed, incorrect password
-            'E-0160': '404',  # Feed ID not found
+            "E-0173": "401",  # Authentication failed, incorrect password
+            "E-0160": "404",  # Feed ID not found
         }
-        
-        return error_mapping.get(spot_error_code, 'json_error')
+
+        return error_mapping.get(spot_error_code, "json_error")
 
     def _parse_spot_response(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
@@ -258,24 +291,40 @@ class SpotPlugin(BaseGPSPlugin):
                 errors = feed_response["errors"]["error"]
                 if isinstance(errors, list):
                     for error in errors:
-                        error_code = error.get('code', 'Unknown')
-                        error_text = error.get('text', 'Unknown error')
-                        error_desc = error.get('description', 'Unknown error')
-                        logger.error(f"SPOT API error {error_code}: {error_text} - {error_desc}")
+                        error_code = error.get("code", "Unknown")
+                        error_text = error.get("text", "Unknown error")
+                        error_desc = error.get("description", "Unknown error")
+                        logger.error(
+                            f"SPOT API error {error_code}: {error_text} - {error_desc}"
+                        )
                 else:
-                    error_code = errors.get('code', 'Unknown')
-                    error_text = errors.get('text', 'Unknown error')
-                    error_desc = errors.get('description', 'Unknown error')
-                    logger.error(f"SPOT API error {error_code}: {error_text} - {error_desc}")
-                
+                    error_code = errors.get("code", "Unknown")
+                    error_text = errors.get("text", "Unknown error")
+                    error_desc = errors.get("description", "Unknown error")
+                    logger.error(
+                        f"SPOT API error {error_code}: {error_text} - {error_desc}"
+                    )
+
                 # Handle E-0195 as success (no devices found)
-                if error_code == 'E-0195':
-                    logger.info(f"SPOT API: Authentication successful but no devices found ({error_text})")
-                    return [{"_error": "no_devices", "_error_message": f"SPOT API error: {error_code} - {error_text}"}]
-                
+                if error_code == "E-0195":
+                    logger.info(
+                        f"SPOT API: Authentication successful but no devices found ({error_text})"
+                    )
+                    return [
+                        {
+                            "_error": "no_devices",
+                            "_error_message": f"SPOT API error: {error_code} - {error_text}",
+                        }
+                    ]
+
                 # Map other error codes
                 mapped_error_code = self._map_spot_error_code(error_code)
-                return [{"_error": mapped_error_code, "_error_message": f"SPOT API error: {error_code} - {error_text}"}]
+                return [
+                    {
+                        "_error": mapped_error_code,
+                        "_error_message": f"SPOT API error: {error_code} - {error_text}",
+                    }
+                ]
 
             messages_container = feed_response.get("messages", {})
             messages = messages_container.get("message", [])

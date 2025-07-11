@@ -47,7 +47,10 @@ class DatabaseManager:
 
         # Add debug logging
         import traceback
-        logger.info(f"DatabaseManager created with factory: {app_context_factory is not None}")
+
+        logger.info(
+            f"DatabaseManager created with factory: {app_context_factory is not None}"
+        )
         if app_context_factory is None:
             logger.warning("DatabaseManager created WITHOUT app_context_factory!")
             logger.warning("Stack trace:")
@@ -83,7 +86,9 @@ class DatabaseManager:
                         return result
                     except SQLAlchemyError as e:
                         db.session.rollback()
-                        logger.error(f"Database error (attempt {attempt + 1}/{max_retries}): {e}")
+                        logger.error(
+                            f"Database error (attempt {attempt + 1}/{max_retries}): {e}"
+                        )
                         if attempt == max_retries - 1:
                             raise
                         time.sleep(retry_delay * (attempt + 1))
@@ -94,7 +99,9 @@ class DatabaseManager:
 
             except Exception as e:
                 if attempt == max_retries - 1:
-                    logger.error(f"Database operation failed after {max_retries} attempts: {e}")
+                    logger.error(
+                        f"Database operation failed after {max_retries} attempts: {e}"
+                    )
                     return None
                 time.sleep(retry_delay * (attempt + 1))
 
@@ -141,7 +148,7 @@ class DatabaseManager:
         stream_copy.cot_type = stream.cot_type
         stream_copy.cot_stale_time = stream.cot_stale_time
         stream_copy.plugin_config = stream.plugin_config
-        stream_copy.total_messages_sent = getattr(stream, 'total_messages_sent', 0)
+        stream_copy.total_messages_sent = getattr(stream, "total_messages_sent", 0)
 
         # Copy TAK server data if it exists
         if stream.tak_server:
@@ -155,11 +162,11 @@ class DatabaseManager:
             tak_copy.cert_p12 = stream.tak_server.cert_p12
             tak_copy.cert_password = stream.tak_server.get_cert_password()
             tak_copy.has_cert_password = stream.tak_server.has_cert_password
-            
+
             # Add method to get cert password (for compatibility)
             def get_cert_password():
                 return tak_copy.cert_password
-            
+
             tak_copy.get_cert_password = get_cert_password
             stream_copy.tak_server = tak_copy
         else:
@@ -173,8 +180,14 @@ class DatabaseManager:
 
         return stream_copy
 
-    def update_stream_status(self, stream_id: int, is_active=None, last_error=None,
-                             messages_sent=None, last_poll_time=None):
+    def update_stream_status(
+        self,
+        stream_id: int,
+        is_active=None,
+        last_error=None,
+        messages_sent=None,
+        last_poll_time=None,
+    ):
         """Update stream status with proper error handling"""
 
         from models.stream import Stream
@@ -197,7 +210,10 @@ class DatabaseManager:
                 stream.last_poll = datetime.now(timezone.utc)
 
             if messages_sent is not None:
-                if not hasattr(stream, 'total_messages_sent') or stream.total_messages_sent is None:
+                if (
+                    not hasattr(stream, "total_messages_sent")
+                    or stream.total_messages_sent is None
+                ):
                     stream.total_messages_sent = 0
                 stream.total_messages_sent += messages_sent
 

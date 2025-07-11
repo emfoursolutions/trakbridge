@@ -20,7 +20,7 @@ from .environments import get_config
 logger = logging.getLogger(__name__)
 
 # Get the current environment
-FLASK_ENV = os.environ.get('FLASK_ENV', 'development')
+FLASK_ENV = os.environ.get("FLASK_ENV", "development")
 
 # Create the configuration instance
 try:
@@ -31,7 +31,7 @@ try:
     issues = Config.validate_config()
     if issues:
         logger.warning(f"Configuration issues found: {issues}")
-        if FLASK_ENV == 'production':
+        if FLASK_ENV == "production":
             raise ValueError(f"Configuration validation failed: {issues}")
 
 except Exception as e:
@@ -43,4 +43,4 @@ except Exception as e:
     logger.warning("Using fallback development configuration")
 
 # Export the configuration instance
-__all__ = ['Config']
+__all__ = ["Config"]
