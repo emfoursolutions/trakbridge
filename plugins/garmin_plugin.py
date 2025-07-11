@@ -61,7 +61,7 @@ class GarminPlugin(BaseGPSPlugin):
         return {
             "display_name": "Garmin InReach",
             "description": "Connect to Garmin InReach satellite "
-                           "communicators via KML MapShare feeds",
+            "communicators via KML MapShare feeds",
             "icon": "fas fa-satellite-dish",
             "category": "satellite",
             "help_sections": [
@@ -194,7 +194,7 @@ class GarminPlugin(BaseGPSPlugin):
                 # Always use current time for CoT timestamp, add actual time to remarks
                 cot_timestamp = datetime.now(timezone.utc)
                 if actual_reporting_time:
-                    time_str = actual_reporting_time.strftime('%m/%d/%Y %H:%M:%S UTC')
+                    time_str = actual_reporting_time.strftime("%m/%d/%Y %H:%M:%S UTC")
                     remarks_addition = f"Last Reported: {time_str}"
                 else:
                     remarks_addition = "Reporting time unavailable"

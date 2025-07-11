@@ -434,21 +434,21 @@ class BaseGPSPlugin(ABC):
                             "success": False,
                             "error": "Connection Failed - Unknown Error",
                             "message": "Failed to fetch KML feed. "
-                                       "Check your credentials and feed URL.",
+                            "Check your credentials and feed URL.",
                         }
                     elif error_code == "invalid_url":
                         return {
                             "success": False,
                             "error": "Invalid URL or API End Point",
                             "message": "Invalid KML feed URL. "
-                                       "Check the URL and ensure it's a feed.",
+                            "Check the URL and ensure it's a feed.",
                         }
                     elif error_code == "no_devices":
                         return {
                             "success": False,
                             "error": "No Devices Found",
                             "message": "Successfully connected. "
-                                       "No devices returned.",
+                            "No devices returned.",
                         }
                     else:
                         return {
@@ -463,7 +463,7 @@ class BaseGPSPlugin(ABC):
                         "success": False,
                         "error": "Invalid Credentials or No Devices Found",
                         "message": "No devices found. "
-                                   "This usually indicates authentication or permission issues.",
+                        "This usually indicates authentication or permission issues.",
                     }
 
                 device_names = [loc.get("name", "Unknown") for loc in locations]
