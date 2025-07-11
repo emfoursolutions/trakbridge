@@ -540,9 +540,12 @@ if __name__ == "__main__":
     print("=" * 40)
     print(f"Version: {version_info.get_version()}")
     print(f"Development Version: {version_info.get_development_version()}")
-    print(
-        f"Formatted: {version_info.format_version(include_git=True, include_env=True, include_build_info=True)}"
+    formatted_version = version_info.format_version(
+        include_git=True,
+        include_env=True,
+        include_build_info=True
     )
+    print(f"Formatted: {formatted_version}")
     print(f"Development Build: {version_info.is_development_build()}")
     print(f"Release Build: {is_release_version()}")
 

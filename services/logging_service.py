@@ -111,17 +111,16 @@ def log_startup_banner(app):
             banner_lines.append(f"   Git Commit: {build_info['git_commit']}")
 
         # Add configuration details
-        banner_lines.extend(
-            [
-                "",
-                "  Configuration:",
-                f"   Database: {str(app.config.get('SQLALCHEMY_DATABASE_URI', 'not configured'))[:50]}...",
-                f"   Max Worker Threads: {app.config.get('MAX_WORKER_THREADS', 'not set')}",
-                f"   Max Concurrent Streams: {app.config.get('MAX_CONCURRENT_STREAMS', 'not set')}",
-                f"   Log Level: {app.config.get('LOG_LEVEL', 'not set')}",
-                f"   Log Directory: {app.config.get('LOG_DIR', 'not set')}",
-            ]
-        )
+        db_uri = str(app.config.get('SQLALCHEMY_DATABASE_URI', 'not configured'))
+        banner_lines.extend([
+            "",
+            "  Configuration:",
+            f"   Database: {db_uri[:50]}...",
+            f"   Max Worker Threads: {app.config.get('MAX_WORKER_THREADS', 'not set')}",
+            f"   Max Concurrent Streams: {app.config.get('MAX_CONCURRENT_STREAMS', 'not set')}",
+            f"   Log Level: {app.config.get('LOG_LEVEL', 'not set')}",
+            f"   Log Directory: {app.config.get('LOG_DIR', 'not set')}",
+        ])
 
         # Add timestamp
         banner_lines.extend(

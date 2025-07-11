@@ -98,7 +98,8 @@ class SpotPlugin(BaseGPSPlugin):
                     field_type="password",
                     required=False,
                     sensitive=True,
-                    help_text="Password if your SPOT feed is password protected (leave blank if not protected)",
+                    help_text="Password if your SPOT feed is password protected "
+                              "(leave blank if not protected)",
                 ),
                 PluginConfigField(
                     name="max_results",
@@ -133,7 +134,8 @@ class SpotPlugin(BaseGPSPlugin):
             ssl_context = ssl.create_default_context(cafile=certifi.where())
 
             # Build SPOT API URL
-            url = f"https://api.findmespot.com/spot-main-web/consumer/rest-api/2.0/public/feed/{feed_id}/message.json"
+            base_url = "https://api.findmespot.com/spot-main-web/consumer/rest-api/2.0/public/feed"
+            url = f"{base_url}/{feed_id}/message.json"
 
             params = {}
             if feed_password:
@@ -164,12 +166,15 @@ class SpotPlugin(BaseGPSPlugin):
                                 # Handle E-0195 as success (no devices found)
                                 if error_code == "E-0195":
                                     logger.info(
-                                        f"SPOT API: Authentication successful but no devices found ({error_text})"
+                                        f"SPOT API: Authentication successful "
+                                        f"but no devices found ({error_text})"
                                     )
                                     return [
                                         {
                                             "_error": "no_devices",
-                                            "_error_message": f"SPOT API error: {error_code} - {error_text}",
+                                            "_error_message": (
+                                                f"SPOT API error: {error_code} - {error_text}"
+                                            ),
                                         }
                                     ]
 
@@ -180,7 +185,9 @@ class SpotPlugin(BaseGPSPlugin):
                                 return [
                                     {
                                         "_error": mapped_error_code,
-                                        "_error_message": f"SPOT API error: {error_code} - {error_text}",
+                                        "_error_message": (
+                                            f"SPOT API error: {error_code} - {error_text}"
+                                        ),
                                     }
                                 ]
                             else:
@@ -204,7 +211,10 @@ class SpotPlugin(BaseGPSPlugin):
 
                     # Convert to standardized location format
                     location = {
-                        "uid": f"{newest_message.get('messengerName', f'SPOT-{feed_id[:8]}')}-{newest_message['id']}",
+                        "uid": (
+                            f"{newest_message.get('messengerName', f'SPOT-{feed_id[:8]}')}"
+                            f"-{newest_message['id']}"
+                        ),
                         "name": newest_message.get(
                             "messengerName", f"SPOT-{feed_id[:8]}"
                         ),
@@ -223,7 +233,8 @@ class SpotPlugin(BaseGPSPlugin):
                     }
 
                     logger.info(
-                        f"Successfully fetched newest location from SPOT (timestamp: {location['timestamp']})"
+                        f"Successfully fetched newest location from SPOT "
+                        f"(timestamp: {location['timestamp']})"
                     )
                     return [location]
 

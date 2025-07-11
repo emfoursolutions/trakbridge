@@ -8,11 +8,15 @@ Description:
     and metadata-driven configuration management for the TrakBridge application.
 
 Key features:
-    - Comprehensive plugin configuration security validation with sensitive field detection
-    - Advanced security analysis including weak password detection and default credential identification
+    - Comprehensive plugin configuration security validation with sensitive field
+      detection
+    - Advanced security analysis including weak password detection and default
+      credential identification
     - Plugin metadata management with serialization support for JSON API responses
-    - Stream configuration export functionality with selective sensitive data inclusion
-    - Security status reporting across all stream configurations with issue categorization
+    - Stream configuration export functionality with selective sensitive data
+      inclusion
+    - Security status reporting across all stream configurations with issue
+      categorization
     - Plugin configuration extraction from HTTP request data with validation
     - Encrypted field detection and tracking for security compliance monitoring
     - Stream display preparation with plugin metadata enrichment

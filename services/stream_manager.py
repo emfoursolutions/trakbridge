@@ -345,7 +345,8 @@ class StreamManager:
                     await asyncio.wait_for(worker.stop(), timeout=15)
                 except Exception as cleanup_error:
                     logger.error(
-                        f"Error stopping worker for stream {stream_id} after timeout: {cleanup_error}"
+                        f"Error stopping worker for stream {stream_id} "
+                        f"after timeout: {cleanup_error}"
                     )
                 return False
 
@@ -353,7 +354,7 @@ class StreamManager:
                 # The StreamWorker already ensures the persistent PyTAK worker is running
                 # No need to call cot_service.start_worker() again here
                 logger.debug(
-                    f"Stream {stream_id} started successfully, persistent worker already ensured by StreamWorker"
+                    f"Stream {stream_id} started successfully."
                 )
 
                 self.workers[stream_id] = worker

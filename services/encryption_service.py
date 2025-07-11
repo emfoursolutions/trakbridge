@@ -243,7 +243,7 @@ class EncryptionService:
 
     def rotate_database_keys(self, new_master_key: str) -> Dict[str, Any]:
         """
-        Rotate encryption keys for database records (certificate passwords and stream plugin passwords)
+        Rotate encryption keys for database records
         """
         try:
             from models.tak_server import TakServer
@@ -273,7 +273,8 @@ class EncryptionService:
                     rotated_count += 1
 
                 except Exception as e:
-                    error_msg = f"Failed to rotate certificate password for server {server.name} (ID: {server.id}): {e}"
+                    error_msg = (f"Failed to rotate certificate password for server {server.name} "
+                                 f"(ID: {server.id}): {e}")
                     errors.append(error_msg)
                     logger.error(error_msg)
 
@@ -315,7 +316,8 @@ class EncryptionService:
                     rotated_count += 1
 
                 except Exception as e:
-                    error_msg = f"Failed to rotate plugin passwords for stream {stream.name} (ID: {stream.id}): {e}"
+                    error_msg = (f"Failed to rotate plugin passwords for stream {stream.name} "
+                                 f"(ID: {stream.id}): {e}")
                     errors.append(error_msg)
                     logger.error(error_msg)
 
@@ -325,7 +327,7 @@ class EncryptionService:
 
             return {
                 "success": True,
-                "message": f"Successfully rotated {rotated_count} encrypted passwords (certificates + plugin configs)",
+                "message": f"Successfully rotated {rotated_count} encrypted passwords",
                 "rotated_count": rotated_count,
                 "errors": errors,
             }
@@ -471,7 +473,10 @@ encryption_service = EncryptionService()
 
 
 def get_encryption_service():
-    """Get the encryption service instance - check Flask app context first, then fall back to global"""
+    """
+    Get the encryption service instance.
+    Check Flask app context first, then fall back to global.
+    """
     try:
         from flask import current_app, has_app_context
 

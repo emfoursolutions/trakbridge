@@ -318,7 +318,8 @@ class KeyRotationService:
                     return {
                         "success": True,
                         "method": "environment_variable",
-                        "instruction": f'Set environment variable: export TB_MASTER_KEY="{new_key}"',
+                        "instruction": f'Set environment variable: '
+                                       f'export TB_MASTER_KEY="{new_key}"',
                     }
 
                 elif method == "file":
@@ -399,7 +400,7 @@ class KeyRotationService:
             db_info = self.get_database_info()
             storage_info = self.get_key_storage_info()
             app_root = current_app.root_path
-            db_config = current_app.config.copy()
+            # db_config = current_app.config.copy()
         except RuntimeError:
             return {
                 "success": False,

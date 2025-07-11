@@ -2,17 +2,18 @@
 File: services/stream_status_service.py
 
 Description:
-Service for managing and retrieving comprehensive stream status information across the streaming system.
-Provides safe status retrieval, statistics generation, and health monitoring for individual streams
-and the entire stream ecosystem.
+    Service for managing and retrieving comprehensive stream status information
+    across the streaming system. Provides safe status retrieval, statistics
+    generation, and health monitoring for individual streams and the entire
+    stream ecosystem.
 
 Key features:
-- Safe stream status retrieval with error handling
-- Comprehensive statistics aggregation by plugin type and status
-- Detailed health monitoring and recent activity tracking
-- Time-based formatting for last poll information
-- Status validation and error reporting
-- Multi-stream overview with categorized counts
+    - Safe stream status retrieval with error handling
+    - Comprehensive statistics aggregation by plugin type and status
+    - Detailed health monitoring and recent activity tracking
+    - Time-based formatting for last poll information
+    - Status validation and error reporting
+    - Multi-stream overview with categorized counts
 
 Author: {{AUTHOR}}
 Created: {{CREATED_DATE}}

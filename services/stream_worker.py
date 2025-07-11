@@ -2,9 +2,10 @@
 File: services/stream_worker.py
 
 Description:
-Individual stream worker service that manages single feed processing with persistent COT integration.
-Handles plugin lifecycle, TAK server connections, location fetching, and event distribution through
-the persistent COT service architecture.
+Individual stream worker service that manages single feed
+processing with persistent COT integration.Handles plugin
+lifecycle, TAK server connections, location fetching,
+and event distribution through the persistent COT service architecture.
 
 Key features:
 - Asynchronous stream processing with configurable polling intervals
@@ -302,7 +303,7 @@ class StreamWorker:
                         )
                 except asyncio.TimeoutError:
                     self.logger.error(
-                        f"Plugin fetch_locations timed out after 90 seconds"
+                        "Plugin fetch_locations timed out after 90 seconds"
                     )
                     raise Exception("Plugin fetch timeout")
                 except Exception as e:
@@ -311,7 +312,8 @@ class StreamWorker:
 
                 if locations:
                     self.logger.info(
-                        f"Retrieved {len(locations)} locations from {self.stream.plugin_type} plugin"
+                        f"Retrieved {len(locations)} locations "
+                        f"from {self.stream.plugin_type} plugin"
                     )
 
                     # Send to persistent TAK server if configured
@@ -437,7 +439,8 @@ class StreamWorker:
 
             # Log the locations being processed
             self.logger.debug(
-                f"Processing {len(locations)} locations for TAK server {self.stream.tak_server.name}"
+                f"Processing {len(locations)} locations "
+                f"for TAK server {self.stream.tak_server.name}"
             )
 
             # Check for error responses in locations
@@ -446,7 +449,8 @@ class StreamWorker:
             ]
             if error_locations:
                 self.logger.warning(
-                    f"Found {len(error_locations)} error responses in locations, these will be skipped"
+                    f"Found {len(error_locations)} error responses in locations, "
+                    f"these will be skipped"
                 )
                 for error_loc in error_locations:
                     self.logger.debug(f"Error location: {error_loc}")

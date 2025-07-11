@@ -41,12 +41,6 @@ import logging
 # Third-party imports
 from lxml import etree
 
-# Add this after the existing imports
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from models.tak_server import TakServer
-
 # PyTAK imports
 try:
     import pytak
@@ -108,7 +102,8 @@ class EnhancedCOTService:
             return float(value)
         except (ValueError, TypeError) as e:
             logger.warning(
-                f"Could not convert {value} (type: {type(value)}) to float: {e}, using default {default}"
+                f"Could not convert {value} (type: {type(value)}) to float: {e}, "
+                f"using default {default}"
             )
             return default
 
@@ -277,9 +272,8 @@ class EnhancedCOTService:
                 )
 
             except Exception as e:
-                logger.error(
-                    f"Error creating PyTAK COT event for location {location.get('name', 'Unknown')}: {e}"
-                )
+                location_name = location.get('name', 'Unknown')
+                logger.error(f"Error creating PyTAK COT event for location {location_name}: {e}")
                 logger.error(f"Location data: {location}")
                 continue
 
@@ -705,7 +699,8 @@ class EnhancedCOTService:
                         raise
 
             logger.info(
-                f"Connecting to {tak_server.host}:{tak_server.port} using {'TLS' if ssl_context else 'TCP'}"
+                f"Connecting to {tak_server.host}:{tak_server.port} "
+                f"using {'TLS' if ssl_context else 'TCP'}"
             )
 
             if ssl_context:
@@ -906,7 +901,8 @@ class PersistentCOTService:
                 # Create connection using PyTAK's protocol factory with timeout
                 try:
                     logger.debug(
-                        f"Attempting to connect to TAK server {tak_server.name} at {tak_server.host}:{tak_server.port}"
+                        f"Attempting to connect to TAK server {tak_server.name} "
+                        f"at {tak_server.host}:{tak_server.port}"
                     )
                     # Add timeout to prevent hanging
                     connection_result = await asyncio.wait_for(
@@ -1041,13 +1037,13 @@ class PersistentCOTService:
                         writer.write(event)
                         await writer.drain()
                         logger.info(
-                            f"Successfully sent COT event via writer to TAK server {tak_server.name}"
+                            f"Successfully sent COT event to TAK server {tak_server.name}"
                         )
                     elif hasattr(reader, "send"):
                         # Use reader.send for other connection types
                         await reader.send(event)
                         logger.info(
-                            f"Successfully sent COT event via reader.send to TAK server {tak_server.name}"
+                            f"Successfully sent COT event to TAK server {tak_server.name}"
                         )
                     else:
                         logger.error(
@@ -1268,10 +1264,7 @@ class PersistentCOTService:
             connection = self.connections[tak_server_id]
             status["connection_exists"] = True
             # Try to get connection status if possible
-            try:
-                status["connection_closed"] = getattr(connection, "closed", None)
-            except:
-                status["connection_closed"] = "Unknown"
+            status["connection_closed"] = getattr(connection, "closed", "Unknown")
         else:
             status["connection_exists"] = False
 

@@ -2,21 +2,26 @@
 File: plugins/traccar_plugin.py
 
 Description:
-    Plugin implementation for fetching and processing location data from the Traccar GPS tracking platform.
-    Connects to a Traccar server REST API using basic authentication, supports secure HTTPS connections,
-    device filtering, and configurable request timeouts. Implements asynchronous fetching of device and position data,
-    normalizes and enriches GPS positions with detailed metadata including speed, altitude, and battery.
-    Provides detailed metadata for UI integration, validates configuration parameters specific to Traccar,
-    and supports enhanced async connection testing with comprehensive results and logging.
-    Designed to integrate with the BaseGPSPlugin framework, supporting secure config handling and robust error handling.
+    Plugin implementation for fetching and processing location data from the Traccar GPS
+    tracking platform. Connects to a Traccar server REST API using basic authentication,
+    supports secure HTTPS connections, device filtering, and configurable request timeouts.
+    Implements asynchronous fetching of device and position data, normalizes and enriches
+    GPS positions with detailed metadata including speed, altitude, and battery.
+
+    Provides detailed metadata for UI integration, validates configuration parameters
+    specific to Traccar, and supports enhanced async connection testing with comprehensive
+    results and logging. Designed to integrate with the BaseGPSPlugin framework,
+    supporting secure config handling and robust error handling.
 
 Key features:
     - Fetches current GPS positions and device information from Traccar REST API
-    - Normalizes raw position data into a standardized location format with detailed attributes
+    - Normalizes raw position data into a standardized location format with detailed
+      attributes
     - Supports device name filtering and configurable API timeouts
     - Validates Traccar-specific configuration including server URL and credentials
     - Handles SSL context and connection optimizations to prevent timeouts
-    - Provides async connection testing with detailed success/error feedback and device counts
+    - Provides async connection testing with detailed success/error feedback and device
+      counts
 
 Author: {{AUTHOR}}
 Created: 2025-07-05
@@ -136,7 +141,8 @@ class TraccarPlugin(BaseGPSPlugin):
                     field_type="text",
                     required=False,
                     placeholder="vehicle,tracker",
-                    help_text="Comma-separated list of device names to include (leave empty for all devices)",
+                    help_text="Comma-separated list of device names to include "
+                              "(leave empty for all devices)",
                 ),
             ],
         }

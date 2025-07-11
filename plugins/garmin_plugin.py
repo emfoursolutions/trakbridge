@@ -524,7 +524,8 @@ class GarminPlugin(BaseGPSPlugin):
                         )
                 else:
                     logger.debug(
-                        f"Feature has no geometry or sub-features: {getattr(feature, 'name', 'Unknown')}"
+                        f"Feature has no geometry or sub-features: "
+                        f"{getattr(feature, 'name', 'Unknown')}"
                     )
 
             # Start extraction from root features
@@ -533,7 +534,8 @@ class GarminPlugin(BaseGPSPlugin):
                 # self.logger.debug(f"Number of root features: {len(k.features)}")
                 for feature in k.features:
                     logger.debug(
-                        f"Processing feature type: {type(feature)}, name: {getattr(feature, 'name', 'Unknown')}"
+                        f"Processing feature type: {type(feature)}, "
+                        f"name: {getattr(feature, 'name', 'Unknown')}"
                     )
                     extract_placemarks(feature)  # type: ignore[attr-defined]
             else:

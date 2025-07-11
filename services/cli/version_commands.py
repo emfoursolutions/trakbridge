@@ -17,17 +17,10 @@ import sys
 from flask import current_app
 from flask.cli import with_appcontext
 
-from typing import Dict, Any
-
 # Import unified version module
 from services.version import (
     get_version,
-    get_version_tuple,
     get_development_version,
-    get_version_info,
-    format_version,
-    is_development_build,
-    is_release_version,
     _get_version_instance,
 )
 
@@ -108,7 +101,7 @@ def show(detailed, json, dev, git, env):
         # Git information
         git_info = info.get("git", {})
         if git_info.get("available"):
-            click.echo(f"\nGit Information:")
+            click.echo("\nGit Information:")
             if git_info.get("branch"):
                 click.echo(f"  Branch: {git_info['branch']}")
             if git_info.get("commit_short"):
@@ -128,14 +121,14 @@ def show(detailed, json, dev, git, env):
         env_info = info.get("environment", {})
         if env_info.get("virtual_env"):
             venv_name = env_info["virtual_env"].split("/")[-1]
-            click.echo(f"\nEnvironment:")
+            click.echo("\nEnvironment:")
             click.echo(f"  Virtual Env: {venv_name}")
             click.echo(f"  Debug Mode: {'Yes' if env_info.get('debug_mode') else 'No'}")
 
         # Developer information
         dev_info = info.get("developer", {})
         if dev_info.get("name") != "unknown":
-            click.echo(f"\nDeveloper:")
+            click.echo("\nDeveloper:")
             click.echo(f"  Name: {dev_info['name']}")
             click.echo(f"  Email: {dev_info['email']}")
 
@@ -271,7 +264,7 @@ def refresh(force):
     new_version = get_version()
     dev_version = get_development_version()
 
-    click.echo(f"Version cache refreshed:")
+    click.echo("Version cache refreshed:")
     click.echo(f"  Base: {click.style(new_version, fg='green')}")
     click.echo(f"  Development: {click.style(dev_version, fg='blue')}")
 
@@ -330,11 +323,15 @@ def export(output, output_format, include_git, include_env):
             click.echo("tomli-w not installed. Install with: pip install tomli-w")
             sys.exit(1)
     elif output_format == "env":
+        dev_version = version_data.get('development_version', version_data['version'])
+        is_dev = str(version_data.get('is_development', False)).lower()
+        version_source = version_data.get('source', 'unknown')
+
         env_lines = [
             f"TRAKBRIDGE_VERSION={version_data['version']}",
-            f"TRAKBRIDGE_DEVELOPMENT_VERSION={version_data.get('development_version', version_data['version'])}",
-            f"TRAKBRIDGE_IS_DEVELOPMENT={str(version_data.get('is_development', False)).lower()}",
-            f"TRAKBRIDGE_VERSION_SOURCE={version_data.get('source', 'unknown')}",
+            f"TRAKBRIDGE_DEVELOPMENT_VERSION={dev_version}",
+            f"TRAKBRIDGE_IS_DEVELOPMENT={is_dev}",
+            f"TRAKBRIDGE_VERSION_SOURCE={version_source}",
         ]
 
         if include_env and "environment" in version_data:
@@ -387,10 +384,19 @@ def check(version_string, strict):
 
     if strict:
         # Strict semantic version regex pattern
-        semver_pattern = r"^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
+        semver_pattern = (
+            r"^(\d+)\.(\d+)\.(\d+)"
+            r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+            r"(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
+        )
     else:
         # Relaxed pattern that allows development versions
-        semver_pattern = r"^v?(\d+)\.(\d+)\.(\d+)(?:\.(\w+))?(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\.(dirty|dev\d+))?$"
+        semver_pattern = (
+            r"^v?(\d+)\.(\d+)\.(\d+)(?:\.(\w+))?"
+            r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+            r"(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+            r"(?:\.(dirty|dev\d+))?$"
+        )
 
     match = re.match(semver_pattern, version_string)
 
@@ -467,29 +473,41 @@ def debug():
 
     # Show current resolution
     base_version = version_instance._get_base_version()
-    click.echo(
-        f"Selected base version: {click.style(base_version['version'], fg='green', bold=True)}"
+
+    # Extract styled values
+    styled_base_version = click.style(base_version['version'], fg='green', bold=True)
+    styled_dev_version = click.style(
+        version_instance.get_development_version(), fg='blue', bold=True
     )
+    styled_is_dev = click.style(
+        str(version_instance.is_development_build()), fg='yellow'
+    )
+
+    click.echo(f"Selected base version: {styled_base_version}")
     click.echo(f"Version source: {base_version['source']}")
-    click.echo(
-        f"Development version: {click.style(version_instance.get_development_version(), fg='blue', bold=True)}"
-    )
-    click.echo(
-        f"Is development build: {click.style(str(version_instance.is_development_build()), fg='yellow')}"
-    )
+    click.echo(f"Development version: {styled_dev_version}")
+    click.echo(f"Is development build: {styled_is_dev}")
 
     # Show Git status
     git_info = version_instance._get_git_info()
-    click.echo(
-        f"\nGit repository: {click.style('Available' if git_info['available'] else 'Not available', fg='green' if git_info['available'] else 'red')}"
-    )
+
+    # Extract the git status styling
+    git_status = 'Available' if git_info['available'] else 'Not available'
+    git_color = 'green' if git_info['available'] else 'red'
+    styled_git_status = click.style(git_status, fg=git_color)
+
+    click.echo(f"\nGit repository: {styled_git_status}")
 
     if git_info["available"]:
         click.echo(f"  Branch: {git_info.get('branch', 'unknown')}")
         click.echo(f"  Commit: {git_info.get('commit_short', 'unknown')}")
-        click.echo(
-            f"  Dirty: {click.style(str(git_info.get('is_dirty', False)), fg='red' if git_info.get('is_dirty') else 'green')}"
-        )
+
+        # Format dirty status with appropriate color
+        is_dirty = git_info.get('is_dirty', False)
+        dirty_color = 'red' if is_dirty else 'green'
+        styled_dirty = click.style(str(is_dirty), fg=dirty_color)
+
+        click.echo(f"  Dirty: {styled_dirty}")
 
         if git_info.get("distance_from_tag"):
             click.echo(f"  Distance from tag: {git_info['distance_from_tag']}")

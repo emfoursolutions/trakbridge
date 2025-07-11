@@ -141,8 +141,6 @@ class HealthService:
     def check_query_performance() -> Dict[str, Any]:
         """Monitor slow queries and performance metrics"""
         try:
-            start_time = time.time()
-
             # Test basic queries
             queries = [
                 ("SELECT 1", "basic_connectivity"),
@@ -197,17 +195,17 @@ class HealthService:
             if self.db_type == "postgresql":
                 # PostgreSQL specific lock check
                 lock_query = """
-                SELECT 
-                    pid, 
-                    usename, 
+                SELECT
+                    pid,
+                    usename,
                     application_name,
                     client_addr,
                     state,
                     query_start,
                     state_change,
                     EXTRACT(EPOCH FROM (now() - query_start)) as duration_seconds
-                FROM pg_stat_activity 
-                WHERE state = 'active' 
+                FROM pg_stat_activity
+                WHERE state = 'active'
                 AND query_start < now() - interval '30 seconds'
                 ORDER BY duration_seconds DESC
                 LIMIT 10
@@ -217,14 +215,14 @@ class HealthService:
             elif self.db_type == "mysql":
                 # MySQL specific lock check
                 lock_query = """
-                SELECT 
-                    trx_id, 
-                    trx_state, 
-                    trx_started, 
+                SELECT
+                    trx_id,
+                    trx_state,
+                    trx_started,
                     trx_mysql_thread_id,
                     trx_query,
                     TIMESTAMPDIFF(SECOND, trx_started, NOW()) as duration_seconds
-                FROM information_schema.innodb_trx 
+                FROM information_schema.innodb_trx
                 WHERE trx_started < NOW() - INTERVAL 30 SECOND
                 ORDER BY duration_seconds DESC
                 LIMIT 10
@@ -276,7 +274,7 @@ class HealthService:
         try:
             if self.db_type == "postgresql":
                 size_query = """
-                SELECT 
+                SELECT
                     pg_size_pretty(pg_database_size(current_database())) as size,
                     pg_database_size(current_database()) as size_bytes
                 """
@@ -285,10 +283,10 @@ class HealthService:
 
             elif self.db_type == "mysql":
                 size_query = """
-                SELECT 
+                SELECT
                     ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) as size_mb,
                     SUM(data_length + index_length) as size_bytes
-                FROM information_schema.tables 
+                FROM information_schema.tables
                 WHERE table_schema = DATABASE()
                 """
                 result = db.session.execute(text(size_query)).fetchone()
