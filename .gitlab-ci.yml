@@ -49,6 +49,8 @@ cache:
 validate-yaml:
   stage: validate
   image: python:${PYTHON_VERSION}-slim
+  tags:
+    - python
   script:
     - pip install pyyaml
     - python -c "import yaml; yaml.safe_load(open('config/settings/app.yaml'))"
@@ -183,6 +185,8 @@ validate-requirements:
 security-bandit:
   stage: security
   image: python:${PYTHON_VERSION}-slim
+  tags:
+    - python
   before_script:
     - pip install bandit
   script:
