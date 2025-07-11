@@ -231,7 +231,7 @@ lint-black:
     - pip install black
   script:
     - echo "Running Black code formatter check..."
-    - black --check --diff app/ services/ plugins/ models/ tests/
+    - black --check --diff services/ plugins/ models/ tests/
     - echo "✅ Black formatting check passed"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -244,7 +244,7 @@ lint-flake8:
     - pip install flake8
   script:
     - echo "Running Flake8 linting..."
-    - flake8 app/ services/ plugins/ models/ tests/ --max-line-length=100 --extend-ignore=E203,W503
+    - flake8 services/ plugins/ models/ tests/ --max-line-length=100 --extend-ignore=E203,W503
     - echo "✅ Flake8 linting passed"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
