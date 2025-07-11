@@ -339,15 +339,25 @@ class EnhancedCOTService:
                 cot_event.set("how", "h-g-i-g-o")  # Use standard PyTAK "how" value
 
                 # Add point element with proper attribute structure and safe conversions
+                # Extract the conversions first, then format with bounds checking
+                lat_val = max(-90.0, min(90.0, EnhancedCOTService._safe_float_convert(location['lat'])))
+                lon_val = max(-180.0, min(180.0, EnhancedCOTService._safe_float_convert(location['lon'])))
+                hae_val = EnhancedCOTService._safe_float_convert(
+                    location.get('altitude', location.get('hae', 0.0))
+                )
+                ce_val = EnhancedCOTService._safe_float_convert(
+                    location.get('accuracy', location.get('ce', 999999)), 999999
+                )
+                le_val = EnhancedCOTService._safe_float_convert(
+                    location.get('linear_error', location.get('le', 999999)), 999999
+                )
+
                 point_attr = {
-                    "lat": f"{EnhancedCOTService._safe_float_convert(location['lat']):.8f}",
-                    "lon": f"{EnhancedCOTService._safe_float_convert(location['lon']):.8f}",
-                    "hae": f"{EnhancedCOTService._safe_float_convert(location.get(
-                        'altitude', location.get('hae', 0.0))):.2f}",
-                    "ce": f"{EnhancedCOTService._safe_float_convert(location.get(
-                        'accuracy', location.get('ce', 999999)), 999999):.2f}",
-                    "le": f"{EnhancedCOTService._safe_float_convert(location.get(
-                        'linear_error', location.get('le', 999999)), 999999):.2f}"
+                    "lat": f"{lat_val:.8f}",
+                    "lon": f"{lon_val:.8f}",
+                    "hae": f"{hae_val:.2f}",
+                    "ce": f"{ce_val:.2f}",
+                    "le": f"{le_val:.2f}",
                 }
                 etree.SubElement(cot_event, "point", attrib=point_attr)
 
@@ -362,9 +372,14 @@ class EnhancedCOTService:
                 # Add track information with safe conversions
                 if location.get('speed') or location.get('heading') or location.get('course'):
                     track = etree.SubElement(detail, "track")
-                    track.set("speed", f"{EnhancedCOTService._safe_float_convert(location.get('speed', 0.0)):.2f}")
-                    track.set("course", f"{EnhancedCOTService._safe_float_convert(
-                                  location.get('heading', location.get('course', 0.0))):.2f}")
+
+                    speed_val = max(0.0, EnhancedCOTService._safe_float_convert(location.get('speed', 0.0)))
+                    course_val = EnhancedCOTService._safe_float_convert(
+                        location.get('heading', location.get('course', 0.0))
+                    ) % 360.0
+
+                    track.set("speed", f"{speed_val:.2f}")
+                    track.set("course", f"{course_val:.2f}")
 
                 # Add remarks if available
                 if location.get('description'):
