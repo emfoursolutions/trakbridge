@@ -8,6 +8,8 @@
 FROM python:3.12-slim AS builder
 
 ARG BUILD_ENV=production
+ARG SETUPTOOLS_SCM_PRETEND_VERSION
+ENV SETUPTOOLS_SCM_PRETEND_VERSION=$SETUPTOOLS_SCM_PRETEND_VERSION
 
 # Install system dependencies for building
 RUN apt-get update && apt-get install -y \
