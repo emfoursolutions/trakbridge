@@ -264,16 +264,14 @@ lint-flake8:
 
 build-docker-latest:
   stage: build
-  image: docker:24.0.5
+  image: docker:latest
   tags:
     - python
   services:
-    - docker:24.0.5-dind
+    - docker:dind
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
   variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
     DOCKER_DRIVER: overlay2
   before_script:
     - until docker info; do sleep 1; done
@@ -284,14 +282,12 @@ build-docker-latest:
 
 build-docker-tag:
   stage: build
-  image: docker:24.0.5
+  image: docker:latest
   services:
-    - docker:24.0.5-dind
+    - docker:dind
   rules:
     - if: '$CI_COMMIT_TAG'
   variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
     DOCKER_DRIVER: overlay2
   before_script:
     - until docker info; do sleep 1; done
