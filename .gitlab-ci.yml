@@ -233,12 +233,10 @@ build-image:
         exit 1
       fi
     - echo "${DOCKERHUB_TOKEN}" | buildah login --username "${DOCKERHUB_USERNAME}" --password-stdin "${REGISTRY}"
-    # Setup buildah cache
     - mkdir -p buildah-cache
     - export BUILDAH_CACHE_DIR="$PWD/buildah-cache"
-    # Debug: Show what IMAGE_NAME resolves to
-    - echo "IMAGE_NAME resolved to: $IMAGE_NAME"
-    - echo "DOCKERHUB_USERNAME: $DOCKERHUB_USERNAME"
+    - echo "IMAGE_NAME resolved to:$IMAGE_NAME"
+    - echo "DOCKERHUB_USERNAME:$DOCKERHUB_USERNAME"
   script:
     - echo "Building container image with Buildah..."
     - |
