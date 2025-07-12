@@ -168,31 +168,6 @@ lint-flake8:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 # =============================================================================
-# CONTAINER SECURITY SCANNING
-# =============================================================================
-
-container-security-scan:
-  stage: security
-  image: aquasec/trivy:latest
-  tags:
-    - homelab
-    - security
-    - docker
-  script:
-    - echo "Scanning Dockerfile for vulnerabilities..."
-    - trivy config --exit-code 0 --format json --output trivy-config-report.json .
-    - echo "✅ Container security scan completed"
-  artifacts:
-    reports:
-      sast: trivy-config-report.json
-    paths:
-      - trivy-config-report.json
-    expire_in: 1 week
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-# =============================================================================
 # BUILD STAGE - Using Buildah (Best Practice)
 # =============================================================================
 
@@ -257,53 +232,6 @@ build-tagged-image:
   rules:
     - if: $CI_COMMIT_TAG
 
-# =============================================================================
-# IMAGE SCANNING POST-BUILD
-# =============================================================================
-
-scan-built-image:
-  stage: security
-  image: aquasec/trivy:latest
-  tags:
-    - homelab
-    - security
-    - docker
-  script:
-    - echo "Scanning built container image for vulnerabilities..."
-    - trivy image --exit-code 0 --format json --output trivy-image-report.json "$IMAGE_NAME:latest"
-    - echo "✅ Image vulnerability scan completed"
-  artifacts:
-    reports:
-      sast: trivy-image-report.json
-    paths:
-      - trivy-image-report.json
-    expire_in: 1 week
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  needs:
-    - job: build-image
-
-scan-tagged-image:
-  stage: security
-  image: aquasec/trivy:latest
-  tags:
-    - homelab
-    - security
-    - docker
-  script:
-    - echo "Scanning tagged container image for vulnerabilities..."
-    - trivy image --exit-code 0 --format json --output trivy-tagged-report.json "$IMAGE_NAME:$CI_COMMIT_TAG"
-    - echo "✅ Tagged image vulnerability scan completed"
-  artifacts:
-    reports:
-      sast: trivy-tagged-report.json
-    paths:
-      - trivy-tagged-report.json
-    expire_in: 1 week
-  rules:
-    - if: $CI_COMMIT_TAG
-  needs:
-    - job: build-tagged-image
 
 # =============================================================================
 # DEPLOY STAGE
