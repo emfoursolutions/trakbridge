@@ -68,6 +68,8 @@ validate-yaml:
         - "config/**/*.yaml"
         - "config/**/*.yml"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
 
 validate-requirements:
   stage: validate
@@ -77,13 +79,84 @@ validate-requirements:
     - docker
   script:
     - pip install pip-tools
-    - pip-compile --check-only requirements.txt
+    - echo "Checking if requirements.txt is up to date..."
+    - pip-compile --dry-run requirements.in
+    - echo "Comparing generated requirements with current requirements.txt..."
+    - pip-compile --output-file=requirements.tmp requirements.in
+    - diff requirements.txt requirements.tmp || (echo "❌ Requirements.txt is out of date! Run 'pip-compile requirements.in' to update." && exit 1)
+    - rm requirements.tmp
     - echo "✅ Requirements are up to date"
   rules:
     - changes:
         - "requirements.txt"
+        - "requirements.in"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+validate-pyproject:
+  stage: validate
+  image: python:${PYTHON_VERSION}-slim
+  tags:
+    - homelab
+    - docker
+  script:
+    - pip install tomli validate-pyproject build
+    - echo "Validating pyproject.toml syntax..."
+    - python -c "import tomli; tomli.load(open('pyproject.toml', 'rb'))"
+    - echo "Validating pyproject.toml structure..."
+    - validate-pyproject pyproject.toml
+    - echo "Testing package build configuration..."
+    - python -m build --sdist --wheel --outdir dist/ .
+    - echo "✅ pyproject.toml is valid and package builds successfully"
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 hour
+  rules:
+    - changes:
         - "pyproject.toml"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+# =============================================================================
+# CODE QUALITY STAGE
+# =============================================================================
+
+lint-black:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  tags:
+    - homelab
+    - docker
+  before_script:
+    - pip install black
+  script:
+    - echo "Running Black code formatter check..."
+    - black --check .
+    - echo "✅ Black formatting check passed"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+lint-flake8:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  tags:
+    - homelab
+    - docker
+  before_script:
+    - pip install flake8
+  script:
+    - echo "Running Flake8 linting..."
+    - flake8 services/ plugins/ models/ --max-line-length=100 --extend-ignore=E203,W503
+    - echo "✅ Flake8 linting passed"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
 
 # =============================================================================
 # SECURITY STAGE
@@ -111,6 +184,7 @@ security-bandit:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
 
 security-safety:
   stage: security
@@ -134,42 +208,7 @@ security-safety:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-# =============================================================================
-# CODE QUALITY STAGE
-# =============================================================================
-
-lint-black:
-  stage: test
-  image: python:${PYTHON_VERSION}-slim
-  tags:
-    - homelab
-    - docker
-  before_script:
-    - pip install black
-  script:
-    - echo "Running Black code formatter check..."
-    - black --check .
-    - echo "✅ Black formatting check passed"
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-lint-flake8:
-  stage: test
-  image: python:${PYTHON_VERSION}-slim
-  tags:
-    - homelab
-    - docker
-  before_script:
-    - pip install flake8
-  script:
-    - echo "Running Flake8 linting..."
-    - flake8 services/ plugins/ models/ --max-line-length=100 --extend-ignore=E203,W503
-    - echo "✅ Flake8 linting passed"
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
 
 # =============================================================================
 # BUILD STAGE - Using Buildah (Best Practice)
@@ -214,7 +253,8 @@ build-image:
     - echo "✅ Container build and push completed"
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
+  except:
+    - tags
 
 build-tagged-image:
   stage: build
