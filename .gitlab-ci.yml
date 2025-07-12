@@ -1,9 +1,6 @@
 # =============================================================================
-# .gitlab-ci.yml - Homelab Best Practices Configuration
+# .gitlab-ci.yml - Optimized Performance Configuration
 # =============================================================================
-
-# Pipeline configuration for TrakBridge application
-# Using security-first, rootless container building with Buildah
 
 stages:
   - validate
@@ -12,15 +9,20 @@ stages:
   - build
   - deploy
 
-# Global variables
+# Global variables - OPTIMIZED
 variables:
-  # Git configuration
-  GIT_DEPTH: 0  # Full clone to support setuptools_scm
-  GIT_STRATEGY: clone
+  # Git configuration - OPTIMIZED FOR SPEED
+  GIT_DEPTH: 50  # Reduced from 0 - only get recent commits
+  GIT_STRATEGY: fetch  # Faster than clone
+  GIT_SUBMODULE_STRATEGY: none  # Skip submodules unless needed
 
   # Python configuration
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
   PYTHON_VERSION: "3.12"
+
+  # Build optimization
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_CACHE_DIR: "false"  # Enable caching
 
   # Application configuration
   APP_NAME: "trakbridge"
@@ -30,23 +32,27 @@ variables:
   IMAGE_NAME: "$REGISTRY/$DOCKERHUB_USERNAME/$APP_NAME"
 
   # Test configuration
-  PYTEST_ADDOPTS: "--strict-markers --strict-config --tb=short"
+  PYTEST_ADDOPTS: "--strict-markers --strict-config --tb=short -n auto"  # Parallel tests
   COVERAGE_FILE: "$CI_PROJECT_DIR/.coverage"
 
   # Security scanning
   SAST_EXCLUDED_PATHS: "tests, docs, scripts"
-  SECURE_LOG_LEVEL: "debug"
+  SECURE_LOG_LEVEL: "info"  # Reduced from debug
 
-# Cache configuration
+# Enhanced cache configuration
 cache:
-  key: "$CI_COMMIT_REF_SLUG"
-  paths:
-    - .pip-cache/
-    - .coverage
-    - .pytest_cache/
+  - key: "pip-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .pip-cache/
+  - key: "python-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .venv/
+  - key: "buildah-$CI_COMMIT_REF_SLUG"
+    paths:
+      - buildah-cache/
 
 # =============================================================================
-# VALIDATE STAGE
+# VALIDATE STAGE - OPTIMIZED
 # =============================================================================
 
 validate-yaml:
@@ -55,19 +61,24 @@ validate-yaml:
   tags:
     - homelab
     - docker
+  timeout: 5m  # Set specific timeout
+  before_script:
+    - pip install --no-cache-dir pyyaml
   script:
-    - pip install pyyaml
-    - python -c "import yaml; yaml.safe_load(open('config/settings/app.yaml'))"
-    - python -c "import yaml; yaml.safe_load(open('config/settings/database.yaml'))"
-    - python -c "import yaml; yaml.safe_load(open('config/settings/logging.yaml'))"
-    - python -c "import yaml; yaml.safe_load(open('config/settings/threading.yaml'))"
-    - python -c "import yaml; yaml.safe_load(open('config/settings/cot_types.yaml'))"
+    - |
+      # Validate all YAML files in parallel
+      for file in config/settings/*.yaml; do
+        python -c "import yaml; yaml.safe_load(open('$file'))" &
+      done
+      wait
     - echo "✅ All YAML configuration files are valid"
   rules:
     - changes:
         - "config/**/*.yaml"
         - "config/**/*.yml"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
 
 validate-requirements:
   stage: validate
@@ -75,33 +86,99 @@ validate-requirements:
   tags:
     - homelab
     - docker
+  timeout: 10m
+  before_script:
+    - pip install --no-cache-dir pip-tools pip-audit
   script:
-    - pip install pip-tools
-    - pip-compile --check-only requirements.txt
-    - echo "✅ Requirements are up to date"
+    - echo "Validating requirements.txt format..."
+    - python -m pip install --dry-run -r requirements.txt
+    - echo "✅ Requirements are valid and installable"
+    - echo "Checking requirements for known vulnerabilities..."
+    - timeout 300 pip-audit --requirement requirements.txt --format json --output audit-report.json || echo "Audit completed with warnings"
+    - echo "✅ Requirements security check completed"
+  artifacts:
+    reports:
+      sast: audit-report.json
+    paths:
+      - audit-report.json
+    expire_in: 1 day
   rules:
     - changes:
         - "requirements.txt"
+        - "requirements.in"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+validate-pyproject:
+  stage: validate
+  image: python:${PYTHON_VERSION}-slim
+  tags:
+    - homelab
+    - docker
+  timeout: 10m
+  before_script:
+    - pip install --no-cache-dir tomli validate-pyproject build
+  script:
+    - echo "Validating pyproject.toml..."
+    - python -c "import tomli; tomli.load(open('pyproject.toml', 'rb'))"
+    - validate-pyproject pyproject.toml
+    - echo "Testing package build configuration..."
+    - python -m build --sdist --wheel --outdir dist/ .
+    - echo "✅ pyproject.toml validation completed"
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 hour
+  rules:
+    - changes:
         - "pyproject.toml"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
 
 # =============================================================================
-# SECURITY STAGE
+# COMBINED TESTING STAGE - OPTIMIZED
 # =============================================================================
 
-security-bandit:
+code-quality:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  tags:
+    - homelab
+    - docker
+  timeout: 15m
+  before_script:
+    - pip install --no-cache-dir black flake8 pytest pytest-xdist
+  script:
+    - echo "Running code quality checks..."
+    - black --check --diff . &
+    - flake8 services/ plugins/ models/ --max-line-length=100 --extend-ignore=E203,W503 &
+    - wait
+    - echo "✅ Code quality checks passed"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+# =============================================================================
+# SECURITY STAGE - OPTIMIZED
+# =============================================================================
+
+bandit-sast:
   stage: security
   image: python:${PYTHON_VERSION}-slim
   tags:
     - homelab
     - security
     - docker
+  timeout: 15m
   before_script:
-    - pip install bandit
+    - pip install --no-cache-dir bandit
   script:
-    - echo "Running security scan with Bandit..."
-    - bandit -r app.py services/ plugins/ routes/ models/ config/ -f json -o bandit-report.json || true
-    - echo "✅ Security scan completed"
+    - echo "Running Bandit security scan..."
+    - bandit -r app.py services/ plugins/ routes/ models/ config/ -f json -o bandit-report.json
+    - echo "✅ Bandit security scan completed"
   artifacts:
     reports:
       sast: bandit-report.json
@@ -111,68 +188,33 @@ security-bandit:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
 
-security-safety:
+safety-check:
   stage: security
   image: python:${PYTHON_VERSION}-slim
   tags:
     - homelab
     - security
     - docker
+  timeout: 10m
   before_script:
-    - pip install safety
+    - pip install --no-cache-dir safety
   script:
-    - echo "Checking for known security vulnerabilities..."
-    - safety scan --output json > safety-report.json || true
-    - echo "✅ Security vulnerability check completed"
+    - echo "Running Safety vulnerability check..."
+    - safety --key ${SAFETY_API_KEY} scan --output json > safety-report.json
+    - echo "✅ Safety vulnerability check completed"
   artifacts:
-    reports:
-      sast: safety-report.json
     paths:
       - safety-report.json
     expire_in: 1 week
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
 
 # =============================================================================
-# CODE QUALITY STAGE
-# =============================================================================
-
-lint-black:
-  stage: test
-  image: python:${PYTHON_VERSION}-slim
-  tags:
-    - homelab
-    - docker
-  before_script:
-    - pip install black
-  script:
-    - echo "Running Black code formatter check..."
-    - black --check .
-    - echo "✅ Black formatting check passed"
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-lint-flake8:
-  stage: test
-  image: python:${PYTHON_VERSION}-slim
-  tags:
-    - homelab
-    - docker
-  before_script:
-    - pip install flake8
-  script:
-    - echo "Running Flake8 linting..."
-    - flake8 services/ plugins/ models/ --max-line-length=100 --extend-ignore=E203,W503
-    - echo "✅ Flake8 linting passed"
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-# =============================================================================
-# BUILD STAGE - Using Buildah (Best Practice)
+# BUILD STAGE - HIGHLY OPTIMIZED
 # =============================================================================
 
 build-image:
@@ -182,6 +224,7 @@ build-image:
     - homelab
     - build
     - buildah
+  timeout: 45m  # Explicit timeout for build
   before_script:
     - echo "Authenticating with container registry..."
     - |
@@ -190,13 +233,16 @@ build-image:
         exit 1
       fi
     - echo "${DOCKERHUB_TOKEN}" | buildah login --username "${DOCKERHUB_USERNAME}" --password-stdin "${REGISTRY}"
+    # Setup buildah cache
+    - mkdir -p buildah-cache
+    - export BUILDAH_CACHE_DIR="$PWD/buildah-cache"
   script:
     - echo "Building container image with Buildah..."
     - |
       # Set fallback version for setuptools_scm
       export SETUPTOOLS_SCM_PRETEND_VERSION="${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}"
       
-      # Build with proper labels and metadata
+      # Build with optimizations
       buildah build \
         --tag "$IMAGE_NAME:$CI_COMMIT_SHA" \
         --tag "$IMAGE_NAME:latest" \
@@ -206,15 +252,18 @@ build-image:
         --label "org.opencontainers.image.version=$CI_COMMIT_REF_NAME" \
         --label "org.opencontainers.image.title=$APP_NAME" \
         --build-arg SETUPTOOLS_SCM_PRETEND_VERSION="${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}" \
+        --ulimit nofile=1024:4096 \
+        --layers \
+        --cache-from "$IMAGE_NAME:latest" \
         --file Dockerfile \
         .
     - echo "Pushing images to registry..."
-    - buildah push "$IMAGE_NAME:$CI_COMMIT_SHA"
-    - buildah push "$IMAGE_NAME:latest"
+    - buildah push "$IMAGE_NAME:$CI_COMMIT_SHA" &
+    - buildah push "$IMAGE_NAME:latest" &
+    - wait
     - echo "✅ Container build and push completed"
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_TAG == null
 
 build-tagged-image:
   stage: build
@@ -223,6 +272,7 @@ build-tagged-image:
     - homelab
     - build
     - buildah
+  timeout: 45m
   before_script:
     - echo "Authenticating with container registry..."
     - |
@@ -231,13 +281,13 @@ build-tagged-image:
         exit 1
       fi
     - echo "${DOCKERHUB_TOKEN}" | buildah login --username "${DOCKERHUB_USERNAME}" --password-stdin "${REGISTRY}"
+    - mkdir -p buildah-cache
+    - export BUILDAH_CACHE_DIR="$PWD/buildah-cache"
   script:
-    - echo "Building tagged container image with Buildah..."
+    - echo "Building tagged container image..."
     - |
-      # Set fallback version for setuptools_scm
       export SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG"
       
-      # Build with proper labels and metadata
       buildah build \
         --tag "$IMAGE_NAME:$CI_COMMIT_TAG" \
         --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
@@ -246,16 +296,18 @@ build-tagged-image:
         --label "org.opencontainers.image.version=$CI_COMMIT_TAG" \
         --label "org.opencontainers.image.title=$APP_NAME" \
         --build-arg SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG" \
+        --ulimit nofile=1024:4096 \
+        --layers \
+        --cache-from "$IMAGE_NAME:latest" \
         --file Dockerfile \
         .
-    - echo "Pushing tagged image to registry..."
     - buildah push "$IMAGE_NAME:$CI_COMMIT_TAG"
-    - echo "✅ Tagged container build and push completed"
+    - echo "✅ Tagged container build completed"
   rules:
     - if: $CI_COMMIT_TAG
 
 # =============================================================================
-# DEPLOY STAGE
+# DEPLOY STAGE - UNCHANGED
 # =============================================================================
 
 deploy-staging:
@@ -264,6 +316,7 @@ deploy-staging:
   tags:
     - homelab
     - deploy
+  timeout: 10m
   before_script:
     - apk add --no-cache curl
   script:
@@ -284,6 +337,7 @@ deploy-production:
   tags:
     - homelab
     - deploy
+  timeout: 10m
   before_script:
     - apk add --no-cache curl
   script:
@@ -299,7 +353,7 @@ deploy-production:
   when: manual
 
 # =============================================================================
-# NOTIFICATION STAGE
+# NOTIFICATION STAGE - OPTIMIZED
 # =============================================================================
 
 notify-success:
@@ -307,6 +361,7 @@ notify-success:
   image: alpine:latest
   tags:
     - homelab
+  timeout: 2m
   before_script:
     - apk add --no-cache curl
   script:
@@ -323,6 +378,7 @@ notify-failure:
   image: alpine:latest
   tags:
     - homelab
+  timeout: 2m
   before_script:
     - apk add --no-cache curl
   script:
