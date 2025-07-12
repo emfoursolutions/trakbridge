@@ -119,7 +119,7 @@ security-safety:
     - pip install safety
   script:
     - echo "Checking for known security vulnerabilities..."
-    - safety scan --output json > safety-report.json || true
+    - safety scan --key $SAFETY_API_KEY --output json > safety-report.json || true
     - echo "✅ Security vulnerability check completed"
   artifacts:
     reports:
