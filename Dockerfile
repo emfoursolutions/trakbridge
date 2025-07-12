@@ -24,7 +24,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Install build tools and setuptools-scm
 COPY pyproject.toml .
-COPY requirements.txt .  # Optional, may contain dev-only deps
+# COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip setuptools build setuptools-scm
 
 # Copy app source for install
