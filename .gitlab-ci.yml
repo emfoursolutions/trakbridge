@@ -266,15 +266,13 @@ build-docker-latest:
   stage: build
   image: docker:latest
   tags:
-    - python
-  services:
-    - docker:dind
+    - python  # Make sure your runner has Docker socket access
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
   variables:
-    DOCKER_DRIVER: overlay2
+    DOCKER_HOST: unix:///var/run/docker.sock
   before_script:
-    - until docker info; do sleep 1; done
+    - docker info
   script:
     - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
     - docker build -t docker.io/$DOCKERHUB_USERNAME/$APP_NAME:latest .
@@ -283,14 +281,14 @@ build-docker-latest:
 build-docker-tag:
   stage: build
   image: docker:latest
-  services:
-    - docker:dind
+  tags:
+    - python  # Make sure your runner has Docker socket access
   rules:
     - if: '$CI_COMMIT_TAG'
   variables:
-    DOCKER_DRIVER: overlay2
+    DOCKER_HOST: unix:///var/run/docker.sock
   before_script:
-    - until docker info; do sleep 1; done
+    - docker info
   script:
     - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
     - docker build -t docker.io/$DOCKERHUB_USERNAME/$APP_NAME:$CI_COMMIT_TAG .
