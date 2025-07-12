@@ -191,7 +191,7 @@ security-bandit:
     - pip install bandit
   script:
     - echo "Running security scan with Bandit..."
-    - bandit -r services/ plugins/ routes/ models/ config/ -f json -o bandit-report.json || true
+    - bandit -r app.py services/ plugins/ routes/ models/ config/ -f json -o bandit-report.json || true
     - echo "✅ Security scan completed"
   artifacts:
     reports:
@@ -272,10 +272,13 @@ build-docker-latest:
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
   variables:
-    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
     DOCKER_DRIVER: overlay2
+  before_script:
+    - until docker info; do sleep 1; done
   script:
-    - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+    - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
     - docker build -t docker.io/$DOCKERHUB_USERNAME/$APP_NAME:latest .
     - docker push docker.io/$DOCKERHUB_USERNAME/$APP_NAME:latest
 
@@ -287,12 +290,15 @@ build-docker-tag:
   rules:
     - if: '$CI_COMMIT_TAG'
   variables:
-    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
     DOCKER_DRIVER: overlay2
+  before_script:
+    - until docker info; do sleep 1; done
   script:
-    - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-    - docker build -t docker.io/$DOCKERHUB_USER/$APP_NAME:$CI_COMMIT_TAG .
-    - docker push docker.io/$DOCKERHUB_USER/$APP_NAME:$CI_COMMIT_TAG
+    - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+    - docker build -t docker.io/$DOCKERHUB_USERNAME/$APP_NAME:$CI_COMMIT_TAG .
+    - docker push docker.io/$DOCKERHUB_USERNAME/$APP_NAME:$CI_COMMIT_TAG
 
 
 

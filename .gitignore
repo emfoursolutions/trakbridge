@@ -1,7 +1,6 @@
 # Ignore Python virtual environments
 venv/
 __pycache__/
-utils/
 *.pyc
 app.db*
 .env*
@@ -17,3 +16,9 @@ build/
 
 # Development version files
 .setuptools-scm-info.json
+
+# Tests for now
+tests/
+
+# Scripts
+scripts/
