@@ -1,7 +1,6 @@
 # =============================================================================
 # .gitlab-ci.yml - Homelab Best Practices Configuration
 # =============================================================================
-
 # Pipeline configuration for TrakBridge application
 # Using security-first, rootless container building with Buildah
 
