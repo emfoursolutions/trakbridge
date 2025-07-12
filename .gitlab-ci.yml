@@ -180,7 +180,7 @@ build-image:
     - buildah
   before_script:
     - echo "Authenticating with container registry..."
-    - buildah login --username "$DOCKERHUB_USERNAME" --password "$DOCKERHUB_TOKEN" $REGISTRY
+    - echo "${DOCKERHUB_TOKEN}" | buildah login --username "${DOCKERHUB_USERNAME}" --password-stdin "${REGISTRY}"
   script:
     - echo "Building container image with Buildah..."
     - |
@@ -212,7 +212,7 @@ build-tagged-image:
     - buildah
   before_script:
     - echo "Authenticating with container registry..."
-    - buildah login --username "$DOCKERHUB_USERNAME" --password "$DOCKERHUB_TOKEN" $REGISTRY
+    - echo "${DOCKERHUB_TOKEN}" | buildah login --username "${DOCKERHUB_USERNAME}" --password-stdin "${REGISTRY}"
   script:
     - echo "Building tagged container image with Buildah..."
     - |
