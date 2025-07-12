@@ -165,38 +165,47 @@ code-quality:
 # SECURITY STAGE - OPTIMIZED
 # =============================================================================
 
-security-scan:
+bandit-sast:
   stage: security
   image: python:${PYTHON_VERSION}-slim
   tags:
     - homelab
     - security
     - docker
-  timeout: 20m
+  timeout: 15m
   before_script:
-    - pip install --no-cache-dir bandit safety
+    - pip install --no-cache-dir bandit
   script:
-    - echo "Running security scans..."
-    - |
-      # Run bandit and safety in parallel
-      bandit -r app.py services/ plugins/ routes/ models/ config/ -f json -o bandit-report.json &
-      BANDIT_PID=$!
-      
-      safety scan --output json > safety-report.json &
-      SAFETY_PID=$!
-      
-      # Wait for both to complete
-      wait $BANDIT_PID
-      wait $SAFETY_PID
-
-    - echo "✅ Security scans completed"
+    - echo "Running Bandit security scan..."
+    - bandit -r app.py services/ plugins/ routes/ models/ config/ -f json -o bandit-report.json
+    - echo "✅ Bandit security scan completed"
   artifacts:
     reports:
-      sast:
-        - bandit-report.json
-        - safety-report.json
+      sast: bandit-report.json
     paths:
       - bandit-report.json
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+safety-check:
+  stage: security
+  image: python:${PYTHON_VERSION}-slim
+  tags:
+    - homelab
+    - security
+    - docker
+  timeout: 10m
+  before_script:
+    - pip install --no-cache-dir safety
+  script:
+    - echo "Running Safety vulnerability check..."
+    - safety --key ${SAFETY_API_KEY} scan --output json > safety-report.json
+    - echo "✅ Safety vulnerability check completed"
+  artifacts:
+    paths:
       - safety-report.json
     expire_in: 1 week
   rules:
