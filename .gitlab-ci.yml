@@ -1,9 +1,9 @@
 # =============================================================================
-# .gitlab-ci.yml - GitLab CI/CD Pipeline Configuration
+# .gitlab-ci.yml - Homelab Best Practices Configuration
 # =============================================================================
 
 # Pipeline configuration for TrakBridge application
-# This pipeline includes: testing, linting, security scanning, and deployment
+# Using security-first, rootless container building with Buildah
 
 stages:
   - validate
@@ -17,18 +17,18 @@ variables:
   # Python configuration
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
   PYTHON_VERSION: "3.10"
-  
-  # Docker configuration
-  DOCKER_DRIVER: overlay2
-  DOCKER_TLS_CERTDIR: "/certs"
-  
+
   # Application configuration
   APP_NAME: "trakbridge"
+
+  # Container registry configuration
+  REGISTRY: "docker.io"
+  IMAGE_NAME: "$REGISTRY/$DOCKERHUB_USERNAME/$APP_NAME"
 
   # Test configuration
   PYTEST_ADDOPTS: "--strict-markers --strict-config --tb=short"
   COVERAGE_FILE: "$CI_PROJECT_DIR/.coverage"
-  
+
   # Security scanning
   SAST_EXCLUDED_PATHS: "tests, docs, scripts"
   SECURE_LOG_LEVEL: "debug"
@@ -40,7 +40,6 @@ cache:
     - .pip-cache/
     - .coverage
     - .pytest_cache/
-    - node_modules/
 
 # =============================================================================
 # VALIDATE STAGE
@@ -50,7 +49,8 @@ validate-yaml:
   stage: validate
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - python
+    - homelab
+    - docker
   script:
     - pip install pyyaml
     - python -c "import yaml; yaml.safe_load(open('config/settings/app.yaml'))"
@@ -68,6 +68,9 @@ validate-yaml:
 validate-requirements:
   stage: validate
   image: python:${PYTHON_VERSION}-slim
+  tags:
+    - homelab
+    - docker
   script:
     - pip install pip-tools
     - pip-compile --check-only requirements.txt
@@ -79,106 +82,6 @@ validate-requirements:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 # =============================================================================
-# TEST STAGE
-# =============================================================================
-
-#test-unit:
-#  stage: test
-#  image: python:${PYTHON_VERSION}-slim
-#  services:
-#    - postgres:13
-#  variables:
-#    POSTGRES_DB: trakbridge_test
-#    POSTGRES_USER: test_user
-#    POSTGRES_PASSWORD: test_password
-#    SQLALCHEMY_DATABASE_URI: "postgresql://test_user:test_password@postgres:5432/trakbridge_test"
-#  before_script:
-#    - apt-get update -qq && apt-get install -y -qq gcc libpq-dev
-#    - pip install -r requirements.txt
-#    - pip install pytest pytest-cov pytest-asyncio pytest-mock
-#    - pip install black flake8 bandit safety
-#    - pip install -e ".[dev]"
-#  script:
-#    - echo "Running unit tests..."
-#    - pytest tests/unit/ -v --cov=app --cov=services --cov=plugins --cov=models --cov-report=xml --cov-report=term-missing
-#    - echo "✅ Unit tests completed"
-#  coverage: '/TOTAL.*\s+(\d+%)$/'
-#  artifacts:
-#    reports:
-#      coverage_report:
-#        coverage_format: cobertura
-#        path: coverage.xml
-#    paths:
-#      - coverage.xml
-#      - .coverage
-#    expire_in: 1 week
-#  rules:
-#    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-#    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-#
-#test-integration:
-#  stage: test
-#  image: python:${PYTHON_VERSION}-slim
-#  services:
-#    - postgres:13
-#  variables:
-#    POSTGRES_DB: trakbridge_test
-#    POSTGRES_USER: test_user
-#    POSTGRES_PASSWORD: test_password
-#    SQLALCHEMY_DATABASE_URI: "postgresql://test_user:test_password@postgres:5432/trakbridge_test"
-#  before_script:
-#    - apt-get update -qq && apt-get install -y -qq gcc libpq-dev
-#    - pip install -r requirements.txt
-#    - pip install pytest pytest-cov pytest-asyncio pytest-mock
-#  script:
-#    - echo "Running integration tests..."
-#    - pytest tests/integration/ -v --cov=app --cov=services --cov=plugins --cov=models --cov-report=xml --cov-report=term-missing
-#    - echo "✅ Integration tests completed"
-#  artifacts:
-#    reports:
-#      coverage_report:
-#        coverage_format: cobertura
-#        path: coverage.xml
-#    paths:
-#      - coverage.xml
-#      - .coverage
-#    expire_in: 1 week
-#  rules:
-#    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-#    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-#
-#test-e2e:
-#  stage: test
-#  image: python:${PYTHON_VERSION}-slim
-#  services:
-#    - postgres:13
-#  variables:
-#    POSTGRES_DB: trakbridge_test
-#    POSTGRES_USER: test_user
-#    POSTGRES_PASSWORD: test_password
-#    SQLALCHEMY_DATABASE_URI: "postgresql://test_user:test_password@postgres:5432/trakbridge_test"
-#  before_script:
-#    - apt-get update -qq && apt-get install -y -qq gcc libpq-dev
-#    - pip install -r requirements.txt
-#    - pip install pytest pytest-cov pytest-asyncio pytest-mock
-#  script:
-#    - echo "Running end-to-end tests..."
-#    - pytest tests/e2e/ -v --cov=app --cov=services --cov=plugins --cov=models --cov-report=xml --cov-report=term-missing
-#    - echo "✅ End-to-end tests completed"
-#  artifacts:
-#    reports:
-#      coverage_report:
-#        coverage_format: cobertura
-#        path: coverage.xml
-#    paths:
-#      - coverage.xml
-#      - .coverage
-#    expire_in: 1 week
-#  rules:
-#    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-#  allow_failure: true
-
-# =============================================================================
 # SECURITY STAGE
 # =============================================================================
 
@@ -186,7 +89,9 @@ security-bandit:
   stage: security
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - python
+    - homelab
+    - security
+    - docker
   before_script:
     - pip install bandit
   script:
@@ -207,12 +112,14 @@ security-safety:
   stage: security
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - python
+    - homelab
+    - security
+    - docker
   before_script:
     - pip install safety
   script:
     - echo "Checking for known security vulnerabilities..."
-    - safety --key $SAFETY_API_KEY scan --output json > safety-report.json || true
+    - safety scan --output json > safety-report.json || true
     - echo "✅ Security vulnerability check completed"
   artifacts:
     reports:
@@ -232,7 +139,8 @@ lint-black:
   stage: test
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - python
+    - homelab
+    - docker
   before_script:
     - pip install black
   script:
@@ -245,9 +153,10 @@ lint-black:
 
 lint-flake8:
   stage: test
-  tags:
-    - python
   image: python:${PYTHON_VERSION}-slim
+  tags:
+    - homelab
+    - docker
   before_script:
     - pip install flake8
   script:
@@ -259,42 +168,120 @@ lint-flake8:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 # =============================================================================
-# BUILD STAGE
+# CONTAINER SECURITY SCANNING
 # =============================================================================
 
-build-docker-latest:
-  stage: build
-  image: docker:latest
+container-security-scan:
+  stage: security
+  image: aquasec/trivy:latest
   tags:
-    - python  # Make sure your runner has Docker socket access
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-  variables:
-    DOCKER_HOST: unix:///var/run/docker.sock
-  before_script:
-    - docker info
+    - homelab
+    - security
+    - docker
   script:
-    - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
-    - docker build -t docker.io/$DOCKERHUB_USERNAME/$APP_NAME:latest .
-    - docker push docker.io/$DOCKERHUB_USERNAME/$APP_NAME:latest
+    - echo "Scanning Dockerfile for vulnerabilities..."
+    - trivy config --exit-code 0 --format json --output trivy-config-report.json .
+    - echo "✅ Container security scan completed"
+  artifacts:
+    reports:
+      sast: trivy-config-report.json
+    paths:
+      - trivy-config-report.json
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-build-docker-tag:
+# =============================================================================
+# BUILD STAGE - Using Buildah (Best Practice)
+# =============================================================================
+
+build-image:
   stage: build
-  image: docker:latest
+  image: quay.io/buildah/stable:latest
   tags:
-    - python  # Make sure your runner has Docker socket access
-  rules:
-    - if: '$CI_COMMIT_TAG'
-  variables:
-    DOCKER_HOST: unix:///var/run/docker.sock
+    - homelab
+    - build
+    - buildah
   before_script:
-    - docker info
+    - echo "Authenticating with container registry..."
+    - buildah login --username "$DOCKERHUB_USERNAME" --password "$DOCKERHUB_TOKEN" $REGISTRY
   script:
-    - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
-    - docker build -t docker.io/$DOCKERHUB_USERNAME/$APP_NAME:$CI_COMMIT_TAG .
-    - docker push docker.io/$DOCKERHUB_USERNAME/$APP_NAME:$CI_COMMIT_TAG
+    - echo "Building container image with Buildah..."
+    - |
+      # Build with proper labels and metadata
+      buildah build \
+        --tag "$IMAGE_NAME:$CI_COMMIT_SHA" \
+        --tag "$IMAGE_NAME:latest" \
+        --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
+        --label "org.opencontainers.image.revision=$CI_COMMIT_SHA" \
+        --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --label "org.opencontainers.image.version=$CI_COMMIT_REF_NAME" \
+        --label "org.opencontainers.image.title=$APP_NAME" \
+        --file Dockerfile \
+        .
+    - echo "Pushing images to registry..."
+    - buildah push "$IMAGE_NAME:$CI_COMMIT_SHA"
+    - buildah push "$IMAGE_NAME:latest"
+    - echo "✅ Container build and push completed"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
 
+build-tagged-image:
+  stage: build
+  image: quay.io/buildah/stable:latest
+  tags:
+    - homelab
+    - build
+    - buildah
+  before_script:
+    - echo "Authenticating with container registry..."
+    - buildah login --username "$DOCKERHUB_USERNAME" --password "$DOCKERHUB_TOKEN" $REGISTRY
+  script:
+    - echo "Building tagged container image with Buildah..."
+    - |
+      # Build with proper labels and metadata
+      buildah build \
+        --tag "$IMAGE_NAME:$CI_COMMIT_TAG" \
+        --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
+        --label "org.opencontainers.image.revision=$CI_COMMIT_SHA" \
+        --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --label "org.opencontainers.image.version=$CI_COMMIT_TAG" \
+        --label "org.opencontainers.image.title=$APP_NAME" \
+        --file Dockerfile \
+        .
+    - echo "Pushing tagged image to registry..."
+    - buildah push "$IMAGE_NAME:$CI_COMMIT_TAG"
+    - echo "✅ Tagged container build and push completed"
+  rules:
+    - if: $CI_COMMIT_TAG
 
+# =============================================================================
+# IMAGE SCANNING POST-BUILD
+# =============================================================================
+
+scan-built-image:
+  stage: security
+  image: aquasec/trivy:latest
+  tags:
+    - homelab
+    - security
+    - docker
+  script:
+    - echo "Scanning built container image for vulnerabilities..."
+    - trivy image --exit-code 0 --format json --output trivy-image-report.json "$IMAGE_NAME:latest"
+    - echo "✅ Image vulnerability scan completed"
+  artifacts:
+    reports:
+      sast: trivy-image-report.json
+    paths:
+      - trivy-image-report.json
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  needs:
+    - build-image
 
 # =============================================================================
 # DEPLOY STAGE
@@ -303,15 +290,19 @@ build-docker-tag:
 deploy-staging:
   stage: deploy
   image: alpine:latest
+  tags:
+    - homelab
+    - deploy
   before_script:
     - apk add --no-cache curl
   script:
     - echo "Deploying to staging environment..."
+    - echo "Image: $IMAGE_NAME:$CI_COMMIT_SHA"
     - echo "Staging deployment would happen here"
     - echo "✅ Staging deployment completed"
   environment:
     name: staging
-    url: https://staging.trakbridge.example.com
+    url: https://staging.trakbridge.homelab.local
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   when: manual
@@ -319,15 +310,19 @@ deploy-staging:
 deploy-production:
   stage: deploy
   image: alpine:latest
+  tags:
+    - homelab
+    - deploy
   before_script:
     - apk add --no-cache curl
   script:
     - echo "Deploying to production environment..."
+    - echo "Image: $IMAGE_NAME:$CI_COMMIT_TAG"
     - echo "Production deployment would happen here"
     - echo "✅ Production deployment completed"
   environment:
     name: production
-    url: https://trakbridge.example.com
+    url: https://trakbridge.homelab.local
   rules:
     - if: $CI_COMMIT_TAG
   when: manual
@@ -340,17 +335,12 @@ notify-success:
   stage: .post
   image: alpine:latest
   tags:
-    - python
+    - homelab
   before_script:
     - apk add --no-cache curl
   script:
     - echo "Pipeline completed successfully!"
-    - |
-      if [ -n "$SLACK_WEBHOOK_URL" ]; then
-        curl -X POST -H 'Content-type: application/json' \
-          --data "{\"text\":\"✅ Pipeline for $CI_PROJECT_NAME succeeded! Branch: $CI_COMMIT_REF_NAME, Commit: $CI_COMMIT_SHORT_SHA\"}" \
-          $SLACK_WEBHOOK_URL
-      fi
+    - echo "Built and pushed: $IMAGE_NAME:$CI_COMMIT_SHA"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
@@ -361,19 +351,14 @@ notify-failure:
   stage: .post
   image: alpine:latest
   tags:
-    - python
+    - homelab
   before_script:
     - apk add --no-cache curl
   script:
     - echo "Pipeline failed!"
-    - |
-      if [ -n "$SLACK_WEBHOOK_URL" ]; then
-        curl -X POST -H 'Content-type: application/json' \
-          --data "{\"text\":\"❌ Pipeline for $CI_PROJECT_NAME failed! Branch: $CI_COMMIT_REF_NAME, Commit: $CI_COMMIT_SHORT_SHA\"}" \
-          $SLACK_WEBHOOK_URL
-      fi
+    - echo "Check the logs for details"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
-  when: on_failure 
+  when: on_failure
