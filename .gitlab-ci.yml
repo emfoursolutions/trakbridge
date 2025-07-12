@@ -235,13 +235,19 @@ build-image:
     - echo "${DOCKERHUB_TOKEN}" | buildah login --username "${DOCKERHUB_USERNAME}" --password-stdin "${REGISTRY}"
     - mkdir -p buildah-cache
     - export BUILDAH_CACHE_DIR="$PWD/buildah-cache"
-    - echo "IMAGE_NAME resolved to:$IMAGE_NAME"
-    - echo "DOCKERHUB_USERNAME:$DOCKERHUB_USERNAME"
   script:
     - echo "Building container image with Buildah..."
     - |
-      # Set fallback version for setuptools_scm
-      export SETUPTOOLS_SCM_PRETEND_VERSION="${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}"
+      # Set proper version for setuptools_scm
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        # Use tag as-is if it's a tagged release
+        export SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG"
+        echo "Using tag version: $CI_COMMIT_TAG"
+      else
+        # Create a development version for non-tagged builds
+        export SETUPTOOLS_SCM_PRETEND_VERSION="0.1.0.dev0+g$CI_COMMIT_SHORT_SHA"
+        echo "Using dev version: 0.1.0.dev0+g$CI_COMMIT_SHORT_SHA"
+      fi
       
       # Check if cache image exists
       CACHE_IMAGE="$IMAGE_NAME:latest"
@@ -265,7 +271,7 @@ build-image:
         --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         --label "org.opencontainers.image.version=$CI_COMMIT_REF_NAME" \
         --label "org.opencontainers.image.title=$APP_NAME" \
-        --build-arg SETUPTOOLS_SCM_PRETEND_VERSION="${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}" \
+        --build-arg SETUPTOOLS_SCM_PRETEND_VERSION="$SETUPTOOLS_SCM_PRETEND_VERSION" \
         --ulimit nofile=1024:4096 \
         --layers \
         $CACHE_FROM_ARG \
@@ -279,6 +285,57 @@ build-image:
     - echo "✅ Container build and push completed"
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_TAG == null
+
+build-tagged-image:
+  stage: build
+  image: quay.io/buildah/stable:latest
+  tags:
+    - homelab
+    - build
+    - buildah
+  timeout: 45m
+  before_script:
+    - echo "Authenticating with container registry..."
+    - |
+      if [ -z "${DOCKERHUB_USERNAME}" ] || [ -z "${DOCKERHUB_TOKEN}" ]; then
+        echo "Error: DOCKERHUB_USERNAME and DOCKERHUB_TOKEN must be set"
+        exit 1
+      fi
+    - echo "${DOCKERHUB_TOKEN}" | buildah login --username "${DOCKERHUB_USERNAME}" --password-stdin "${REGISTRY}"
+    - mkdir -p buildah-cache
+    - export BUILDAH_CACHE_DIR="$PWD/buildah-cache"
+  script:
+    - echo "Building tagged container image..."
+    - |
+      # For tagged builds, use the tag as version
+      export SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG"
+      echo "Using tag version: $CI_COMMIT_TAG"
+      
+      # Check if cache image exists
+      CACHE_IMAGE="$IMAGE_NAME:latest"
+      if buildah pull "$CACHE_IMAGE" 2>/dev/null; then
+        CACHE_FROM_ARG="--cache-from $CACHE_IMAGE"
+      else
+        CACHE_FROM_ARG=""
+      fi
+      
+      buildah build \
+        --tag "$IMAGE_NAME:$CI_COMMIT_TAG" \
+        --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
+        --label "org.opencontainers.image.revision=$CI_COMMIT_SHA" \
+        --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --label "org.opencontainers.image.version=$CI_COMMIT_TAG" \
+        --label "org.opencontainers.image.title=$APP_NAME" \
+        --build-arg SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG" \
+        --ulimit nofile=1024:4096 \
+        --layers \
+        $CACHE_FROM_ARG \
+        --file Dockerfile \
+        .
+    - buildah push "$IMAGE_NAME:$CI_COMMIT_TAG"
+    - echo "✅ Tagged container build completed"
+  rules:
+    - if: $CI_COMMIT_TAG
 
 # =============================================================================
 # DEPLOY STAGE - UNCHANGED
