@@ -297,7 +297,7 @@ deploy-staging:
     - apk add --no-cache curl
   script:
     - echo "Deploying to staging environment..."
-    - echo "Image: $IMAGE_NAME:$CI_COMMIT_SHA"
+    - echo "Image:$IMAGE_NAME:$CI_COMMIT_SHA"
     - echo "Staging deployment would happen here"
     - echo "✅ Staging deployment completed"
   environment:
@@ -317,7 +317,7 @@ deploy-production:
     - apk add --no-cache curl
   script:
     - echo "Deploying to production environment..."
-    - echo "Image: $IMAGE_NAME:$CI_COMMIT_TAG"
+    - echo "Image:$IMAGE_NAME:$CI_COMMIT_TAG"
     - echo "Production deployment would happen here"
     - echo "✅ Production deployment completed"
   environment:
@@ -340,7 +340,7 @@ notify-success:
     - apk add --no-cache curl
   script:
     - echo "Pipeline completed successfully!"
-    - echo "Built and pushed: $IMAGE_NAME:$CI_COMMIT_SHA"
+    - echo "Built and pushed:$IMAGE_NAME:$CI_COMMIT_SHA"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
