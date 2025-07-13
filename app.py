@@ -189,7 +189,11 @@ def setup_version_context_processor(app):
 
         # Log startup information first
         try:
-            from services.version import format_version, get_version_info, get_build_info
+            from services.version import (
+                format_version,
+                get_version_info,
+                get_build_info,
+            )
 
             # Log comprehensive startup banner
             log_startup_banner(app)
@@ -224,9 +228,12 @@ def setup_version_context_processor(app):
             # Fallback to basic logging
             try:
                 from services.version import format_version
+
                 app.logger.info(f"Starting {format_version(include_build_info=True)}")
             except Exception as fallback_e:
-                app.logger.warning(f"Could not log even basic version info: {fallback_e}")
+                app.logger.warning(
+                    f"Could not log even basic version info: {fallback_e}"
+                )
 
     @app.context_processor
     def inject_version_info():
@@ -324,9 +331,11 @@ def configure_flask_app(app, config_instance):
     app.config_instance = config_instance
 
     # Log configuration info (only once)
-    if not hasattr(configure_flask_app, '_config_logged'):
+    if not hasattr(configure_flask_app, "_config_logged"):
         configure_flask_app._config_logged = True
-        logger.info(f"Configured Flask app for environment: {config_instance.environment}")
+        logger.info(
+            f"Configured Flask app for environment: {config_instance.environment}"
+        )
 
         # Validate configuration
         issues = config_instance.validate_config()
