@@ -48,6 +48,10 @@ _startup_complete = False
 _startup_error = None
 _startup_progress = []
 
+# Global flags to prevent duplicate startup
+_startup_banner_logged = False
+_startup_thread_started = False
+
 load_dotenv()
 
 # Set up logger
@@ -97,7 +101,7 @@ def create_app(config_name=None):
     config_instance = get_config(flask_env)
 
     # Configure Flask app with the new configuration system
-    configure_flask_app(app, config_instance)  # type: ignore[attr-defined]
+    configure_flask_app(app, config_instance)
 
     # Initialize extensions with app
     db.init_app(app)
@@ -132,19 +136,16 @@ def create_app(config_name=None):
 
         app.encryption_service = EncryptionService()
 
-        # Initialize stream manager and store global reference
-        from services.stream_manager import StreamManager
-
-        app.stream_manager = StreamManager(app_context_factory=app_context_factory)
-        _stream_manager_ref = app.stream_manager  # Store global reference
+        # Store global reference for cleanup
+        _stream_manager_ref = app.stream_manager
 
     # Set up database event listeners
     setup_database_events()
 
-    # Set up logging
+    # Set up logging (only once per app instance)
     setup_logging(app)
 
-    # Add version context processor
+    # Add version context processor (only once per app instance)
     setup_version_context_processor(app)
 
     # Register cleanup handlers
@@ -173,102 +174,66 @@ def create_app(config_name=None):
     setup_error_handlers(app)
 
     # Splash screen routes
-    def setup_startup_routes(app):
-        """Set up startup-related routes"""
-
-        @app.route("/startup-status")
-        def startup_status():
-            """API endpoint to check startup status"""
-            return jsonify(get_startup_status())
-
-        @app.route("/startup")
-        def startup_page():
-            """Display startup/loading page"""
-            return render_template("startup.html")
-
-        @app.before_request
-        def check_startup():
-            """Check if startup is complete before processing requests"""
-            from flask import request
-
-            # Allow startup-related routes and static files
-            if request.endpoint in ["startup_page", "startup_status", "static"]:
-                return None
-
-            # Allow API health checks
-            if request.path.startswith("/api/health"):
-                return None
-
-            # Redirect to startup page if not ready
-            if not _startup_complete and request.endpoint:
-                if request.is_json:
-                    return (
-                        jsonify(
-                            {
-                                "status": "starting",
-                                "message": "Application is starting up",
-                            }
-                        ),
-                        503,
-                    )
-                else:
-                    return render_template("startup.html")
-
-            return None
-
     setup_startup_routes(app)
+
     return app
 
 
 def setup_version_context_processor(app):
     """Set up version context processor for Flask app with enhanced logging."""
+    global _startup_banner_logged
 
-    # Log startup information first
-    try:
-        from services.version import format_version, get_version_info, get_build_info
+    # Only log startup banner once
+    if not _startup_banner_logged:
+        _startup_banner_logged = True
 
-        # Log comprehensive startup banner
-        log_startup_banner(app)
-
-        # Log detailed version information
-        version_info = get_version_info()
-        build_info = get_build_info()
-
-        app.logger.info("=" * 60)
-        app.logger.info("VERSION INFORMATION")
-        app.logger.info("=" * 60)
-        app.logger.info(f"Application: {format_version(include_build_info=True)}")
-        app.logger.info(f"Version: {version_info.get('version', 'unknown')}")
-        app.logger.info(f"Version Source: {version_info.get('source', 'unknown')}")
-        app.logger.info(
-            f"Development Build: {'YES' if is_development_build() else 'NO'}"
-        )
-
-        if build_info.get("git_commit"):
-            app.logger.info(f"Git Commit: {build_info['git_commit']}")
-
-        app.logger.info(
-            f"Python Version: {version_info.get('python_version', 'unknown')}"
-        )
-        app.logger.info(f"Platform: {version_info.get('platform', 'unknown')}")
-        app.logger.info(f"Process ID: {os.getpid()}")
-        app.logger.info(f"Working Directory: {os.getcwd()}")
-        app.logger.info("=" * 60)
-
-    except Exception as e:
-        app.logger.warning(f"Could not log detailed version info: {e}")
-        # Fallback to basic logging
+        # Log startup information first
         try:
-            from services.version import format_version
+            from services.version import format_version, get_version_info, get_build_info
 
-            app.logger.info(f"Starting {format_version(include_build_info=True)}")
-        except Exception as fallback_e:
-            app.logger.warning(f"Could not log even basic version info: {fallback_e}")
+            # Log comprehensive startup banner
+            log_startup_banner(app)
+
+            # Log detailed version information
+            version_info = get_version_info()
+            build_info = get_build_info()
+
+            app.logger.info("=" * 60)
+            app.logger.info("VERSION INFORMATION")
+            app.logger.info("=" * 60)
+            app.logger.info(f"Application: {format_version(include_build_info=True)}")
+            app.logger.info(f"Version: {version_info.get('version', 'unknown')}")
+            app.logger.info(f"Version Source: {version_info.get('source', 'unknown')}")
+            app.logger.info(
+                f"Development Build: {'YES' if is_development_build() else 'NO'}"
+            )
+
+            if build_info.get("git_commit"):
+                app.logger.info(f"Git Commit: {build_info['git_commit']}")
+
+            app.logger.info(
+                f"Python Version: {version_info.get('python_version', 'unknown')}"
+            )
+            app.logger.info(f"Platform: {version_info.get('platform', 'unknown')}")
+            app.logger.info(f"Process ID: {os.getpid()}")
+            app.logger.info(f"Working Directory: {os.getcwd()}")
+            app.logger.info("=" * 60)
+
+        except Exception as e:
+            app.logger.warning(f"Could not log detailed version info: {e}")
+            # Fallback to basic logging
+            try:
+                from services.version import format_version
+                app.logger.info(f"Starting {format_version(include_build_info=True)}")
+            except Exception as fallback_e:
+                app.logger.warning(f"Could not log even basic version info: {fallback_e}")
 
     @app.context_processor
     def inject_version_info():
         """Inject version information into all templates."""
         try:
+            from services.version import get_version_info, get_build_info
+
             version_info = get_version_info()
             build_info = get_build_info()
 
@@ -358,15 +323,17 @@ def configure_flask_app(app, config_instance):
     # Store the config instance for later use
     app.config_instance = config_instance
 
-    # Log configuration info
-    logger.info(f"Configured Flask app for environment: {config_instance.environment}")
+    # Log configuration info (only once)
+    if not hasattr(configure_flask_app, '_config_logged'):
+        configure_flask_app._config_logged = True
+        logger.info(f"Configured Flask app for environment: {config_instance.environment}")
 
-    # Validate configuration
-    issues = config_instance.validate_config()
-    if issues:
-        logger.warning(f"Configuration issues found: {issues}")
-        if config_instance.environment == "production":
-            raise ValueError(f"Configuration validation failed: {issues}")
+        # Validate configuration
+        issues = config_instance.validate_config()
+        if issues:
+            logger.warning(f"Configuration issues found: {issues}")
+            if config_instance.environment == "production":
+                raise ValueError(f"Configuration validation failed: {issues}")
 
 
 def start_active_streams():
@@ -385,7 +352,6 @@ def start_active_streams():
     try:
         logger.info("Initializing stream startup process...")
         add_startup_progress("Initializing stream startup process...")
-        logger.info(f"TrakBridge Version: {get_version()}")
 
         # Wait for stream manager to be ready with longer timeout
         logger.info("Waiting for stream manager to be ready...")
@@ -686,6 +652,50 @@ def setup_error_handlers(app):
         return render_template("errors/500.html"), 500
 
 
+def setup_startup_routes(app):
+    """Set up startup-related routes"""
+
+    @app.route("/startup-status")
+    def startup_status():
+        """API endpoint to check startup status"""
+        return jsonify(get_startup_status())
+
+    @app.route("/startup")
+    def startup_page():
+        """Display startup/loading page"""
+        return render_template("startup.html")
+
+    @app.before_request
+    def check_startup():
+        """Check if startup is complete before processing requests"""
+        from flask import request
+
+        # Allow startup-related routes and static files
+        if request.endpoint in ["startup_page", "startup_status", "static"]:
+            return None
+
+        # Allow API health checks
+        if request.path.startswith("/api/health"):
+            return None
+
+        # Redirect to startup page if not ready
+        if not _startup_complete and request.endpoint:
+            if request.is_json:
+                return (
+                    jsonify(
+                        {
+                            "status": "starting",
+                            "message": "Application is starting up",
+                        }
+                    ),
+                    503,
+                )
+            else:
+                return render_template("startup.html")
+
+        return None
+
+
 # Create the application instance
 app = create_app()
 
@@ -752,19 +762,31 @@ def delayed_startup():
         set_startup_complete(False, str(e))
 
 
-# Call start_active_streams ONCE during application startup
-if __name__ == "__main__" or not hasattr(start_active_streams, "_called"):
-    start_active_streams._called = True
+# Prevent duplicate startup thread creation
+def ensure_startup_thread():
+    """Ensure startup thread is only created once"""
+    global _startup_thread_started
 
-    # Run startup in a separate thread to avoid blocking Flask initialization
-    startup_thread = threading.Thread(
-        target=delayed_startup, daemon=True, name="StartupThread"
-    )
-    startup_thread.start()
+    if not _startup_thread_started:
+        _startup_thread_started = True
 
+        # Run startup in a separate thread to avoid blocking Flask initialization
+        startup_thread = threading.Thread(
+            target=delayed_startup, daemon=True, name="StartupThread"
+        )
+        startup_thread.start()
+        logger.info("Startup thread initiated")
+
+
+# Only start the startup thread if running directly or in production
 if __name__ == "__main__":
+    ensure_startup_thread()
+
     # Create tables within app context
     with app.app_context():
         db.create_all()
 
     app.run(debug=False, port=8080, threaded=True)
+else:
+    # For production/WSGI deployment
+    ensure_startup_thread()
