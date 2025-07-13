@@ -44,6 +44,110 @@ log_info "Starting TrakBridge from $(pwd)"
 log_info "Environment: $FLASK_ENV"
 log_info "Database Type: $DB_TYPE"
 log_info "Log Level: $LOG_LEVEL"
+log_info "Running as UID: $(id -u), GID: $(id -g)"
+
+# Function to handle secrets permissions
+handle_secrets() {
+    log_info "Handling secrets permissions..."
+
+    local secrets_dir="/app/secrets"
+    local current_uid=$(id -u)
+    local current_gid=$(id -g)
+
+    if [[ -d "$secrets_dir" ]]; then
+        log_info "Secrets directory found, checking permissions..."
+
+        # Check if we can access the secrets directory
+        if [[ ! -r "$secrets_dir" ]]; then
+            log_error "Cannot read secrets directory: $secrets_dir"
+            return 1
+        fi
+
+        # Process each secret file
+        for secret_file in "$secrets_dir"/*; do
+            if [[ -f "$secret_file" ]]; then
+                local filename=$(basename "$secret_file")
+                log_debug "Processing secret file: $filename"
+
+                # Check if we can read the file
+                if [[ ! -r "$secret_file" ]]; then
+                    log_warn "Cannot read secret file: $secret_file"
+
+                    # Try to fix permissions (this will work if we're root or if the file is group-writable)
+                    if chmod 640 "$secret_file" 2>/dev/null; then
+                        log_info "Fixed permissions for $filename"
+                    else
+                        log_error "Cannot fix permissions for $filename"
+                        log_error "Please ensure the secret file is readable by UID $current_uid or GID $current_gid"
+                        return 1
+                    fi
+                fi
+
+                # Test that we can actually read the file content
+                if ! cat "$secret_file" >/dev/null 2>&1; then
+                    log_error "Cannot read content of secret file: $secret_file"
+                    return 1
+                fi
+
+                log_debug "Secret file $filename is readable"
+            fi
+        done
+
+        log_info "All secret files are accessible"
+    else
+        log_debug "No secrets directory found at $secrets_dir"
+    fi
+
+    return 0
+}
+
+# Function to ensure directory permissions
+ensure_permissions() {
+    log_info "Ensuring proper permissions for application directories..."
+
+    # Create directories if they don't exist
+    mkdir -p /app/logs /app/data /app/tmp
+
+    # Get current user info
+    local current_uid=$(id -u)
+    local current_gid=$(id -g)
+
+    # Function to check and fix directory permissions
+    check_and_fix_dir() {
+        local dir="$1"
+        local dir_name="$2"
+
+        if [[ -w "$dir" ]]; then
+            log_debug "$dir_name directory is writable"
+        else
+            log_warn "$dir_name directory is not writable, attempting to fix..."
+
+            # Try different approaches to fix permissions
+            chmod 755 "$dir" 2>/dev/null || {
+                log_warn "Could not chmod $dir_name directory"
+                # Try to make it writable by group/other as fallback
+                chmod 775 "$dir" 2>/dev/null || chmod 777 "$dir" 2>/dev/null || {
+                    log_error "Could not fix $dir_name directory permissions"
+                    log_error "You may need to fix permissions manually: sudo chown -R $current_uid:$current_gid $dir"
+                }
+            }
+        fi
+
+        # Ensure we can create files in the directory
+        local test_file="$dir/.write_test"
+        if touch "$test_file" 2>/dev/null; then
+            rm -f "$test_file" 2>/dev/null
+            log_debug "$dir_name directory write test passed"
+        else
+            log_warn "$dir_name directory write test failed - may cause runtime issues"
+        fi
+    }
+
+    # Check each directory
+    check_and_fix_dir "/app/logs" "Logs"
+    check_and_fix_dir "/app/data" "Data"
+    check_and_fix_dir "/app/tmp" "Tmp"
+}
 
 # Function to wait for database
 wait_for_database() {
@@ -99,18 +203,6 @@ run_migrations() {
     else
         log_warn "Flask CLI not available, skipping migrations"
     fi
-}
-
-# Function to create necessary directories
-create_directories() {
-    log_info "Creating necessary directories..."
-
-    mkdir -p /app/logs
-    mkdir -p /app/data
-    mkdir -p /app/tmp
-
-    # Ensure proper permissions
-    chmod 755 /app/logs /app/data /app/tmp
 }
 
 # Function to validate configuration
@@ -191,17 +283,17 @@ for key in ['FLASK_APP', 'FLASK_ENV', 'PYTHONPATH']:
 
     # Check for required secrets in production
     if [[ "$FLASK_ENV" == "production" ]]; then
-        if [[ -z "$SECRET_KEY" ]] && [[ ! -f "/run/secrets/secret_key" ]]; then
+        if [[ -z "$SECRET_KEY" ]] && [[ ! -f "/app/secrets/secret_key" ]]; then
             log_error "SECRET_KEY is required in production environment"
             return 1
         fi
 
-        if [[ "$DB_TYPE" != "sqlite" ]] && [[ ! -f "/run/secrets/db_password" ]] && [[ -z "$DB_PASSWORD" ]]; then
+        if [[ "$DB_TYPE" != "sqlite" ]] && [[ ! -f "/app/secrets/db_password" ]] && [[ -z "$DB_PASSWORD" ]]; then
             log_error "Database password is required for $DB_TYPE in production"
             return 1
         fi
 
-        if [[ -z "$TB_MASTER_KEY" ]] && [[ ! -f "/run/secrets/tb_master_key" ]]; then
+        if [[ -z "$TB_MASTER_KEY" ]] && [[ ! -f "/app/secrets/tb_master_key" ]]; then
             log_error "Master Key is required in production"
             return 1
         fi
@@ -215,17 +307,17 @@ for key in ['FLASK_APP', 'FLASK_ENV', 'PYTHONPATH']:
 setup_logging() {
     log_info "Setting up logging..."
 
-    # Ensure log directory exists
+    # Ensure log directory exists and is writable
     mkdir -p /app/logs
 
     # Create log files if they don't exist
-    touch /app/logs/app.log
-    touch /app/logs/error.log
-    touch /app/logs/hypercorn-access.log
-    touch /app/logs/hypercorn-error.log
+    touch /app/logs/app.log 2>/dev/null || log_warn "Cannot create app.log"
+    touch /app/logs/error.log 2>/dev/null || log_warn "Cannot create error.log"
+    touch /app/logs/hypercorn-access.log 2>/dev/null || log_warn "Cannot create hypercorn-access.log"
+    touch /app/logs/hypercorn-error.log 2>/dev/null || log_warn "Cannot create hypercorn-error.log"
 
-    # Set appropriate permissions
-    chmod 644 /app/logs/*.log
+    # Set appropriate permissions if possible
+    chmod 644 /app/logs/*.log 2>/dev/null || log_debug "Could not set log file permissions"
 }
 
 # Function to handle shutdown signals
@@ -301,8 +393,14 @@ main() {
     # Ensure we're in the correct directory
     cd /app
 
-    # Create necessary directories
-    create_directories
+    # Ensure proper permissions
+    ensure_permissions
+
+    # Handle secrets permissions
+    if ! handle_secrets; then
+        log_error "Failed to handle secrets permissions"
+        exit 1
+    fi
 
     # Setup logging
     setup_logging
@@ -379,7 +477,8 @@ case "${1:-}" in
     "migrate")
         log_info "Running database migrations only"
         cd /app
-        create_directories
+        ensure_permissions
+        handle_secrets
         setup_logging
         validate_config
         if [[ "$DB_TYPE" != "sqlite" ]]; then

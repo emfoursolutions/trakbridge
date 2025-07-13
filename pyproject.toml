@@ -23,6 +23,9 @@ dependencies = [
     "Flask-Migrate",
     "Flask-SQLAlchemy",
     "frozenlist",
+    "gunicorn",
+    "gevent",
+    "hypercorn[uvloop,h2,quic]",
     "idna",
     "itsdangerous",
     "Jinja2",
@@ -40,8 +43,12 @@ dependencies = [
     "python-dateutil",
     "python-dotenv",
     "PyYAML",
+    "setuptools",
+    "setuptools-scm",
+    "six",
     "SQLAlchemy",
     "types-python-dateutil",
+    "watchdog",
     "Werkzeug",
     "yarl"
 ]
@@ -69,7 +76,7 @@ dev = [
     "coverage>=7.0.0",
     "bump2version",
     "pre-commit",
-    "setuptools-scm>=8.0.0"  # Added for dynamic versioning
+    "setuptools-scm>=8.0.0"
 ]
 
 [build-system]
