@@ -54,15 +54,15 @@
                 <td>{{ server.created_at.strftime('%Y-%m-%d') }}</td>
                 <td>
                     <div class="btn-group btn-group-sm" role="group">
-                        <button class="btn btn-outline-info" onclick="testServer({{ server.id }})" title="Test Connection">
-                            <i class="fas fa-network-wired"></i>
-                        </button>
                         <a href="{{ url_for('tak_servers.view_tak_server', server_id=server.id) }}" class="btn btn-outline-primary" title="View Details">
                             <i class="fas fa-eye"></i>
                         </a>
                         <a href="{{ url_for('tak_servers.edit_tak_server', server_id=server.id) }}" class="btn btn-outline-warning" title="Edit Server">
                             <i class="fas fa-edit"></i>
                         </a>
+                        <button class="btn btn-outline-info" onclick="testServer({{ server.id }})" title="Test Connection">
+                            <i class="fas fa-network-wired"></i>
+                        </button>
                         <button class="btn btn-outline-danger" onclick="deleteServer({{ server.id }})" title="Delete Server" {% if server.streams %}disabled{% endif %}>
                             <i class="fas fa-trash"></i>
                         </button>
