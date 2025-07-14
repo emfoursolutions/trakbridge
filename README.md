@@ -36,6 +36,277 @@ A comprehensive web application for bridging tracking devices and services to TA
 
 ### Setup Instructions
 
+# TrakBridge Deployment Guide
+
+## Quick Start
+
+1. **Generate secrets**:
+   ```bash
+   ./init-secrets.sh production
+   ```
+
+2. **Configure deployment**:
+   Edit the `x-environment` section in `docker-compose.yml` to match your environment.
+
+3. **Setup SSL certificates** (for nginx profile):
+   ```bash
+   chmod +x docker/nginx/setup-ssl.sh
+   ./docker/nginx/setup-ssl.sh yourdomain.com
+   ```
+
+4. **Start the application**:
+   ```bash
+   # PostgreSQL + Nginx (recommended)
+   docker-compose --profile postgres --profile nginx up -d
+   
+   # MySQL variant
+   docker-compose --profile mysql --profile nginx up -d
+   
+   # App only (external database)
+   docker-compose up -d
+   ```
+
+## Configuration
+
+All configuration is managed in the `docker-compose.yml` file. Edit the `x-environment` section:
+
+```yaml
+x-environment: &common-environment
+  # Application Settings
+  APP_VERSION: "latest"
+  FLASK_ENV: "production"
+  FLASK_APP: "app.py"
+  APP_PORT: "5000"
+  
+  # Database Configuration
+  DB_TYPE: "postgresql"        # postgresql or mysql
+  DB_HOST: "postgres"          # Change to your external DB host
+  DB_PORT: "5432"              # 5432 for PostgreSQL, 3306 for MySQL
+  DB_NAME: "trakbridge"
+  DB_USER: "trakbridge"
+  
+  # Application Performance
+  DEBUG: "false"
+  LOG_LEVEL: "INFO"            # DEBUG, INFO, WARNING, ERROR
+  MAX_WORKER_THREADS: "4"
+  DEFAULT_POLL_INTERVAL: "120"
+  HTTP_TIMEOUT: "30"
+```
+
+## Deployment Profiles
+
+### PostgreSQL + Nginx (Recommended)
+```bash
+docker-compose --profile postgres --profile nginx up -d
+```
+- Includes PostgreSQL database
+- Nginx reverse proxy with SSL
+- Production-ready configuration
+
+### MySQL + Nginx
+```bash
+docker-compose --profile mysql --profile nginx up -d
+```
+- Includes MySQL database
+- Nginx reverse proxy with SSL
+
+### App Only (External Database)
+```bash
+docker-compose up -d
+```
+- Application only
+- Configure external database in `x-environment`
+
+### Development
+```bash
+docker-compose --profile postgres up
+```
+- PostgreSQL database
+- Direct app access on port 5000
+- No SSL termination
+
+## External Database Configuration
+
+To use an external database:
+
+1. **Update `x-environment` section**:
+   ```yaml
+   DB_TYPE: "postgresql"
+   DB_HOST: "your-db-host.com"
+   DB_PORT: "5432"
+   DB_NAME: "your_database"
+   DB_USER: "your_user"
+   ```
+
+2. **Start without database profile**:
+   ```bash
+   docker-compose --profile nginx up -d
+   ```
+
+## SSL Certificate Setup
+
+### Development (Self-signed)
+```bash
+./docker/nginx/setup-ssl.sh localhost
+```
+
+### Production (Let's Encrypt)
+```bash
+# Install certbot
+sudo apt-get install certbot
+
+# Get certificate
+sudo certbot certonly --standalone -d yourdomain.com
+
+# Copy to nginx directory
+sudo cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem docker/nginx/ssl/trakbridge.crt
+sudo cp /etc/letsencrypt/live/yourdomain.com/privkey.pem docker/nginx/ssl/trakbridge.key
+sudo chown $USER:$USER docker/nginx/ssl/trakbridge.*
+```
+
+## Monitoring
+
+### Health Check
+```bash
+curl -f https://yourdomain.com/api/health
+```
+
+### Logs
+```bash
+# Application logs
+docker-compose logs -f app
+
+# Database logs
+docker-compose logs -f postgres
+
+# Nginx logs
+docker-compose logs -f nginx
+
+# All logs
+docker-compose logs -f
+```
+
+### Container Status
+```bash
+docker-compose ps
+```
+
+## Backup & Recovery
+
+### Database Backup
+```bash
+# PostgreSQL
+docker-compose exec postgres pg_dump -U trakbridge trakbridge > backup.sql
+
+# MySQL
+docker-compose exec mysql mysqldump -u trakbridge -p trakbridge > backup.sql
+```
+
+### Volume Backup
+```bash
+# Create volume backup
+docker run --rm -v trakbridge-postgres-data:/data -v $(pwd):/backup alpine tar czf /backup/postgres-backup.tar.gz /data
+```
+
+## Scaling
+
+### Horizontal Scaling
+```bash
+# Scale app instances
+docker-compose up -d --scale app=3
+
+# Load balancer configuration required
+```
+
+### Resource Limits
+Add to individual services in `docker-compose.yml`:
+```yaml
+deploy:
+  resources:
+    limits:
+      cpus: '2.0'
+      memory: 2G
+    reservations:
+      cpus: '0.5'
+      memory: 512M
+```
+
+## Security
+
+### Network Security
+- All services use internal Docker network
+- Only nginx exposes ports 80/443
+- Database accessible only from app container
+
+### Secret Management
+- Database passwords stored in files
+- Secrets mounted as read-only
+- No secrets in environment variables
+
+### SSL Security
+- TLS 1.2+ only
+- Modern cipher suites
+- HSTS headers
+- Security headers enabled
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Permission Denied**:
+   ```bash
+   sudo chown -R $USER:$USER logs/ data/ secrets/
+   ```
+
+2. **Database Connection Failed**:
+   - Check `DB_HOST` in configuration
+   - Verify database is healthy: `docker-compose ps`
+   - Check logs: `docker-compose logs postgres`
+
+3. **SSL Certificate Issues**:
+   ```bash
+   # Regenerate certificates
+   ./docker/nginx/setup-ssl.sh yourdomain.com --force
+   ```
+
+4. **Application Won't Start**:
+   ```bash
+   # Check health
+   docker-compose ps
+   
+   # View logs
+   docker-compose logs app
+   
+   # Restart services
+   docker-compose restart
+   ```
+
+### Debug Mode
+Enable debug mode in `x-environment`:
+```yaml
+DEBUG: "true"
+LOG_LEVEL: "DEBUG"
+```
+
+## Updates
+
+### Application Update
+```bash
+# Pull latest image
+docker-compose pull
+
+# Restart with new image
+docker-compose up -d
+```
+
+### Database Migration
+```bash
+# Application handles migrations automatically
+# Check logs for migration status
+docker-compose logs app | grep -i migration
+```
+
+
 1. **Clone the Repository**
    ```bash
    git clone <repository-url>
