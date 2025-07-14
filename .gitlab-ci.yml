@@ -89,6 +89,7 @@ validate-requirements:
     - docker
   timeout: 10m
   before_script:
+    - apt-get update && apt-get install -y git
     - pip install --no-cache-dir pip-tools pip-audit
   script:
     - echo "Validating requirements.txt format..."
@@ -119,6 +120,7 @@ validate-pyproject:
     - docker
   timeout: 10m
   before_script:
+    - apt-get update && apt-get install -y git
     - pip install --no-cache-dir tomli validate-pyproject build setuptools-scm
   script:
     - echo "Validating pyproject.toml..."
@@ -152,6 +154,7 @@ code-quality:
     - docker
   timeout: 15m
   before_script:
+    - apt-get update && apt-get install -y git
     - pip install --no-cache-dir black flake8 pytest pytest-xdist
   script:
     - echo "Running code quality checks..."
@@ -177,6 +180,7 @@ bandit-sast:
     - docker
   timeout: 15m
   before_script:
+    - apt-get update && apt-get install -y git
     - pip install --no-cache-dir bandit
   script:
     - echo "Running Bandit security scan..."
@@ -202,6 +206,7 @@ safety-check:
     - docker
   timeout: 10m
   before_script:
+    - apt-get update && apt-get install -y git
     - pip install --no-cache-dir safety
   script:
     - echo "Running Safety vulnerability check..."
