@@ -91,4 +91,4 @@ defaults:
     name: trakbridge
 
   sqlite:
-    name: app.db
+    name: data/app.db

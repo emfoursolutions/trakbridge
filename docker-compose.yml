@@ -1,71 +1,84 @@
 # =============================================================================
-# Docker Compose Configuration for TrakBridge with Production WSGI
+# TrakBridge Docker Compose Configuration
 # =============================================================================
+#
+# Usage:
+#   docker-compose up                          # App only (requires external DB)
+#   docker-compose --profile postgres up      # App + PostgreSQL
+#   docker-compose --profile mysql up         # App + MySQL
+#   docker-compose --profile nginx up         # App + Nginx reverse proxy
+#   docker-compose --profile postgres --profile nginx up  # Full stack
+#
+# Configuration:
+#   Edit the 'x-environment' section below to customize your deployment
+#
+# =============================================================================
+
+# =============================================================================
+# CONFIGURATION SECTION - Edit these values for your deployment
+# =============================================================================
+x-environment: &common-environment
+  # Application Settings
+  APP_VERSION: "latest"
+  FLASK_ENV: "production"
+  FLASK_APP: "app.py"
+  APP_PORT: "5000"
+  
+  # Database Configuration
+  DB_TYPE: "postgresql"        # postgresql or mysql or sqlite
+  DB_HOST: "postgres"          # Change to your external DB host if not using profiles. If sqlite these will be ignored.
+  DB_PORT: "5432"              # 5432 for PostgreSQL, 3306 for MySQL
+  DB_NAME: "trakbridge"
+  DB_USER: "trakbridge"
+  
+  # Application Performance
+  DEBUG: "false"
+  LOG_LEVEL: "INFO"
+  MAX_WORKER_THREADS: "4"
+  DEFAULT_POLL_INTERVAL: "120"
+  HTTP_TIMEOUT: "30"
+  
+  # External Database Ports (uncomment if needed)
+  # POSTGRES_PORT: "5432"
+  # MYSQL_PORT: "3306"
+
+# Secret file paths - customize if needed
+x-secrets: &common-secrets
+  DB_PASSWORD_FILE: "./secrets/db_password"
+  SECRET_KEY_FILE: "./secrets/secret_key"
+  TB_MASTER_KEY_FILE: "./secrets/tb_master_key"
 
 version: '3.8'
 
 services:
-  # Main application service
+  # =============================================================================
+  # TrakBridge Application
+  # =============================================================================
   app:
     build:
       context: .
       dockerfile: Dockerfile
-      target: ${BUILD_TARGET:-production}
-      args:
-        BUILD_ENV: ${FLASK_ENV:-production}
-    image: trakbridge:${APP_VERSION:-latest}
+      target: production
+    image: trakbridge:latest
     container_name: trakbridge
     restart: unless-stopped
 
-    # Environment configuration
     environment:
-      # Flask environment
-      FLASK_ENV: ${FLASK_ENV:-production}
-      FLASK_APP: ${FLASK_APP:-app.py}
-
-      # Database configuration
-      DB_TYPE: ${DB_TYPE:-postgresql}
-      DB_HOST: ${DB_HOST:-postgres}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_NAME: ${DB_NAME:-trakbridge_db}
-      DB_USER: ${DB_USER:-postgres}
-
-      # Application settings
-      DEBUG: ${DEBUG:-false}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      LOG_DIR: ${LOG_DIR:-logs}
-
-      # Performance settings
-      MAX_WORKER_THREADS: ${MAX_WORKER_THREADS:-8}
-      MAX_CONCURRENT_STREAMS: ${MAX_CONCURRENT_STREAMS:-200}
-      DEFAULT_POLL_INTERVAL: ${DEFAULT_POLL_INTERVAL:-120}
-      HTTP_TIMEOUT: ${HTTP_TIMEOUT:-30}
-      HTTP_MAX_CONNECTIONS: ${HTTP_MAX_CONNECTIONS:-100}
-      HTTP_MAX_CONNECTIONS_PER_HOST: ${HTTP_MAX_CONNECTIONS_PER_HOST:-10}
-      ASYNC_TIMEOUT: ${ASYNC_TIMEOUT:-60}
-
-      # Feature flags
-      ENABLE_SQL_ECHO: ${ENABLE_SQL_ECHO:-false}
-      SQLALCHEMY_RECORD_QUERIES: ${SQLALCHEMY_RECORD_QUERIES:-false}
-
-    # Secrets (for production)
+      <<: *common-environment
+      
     secrets:
       - db_password
       - secret_key
       - tb_master_key
 
-    # Ports
     ports:
-      - "${APP_PORT:-5000}:5000"
+      - "5000:5000"
 
-    # Volumes
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data
-      - ./plugins:/app/plugins
-      - ${CONFIG_DIR:-./config}:/app/config:ro
-
-    # Health check
+      - ./secrets:/app/secrets
+      
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 30s
@@ -73,7 +86,6 @@ services:
       retries: 3
       start_period: 40s
 
-    # Dependencies
     depends_on:
       postgres:
         condition: service_healthy
@@ -82,123 +94,82 @@ services:
         condition: service_healthy
         required: false
 
-    # Resource limits (optional)
-    deploy:
-      resources:
-        limits:
-          cpus: '${CPU_LIMIT:-2.0}'
-          memory: ${MEMORY_LIMIT:-2G}
-        reservations:
-          cpus: '${CPU_RESERVATION:-0.5}'
-          memory: ${MEMORY_RESERVATION:-512M}
-
-    # Networks
     networks:
-      - app-network
+      - trakbridge
 
-  # PostgreSQL database (optional)
+  # =============================================================================
+  # PostgreSQL Database (Optional)
+  # =============================================================================
   postgres:
     image: postgres:15-alpine
     container_name: trakbridge-postgres
     restart: unless-stopped
-    profiles:
-      - postgres
-      - db
+    profiles: ["postgres"]
 
     environment:
-      POSTGRES_DB: ${DB_NAME:-trakbridge_db}
-      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_DB: trakbridge
+      POSTGRES_USER: trakbridge
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password
 
     secrets:
       - db_password
-
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/init-scripts/postgres:/docker-entrypoint-initdb.d:ro
 
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-trakbridge_db}" ]
+      test: ["CMD-SHELL", "pg_isready -U trakbridge -d trakbridge"]
       interval: 10s
       timeout: 5s
       retries: 5
 
     networks:
-      - app-network
+      - trakbridge
 
-  # MySQL database (optional)
+  # =============================================================================
+  # MySQL Database (Optional)
+  # =============================================================================
   mysql:
     image: mysql:8.0
     container_name: trakbridge-mysql
     restart: unless-stopped
-    profiles:
-      - mysql
-      - db
+    profiles: ["mysql"]
 
     environment:
-      MYSQL_DATABASE: ${DB_NAME:-trakbridge_db}
-      MYSQL_USER: ${DB_USER:-mysql}
+      MYSQL_DATABASE: trakbridge
+      MYSQL_USER: trakbridge
       MYSQL_PASSWORD_FILE: /run/secrets/db_password
       MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_password
 
     secrets:
       - db_password
 
-    ports:
-      - "${MYSQL_PORT:-3306}:3306"
-
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/init-scripts/mysql:/docker-entrypoint-initdb.d:ro
 
     healthcheck:
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
       retries: 5
 
     networks:
-      - app-network
+      - trakbridge
 
-  # Redis (optional, for caching/sessions)
-  redis:
-    image: redis:7-alpine
-    container_name: trakbridge-redis
-    restart: unless-stopped
-    profiles:
-      - redis
-      - cache
-
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-
-    volumes:
-      - redis_data:/data
-
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-    networks:
-      - app-network
-
-  # Nginx reverse proxy (optional)
+  # =============================================================================
+  # Nginx Reverse Proxy (Optional)
+  # =============================================================================
   nginx:
     image: nginx:alpine
     container_name: trakbridge-nginx
     restart: unless-stopped
-    profiles:
-      - nginx
-      - proxy
+    profiles: ["nginx"]
 
     ports:
-      - "${NGINX_PORT:-80}:80"
-      - "${NGINX_SSL_PORT:-443}:443"
+      - "80:80"
+      - "443:443"
 
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
@@ -206,38 +177,32 @@ services:
       - ./logs/nginx:/var/log/nginx
 
     depends_on:
-      - app
+      app:
+        condition: service_healthy
 
     networks:
-      - app-network
+      - trakbridge
 
-# Networks
+# =============================================================================
+# Networks & Volumes
+# =============================================================================
 networks:
-  app-network:
+  trakbridge:
     driver: bridge
-    name: trakbridge-network
 
-# Volumes
 volumes:
   postgres_data:
     driver: local
-    name: trakbridge-postgres-data
-
   mysql_data:
     driver: local
-    name: trakbridge-mysql-data
 
-  redis_data:
-    driver: local
-    name: trakbridge-redis-data
-
+# =============================================================================
 # Secrets
+# =============================================================================
 secrets:
   db_password:
-    file: ${DB_PASSWORD:-./secrets/db_password}
-
+    file: ./secrets/db_password
   secret_key:
-    file: ${SECRET_KEY:-./secrets/secret_key}
-
+    file: ./secrets/secret_key
   tb_master_key:
-    file: ${TB_MASTER_KEY:-./secrets/tb_master_key}
+    file: ./secrets/tb_master_key
