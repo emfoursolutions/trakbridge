@@ -586,7 +586,7 @@
                             <div class="version-info">
                                 <span>&copy; <span id="currentYear"></span> Emfour Solutions - TrakBridge</span>
                                 <span class="version-badge {% if app_version.is_development %}dev{% else %}release{% endif %}">
-                                    v{{ app_version.version }}
+                                    {{ app_version.version }}
                                 </span>
                                 {% if app_version.git_commit %}
                                     <span class="version-badge">

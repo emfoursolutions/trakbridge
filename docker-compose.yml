@@ -3,7 +3,7 @@
 # =============================================================================
 #
 # Usage:
-#   docker-compose up                          # App only (requires external DB)
+#   docker-compose up                         # App only (requires external DB or SQLite)
 #   docker-compose --profile postgres up      # App + PostgreSQL
 #   docker-compose --profile mysql up         # App + MySQL
 #   docker-compose --profile nginx up         # App + Nginx reverse proxy
@@ -25,19 +25,22 @@ x-environment: &common-environment
   APP_PORT: "5000"
   
   # Database Configuration - Postresql
-  DB_TYPE: "postgresql"        # postgresql or mysql or sqlite
-  DB_HOST: "postgres"          # Change to your external DB host if not using profiles. If sqlite these will be ignored.
-  DB_PORT: "5432"              # 5432 for PostgreSQL, 3306 for MySQL
+  DB_TYPE: "postgresql" 
+  DB_HOST: "postgres"
+  DB_PORT: "5432" 
   DB_NAME: "trakbridge"
   DB_USER: "trakbridge"
   
 # Database Configuration - MySQL
-#  DB_TYPE: "mysql"        # postgresql or mysql or sqlite
-#  DB_HOST: "mysql"          # Change to your external DB host if not using profiles. If sqlite these will be ignored.
-#  DB_PORT: "3306"              # 5432 for PostgreSQL, 3306 for MySQL
+#  DB_TYPE: "mysql" 
+#  DB_HOST: "mysql"
+#  DB_PORT: "3306"
 #  DB_NAME: "trakbridge"
 #  DB_USER: "trakbridge"
-  
+
+# Database Configuration - SQLite
+#  DB_TYPE: "sqlite"
+
 
   # Application Performance
   DEBUG: "false"
