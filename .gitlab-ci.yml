@@ -251,6 +251,9 @@ build-image-shell:
       git tag -l | head -10 || echo "No tags"
   script:
     - echo "Building container image with host Docker..."
+    - "echo \"Branch: $CI_COMMIT_BRANCH\""
+    - "echo \"Tag: $CI_COMMIT_TAG\""
+    - "echo \"Ref name: $CI_COMMIT_REF_NAME\""
     - |
       # Set proper version for setuptools_scm
       if [ -n "$CI_COMMIT_TAG" ]; then
@@ -281,6 +284,8 @@ build-image-shell:
     - docker push "$IMAGE_NAME:latest"
     - echo "✅ Container build and push completed"
   rules:
+    - if: '$CI_COMMIT_TAG != null'
+      when: never
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_TAG == null
 
 build-tagged-image-shell:
@@ -309,6 +314,9 @@ build-tagged-image-shell:
       git tag -l | head -10 || echo "No tags"
   script:
     - echo "Building tagged container image with host Docker..."
+    - "echo \"Branch: $CI_COMMIT_BRANCH\""
+    - "echo \"Tag: $CI_COMMIT_TAG\""
+    - "echo \"Ref name: $CI_COMMIT_REF_NAME\""
     - |
       # For tagged builds, use the tag as version
       export SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG"
