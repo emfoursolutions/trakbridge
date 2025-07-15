@@ -259,7 +259,6 @@ except Exception as e:
 import sys
 print('Python version:', sys.version)
 print('Python path:', sys.path)
-print('Current working directory:', sys.getcwd())
 import os
 print('Environment variables:')
 for key in ['FLASK_APP', 'FLASK_ENV', 'PYTHONPATH']:

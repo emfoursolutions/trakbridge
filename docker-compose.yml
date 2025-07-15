@@ -24,13 +24,21 @@ x-environment: &common-environment
   FLASK_APP: "app.py"
   APP_PORT: "5000"
   
-  # Database Configuration
+  # Database Configuration - Postresql
   DB_TYPE: "postgresql"        # postgresql or mysql or sqlite
   DB_HOST: "postgres"          # Change to your external DB host if not using profiles. If sqlite these will be ignored.
   DB_PORT: "5432"              # 5432 for PostgreSQL, 3306 for MySQL
   DB_NAME: "trakbridge"
   DB_USER: "trakbridge"
   
+# Database Configuration - MySQL
+#  DB_TYPE: "mysql"        # postgresql or mysql or sqlite
+#  DB_HOST: "mysql"          # Change to your external DB host if not using profiles. If sqlite these will be ignored.
+#  DB_PORT: "3306"              # 5432 for PostgreSQL, 3306 for MySQL
+#  DB_NAME: "trakbridge"
+#  DB_USER: "trakbridge"
+  
+
   # Application Performance
   DEBUG: "false"
   LOG_LEVEL: "INFO"
@@ -54,12 +62,12 @@ services:
   # =============================================================================
   # TrakBridge Application
   # =============================================================================
-  app:
+  trakbridge:
     build:
       context: .
       dockerfile: Dockerfile
       target: production
-    image: trakbridge:latest
+    image: emfoursolutions/trakbridge:latest
     container_name: trakbridge
     restart: unless-stopped
 
@@ -78,7 +86,7 @@ services:
       - ./logs:/app/logs
       - ./data:/app/data
       - ./secrets:/app/secrets
-      
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 30s
