@@ -12,124 +12,97 @@
     <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
 
     <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 
     <style>
         :root {
-            --primary-purple: #7c3aed;
-            --secondary-purple: #8b5cf6;
-            --accent-purple: #a855f7;
-            --light-purple: #e9d5ff;
-            --text-primary: #1e293b;
-            --text-secondary: #64748b;
-            --border-color: #e2e8f0;
-            --syncopate-font: 'Syncopate', sans-serif;
-            --inter-font: 'Inter', sans-serif;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+            /* Color Palette - Muted Professional (matching base.html) */
+            --primary-blue: #1e3a8a;
+            --primary-blue-light: #3b82f6;
+            --primary-blue-dark: #1e40af;
+            --accent-orange: #ea580c;
+            --accent-orange-light: #f97316;
+            --accent-orange-dark: #c2410c;
+            
+            /* Neutrals */
+            --gray-50: #f8fafc;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
+            
+            /* Semantic Colors */
+            --success: #059669;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --info: #0284c7;
+            
+            /* Typography */
+            --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --font-mono: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
+            
+            /* Layout */
+            --border-radius: 8px;
+            --border-radius-sm: 4px;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }
 
         body {
-            font-family: var(--inter-font);
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            font-family: var(--font-primary);
+            background-color: var(--gray-50);
+            color: var(--gray-800);
+            line-height: 1.6;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--text-primary);
-            line-height: 1.6;
         }
 
         .startup-container {
-            text-align: center;
             max-width: 800px;
-            padding: 3rem 2rem;
-            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-            border-radius: 1.5rem;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            border: 1px solid var(--border-color);
+            width: 100%;
+            margin: 2rem;
         }
 
-        .logo {
-            margin-bottom: 2rem;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+        .card {
+            background-color: white;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 1.5rem;
         }
 
-        .logo img {
-            filter: drop-shadow(0 4px 12px rgba(124, 58, 237, 0.2));
-            transition: all 0.3s ease;
-        }
-
-        .logo img:hover {
-            transform: translateY(-2px);
-            filter: drop-shadow(0 6px 16px rgba(124, 58, 237, 0.3));
-        }
-
-        .version-info {
-            font-size: 1.1rem;
-            margin-bottom: 2rem;
-            color: var(--text-secondary);
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.75rem;
-            flex-wrap: wrap;
-        }
-
-        .version-badge {
-            background: linear-gradient(135deg, var(--light-purple) 0%, #f3e8ff 100%);
-            color: var(--primary-purple);
-            padding: 0.25rem 0.75rem;
-            border-radius: 1rem;
-            font-size: 0.75rem;
+        .card-header {
+            background-color: var(--gray-50);
+            border-bottom: 1px solid var(--gray-200);
+            padding: 1rem 1.5rem;
             font-weight: 600;
-            font-family: var(--syncopate-font);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            color: var(--gray-800);
         }
 
-        .version-badge.dev {
-            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-            color: #92400e;
-        }
-
-        .git-commit {
-            font-family: 'Courier New', monospace;
-            font-size: 0.75rem;
-            background: linear-gradient(135deg, var(--light-purple) 0%, #f3e8ff 100%);
-            color: var(--primary-purple);
-            padding: 0.25rem 0.75rem;
-            border-radius: 1rem;
-            font-weight: 600;
-        }
-
-        .status-message {
-            font-size: 2rem;
-            font-family: var(--syncopate-font);
-            font-weight: 700;
-            margin-bottom: 2rem;
-            background: linear-gradient(135deg, var(--primary-purple) 0%, var(--secondary-purple) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        .card-body {
+            padding: 1.5rem;
         }
 
         .loading-spinner {
-            width: 80px;
-            height: 80px;
-            margin: 0 auto 2rem;
-            border: 4px solid var(--light-purple);
-            border-top: 4px solid var(--primary-purple);
+            width: 60px;
+            height: 60px;
+            border: 4px solid var(--gray-200);
+            border-top: 4px solid var(--primary-blue);
             border-radius: 50%;
             animation: spin 1s linear infinite;
+            margin: 0 auto 2rem;
         }
 
         @keyframes spin {
@@ -137,46 +110,78 @@
             100% { transform: rotate(360deg); }
         }
 
-        .progress-container {
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-            border-radius: 1rem;
-            padding: 2rem;
-            margin-top: 2rem;
-            border: 1px solid var(--border-color);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-        }
-
-        .progress-title {
-            font-size: 1.25rem;
-            font-family: var(--syncopate-font);
-            font-weight: 700;
-            margin-bottom: 1.5rem;
-            color: var(--text-primary);
-            display: flex;
+        .version-bubble {
+            background: linear-gradient(135deg, var(--primary-blue-light), var(--primary-blue));
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 25px;
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            font-weight: 500;
+            box-shadow: var(--shadow-md);
+            display: inline-flex;
+            flex-direction: column;
             align-items: center;
             gap: 0.5rem;
+            margin-bottom: 2rem;
+            position: relative;
+            overflow: hidden;
         }
 
-        .progress-list {
-            max-height: 250px;
-            overflow-y: auto;
-            text-align: left;
-            border-radius: 0.75rem;
-            background: white;
-            border: 1px solid var(--border-color);
+        .version-bubble::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+            pointer-events: none;
+        }
+
+        .version-badge {
+            background-color: rgba(255,255,255,0.2);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 15px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .version-badge.dev {
+            background-color: rgba(251, 191, 36, 0.3);
+            color: #fef3c7;
+        }
+
+        .version-badge.release {
+            background-color: rgba(34, 197, 94, 0.3);
+            color: #dcfce7;
+        }
+
+        .git-commit {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            background-color: rgba(255,255,255,0.15);
+            color: rgba(255,255,255,0.9);
+            padding: 0.25rem 0.75rem;
+            border-radius: 15px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
         }
 
         .progress-item {
-            padding: 1rem;
-            border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--gray-200);
             animation: fadeIn 0.5s ease-in;
-            transition: background-color 0.3s ease;
-        }
-
-        .progress-item:hover {
-            background-color: rgba(124, 58, 237, 0.05);
         }
 
         .progress-item:last-child {
@@ -185,21 +190,21 @@
 
         .progress-timestamp {
             font-size: 0.875rem;
-            color: var(--text-secondary);
+            color: var(--gray-500);
             margin-right: 1rem;
             min-width: 80px;
-            font-family: 'Courier New', monospace;
-            background: linear-gradient(135deg, var(--light-purple) 0%, #f3e8ff 100%);
-            color: var(--primary-purple);
+            font-family: var(--font-mono);
+            background-color: var(--gray-100);
+            color: var(--gray-700);
             padding: 0.25rem 0.5rem;
-            border-radius: 0.5rem;
-            font-weight: 600;
+            border-radius: var(--border-radius-sm);
+            font-weight: 500;
         }
 
         .progress-message {
             flex: 1;
             font-size: 0.9rem;
-            color: var(--text-primary);
+            color: var(--gray-800);
             font-weight: 500;
         }
 
@@ -208,126 +213,124 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        .status-message {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 2rem;
+            color: var(--gray-900);
+            text-align: center;
+        }
+
+        .progress-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border-radius: var(--border-radius);
+            background: white;
+            border: 1px solid var(--gray-200);
+        }
+
+        .progress-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .progress-list::-webkit-scrollbar-track {
+            background: var(--gray-100);
+            border-radius: 4px;
+        }
+
+        .progress-list::-webkit-scrollbar-thumb {
+            background: var(--primary-blue);
+            border-radius: 4px;
+        }
+
+        .progress-list::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-blue-dark);
+        }
+
+        .btn-primary {
+            background-color: var(--primary-blue);
+            border-color: var(--primary-blue);
+            color: white;
+            border-radius: var(--border-radius-sm);
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-blue-dark);
+            border-color: var(--primary-blue-dark);
+        }
+
         .error-container {
-            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-            border: 1px solid #f87171;
-            border-radius: 1rem;
-            padding: 2rem;
+            background-color: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+            border-radius: var(--border-radius);
+            padding: 1.5rem;
             margin-top: 2rem;
-            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);
-        }
-
-        .error-title {
-            font-size: 1.25rem;
-            font-family: var(--syncopate-font);
-            font-weight: 700;
-            margin-bottom: 1rem;
-            color: #991b1b;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .error-message {
-            font-size: 0.9rem;
-            color: #991b1b;
-            text-align: left;
-            background: rgba(255, 255, 255, 0.5);
-            padding: 1rem;
-            border-radius: 0.5rem;
-            font-family: 'Courier New', monospace;
-            line-height: 1.5;
         }
 
         .success-container {
-            background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
-            border: 1px solid #4ade80;
-            border-radius: 1rem;
-            padding: 2rem;
+            background-color: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            color: #065f46;
+            border-radius: var(--border-radius);
+            padding: 1.5rem;
             margin-top: 2rem;
-            box-shadow: 0 4px 12px rgba(34, 197, 94, 0.1);
         }
 
-        .success-title {
-            font-size: 1.25rem;
-            font-family: var(--syncopate-font);
-            font-weight: 700;
-            margin-bottom: 1rem;
-            color: #166534;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .redirect-message {
+        .error-message {
+            font-family: var(--font-mono);
             font-size: 0.9rem;
-            color: #166534;
+            color: var(--danger);
+            background: rgba(255, 255, 255, 0.7);
+            padding: 1rem;
+            border-radius: var(--border-radius-sm);
             margin-top: 1rem;
-            font-weight: 500;
         }
 
-        .retry-button {
-            background: linear-gradient(135deg, var(--primary-purple) 0%, var(--secondary-purple) 100%);
-            color: white;
-            border: none;
-            padding: 0.75rem 2rem;
-            border-radius: 0.5rem;
-            cursor: pointer;
-            font-size: 1rem;
-            font-weight: 600;
-            margin-top: 1.5rem;
-            transition: all 0.3s ease;
-            font-family: var(--inter-font);
-            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+        .logo-container {
+            text-align: center;
+            margin-bottom: 2rem;
         }
 
-        .retry-button:hover {
-            background: linear-gradient(135deg, var(--secondary-purple) 0%, var(--accent-purple) 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(124, 58, 237, 0.4);
+        .logo-container img {
+            max-width: 200px;
+            height: auto;
+            display: block;
+            margin: 0 auto;
         }
 
-        .retry-button:active {
-            transform: translateY(0);
+        .version-info {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 2rem;
         }
 
-        /* Responsive Design */
+        .text-muted {
+            color: var(--gray-500);
+        }
+
+        .text-success {
+            color: var(--success);
+        }
+
+        .text-danger {
+            color: var(--danger);
+        }
+
         @media (max-width: 768px) {
             .startup-container {
-                padding: 2rem 1rem;
                 margin: 1rem;
             }
 
-            .logo img {
-                max-height: 60px;
-                max-width: 200px;
-            }
-
-            .version-info {
-                font-size: 1rem;
-                flex-direction: column;
-                gap: 0.5rem;
-            }
-
             .status-message {
-                font-size: 1.5rem;
-            }
-
-            .loading-spinner {
-                width: 60px;
-                height: 60px;
-            }
-
-            .progress-container {
-                padding: 1.5rem;
-            }
-
-            .progress-list {
-                max-height: 200px;
+                font-size: 1.25rem;
             }
 
             .progress-item {
-                padding: 0.75rem;
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 0.5rem;
@@ -337,108 +340,110 @@
                 margin-right: 0;
                 min-width: auto;
             }
-        }
 
-        @media (max-width: 480px) {
-            .startup-container {
-                padding: 1.5rem 1rem;
+            .logo-container img {
+                max-width: 160px;
             }
 
-            .status-message {
-                font-size: 1.25rem;
+            .version-bubble {
+                font-size: 0.8rem;
+                padding: 0.6rem 1.2rem;
+                flex-wrap: wrap;
+                justify-content: center;
             }
-
-            .progress-title {
-                font-size: 1.1rem;
-            }
-
-            .version-badge,
-            .git-commit {
-                font-size: 0.7rem;
-                padding: 0.2rem 0.5rem;
-            }
-        }
-
-        /* Scrollbar styling */
-        .progress-list::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        .progress-list::-webkit-scrollbar-track {
-            background: var(--border-color);
-            border-radius: 4px;
-        }
-
-        .progress-list::-webkit-scrollbar-thumb {
-            background: linear-gradient(135deg, var(--primary-purple) 0%, var(--secondary-purple) 100%);
-            border-radius: 4px;
-        }
-
-        .progress-list::-webkit-scrollbar-thumb:hover {
-            background: linear-gradient(135deg, var(--secondary-purple) 0%, var(--accent-purple) 100%);
         }
     </style>
 </head>
 <body>
     <div class="startup-container">
-        <div class="logo">
-            <img src="{{ url_for('static', filename='large_logo.png') }}" alt="TrakBridge" style="max-height: 196px; max-width: 408px; height: auto;">
-        </div>
-        <div class="version-info">
-            {% if app_version %}
-                <span>v{{ app_version.version }}</span>
-                {% if app_version.is_development %}
-                    <span class="version-badge dev">
-                        <i class="fas fa-tools"></i> DEV
-                    </span>
-                {% endif %}
-                {% if app_version.git_commit %}
-                    <span class="git-commit">
-                        <i class="fas fa-code-branch"></i> {{ app_version.git_commit }}
-                    </span>
-                {% endif %}
-            {% else %}
-                <span>Loading version...</span>
-            {% endif %}
-        </div>
-        <div class="status-message" id="statusMessage">Starting up...</div>
-
-        <div class="loading-spinner" id="loadingSpinner"></div>
-
-        <div class="progress-container">
-            <div class="progress-title">
-                <i class="fas fa-cogs"></i>
-                Startup Progress
-            </div>
-            <div class="progress-list" id="progressList">
-                <div class="progress-item">
-                    <div class="progress-timestamp">--:--:--</div>
-                    <div class="progress-message">Initializing...</div>
+        <!-- Application Overview -->
+        <div class="row justify-content-center mb-4">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-body py-5">
+                        <div class="logo-container">
+                            <img src="{{ url_for('static', filename='logo.png') }}" alt="TrakBridge">
+                        </div>
+                        <div class="version-info">
+                            {% if app_version %}
+                                <div class="version-bubble">
+                                    <span>v{{ app_version.version }}</span>
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        {% if app_version.is_development %}
+                                            <span class="version-badge dev">
+                                                <i class="fas fa-tools"></i> Development
+                                            </span>
+                                        {% else %}
+                                            <span class="version-badge release">
+                                                <i class="fas fa-check"></i> Release
+                                            </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="version-bubble">
+                                    <span class="text-muted">Loading version...</span>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="status-message" id="statusMessage">Starting up...</div>
+                        <div class="loading-spinner" id="loadingSpinner"></div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="error-container" id="errorContainer" style="display: none;">
-            <div class="error-title">
-                <i class="fas fa-exclamation-triangle"></i>
-                Startup Error
-            </div>
-            <div class="error-message" id="errorMessage"></div>
-            <button class="retry-button" onclick="location.reload()">
-                <i class="fas fa-redo"></i> Retry
-            </button>
-        </div>
+        <!-- Startup Progress -->
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-cogs"></i> Startup Progress
+                        </h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="progress-list" id="progressList">
+                            <div class="progress-item">
+                                <div class="progress-timestamp">--:--:--</div>
+                                <div class="progress-message">Initializing...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-        <div class="success-container" id="successContainer" style="display: none;">
-            <div class="success-title">
-                <i class="fas fa-check-circle"></i>
-                Startup Complete!
-            </div>
-            <div class="redirect-message">
-                <i class="fas fa-arrow-right"></i> Redirecting to application...
+                <!-- Error Container -->
+                <div class="error-container" id="errorContainer" style="display: none;">
+                    <div class="d-flex align-items-center mb-3">
+                        <i class="fas fa-exclamation-triangle text-danger me-2"></i>
+                        <h5 class="mb-0 text-danger">Startup Error</h5>
+                    </div>
+                    <div class="error-message" id="errorMessage"></div>
+                    <div class="text-center mt-3">
+                        <button class="btn btn-primary" onclick="location.reload()">
+                            <i class="fas fa-redo me-2"></i> Retry
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Success Container -->
+                <div class="success-container" id="successContainer" style="display: none;">
+                    <div class="d-flex align-items-center mb-3">
+                        <i class="fas fa-check-circle text-success me-2"></i>
+                        <h5 class="mb-0 text-success">Startup Complete!</h5>
+                    </div>
+                    <div class="text-center">
+                        <p class="mb-0 text-success">
+                            <i class="fas fa-arrow-right me-2"></i> Redirecting to application...
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
         let checkInterval;

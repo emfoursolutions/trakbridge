@@ -1,65 +1,35 @@
 {% extends "base.html" %}
 
-{% block title %}Create TAK Server - Stream to TAK Server{% endblock %}
+{% block title %}Create TAK Server{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Create TAK Server</h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <div class="btn-group me-2">
-            <a href="{{ url_for('tak_servers.list_tak_servers') }}" class="btn btn-sm btn-outline-secondary">
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>Create TAK Server</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('tak_servers.list_tak_servers') }}">TAK Servers</a>
+                    </li>
+                    <li class="breadcrumb-item active">Create</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="btn-toolbar">
+            <a href="{{ url_for('tak_servers.list_tak_servers') }}" class="btn btn-outline-secondary btn-sm">
                 <i class="fas fa-arrow-left"></i> Back to Servers
             </a>
         </div>
     </div>
 </div>
 
-<style>
-    .alert {
-        margin-bottom: 1rem;
-    }
-    .card {
-        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-    }
-    .form-control:focus, .form-select:focus {
-        border-color: #0d6efd;
-        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
-    }
-    .btn-outline-info:hover {
-        color: #fff;
-        background-color: #0dcaf0;
-        border-color: #0dcaf0;
-    }
-    .text-danger {
-        color: #dc3545 !important;
-    }
-    .cert-validation-status {
-        padding: 0.5rem;
-        border-radius: 0.375rem;
-        margin-top: 0.5rem;
-    }
-    .cert-valid {
-        background-color: #d1edff;
-        border: 1px solid #0dcaf0;
-        color: #055160;
-    }
-    .cert-invalid {
-        background-color: #f8d7da;
-        border: 1px solid #dc3545;
-        color: #721c24;
-    }
-    .cert-validating {
-        background-color: #fff3cd;
-        border: 1px solid #ffc107;
-        color: #664d03;
-    }
-</style>
-
 <div class="row">
-    <div class="col-md-8">
+    <div class="col-lg-8">
         <div class="card">
             <div class="card-header">
-                <h5 class="card-title mb-0">
+                <h5 class="mb-0">
                     <i class="fas fa-server"></i> Server Configuration
                 </h5>
             </div>
@@ -107,12 +77,11 @@
                     <!-- SSL/TLS Configuration -->
                     <div class="card mb-3" id="tlsConfig">
                         <div class="card-header">
-                            <h6 class="card-title mb-0">
+                            <h6 class="mb-0">
                                 <i class="fas fa-shield-alt"></i> TLS/SSL Configuration
                             </h6>
                         </div>
                         <div class="card-body">
-
                             <div class="mb-3">
                                 <div class="form-check">
                                     <!-- Hidden input to ensure verify_ssl is always sent -->
@@ -139,7 +108,7 @@
                                 </div>
 
                                 <!-- Certificate Validation Status -->
-                                <div id="cert_validation_status" style="display: none;"></div>
+                                <div id="cert_validation_status" class="cert-validation-status" style="display: none;"></div>
                             </div>
 
                             <div class="mb-3" id="cert_password_group" style="display: none;">
@@ -169,11 +138,11 @@
 
                     <!-- Action Buttons -->
                     <div class="d-flex justify-content-between">
-                        <button type="button" class="btn btn-outline-info" onclick="testServerConfig()" title="Test Connection">
+                        <button type="button" class="btn btn-outline-secondary" onclick="testServerConfig()">
                             <i class="fas fa-network-wired"></i> Test Connection
                         </button>
                         <div>
-                            <a href="{{ url_for('tak_servers.list_tak_servers') }}" class="btn btn-secondary me-2">
+                            <a href="{{ url_for('tak_servers.list_tak_servers') }}" class="btn btn-outline-secondary me-2">
                                 <i class="fas fa-times"></i> Cancel
                             </a>
                             <button type="submit" class="btn btn-primary" id="submitBtn">
@@ -186,10 +155,10 @@
         </div>
     </div>
 
-    <div class="col-md-4">
+    <div class="col-lg-4">
         <div class="card">
             <div class="card-header">
-                <h6 class="card-title mb-0">
+                <h6 class="mb-0">
                     <i class="fas fa-info-circle"></i> Configuration Help
                 </h6>
             </div>
@@ -224,7 +193,7 @@
 
         <div class="card mt-3">
             <div class="card-header">
-                <h6 class="card-title mb-0">
+                <h6 class="mb-0">
                     <i class="fas fa-lightbulb"></i> Quick Setup
                 </h6>
             </div>
@@ -244,7 +213,7 @@
 
         <div class="card mt-3">
             <div class="card-header">
-                <h6 class="card-title mb-0">
+                <h6 class="mb-0">
                     <i class="fas fa-shield-alt"></i> Security Notes
                 </h6>
             </div>
@@ -272,7 +241,7 @@ function testServerConfig() {
     const originalContent = button.innerHTML;
     
     // Show loading state
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
     button.disabled = true;
     
     // Collect form data
@@ -321,16 +290,24 @@ function sendTestRequest(formData, button, originalContent) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            button.innerHTML = '<i class="fas fa-check text-success"></i>';
+            button.innerHTML = '<i class="fas fa-check text-success"></i> Success';
+            button.classList.add('btn-success');
+            button.classList.remove('btn-outline-secondary');
             setTimeout(() => {
                 button.innerHTML = originalContent;
+                button.classList.remove('btn-success');
+                button.classList.add('btn-outline-secondary');
                 button.disabled = false;
             }, 2000);
             showAlert('Connection test successful!', 'success');
         } else {
-            button.innerHTML = '<i class="fas fa-times text-danger"></i>';
+            button.innerHTML = '<i class="fas fa-times text-danger"></i> Failed';
+            button.classList.add('btn-danger');
+            button.classList.remove('btn-outline-secondary');
             setTimeout(() => {
                 button.innerHTML = originalContent;
+                button.classList.remove('btn-danger');
+                button.classList.add('btn-outline-secondary');
                 button.disabled = false;
             }, 2000);
             showAlert('Connection test failed: ' + data.error, 'danger');
@@ -338,9 +315,13 @@ function sendTestRequest(formData, button, originalContent) {
     })
     .catch(error => {
         console.error('Error:', error);
-        button.innerHTML = '<i class="fas fa-times text-danger"></i>';
+        button.innerHTML = '<i class="fas fa-times text-danger"></i> Error';
+        button.classList.add('btn-danger');
+        button.classList.remove('btn-outline-secondary');
         setTimeout(() => {
             button.innerHTML = originalContent;
+            button.classList.remove('btn-danger');
+            button.classList.add('btn-outline-secondary');
             button.disabled = false;
         }, 2000);
         showAlert('Network error occurred during connection test', 'danger');
@@ -348,7 +329,7 @@ function sendTestRequest(formData, button, originalContent) {
 }
 
 function showAlert(message, type = 'info') {
-    // Create a simple alert (you can replace this with a better notification system)
+    // Create a simple alert
     const alertDiv = document.createElement('div');
     alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
     alertDiv.innerHTML = `
@@ -532,13 +513,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function displayCertificateInfo(certInfo) {
         const details = `
-            <table class="table table-sm">
-                <tr><td><strong>Subject:</strong></td><td>${certInfo.subject}</td></tr>
-                <tr><td><strong>Issuer:</strong></td><td>${certInfo.issuer}</td></tr>
-                <tr><td><strong>Valid From:</strong></td><td>${new Date(certInfo.not_valid_before).toLocaleDateString()}</td></tr>
-                <tr><td><strong>Valid Until:</strong></td><td>${new Date(certInfo.not_valid_after).toLocaleDateString()}</td></tr>
-                <tr><td><strong>Serial Number:</strong></td><td>${certInfo.serial_number}</td></tr>
-            </table>
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <tr><td><strong>Subject:</strong></td><td>${certInfo.subject}</td></tr>
+                    <tr><td><strong>Issuer:</strong></td><td>${certInfo.issuer}</td></tr>
+                    <tr><td><strong>Valid From:</strong></td><td>${new Date(certInfo.not_valid_before).toLocaleDateString()}</td></tr>
+                    <tr><td><strong>Valid Until:</strong></td><td>${new Date(certInfo.not_valid_after).toLocaleDateString()}</td></tr>
+                    <tr><td><strong>Serial Number:</strong></td><td>${certInfo.serial_number}</td></tr>
+                </table>
+            </div>
         `;
         certDetails.innerHTML = details;
         document.getElementById('cert_info').style.display = 'block';
@@ -630,4 +613,99 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
+
+<style>
+.cert-validation-status {
+    padding: 0.75rem;
+    border-radius: 0.375rem;
+    margin-top: 0.5rem;
+}
+
+.cert-valid {
+    background-color: #d1edff;
+    border: 1px solid #0dcaf0;
+    color: #055160;
+}
+
+.cert-invalid {
+    background-color: #f8d7da;
+    border: 1px solid #dc3545;
+    color: #721c24;
+}
+
+.cert-validating {
+    background-color: #fff3cd;
+    border: 1px solid #ffc107;
+    color: #664d03;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.page-header h1 {
+    margin-bottom: 0.5rem;
+    font-size: 1.75rem;
+    font-weight: 600;
+}
+
+.breadcrumb {
+    margin-bottom: 0;
+    background: none;
+    padding: 0;
+}
+
+.breadcrumb-item {
+    color: #6c757d;
+}
+
+.breadcrumb-item + .breadcrumb-item::before {
+    content: "›";
+    color: #6c757d;
+}
+
+.breadcrumb-item.active {
+    color: #495057;
+}
+
+.card {
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    padding: 0.75rem 1rem;
+}
+
+.card-header h5,
+.card-header h6 {
+    color: #495057;
+    font-weight: 600;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.btn-outline-secondary:hover {
+    color: #fff;
+    background-color: #6c757d;
+    border-color: #6c757d;
+}
+
+.text-danger {
+    color: #dc3545 !important;
+}
+
+.small {
+    font-size: 0.875rem;
+}
+</style>
 {% endblock %}

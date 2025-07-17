@@ -1,13 +1,24 @@
 {% extends "base.html" %}
 
-{% block title %}Streams - Stream to TAK Server{% endblock %}
+{% block title %}Data Streams{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Streams</h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <div class="btn-group me-2">
-            <a href="{{ url_for('streams.create_stream') }}" class="btn btn-sm btn-primary">
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>Data Streams</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item active">Streams</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="btn-toolbar">
+            <button type="button" class="btn btn-outline-secondary btn-sm me-2" onclick="refreshStreams()">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+            <a href="{{ url_for('streams.create_stream') }}" class="btn btn-primary btn-sm">
                 <i class="fas fa-plus"></i> New Stream
             </a>
         </div>
@@ -15,131 +26,146 @@
 </div>
 
 {% if streams %}
-<div class="table-responsive">
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Plugin</th>
-                <th>TAK Server</th>
-                <th>Poll Interval</th>
-                <th>Status</th>
-                <th>Last Poll</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for stream in streams %}
-            <tr>
-                <td>
-                    <a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}">
-                        {{ stream.name }}
-                    </a>
-                </td>
-                <td>
-                    {% if stream.plugin_metadata %}
-                        <div class="d-flex align-items-center">
-                            {% if stream.plugin_metadata.get('icon') %}
-                                <i class="{{ stream.plugin_metadata.icon }} me-2 text-muted"></i>
+<!-- Streams Table -->
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">All Streams</h5>
+            <span class="text-muted">{{ streams|length }} stream{{ 's' if streams|length != 1 else '' }}</span>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Stream Details</th>
+                        <th>Plugin</th>
+                        <th>TAK Server</th>
+                        <th>Status</th>
+                        <th>Last Poll</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stream in streams %}
+                    <tr>
+                        <td>
+                            <div class="d-flex flex-column">
+                                <strong>
+                                    <a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}" 
+                                       class="text-decoration-none">
+                                        {{ stream.name }}
+                                    </a>
+                                </strong>
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>
+                                    {{ stream.poll_interval }}s interval
+                                </small>
+                            </div>
+                        </td>
+                        <td>
+                            {% if stream.plugin_metadata %}
+                                <div class="d-flex align-items-center">
+                                    {% if stream.plugin_metadata.get('icon') %}
+                                        <i class="{{ stream.plugin_metadata.icon }} me-2 text-primary"></i>
+                                    {% else %}
+                                        <i class="fas fa-puzzle-piece me-2 text-muted"></i>
+                                    {% endif %}
+                                    <div>
+                                        <div class="fw-semibold">{{ stream.plugin_metadata.get('display_name', stream.plugin_type) }}</div>
+                                        {% if stream.plugin_metadata.get('category') %}
+                                            <small class="text-muted">{{ stream.plugin_metadata.category }}</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-puzzle-piece me-2 text-muted"></i>
+                                    <div>
+                                        <div class="fw-semibold">{{ stream.plugin_type }}</div>
+                                        <small class="text-muted">Legacy Plugin</small>
+                                    </div>
+                                </div>
                             {% endif %}
-                            <div>
-                                <div class="fw-semibold">{{ stream.plugin_metadata.get('display_name', stream.plugin_type) }}</div>
-                                {% if stream.plugin_metadata.get('category') %}
-                                    <small class="text-muted">
-                                        <span class="badge bg-light text-dark">{{ stream.plugin_metadata.category }}</span>
-                                    </small>
+                        </td>
+                        <td>
+                            {% if stream.tak_server %}
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-server me-2 text-muted"></i>
+                                    <div>
+                                        <strong>{{ stream.tak_server.name if stream.tak_server.name else 'Unnamed' }}</strong>
+                                        <br>
+                                        <small class="text-mono text-muted">{{ stream.tak_server.host }}:{{ stream.tak_server.port }}</small>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <span class="text-muted">Not configured</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="status-indicator {% if stream.is_active %}status-active{% else %}status-inactive{% endif %}">
+                                <span class="status-dot"></span>
+                                {% if stream.is_active %}Active{% else %}Inactive{% endif %}
+                            </span>
+                        </td>
+                        <td>
+                            {% if stream.last_poll_date %}
+                                <div class="d-flex flex-column">
+                                    <span class="text-mono">{{ stream.last_poll_date }}</span>
+                                    <small class="text-muted">{{ stream.last_poll_time }}</small>
+                                </div>
+                            {% else %}
+                                <span class="text-muted">Never</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                {% if stream.is_active %}
+                                    <button class="btn btn-outline-danger"
+                                            onclick="controlStream({{ stream.id }}, 'stop')"
+                                            title="Stop Stream">
+                                        <i class="fas fa-stop"></i>
+                                    </button>
+                                {% else %}
+                                    <button class="btn btn-outline-success"
+                                            onclick="controlStream({{ stream.id }}, 'start')"
+                                            title="Start Stream">
+                                        <i class="fas fa-play"></i>
+                                    </button>
                                 {% endif %}
+                                <a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}"
+                                   class="btn btn-outline-primary"
+                                   title="View Details">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <button class="btn btn-outline-secondary"
+                                        onclick="testStream({{ stream.id }})"
+                                        title="Test Connection">
+                                    <i class="fas fa-network-wired"></i>
+                                </button>
+                                <button class="btn btn-outline-danger"
+                                        onclick="deleteStream({{ stream.id }})"
+                                        title="Delete Stream">
+                                    <i class="fas fa-trash"></i>
+                                </button>
                             </div>
-                        </div>
-                    {% else %}
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-puzzle-piece me-2 text-muted"></i>
-                            <div>
-                                <div class="fw-semibold">{{ stream.plugin_type }}</div>
-                                <small class="text-muted">Legacy Plugin</small>
-                            </div>
-                        </div>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if stream.tak_server %}
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-server me-2 text-muted"></i>
-                            {{ stream.tak_server.name if stream.tak_server.name else 'N/A' }}
-                        </div>
-                    {% else %}
-                        <span class="text-muted">N/A</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <span class="badge bg-secondary">{{ stream.poll_interval }}s</span>
-                </td>
-                <td>
-                    <div class="d-flex align-items-center">
-                        <i class="fas fa-circle me-2 {% if stream.is_active %}text-success{% else %}text-danger{% endif %}"></i>
-                        <span class="{% if stream.is_active %}text-success{% else %}text-danger{% endif %}">
-                            {% if stream.is_active %}Active{% else %}Inactive{% endif %}
-                        </span>
-                    </div>
-                </td>
-                <td>
-                    {% if stream.last_poll_date %}
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-clock me-2 text-muted"></i>
-                            <div>
-                                <div>{{ stream.last_poll_date }}</div>
-                                <small class="text-muted">{{ stream.last_poll_time }}</small>
-                            </div>
-                        </div>
-                    {% else %}
-                        <span class="text-muted">Never</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <div class="btn-group btn-group-sm" role="group">
-                        {% if stream.is_active %}
-                            <button class="btn btn-outline-danger"
-                                    onclick="controlStream({{ stream.id }}, 'stop')"
-                                    title="Stop Stream">
-                                <i class="fas fa-stop"></i>
-                            </button>
-                        {% else %}
-                            <button class="btn btn-outline-success"
-                                    onclick="controlStream({{ stream.id }}, 'start')"
-                                    title="Start Stream">
-                                <i class="fas fa-play"></i>
-                            </button>
-                        {% endif %}
-                        <a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}"
-                           class="btn btn-outline-primary"
-                           title="View Details">
-                            <i class="fas fa-eye"></i>
-                        </a>
-                        <button class="btn btn-outline-info"
-                                onclick="testStream({{ stream.id }})"
-                                title="Test Connection">
-                            <i class="fas fa-network-wired"></i>
-                        </button>
-                        <button class="btn btn-outline-danger"
-                                onclick="deleteStream({{ stream.id }})"
-                                title="Delete Stream">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
-<!-- Optional: Plugin Statistics Summary -->
+<!-- Plugin Statistics Summary -->
 {% if plugin_stats %}
 <div class="row mt-4">
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <h5 class="card-title mb-0">Plugin Usage Summary</h5>
+                <h5 class="mb-0">Plugin Usage Summary</h5>
             </div>
             <div class="card-body">
                 <div class="row">
@@ -168,19 +194,54 @@
 {% endif %}
 
 {% else %}
-<div class="text-center py-5">
-    <i class="fas fa-stream fa-3x text-muted mb-3"></i>
-    <h4>No Streams Yet</h4>
-    <p class="text-muted">Create your first stream to get started with location tracking.</p>
-    <a href="{{ url_for('streams.create_stream') }}" class="btn btn-primary">
-        <i class="fas fa-plus"></i> Create Stream
-    </a>
+<!-- Empty State -->
+<div class="card">
+    <div class="card-body">
+        <div class="text-center py-5">
+            <i class="fas fa-stream text-muted mb-3" style="font-size: 3rem; opacity: 0.3;"></i>
+            <h4>No Streams Yet</h4>
+            <p class="text-muted mb-4">Create your first stream to get started with location tracking.</p>
+            <a href="{{ url_for('streams.create_stream') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Create Stream
+            </a>
+        </div>
+    </div>
 </div>
 {% endif %}
+
+<!-- Toast Container for Notifications -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1055;">
+    <div id="notification-toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <i class="fas fa-info-circle me-2" id="toast-icon"></i>
+            <strong class="me-auto" id="toast-title">Notification</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body" id="toast-message">
+            Message content
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
+function refreshStreams() {
+    const refreshBtn = document.querySelector('[onclick="refreshStreams()"]');
+    const icon = refreshBtn.querySelector('i');
+    
+    // Show loading state
+    icon.classList.remove('fa-sync-alt');
+    icon.classList.add('fa-spinner', 'fa-spin');
+    refreshBtn.disabled = true;
+    
+    // Reload the page after a short delay
+    setTimeout(() => {
+        location.reload();
+    }, 500);
+}
+
 function controlStream(streamId, action) {
     const button = event.target.closest('button');
     const originalContent = button.innerHTML;
@@ -200,21 +261,22 @@ function controlStream(streamId, action) {
         if (data.success) {
             // Show success message briefly before reload
             button.innerHTML = '<i class="fas fa-check"></i>';
+            showToast('Success', `Stream ${action}ed successfully`, 'success');
             setTimeout(() => {
                 location.reload();
-            }, 500);
+            }, 1000);
         } else {
             // Restore button and show error
             button.disabled = false;
             button.innerHTML = originalContent;
-            showAlert('Error: ' + (data.error || 'Unknown error occurred'), 'danger');
+            showToast('Error', data.error || 'Unknown error occurred', 'danger');
         }
     })
     .catch(error => {
         console.error('Error:', error);
         button.disabled = false;
         button.innerHTML = originalContent;
-        showAlert('Network error occurred', 'danger');
+        showToast('Network Error', 'Failed to communicate with server', 'danger');
     });
 }
 
@@ -242,16 +304,16 @@ function testStream(streamId) {
             if (data.device_count !== undefined) {
                 message += ` (${data.device_count} device${data.device_count !== 1 ? 's' : ''} found)`;
             }
-            showAlert(message, 'success');
+            showToast('Test Successful', message, 'success');
         } else {
-            showAlert('Test failed: ' + (data.error || 'Unknown error'), 'danger');
+            showToast('Test Failed', data.error || 'Unknown error', 'danger');
         }
     })
     .catch(error => {
         console.error('Error:', error);
         button.disabled = false;
         button.innerHTML = originalContent;
-        showAlert('Network error during test', 'danger');
+        showToast('Network Error', 'Failed to test connection', 'danger');
     });
 }
 
@@ -275,44 +337,55 @@ function deleteStream(streamId) {
             if (data.success) {
                 // Show success message briefly before reload
                 button.innerHTML = '<i class="fas fa-check"></i>';
+                showToast('Success', 'Stream deleted successfully', 'success');
                 setTimeout(() => {
                     location.reload();
-                }, 500);
+                }, 1000);
             } else {
                 // Restore button and show error
                 button.disabled = false;
                 button.innerHTML = originalContent;
-                showAlert('Error: ' + (data.error || 'Unknown error occurred'), 'danger');
+                showToast('Error', data.error || 'Unknown error occurred', 'danger');
             }
         })
         .catch(error => {
             console.error('Error:', error);
             button.disabled = false;
             button.innerHTML = originalContent;
-            showAlert('Network error occurred', 'danger');
+            showToast('Network Error', 'Failed to delete stream', 'danger');
         });
     }
 }
 
-function showAlert(message, type) {
-    // Create alert element
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
-    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
-    alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-
-    // Add to page
-    document.body.appendChild(alertDiv);
-
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
-        if (alertDiv.parentNode) {
-            alertDiv.remove();
-        }
-    }, 5000);
+function showToast(title, message, type) {
+    const toast = document.getElementById('notification-toast');
+    const toastTitle = document.getElementById('toast-title');
+    const toastMessage = document.getElementById('toast-message');
+    const toastIcon = document.getElementById('toast-icon');
+    
+    // Set content
+    toastTitle.textContent = title;
+    toastMessage.textContent = message;
+    
+    // Set icon based on type
+    toastIcon.className = 'me-2 fas ';
+    switch(type) {
+        case 'success':
+            toastIcon.className += 'fa-check-circle text-success';
+            break;
+        case 'danger':
+            toastIcon.className += 'fa-exclamation-circle text-danger';
+            break;
+        case 'warning':
+            toastIcon.className += 'fa-exclamation-triangle text-warning';
+            break;
+        default:
+            toastIcon.className += 'fa-info-circle text-info';
+    }
+    
+    // Show toast
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
 }
 
 // Add keyboard shortcuts
@@ -321,6 +394,12 @@ document.addEventListener('keydown', function(e) {
     if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault();
         window.location.href = "{{ url_for('streams.create_stream') }}";
+    }
+    
+    // Ctrl+R or Cmd+R for refresh (override default)
+    if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+        e.preventDefault();
+        refreshStreams();
     }
 });
 
@@ -333,5 +412,13 @@ setInterval(function() {
     }
 }, 30000);
 {% endif %}
+
+// Initialize tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));
+    tooltipTriggerList.map(function(tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
 </script>
 {% endblock %}

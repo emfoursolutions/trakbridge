@@ -3,193 +3,138 @@
 {% block title %}About - TrakBridge{% endblock %}
 
 {% block content %}
-<style>
-    .header-section {
-        text-align: center;
-        padding: 3rem 0 2rem;
-    }
-
-    .app-logo {
-        height: 120px;
-        margin-bottom: 1rem;
-        filter: drop-shadow(0 4px 12px rgba(124, 58, 237, 0.2));
-    }
-
-    .app-tagline {
-        font-size: 1.2rem;
-        color: var(--text-secondary);
-        margin-bottom: 2rem;
-        font-weight: 500;
-    }
-
-    .info-card {
-        background: white;
-        border-radius: 1rem;
-        padding: 2rem;
-        margin-bottom: 2rem;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-        border: 1px solid var(--border-color);
-        transition: all 0.3s ease;
-    }
-
-    .info-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
-    }
-
-    .card-title {
-        font-family: var(--syncopate-font);
-        font-weight: 600;
-        color: var(--primary-purple);
-        margin-bottom: 1rem;
-        font-size: 1.4rem;
-    }
-
-    .feature-list {
-        list-style: none;
-        padding: 0;
-    }
-
-    .feature-list li {
-        padding: 0.5rem 0;
-        display: flex;
-        align-items: center;
-    }
-
-    .feature-list li i {
-        color: var(--primary-purple);
-        margin-right: 1rem;
-        width: 20px;
-    }
-
-    .company-card {
-        background: linear-gradient(135deg, var(--primary-purple) 0%, var(--secondary-purple) 100%);
-        color: white;
-        border-radius: 1rem;
-        padding: 2rem;
-        text-align: center;
-        margin: 2rem 0;
-    }
-
-    .company-logo {
-        height: 50px;
-        width: auto;
-        margin-bottom: 1rem;
-        filter: brightness(0) invert(1);
-    }
-
-    .contact-section {
-        text-align: center;
-        padding: 2rem 0;
-    }
-
-    .contact-button {
-        background: linear-gradient(135deg, var(--primary-purple) 0%, var(--secondary-purple) 100%);
-        color: white;
-        padding: 0.75rem 2rem;
-        border-radius: 50px;
-        text-decoration: none;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        display: inline-block;
-        box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3);
-    }
-
-    .contact-button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(124, 58, 237, 0.4);
-        color: white;
-    }
-
-    .version-info {
-        background: linear-gradient(135deg, #f8fafc 0%, white 100%);
-        border-radius: 1rem;
-        padding: 1.5rem;
-        margin-top: 2rem;
-        border: 1px solid var(--border-color);
-    }
-
-    .version-badge {
-        background: linear-gradient(135deg, var(--light-purple) 0%, #f3e8ff 100%);
-        color: var(--primary-purple);
-        padding: 0.25rem 0.75rem;
-        border-radius: 1rem;
-        font-size: 0.85rem;
-        font-weight: 600;
-        display: inline-block;
-        margin: 0.25rem;
-    }
-
-    @media (max-width: 768px) {
-        .app-logo {
-            height: 100px;
-        }
-        
-        .info-card {
-            padding: 1.5rem;
-        }
-        
-        .card-title {
-            font-size: 1.2rem;
-        }
-    }
-</style>
-
-<div class="container-fluid">
-    <!-- Header -->
-    <div class="header-section">
-        <img src="{{ url_for('static', filename='large_logo.png') }}" alt="TrakBridge Logo" class="app-logo">
-        <p class="app-tagline">Secure. Reliable. Mission-Critical Data Streaming for TAK Ecosystems.</p>
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>About TrakBridge</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item active">About</li>
+                </ol>
+            </nav>
+        </div>
     </div>
+</div>
 
-    <div class="row justify-content-center">
-        <div class="col-lg-8">
-            <!-- What is TrakBridge -->
-            <div class="info-card">
-                <h3 class="card-title">What is TrakBridge?</h3>
+<!-- Application Overview -->
+<div class="row justify-content-center mb-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <img src="{{ url_for('static', filename='large_logo.png') }}" alt="TrakBridge Logo" 
+                     style="height: 120px; margin-bottom: 2rem; filter: drop-shadow(0 4px 12px rgba(124, 58, 237, 0.2));">
+                <h2 class="mb-3">TrakBridge</h2>
+                <p class="lead text-muted">
+                    Secure. Reliable. Mission-Critical Data Streaming for TAK Ecosystems.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Content Cards -->
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <!-- What is TrakBridge -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-info-circle"></i> What is TrakBridge?
+                </h5>
+            </div>
+            <div class="card-body">
                 <p>
                     <strong>TrakBridge</strong> is a comprehensive stream management system designed to bridge multiple intelligence and tracking sources with TAK (Team Awareness Kit) systems.
                     Built on a robust Flask-based architecture with multi-threaded stream processing, <strong>TrakBridge</strong> consolidates real-time positional data from GPS tracking services,
-                    open source intelligence feeds, and various location-based APIs into a unified operational picture. The platform features an extensible plugin system that
-                    enables seamless integration with diverse data sources, automated stream lifecycle management, and encrypted data handling for secure operations.
+                    open source intelligence feeds, and various location-based APIs into a unified operational picture.
+                </p>
+                <p>
+                    The platform features an extensible plugin system that enables seamless integration with diverse data sources, automated stream lifecycle management, and encrypted data handling for secure operations.
                     Organizations can leverage <strong>TrakBridge</strong> to aggregate disparate location information streams—from vehicle tracking systems to OSINT feeds—and seamlessly present
                     them within their TAK environment, enhancing situational awareness and operational coordination across teams and platforms.
                 </p>
             </div>
+        </div>
 
-            <!-- Key Features -->
-            <div class="info-card">
-                <h3 class="card-title">Key Features</h3>
-                <ul class="feature-list">
-                    <li><i class="fas fa-plug"></i> Flexible plugin system for multiple data providers</li>
-                    <li><i class="fas fa-stream"></i> Multi-threaded real-time stream processing</li>
-                    <li><i class="fas fa-link"></i> Native TAK server integration with CoT support</li>
-                    <li><i class="fas fa-lock"></i> Built-in encryption services for secure data handling</li>
-                    <li><i class="fas fa-desktop"></i> Full web-based management interface</li>
-                    <li><i class="fas fa-expand-arrows-alt"></i> Scalable to hundreds of concurrent data streams</li>
-                    <li><i class="fas fa-heartbeat"></i> Stream health monitoring and error recovery</li>
-                </ul>
+        <!-- Key Features -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-star"></i> Key Features
+                </h5>
             </div>
-
-            <!-- Company Information -->
-            <div class="company-card">
-                <div class="mb-3">
-                    <img src="{{ url_for('static', filename='es_logo.png') }}" alt="Emfour Solutions Logo" class="company-logo">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-plug text-primary me-3"></i>
+                            <span>Flexible plugin system for multiple data providers</span>
+                        </div>
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-stream text-primary me-3"></i>
+                            <span>Multi-threaded real-time stream processing</span>
+                        </div>
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-link text-primary me-3"></i>
+                            <span>Native TAK server integration with CoT support</span>
+                        </div>
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-lock text-primary me-3"></i>
+                            <span>Built-in encryption services for secure data handling</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-desktop text-primary me-3"></i>
+                            <span>Full web-based management interface</span>
+                        </div>
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-expand-arrows-alt text-primary me-3"></i>
+                            <span>Scalable to hundreds of concurrent data streams</span>
+                        </div>
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-heartbeat text-primary me-3"></i>
+                            <span>Stream health monitoring and error recovery</span>
+                        </div>
+                    </div>
                 </div>
-                <p style="margin-bottom: 0;">
+            </div>
+        </div>
+
+        <!-- Company Information -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-building"></i> About Emfour Solutions
+                </h5>
+            </div>
+            <div class="card-body text-center py-4">
+                <img src="{{ url_for('static', filename='es_logo.png') }}" alt="Emfour Solutions Logo" 
+                     style="height: 60px; margin-bottom: 1rem;">
+                <p class="mb-0">
                     Dedicated to building highly reliable, mission-critical software platforms
                     that empower organizations with advanced situational awareness, secure data management,
                     and scalable infrastructure solutions.
                 </p>
             </div>
+        </div>
 
-            <!-- Support Contact -->
-            <div class="contact-section">
-                <h4 style="font-family: var(--syncopate-font); color: var(--text-primary); margin-bottom: 1rem;">Need Support?</h4>
-                <p class="text-muted mb-3">Contact our team for technical support and assistance.</p>
-                <a href="mailto:support@emfoursolutions.com.au" class="contact-button">
-                    <i class="fas fa-envelope me-2"></i>Contact Support
-                </a>
+        <!-- Support Contact -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-headset"></i> Support & Contact
+                </h5>
+            </div>
+            <div class="card-body text-center py-4">
+                <h6 class="mb-3">Need Support?</h6>
+                <p class="text-muted mb-4">Contact our team for technical support and assistance.</p>
+                <div class="btn-toolbar justify-content-center">
+                    <a href="mailto:support@emfoursolutions.com.au" class="btn btn-primary">
+                        <i class="fas fa-envelope me-2"></i>Contact Support
+                    </a>
+                </div>
             </div>
         </div>
     </div>

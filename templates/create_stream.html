@@ -1,23 +1,37 @@
 {% extends "base.html" %}
 
-{% block title %}Create Stream - Stream to TAK Server{% endblock %}
+{% block title %}Create Stream - TrakBridge{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Create New Stream</h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <a href="{{ url_for('streams.list_streams') }}" class="btn btn-sm btn-outline-secondary">
-            <i class="fas fa-arrow-left"></i> Back to Streams
-        </a>
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>Create New Stream</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('streams.list_streams') }}">Streams</a></li>
+                    <li class="breadcrumb-item active">Create</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="btn-toolbar">
+            <a href="{{ url_for('streams.list_streams') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left"></i> Back to Streams
+            </a>
+        </div>
     </div>
 </div>
 
 <div class="row">
-    <div class="col-md-8">
+    <div class="col-lg-8">
         <form id="streamForm" method="POST">
             <div class="card">
                 <div class="card-header">
-                    <h5>Stream Configuration</h5>
+                    <h5 class="mb-0">
+                        <i class="fas fa-stream"></i>
+                        Stream Configuration
+                    </h5>
                 </div>
                 <div class="card-body">
                     <div class="mb-3">
@@ -32,7 +46,7 @@
                             <option value="">Select Stream Provider</option>
                             {% for plugin_name, plugin_meta in plugin_metadata.items() %}
                             <option value="{{ plugin_name }}" data-category="{{ plugin_meta.category }}">
-                                <i class="{{ plugin_meta.icon }}"></i> {{ plugin_meta.display_name }}
+                                {{ plugin_meta.display_name }}
                             </option>
                             {% endfor %}
                         </select>
@@ -80,10 +94,10 @@
                 </div>
             </div>
 
-            <!-- Plugin-specific configuration will be inserted here -->
-            <div id="plugin-config-section" class="card mt-3" style="display: none;">
+            <!-- Plugin-specific configuration -->
+            <div id="plugin-config-section" class="card" style="display: none;">
                 <div class="card-header">
-                    <h5 id="plugin-config-title">
+                    <h5 class="mb-0" id="plugin-config-title">
                         <i id="plugin-config-icon" class="fas fa-cog"></i>
                         <span id="plugin-config-name">Provider Configuration</span>
                     </h5>
@@ -92,34 +106,46 @@
                 </div>
             </div>
 
-            <div class="mt-3">
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-plus"></i> Create Stream
-                </button>
-                <button type="button" class="btn btn-outline-info" onclick="testStreamConfig()" title="Test Connection">
-                    <i class="fas fa-network-wired"></i> Test Connection
-                </button>
-                <a href="{{ url_for('streams.list_streams') }}" class="btn btn-secondary">Cancel</a>
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Create Stream
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="testStreamConfig()" title="Test Connection">
+                            <i class="fas fa-network-wired"></i> Test Connection
+                        </button>
+                        <a href="{{ url_for('streams.list_streams') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
+                    </div>
+                </div>
             </div>
         </form>
     </div>
 
-    <div class="col-md-4">
+    <div class="col-lg-4">
         <div class="card">
             <div class="card-header">
-                <h5><i class="fas fa-info-circle"></i> Help</h5>
+                <h5 class="mb-0">
+                    <i class="fas fa-info-circle"></i>
+                    Help
+                </h5>
             </div>
             <div class="card-body">
                 <div id="help-content">
-                    <p class="text-muted">Select a Stream provider to see configuration instructions.</p>
+                    <p class="text-muted">Select a stream provider to see configuration instructions.</p>
                 </div>
             </div>
         </div>
 
         <!-- Connection test results -->
-        <div id="test-results" class="card mt-3" style="display: none;">
+        <div id="test-results" class="card" style="display: none;">
             <div class="card-header">
-                <h5><i class="fas fa-flask"></i> Connection Test</h5>
+                <h5 class="mb-0">
+                    <i class="fas fa-flask"></i>
+                    Connection Test
+                </h5>
             </div>
             <div class="card-body" id="test-results-body">
             </div>
@@ -145,7 +171,7 @@ function updatePluginConfig() {
 
     if (!pluginType) {
         configSection.style.display = 'none';
-        helpContent.innerHTML = '<p class="text-muted">Select a Stream provider to see configuration instructions.</p>';
+        helpContent.innerHTML = '<p class="text-muted">Select a stream provider to see configuration instructions.</p>';
         return;
     }
 
@@ -181,7 +207,6 @@ function renderPluginConfig(pluginMeta) {
     configBody.innerHTML = fields.map(field => generateFormField(field)).join('');
 }
 
-
 function generateFormField(field) {
     const pluginType = document.getElementById('plugin_type').value;
     const fieldId = `plugin_${field.name}`;
@@ -210,7 +235,6 @@ function generateFormField(field) {
             inputHtml = `<input type="number" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${min} ${max} ${defaultVal} ${dataPluginAttr}>`;
             break;
         case 'checkbox':
-
             // Handle default value for checkbox
             const isChecked = field.default === true ||
                             field.default === 'true' ||
@@ -268,7 +292,10 @@ function renderHelpContent(pluginMeta) {
 
     let html = `
         <div class="mb-3">
-            <h6><i class="${pluginMeta.icon}"></i> ${pluginMeta.display_name}</h6>
+            <div class="d-flex align-items-center mb-2">
+                <i class="${pluginMeta.icon} me-2"></i>
+                <h6 class="mb-0">${pluginMeta.display_name}</h6>
+            </div>
             <p class="text-muted">${pluginMeta.description}</p>
         </div>
     `;
@@ -277,9 +304,9 @@ function renderHelpContent(pluginMeta) {
         pluginMeta.help_sections.forEach(section => {
             html += `
                 <div class="mb-3">
-                    <h6>${section.title}</h6>
-                    <ul class="list-unstyled">
-                        ${section.content.map(item => `<li><small>• ${item}</small></li>`).join('')}
+                    <h6 class="mb-2">${section.title}</h6>
+                    <ul class="list-unstyled mb-0">
+                        ${section.content.map(item => `<li class="mb-1"><small class="text-muted">• ${item}</small></li>`).join('')}
                     </ul>
                 </div>
             `;
@@ -294,7 +321,7 @@ function testStreamConfig() {
     const originalContent = button.innerHTML;
     
     // Show loading state
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
     button.disabled = true;
     
     // Collect form data
@@ -326,34 +353,53 @@ function testStreamConfig() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            button.innerHTML = '<i class="fas fa-check text-success"></i>';
+            button.innerHTML = '<i class="fas fa-check"></i> Success';
+            button.classList.remove('btn-outline-secondary');
+            button.classList.add('btn-success');
+            
             setTimeout(() => {
                 button.innerHTML = originalContent;
+                button.classList.remove('btn-success');
+                button.classList.add('btn-outline-secondary');
                 button.disabled = false;
             }, 2000);
-            showAlert('Connection test successful!', 'success');  // Fixed order
+            
+            showAlert('Connection test successful!', 'success');
         } else {
-            button.innerHTML = '<i class="fas fa-times text-danger"></i>';
+            button.innerHTML = '<i class="fas fa-times"></i> Failed';
+            button.classList.remove('btn-outline-secondary');
+            button.classList.add('btn-danger');
+            
             setTimeout(() => {
                 button.innerHTML = originalContent;
+                button.classList.remove('btn-danger');
+                button.classList.add('btn-outline-secondary');
                 button.disabled = false;
             }, 2000);
-            showAlert('Connection test failed: ' + data.error, 'danger');  // Fixed order
+            
+            showAlert('Connection test failed: ' + data.error, 'danger');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        button.innerHTML = '<i class="fas fa-times text-danger"></i>';
+        
+        button.innerHTML = '<i class="fas fa-times"></i> Error';
+        button.classList.remove('btn-outline-secondary');
+        button.classList.add('btn-danger');
+        
         setTimeout(() => {
             button.innerHTML = originalContent;
+            button.classList.remove('btn-danger');
+            button.classList.add('btn-outline-secondary');
             button.disabled = false;
         }, 2000);
+        
         showAlert('Network error occurred during connection test', 'danger');
     });
 }
 
 function showAlert(message, type = 'info') {
-    // Create a simple alert (you can replace this with a better notification system)
+    // Create alert element
     const alertDiv = document.createElement('div');
     alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
     alertDiv.innerHTML = `
@@ -361,9 +407,10 @@ function showAlert(message, type = 'info') {
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     `;
 
-    // Insert at the top of the form
-    const form = document.getElementById('streamForm');
-    form.insertBefore(alertDiv, form.firstChild);
+    // Insert at the top of the content
+    const content = document.querySelector('.content-wrapper');
+    const firstCard = content.querySelector('.card');
+    content.insertBefore(alertDiv, firstCard);
 
     // Auto-remove after 5 seconds
     setTimeout(() => {

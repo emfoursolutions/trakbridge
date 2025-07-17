@@ -12,428 +12,531 @@
     <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
 
     <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         :root {
-            --primary-purple: #7c3aed;
-            --secondary-purple: #8b5cf6;
-            --accent-purple: #a855f7;
-            --light-purple: #e9d5ff;
-            --dark-bg: #1a1a1a;
-            --sidebar-bg: #f8fafc;
-            --text-primary: #1e293b;
-            --text-secondary: #64748b;
-            --border-color: #e2e8f0;
-            --syncopate-font: 'Syncopate', sans-serif;
-            --inter-font: 'Inter', sans-serif;
+            /* Color Palette - Muted Professional */
+            --primary-blue: #1e3a8a;
+            --primary-blue-light: #3b82f6;
+            --primary-blue-dark: #1e40af;
+            --accent-orange: #ea580c;
+            --accent-orange-light: #f97316;
+            --accent-orange-dark: #c2410c;
+            
+            /* Neutrals */
+            --gray-50: #f8fafc;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
+            
+            /* Semantic Colors */
+            --success: #059669;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --info: #0284c7;
+            
+            /* Typography */
+            --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --font-mono: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
+            
+            /* Layout */
+            --sidebar-width: 280px;
+            --header-height: 64px;
+            --border-radius: 8px;
+            --border-radius-sm: 4px;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
         }
 
         body {
-            font-family: var(--inter-font);
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-            color: var(--text-primary);
+            font-family: var(--font-primary);
+            background-color: var(--gray-50);
+            color: var(--gray-800);
             line-height: 1.6;
+            margin: 0;
+            padding: 0;
         }
 
+        /* Layout Structure */
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar */
         .sidebar {
-            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-            border-right: 1px solid var(--border-color);
-            transition: transform 0.3s ease;
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
-        }
-
-        /* Desktop sidebar */
-        @media (min-width: 768px) {
-            .sidebar {
-                min-height: 100vh;
-                position: fixed;
-                top: 0;
-                left: 0;
-                z-index: 1000;
-                width: 16.66667%;
-            }
-            .main-content {
-                margin-left: 16.66667%;
-                width: calc(100% - 16.66667%);
-                max-width: calc(100% - 16.66667%);
-            }
-        }
-
-        /* Mobile sidebar */
-        @media (max-width: 767.98px) {
-            .sidebar {
-                position: fixed;
-                top: 0;
-                left: -100%;
-                width: 280px;
-                max-width: 80vw;
-                height: 100vh;
-                z-index: 1050;
-                box-shadow: 0 0 30px rgba(0, 0, 0, 0.2);
-                overflow-y: auto;
-            }
-            .sidebar.show {
-                left: 0;
-            }
-            .main-content {
-                margin-left: 0;
-                padding-top: 70px;
-                width: 100%;
-                max-width: 100%;
-            }
-            .mobile-header {
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                width: 100%;
-                background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-                z-index: 1040;
-                padding: 15px 20px;
-                border-bottom: 1px solid var(--border-color);
-                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            }
-            .mobile-header h5 {
-                font-family: var(--syncopate-font);
-                font-weight: 700;
-                color: var(--primary-purple);
-                margin: 0;
-            }
-        }
-
-        .sidebar-overlay {
+            width: var(--sidebar-width);
+            background-color: white;
+            border-right: 1px solid var(--gray-200);
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.6);
-            z-index: 1040;
-            display: none;
-            backdrop-filter: blur(2px);
+            height: 100vh;
+            overflow-y: auto;
+            z-index: 1000;
+            transition: transform 0.3s ease;
         }
 
-        .sidebar-overlay.show {
-            display: block;
-        }
-
-        /* Logo styling */
-        .sidebar .logo-container {
-            padding: 2rem 1rem;
+        .sidebar-header {
+            padding: 1.5rem 1rem;
+            border-bottom: 1px solid var(--gray-200);
             text-align: center;
-            border-bottom: 1px solid var(--border-color);
-            margin-bottom: 2rem;
         }
 
-        .sidebar .logo-container img {
-            width: 85%;
-            max-width: 100%;
+        .sidebar-header img {
+            max-width: 140px;
             height: auto;
-            filter: drop-shadow(0 2px 8px rgba(124, 58, 237, 0.2));
-            transition: all 0.3s ease;
+            display: block;
+            margin: 0 auto;
         }
 
-        .sidebar .logo-container img:hover {
-            transform: translateY(-2px);
-            filter: drop-shadow(0 4px 12px rgba(124, 58, 237, 0.3));
+        .sidebar-nav {
+            padding: 1rem 0;
         }
 
-        /* Navigation styling */
-        .sidebar .nav {
-            padding: 0 1rem;
+        .nav-section {
+            margin-bottom: 0.5rem;
         }
 
-        .sidebar .nav-link {
-            color: var(--text-secondary);
+        .nav-item {
+            margin: 0;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1.5rem;
+            color: var(--gray-700);
+            text-decoration: none;
             font-weight: 500;
-            font-size: 0.95rem;
-            padding: 0.75rem 1rem;
-            margin-bottom: 0.25rem;
-            border-radius: 0.5rem;
-            transition: all 0.3s ease;
-            border: 1px solid transparent;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+            border: none;
+            background: none;
+            border-radius: 0;
+            position: relative;
         }
 
-        .sidebar .nav-link:hover {
-            background: linear-gradient(135deg, var(--light-purple) 0%, #f3e8ff 100%);
-            color: var(--primary-purple);
-            transform: translateX(4px);
-            border-color: var(--accent-purple);
+        .nav-link:hover {
+            background-color: var(--gray-50);
+            color: var(--primary-blue);
         }
 
-        .sidebar .nav-link.active {
-            background: linear-gradient(135deg, var(--primary-purple) 0%, var(--secondary-purple) 100%);
+        .nav-link.active {
+            background-color: var(--primary-blue);
             color: white;
-            font-weight: 600;
-            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
         }
 
-        .sidebar .nav-link i {
+        .nav-link.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background-color: var(--accent-orange);
+        }
+
+        .nav-link i {
             width: 20px;
-            text-align: center;
             margin-right: 0.75rem;
+            text-align: center;
+            font-size: 0.9rem;
         }
 
-        /* Settings menu */
+        /* Settings Menu */
         .settings-menu {
             position: relative;
         }
 
         .settings-toggle {
             cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .settings-toggle:hover {
-            background: linear-gradient(135deg, var(--light-purple) 0%, #f3e8ff 100%);
-            color: var(--primary-purple);
-            transform: translateX(4px);
+            justify-content: space-between;
         }
 
         .settings-submenu {
             max-height: 0;
             overflow: hidden;
-            transition: max-height 0.3s ease-out;
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-            border-radius: 0.5rem;
-            margin-top: 0.5rem;
+            transition: max-height 0.3s ease;
+            background-color: var(--gray-50);
         }
 
         .settings-submenu.expanded {
-            max-height: 250px;
+            max-height: 300px;
         }
 
         .settings-submenu .nav-link {
-            padding-left: 3rem;
-            font-size: 0.9rem;
-            margin-bottom: 0.125rem;
+            padding: 0.6rem 1.5rem 0.6rem 3rem;
+            font-size: 0.85rem;
+            color: var(--gray-600);
+        }
+
+        .settings-submenu .nav-link:hover {
+            background-color: var(--gray-100);
         }
 
         .settings-chevron {
             transition: transform 0.3s ease;
-            color: var(--text-secondary);
+            font-size: 0.75rem;
         }
 
         .settings-chevron.rotated {
             transform: rotate(90deg);
-            color: var(--primary-purple);
         }
 
-        /* Status indicators */
-        .status-active {
-            color: #10b981;
-        }
-        .status-inactive {
-            color: #ef4444;
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: var(--sidebar-width);
+            display: flex;
+            flex-direction: column;
         }
 
-        /* Card styling */
+        .content-wrapper {
+            flex: 1;
+            padding: 2rem;
+        }
+
+        /* Mobile Header */
+        .mobile-header {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: var(--header-height);
+            background-color: white;
+            border-bottom: 1px solid var(--gray-200);
+            z-index: 1030;
+            padding: 0 1rem;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .mobile-header h5 {
+            margin: 0;
+            font-weight: 600;
+            color: var(--primary-blue);
+        }
+
+        /* Page Headers */
+        .page-header {
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .page-header h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--gray-900);
+            margin: 0;
+        }
+
+        .page-header .breadcrumb {
+            background: none;
+            padding: 0;
+            margin: 0.5rem 0 0 0;
+            font-size: 0.85rem;
+        }
+
+        .page-header .breadcrumb-item {
+            color: var(--gray-500);
+        }
+
+        .page-header .breadcrumb-item.active {
+            color: var(--gray-700);
+        }
+
+        /* Cards */
         .card {
-            border: 1px solid var(--border-color);
-            border-radius: 0.75rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            transition: all 0.3s ease;
+            background-color: white;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 1.5rem;
         }
 
-        .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        .card-header {
+            background-color: var(--gray-50);
+            border-bottom: 1px solid var(--gray-200);
+            padding: 1rem 1.5rem;
+            font-weight: 600;
+            color: var(--gray-800);
         }
 
-        .card-metric {
-            background: linear-gradient(135deg, var(--primary-purple) 0%, var(--secondary-purple) 100%);
-            color: white;
-            border: none;
-        }
-
-        .card-metric .card-body {
+        .card-body {
             padding: 1.5rem;
         }
 
-        .card-metric h3 {
-            font-family: var(--syncopate-font);
+        /* Metric Cards */
+        .metric-card {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-blue-light) 100%);
+            color: white;
+            border: none;
+            text-align: center;
+        }
+
+        .metric-card .metric-value {
+            font-size: 2.5rem;
             font-weight: 700;
-            font-size: 2rem;
             margin-bottom: 0.5rem;
+            font-family: var(--font-mono);
+        }
+
+        .metric-card .metric-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 500;
         }
 
         /* Buttons */
         .btn {
-            border-radius: 0.5rem;
+            border-radius: var(--border-radius-sm);
             font-weight: 500;
-            transition: all 0.3s ease;
+            padding: 0.5rem 1rem;
+            transition: all 0.2s ease;
             border: 1px solid transparent;
+            font-size: 0.9rem;
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, var(--primary-purple) 0%, var(--secondary-purple) 100%);
-            border: none;
+            background-color: var(--primary-blue);
+            border-color: var(--primary-blue);
             color: white;
         }
 
         .btn-primary:hover {
-            background: linear-gradient(135deg, var(--secondary-purple) 0%, var(--accent-purple) 100%);
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+            background-color: var(--primary-blue-dark);
+            border-color: var(--primary-blue-dark);
+        }
+
+        .btn-secondary {
+            background-color: var(--gray-500);
+            border-color: var(--gray-500);
+            color: white;
         }
 
         .btn-outline-secondary {
-            border-color: var(--border-color);
-            color: var(--text-secondary);
+            border-color: var(--gray-300);
+            color: var(--gray-700);
         }
 
         .btn-outline-secondary:hover {
-            background: var(--primary-purple);
-            border-color: var(--primary-purple);
-            color: white;
+            background-color: var(--gray-100);
+            border-color: var(--gray-400);
+        }
+
+        .btn-sm {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.8rem;
+        }
+
+        /* Tables */
+        .table {
+            margin-bottom: 0;
+        }
+
+        .table th {
+            background-color: var(--gray-50);
+            border-bottom: 2px solid var(--gray-200);
+            font-weight: 600;
+            color: var(--gray-800);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 0.75rem;
+        }
+
+        .table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--gray-200);
+            font-size: 0.9rem;
+        }
+
+        .table tbody tr:hover {
+            background-color: var(--gray-50);
+        }
+
+        /* Status Indicators */
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .status-active .status-dot {
+            background-color: var(--success);
+        }
+
+        .status-inactive .status-dot {
+            background-color: var(--gray-400);
         }
 
         /* Alerts */
         .alert {
-            border: none;
-            border-radius: 0.75rem;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            border: 1px solid;
+            border-radius: var(--border-radius);
+            padding: 1rem;
+            margin-bottom: 1rem;
         }
 
         .alert-success {
-            background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
-            color: #166534;
+            background-color: #ecfdf5;
+            border-color: #a7f3d0;
+            color: #065f46;
         }
 
         .alert-danger {
-            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            background-color: #fef2f2;
+            border-color: #fecaca;
             color: #991b1b;
         }
 
         .alert-warning {
-            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            background-color: #fffbeb;
+            border-color: #fed7aa;
             color: #92400e;
         }
 
         .alert-info {
-            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+            background-color: #eff6ff;
+            border-color: #bfdbfe;
             color: #1e40af;
-        }
-
-        /* Table styling */
-        .table {
-            border-radius: 0.75rem;
-            overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-
-        .table thead th {
-            background: linear-gradient(135deg, var(--primary-purple) 0%, var(--secondary-purple) 100%);
-            color: white;
-            font-weight: 600;
-            border: none;
-            padding: 1rem;
-        }
-
-        .table tbody td {
-            padding: 1rem;
-            border-color: var(--border-color);
-        }
-
-        .table tbody tr:hover {
-            background-color: rgba(124, 58, 237, 0.05);
         }
 
         /* Footer */
         .app-footer {
-            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-            border-top: 1px solid var(--border-color);
-            padding: 2rem 0;
-            font-size: 0.875rem;
-            color: var(--text-secondary);
+            background-color: white;
+            border-top: 1px solid var(--gray-200);
+            padding: 1.5rem 2rem;
+            color: var(--gray-600);
+            font-size: 0.8rem;
         }
 
         .version-info {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
+            gap: 1rem;
             flex-wrap: wrap;
         }
 
         .version-badge {
-            background: linear-gradient(135deg, var(--light-purple) 0%, #f3e8ff 100%);
-            color: var(--primary-purple);
-            padding: 0.25rem 0.75rem;
-            border-radius: 1rem;
+            background-color: var(--gray-100);
+            color: var(--gray-700);
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--border-radius-sm);
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
         }
 
         .version-badge.dev {
-            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            background-color: #fef3c7;
             color: #92400e;
         }
 
         .version-badge.release {
-            background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+            background-color: #dcfce7;
             color: #166534;
         }
 
-        /* Page titles */
-        h1, h2, h3 {
-            font-family: var(--syncopate-font);
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-
-        h1 {
-            font-size: 2.5rem;
-            margin-bottom: 1.5rem;
-            background: linear-gradient(135deg, var(--primary-purple) 0%, var(--secondary-purple) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        /* Responsive adjustments */
-        @media (max-width: 991.98px) {
-            .sidebar .logo-container img {
-                width: 80%;
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                z-index: 1040;
             }
-            h1 {
+
+            .sidebar.show {
+                transform: translateX(0);
+            }
+
+            .sidebar-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.5);
+                z-index: 1035;
+                display: none;
+            }
+
+            .sidebar-overlay.show {
+                display: block;
+            }
+
+            .main-content {
+                margin-left: 0;
+                padding-top: var(--header-height);
+            }
+
+            .mobile-header {
+                display: flex;
+            }
+
+            .content-wrapper {
+                padding: 1rem;
+            }
+
+            .page-header h1 {
+                font-size: 1.5rem;
+            }
+
+            .metric-card .metric-value {
                 font-size: 2rem;
             }
-        }
 
-        @media (max-width: 767.98px) {
-            .sidebar .logo-container img {
-                width: 75%;
-            }
-            .sidebar .nav-link {
-                padding: 1rem 1.25rem;
-                font-size: 1rem;
-            }
-            .settings-submenu .nav-link {
-                padding-left: 2.5rem;
-            }
-            h1 {
-                font-size: 1.75rem;
-            }
-        }
-
-        @media (max-width: 575.98px) {
-            .sidebar .logo-container img {
-                width: 70%;
-            }
-            .card-metric {
-                margin-bottom: 1rem;
-            }
             .btn {
                 width: 100%;
                 margin-bottom: 0.5rem;
             }
+
             .btn:last-child {
                 margin-bottom: 0;
             }
         }
 
-        /* Loading states */
+        /* Utility Classes */
+        .text-mono {
+            font-family: var(--font-mono);
+        }
+
+        .text-muted {
+            color: var(--gray-500);
+        }
+
+        .bg-muted {
+            background-color: var(--gray-50);
+        }
+
+        .border-muted {
+            border-color: var(--gray-200);
+        }
+
+        /* Loading States */
         .loading {
             opacity: 0.6;
             pointer-events: none;
@@ -444,10 +547,10 @@
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 20px;
-            height: 20px;
-            margin: -10px 0 0 -10px;
-            border: 2px solid var(--primary-purple);
+            width: 16px;
+            height: 16px;
+            margin: -8px 0 0 -8px;
+            border: 2px solid var(--primary-blue);
             border-top: 2px solid transparent;
             border-radius: 50%;
             animation: spin 1s linear infinite;
@@ -457,154 +560,129 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-
-        /* Ensure main content uses full height */
-        html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-        }
-
-        .main-content {
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .main-content .content-wrapper {
-            flex: 1;
-        }
-
-        @media (max-width: 767.98px) {
-            .main-content {
-                min-height: 100vh;
-            }
-        }
     </style>
 </head>
 <body>
-    <!-- Mobile header (only visible on mobile) -->
-    <div class="mobile-header d-md-none d-flex justify-content-between align-items-center">
-        <button class="btn btn-outline-secondary" onclick="toggleSidebar()">
-            <i class="fas fa-bars"></i>
-        </button>
-        <h5 class="mb-0">TrakBridge</h5>
-        <div style="width: 40px;"></div> <!-- Spacer for centering -->
-    </div>
+    <div class="app-container">
+        <!-- Mobile header -->
+        <div class="mobile-header">
+            <button class="btn btn-outline-secondary btn-sm" onclick="toggleSidebar()">
+                <i class="fas fa-bars"></i>
+            </button>
+            <h5>TrakBridge</h5>
+            <div style="width: 40px;"></div>
+        </div>
 
-    <!-- Sidebar overlay for mobile -->
-    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+        <!-- Sidebar overlay for mobile -->
+        <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 
-    <div class="container-fluid p-0">
         <!-- Sidebar -->
-        <nav class="col-md-2 sidebar" id="sidebar">
-            <div class="position-sticky">
-                <div class="logo-container">
-                    <img src="{{ url_for('static', filename='logo.png') }}" alt="TrakBridge Logo">
+        <nav class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="TrakBridge">
+            </div>
+            
+            <div class="sidebar-nav">
+                <div class="nav-section">
+                    <a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}"
+                       href="{{ url_for('main.index') }}" onclick="closeSidebarOnMobile()">
+                        <i class="fas fa-tachometer-alt"></i>
+                        <span>Dashboard</span>
+                    </a>
                 </div>
-                <ul class="nav flex-column">
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}"
-                           href="{{ url_for('main.index') }}" onclick="closeSidebarOnMobile()">
-                            <i class="fas fa-dashboard"></i>Dashboard
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.blueprint == 'streams' %}active{% endif %}"
-                           href="{{ url_for('streams.list_streams') }}" onclick="closeSidebarOnMobile()">
-                            <i class="fas fa-stream"></i>Streams
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.blueprint == 'tak_servers' %}active{% endif %}"
-                           href="{{ url_for('tak_servers.list_tak_servers') }}" onclick="closeSidebarOnMobile()">
-                            <i class="fas fa-server"></i>TAK Servers
-                        </a>
-                    </li>
-                    <li class="nav-item settings-menu">
-                        <div class="nav-link settings-toggle" onclick="toggleSettings()">
-                            <i class="fas fa-cog"></i>Settings
-                            <i class="fas fa-chevron-right settings-chevron float-end mt-1"></i>
+                
+                <div class="nav-section">
+                    <a class="nav-link {% if request.blueprint == 'streams' %}active{% endif %}"
+                       href="{{ url_for('streams.list_streams') }}" onclick="closeSidebarOnMobile()">
+                        <i class="fas fa-stream"></i>
+                        <span>Data Streams</span>
+                    </a>
+                </div>
+                
+                <div class="nav-section">
+                    <a class="nav-link {% if request.blueprint == 'tak_servers' %}active{% endif %}"
+                       href="{{ url_for('tak_servers.list_tak_servers') }}" onclick="closeSidebarOnMobile()">
+                        <i class="fas fa-server"></i>
+                        <span>TAK Servers</span>
+                    </a>
+                </div>
+                
+                <div class="nav-section settings-menu">
+                    <div class="nav-link settings-toggle" onclick="toggleSettings()">
+                        <div>
+                            <i class="fas fa-cog"></i>
+                            <span>Settings</span>
                         </div>
-                        <div class="settings-submenu" id="settingsSubmenu">
-                            <ul class="nav flex-column">
-                                <li class="nav-item">
-                                    <a class="nav-link {% if request.endpoint == 'admin.cot_types' %}active{% endif %}"
-                                       href="/admin/cot_types" onclick="closeSidebarOnMobile()">
-                                        <i class="fas fa-tags"></i>CoT Types
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link {% if request.endpoint == 'admin.admin_dashboard' %}active{% endif %}"
-                                       href="{{ url_for('admin.admin_dashboard') }}" onclick="closeSidebarOnMobile()">
-                                        <i class="fas fa-info-circle"></i>System Info
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link {% if request.endpoint == 'admin.key_rotation_page' %}active{% endif %}"
-                                       href="{{ url_for('admin.key_rotation_page') }}" onclick="closeSidebarOnMobile()">
-                                        <i class="fas fa-key"></i>Key Rotation
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link {% if request.endpoint == 'admin.admin_about' %}active{% endif %}"
-                                       href="{{ url_for('admin.admin_about') }}" onclick="closeSidebarOnMobile()">
-                                        <i class="fas fa-question-circle"></i>About
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
-                    </li>
-                </ul>
+                        <i class="fas fa-chevron-right settings-chevron"></i>
+                    </div>
+                    <div class="settings-submenu" id="settingsSubmenu">
+                        <a class="nav-link {% if request.endpoint == 'admin.cot_types' %}active{% endif %}"
+                           href="/admin/cot_types" onclick="closeSidebarOnMobile()">
+                            <i class="fas fa-tags"></i>
+                            <span>CoT Types</span>
+                        </a>
+                        <a class="nav-link {% if request.endpoint == 'admin.admin_dashboard' %}active{% endif %}"
+                           href="{{ url_for('admin.admin_dashboard') }}" onclick="closeSidebarOnMobile()">
+                            <i class="fas fa-info-circle"></i>
+                            <span>System Info</span>
+                        </a>
+                        <a class="nav-link {% if request.endpoint == 'admin.key_rotation_page' %}active{% endif %}"
+                           href="{{ url_for('admin.key_rotation_page') }}" onclick="closeSidebarOnMobile()">
+                            <i class="fas fa-key"></i>
+                            <span>Key Rotation</span>
+                        </a>
+                        <a class="nav-link {% if request.endpoint == 'admin.admin_about' %}active{% endif %}"
+                           href="{{ url_for('admin.admin_about') }}" onclick="closeSidebarOnMobile()">
+                            <i class="fas fa-info"></i>
+                            <span>About</span>
+                        </a>
+                    </div>
+                </div>
             </div>
         </nav>
 
         <!-- Main content -->
         <main class="main-content">
             <div class="content-wrapper">
-                <div class="px-3 px-md-4 py-3">
-                    {% with messages = get_flashed_messages(with_categories=true) %}
-                        {% if messages %}
-                            {% for category, message in messages %}
-                                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
-                                    {{ message }}
-                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                                </div>
-                            {% endfor %}
-                        {% endif %}
-                    {% endwith %}
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
 
-                    {% block content %}{% endblock %}
-                </div>
+                {% block content %}{% endblock %}
             </div>
 
             <!-- Footer -->
             <footer class="app-footer">
-                <div class="px-3 px-md-4">
-                    <div class="row align-items-center">
-                        <div class="col-md-6">
-                            <div class="version-info">
-                                <span>&copy; <span id="currentYear"></span> Emfour Solutions - TrakBridge</span>
-                                <span class="version-badge {% if app_version.is_development %}dev{% else %}release{% endif %}">
-                                    {{ app_version.version }}
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <div class="version-info">
+                            <span>&copy; <span id="currentYear"></span> Emfour Solutions - TrakBridge</span>
+                            <span class="version-badge {% if app_version.is_development %}dev{% else %}release{% endif %}">
+                                {{ app_version.version }}
+                            </span>
+                            {% if app_version.git_commit %}
+                                <span class="version-badge">
+                                    {{ app_version.git_commit }}
                                 </span>
-                                {% if app_version.git_commit %}
-                                    <span class="version-badge">
-                                        <i class="fas fa-code-branch me-1"></i>{{ app_version.git_commit }}
-                                    </span>
-                                {% endif %}
-                                {% if app_version.is_development %}
-                                    <span class="badge bg-warning text-dark">
-                                        <i class="fas fa-tools me-1"></i>Development
-                                    </span>
-                                {% endif %}
-                            </div>
+                            {% endif %}
+                            {% if app_version.is_development %}
+                                <span class="version-badge dev">
+                                    Development
+                                </span>
+                            {% endif %}
                         </div>
-                        <div class="col-md-6 text-md-end">
-                            <small class="text-muted">
-                                Python {{ app_version.python_version }} | {{ app_version.platform | title }}
-                            </small>
-                        </div>
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        <small class="text-muted">
+                            Python {{ app_version.python_version }} | {{ app_version.platform | title }}
+                        </small>
                     </div>
                 </div>
             </footer>
@@ -620,7 +698,7 @@
         function toggleSettings() {
             const submenu = document.getElementById('settingsSubmenu');
             const chevron = document.querySelector('.settings-chevron');
-
+            
             submenu.classList.toggle('expanded');
             chevron.classList.toggle('rotated');
         }
@@ -628,7 +706,7 @@
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebarOverlay');
-
+            
             sidebar.classList.toggle('show');
             overlay.classList.toggle('show');
         }
@@ -636,7 +714,7 @@
         function closeSidebar() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebarOverlay');
-
+            
             sidebar.classList.remove('show');
             overlay.classList.remove('show');
         }
@@ -650,7 +728,6 @@
         // Auto-expand settings menu for admin pages
         document.addEventListener('DOMContentLoaded', function() {
             const currentPath = window.location.pathname;
-
             if (currentPath.startsWith('/admin/') && currentPath !== '/admin/') {
                 toggleSettings();
             }
@@ -662,9 +739,9 @@
             const overlay = document.getElementById('sidebarOverlay');
             const mobileMenuBtn = document.querySelector('.mobile-header button');
 
-            if (window.innerWidth < 768 &&
-                sidebar.classList.contains('show') &&
-                !sidebar.contains(event.target) &&
+            if (window.innerWidth < 768 && 
+                sidebar.classList.contains('show') && 
+                !sidebar.contains(event.target) && 
                 !mobileMenuBtn.contains(event.target)) {
                 closeSidebar();
             }

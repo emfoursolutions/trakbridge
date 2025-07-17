@@ -3,59 +3,71 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <div class="d-flex align-items-center">
-        <h1 class="h2">Dashboard</h1>
-    </div>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <div class="btn-group me-2">
-            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshStatus()">
-                <i class="fas fa-refresh"></i> Refresh
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>Dashboard</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item active">Overview</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="btn-toolbar">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshStatus()">
+                <i class="fas fa-sync-alt"></i> Refresh
             </button>
         </div>
     </div>
 </div>
 
 <!-- Metrics Cards -->
-<div class="row mb-3">
-    <div class="col-md-4">
-        <div class="card card-metric">
-            <div class="card-body text-center">
-                <h2 class="card-title">{{ active_streams }}</h2>
-                <p class="card-text">Active Streams</p>
+<div class="row mb-4">
+    <div class="col-md-4 mb-3">
+        <div class="card metric-card">
+            <div class="card-body">
+                <div class="metric-value">{{ active_streams }}</div>
+                <div class="metric-label">Active Streams</div>
             </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card card-metric">
-            <div class="card-body text-center">
-                <h2 class="card-title">{{ total_streams }}</h2>
-                <p class="card-text">Total Streams</p>
+    <div class="col-md-4 mb-3">
+        <div class="card metric-card">
+            <div class="card-body">
+                <div class="metric-value">{{ total_streams }}</div>
+                <div class="metric-label">Total Streams</div>
             </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card card-metric">
-            <div class="card-body text-center">
-                <h2 class="card-title">{{ tak_servers|length }}</h2>
-                <p class="card-text">TAK Servers</p>
+    <div class="col-md-4 mb-3">
+        <div class="card metric-card">
+            <div class="card-body">
+                <div class="metric-value">{{ tak_servers|length }}</div>
+                <div class="metric-label">TAK Servers</div>
             </div>
         </div>
     </div>
-
 </div>
 
-<!-- Recent Streams -->
+<!-- Content Cards -->
 <div class="row">
-    <div class="col-md-6">
+    <div class="col-lg-6">
         <div class="card">
             <div class="card-header">
-                <h5>Recent Streams</h5>
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Recent Streams</h5>
+                    {% if streams %}
+                        <a href="{{ url_for('streams.list_streams') }}" class="btn btn-outline-secondary btn-sm">
+                            View All
+                        </a>
+                    {% endif %}
+                </div>
             </div>
             <div class="card-body">
                 {% if streams %}
                     <div class="table-responsive">
-                        <table class="table table-sm">
+                        <table class="table">
                             <thead>
                                 <tr>
                                     <th>Name</th>
@@ -67,18 +79,26 @@
                             <tbody>
                                 {% for stream in streams[:5] %}
                                 <tr>
-                                    <td>{{ stream.name }}</td>
-                                    <td>{{ stream.plugin_type }}</td>
                                     <td>
-                                        <i class="fas fa-circle {% if stream.is_active %}status-active{% else %}status-inactive{% endif %}"></i>
-                                        {% if stream.is_active %}Active{% else %}Inactive{% endif %}
+                                        <strong>{{ stream.name }}</strong>
                                     </td>
                                     <td>
-                                        {% if stream.last_poll %}
-                                            {{ stream.last_poll.strftime('%H:%M:%S') }}
-                                        {% else %}
-                                            Never
-                                        {% endif %}
+                                        <span class="text-muted">{{ stream.plugin_type }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="status-indicator {% if stream.is_active %}status-active{% else %}status-inactive{% endif %}">
+                                            <span class="status-dot"></span>
+                                            {% if stream.is_active %}Active{% else %}Inactive{% endif %}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="text-mono text-muted">
+                                            {% if stream.last_poll %}
+                                                {{ stream.last_poll.strftime('%H:%M:%S') }}
+                                            {% else %}
+                                                Never
+                                            {% endif %}
+                                        </span>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -86,21 +106,34 @@
                         </table>
                     </div>
                 {% else %}
-                    <p class="text-muted">No streams configured yet.</p>
-                    <a href="{{ url_for('streams.create_stream') }}" class="btn btn-primary">Create First Stream</a>
+                    <div class="text-center py-4">
+                        <i class="fas fa-stream text-muted mb-3" style="font-size: 3rem; opacity: 0.3;"></i>
+                        <p class="text-muted mb-3">No streams configured yet.</p>
+                        <a href="{{ url_for('streams.create_stream') }}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Create First Stream
+                        </a>
+                    </div>
                 {% endif %}
             </div>
         </div>
     </div>
-    <div class="col-md-6">
+    
+    <div class="col-lg-6">
         <div class="card">
             <div class="card-header">
-                <h5>TAK Servers</h5>
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">TAK Servers</h5>
+                    {% if tak_servers %}
+                        <a href="{{ url_for('tak_servers.list_tak_servers') }}" class="btn btn-outline-secondary btn-sm">
+                            View All
+                        </a>
+                    {% endif %}
+                </div>
             </div>
             <div class="card-body">
                 {% if tak_servers %}
                     <div class="table-responsive">
-                        <table class="table table-sm">
+                        <table class="table">
                             <thead>
                                 <tr>
                                     <th>Name</th>
@@ -112,38 +145,101 @@
                             <tbody>
                                 {% for server in tak_servers %}
                                 <tr>
-                                    <td>{{ server.name }}</td>
-                                    <td>{{ server.host }}:{{ server.port }}</td>
-                                    <td>{{ server.protocol.upper() }}</td>
-                                    <td>{{ server.streams|length }}</td>
+                                    <td>
+                                        <strong>{{ server.name }}</strong>
+                                    </td>
+                                    <td>
+                                        <span class="text-mono text-muted">{{ server.host }}:{{ server.port }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="version-badge">{{ server.protocol.upper() }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="text-muted">{{ server.streams|length }}</span>
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
                 {% else %}
-                    <p class="text-muted">No TAK servers configured yet.</p>
-                    <a href="{{ url_for('tak_servers.create_tak_server') }}" class="btn btn-primary">Add TAK Server</a>
+                    <div class="text-center py-4">
+                        <i class="fas fa-server text-muted mb-3" style="font-size: 3rem; opacity: 0.3;"></i>
+                        <p class="text-muted mb-3">No TAK servers configured yet.</p>
+                        <a href="{{ url_for('tak_servers.create_tak_server') }}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Add TAK Server
+                        </a>
+                    </div>
                 {% endif %}
             </div>
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
 function refreshStatus() {
+    const refreshBtn = document.querySelector('[onclick="refreshStatus()"]');
+    const icon = refreshBtn.querySelector('i');
+    
+    // Show loading state
+    icon.classList.remove('fa-sync-alt');
+    icon.classList.add('fa-spinner', 'fa-spin');
+    refreshBtn.disabled = true;
+    
     fetch('/api/status')
         .then(response => response.json())
         .then(data => {
-            document.getElementById('running-workers').textContent = data.running_workers;
+            const runningWorkers = document.getElementById('running-workers');
+            if (runningWorkers) {
+                runningWorkers.textContent = data.running_workers || '0';
+            }
+            
+            // Update other metrics if available
+            if (data.uptime) {
+                const uptimeElement = document.querySelector('[data-metric="uptime"]');
+                if (uptimeElement) {
+                    uptimeElement.textContent = data.uptime;
+                }
+            }
+            
+            // Show success feedback
+            refreshBtn.classList.add('btn-success');
+            refreshBtn.classList.remove('btn-outline-secondary');
+            
+            setTimeout(() => {
+                refreshBtn.classList.remove('btn-success');
+                refreshBtn.classList.add('btn-outline-secondary');
+            }, 1000);
         })
-        .catch(error => console.error('Error:', error));
+        .catch(error => {
+            console.error('Error:', error);
+            
+            // Show error feedback
+            refreshBtn.classList.add('btn-danger');
+            refreshBtn.classList.remove('btn-outline-secondary');
+            
+            setTimeout(() => {
+                refreshBtn.classList.remove('btn-danger');
+                refreshBtn.classList.add('btn-outline-secondary');
+            }, 2000);
+        })
+        .finally(() => {
+            // Reset button state
+            icon.classList.remove('fa-spinner', 'fa-spin');
+            icon.classList.add('fa-sync-alt');
+            refreshBtn.disabled = false;
+        });
 }
 
 // Refresh status every 30 seconds
 setInterval(refreshStatus, 30000);
-refreshStatus(); // Initial load
+
+// Initial load
+document.addEventListener('DOMContentLoaded', function() {
+    refreshStatus();
+});
 </script>
 {% endblock %}

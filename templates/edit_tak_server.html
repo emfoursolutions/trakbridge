@@ -3,66 +3,37 @@
 {% block title %}Edit TAK Server - Stream to TAK Server{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Edit TAK Server</h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <div class="btn-group me-2">
-            <a href="{{ url_for('tak_servers.view_tak_server', server_id=server.id) }}" class="btn btn-sm btn-outline-secondary">
-                <i class="fas fa-arrow-left"></i> Back to Server
-            </a>
-            <a href="{{ url_for('tak_servers.list_tak_servers') }}" class="btn btn-sm btn-outline-secondary">
-                <i class="fas fa-list"></i> All Servers
-            </a>
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>Edit TAK Server</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('tak_servers.list_tak_servers') }}">TAK Servers</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('tak_servers.view_tak_server', server_id=server.id) }}">{{ server.name }}</a></li>
+                    <li class="breadcrumb-item active">Edit</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="btn-toolbar">
+            <div class="btn-group">
+                <a href="{{ url_for('tak_servers.view_tak_server', server_id=server.id) }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-arrow-left"></i> Back to Server
+                </a>
+                <a href="{{ url_for('tak_servers.list_tak_servers') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-list"></i> All Servers
+                </a>
+            </div>
         </div>
     </div>
 </div>
 
-<style>
-    .alert {
-        margin-bottom: 1rem;
-    }
-    .card {
-        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-    }
-    .form-control:focus, .form-select:focus {
-        border-color: #0d6efd;
-        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
-    }
-    .btn-outline-info:hover {
-        color: #fff;
-        background-color: #0dcaf0;
-        border-color: #0dcaf0;
-    }
-    .text-danger {
-        color: #dc3545 !important;
-    }
-    .cert-validation-status {
-        padding: 0.5rem;
-        border-radius: 0.375rem;
-        margin-top: 0.5rem;
-    }
-    .cert-valid {
-        background-color: #d1edff;
-        border: 1px solid #0dcaf0;
-        color: #055160;
-    }
-    .cert-invalid {
-        background-color: #f8d7da;
-        border: 1px solid #dc3545;
-        color: #721c24;
-    }
-    .cert-validating {
-        background-color: #fff3cd;
-        border: 1px solid #ffc107;
-        color: #664d03;
-    }
-</style>
-
 <div class="row">
-    <div class="col-md-8">
+    <div class="col-lg-8">
         <div class="card">
             <div class="card-header">
-                <h5 class="card-title mb-0">
+                <h5 class="mb-0">
                     <i class="fas fa-server"></i> Server Configuration - {{ server.name }}
                 </h5>
             </div>
@@ -110,7 +81,7 @@
                     <!-- SSL/TLS Configuration -->
                     <div class="card mb-3" id="tlsConfig">
                         <div class="card-header">
-                            <h6 class="card-title mb-0">
+                            <h6 class="mb-0">
                                 <i class="fas fa-shield-alt"></i> TLS/SSL Configuration
                             </h6>
                         </div>
@@ -190,14 +161,14 @@
 
                     <!-- Action Buttons -->
                     <div class="d-flex justify-content-between">
-                        <button type="button" class="btn btn-outline-info" onclick="testServerConfig()" title="Test Connection">
+                        <button type="button" class="btn btn-outline-secondary" onclick="testServerConfig()" title="Test Connection">
                             <i class="fas fa-network-wired"></i> Test Connection
                         </button>
                         <div>
-                            <a href="{{ url_for('tak_servers.view_tak_server', server_id=server.id) }}" class="btn btn-secondary me-2">
+                            <a href="{{ url_for('tak_servers.view_tak_server', server_id=server.id) }}" class="btn btn-outline-secondary">
                                 <i class="fas fa-times"></i> Cancel
                             </a>
-                            <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <button type="submit" class="btn btn-primary ms-2" id="submitBtn">
                                 <i class="fas fa-save"></i> Update Server
                             </button>
                         </div>
@@ -209,7 +180,7 @@
         <!-- Connection Status Card -->
         <div class="card mt-3" id="connectionStatus" style="display: none;">
             <div class="card-header">
-                <h6 class="card-title mb-0">
+                <h6 class="mb-0">
                     <i class="fas fa-network-wired"></i> Connection Test Results
                 </h6>
             </div>
@@ -219,63 +190,75 @@
         </div>
     </div>
 
-    <div class="col-md-4">
+    <div class="col-lg-4">
         <div class="card">
             <div class="card-header">
-                <h6 class="card-title mb-0">
+                <h6 class="mb-0">
                     <i class="fas fa-info-circle"></i> Server Information
                 </h6>
             </div>
             <div class="card-body">
-                <dl class="row small">
-                    <dt class="col-sm-4">Created:</dt>
-                    <dd class="col-sm-8">{{ server.created_at.strftime('%Y-%m-%d %H:%M') }}</dd>
-                    <dt class="col-sm-4">Updated:</dt>
-                    <dd class="col-sm-8">{{ server.updated_at.strftime('%Y-%m-%d %H:%M') }}</dd>
-                    <dt class="col-sm-4">Streams:</dt>
-                    <dd class="col-sm-8">
-                        <span class="badge bg-secondary">{{ server.streams|length }}</span>
-                        {% if server.streams %}
-                            <small class="text-muted d-block">
-                                {% for stream in server.streams[:3] %}
-                                    {{ stream.name }}{% if not loop.last %}, {% endif %}
-                                {% endfor %}
-                                {% if server.streams|length > 3 %}
-                                    and {{ server.streams|length - 3 }} more...
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <tr>
+                            <td><strong>Created:</strong></td>
+                            <td class="text-mono text-muted">{{ server.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Updated:</strong></td>
+                            <td class="text-mono text-muted">{{ server.updated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Streams:</strong></td>
+                            <td>
+                                <span class="badge bg-secondary">{{ server.streams|length }}</span>
+                                {% if server.streams %}
+                                    <div class="small text-muted mt-1">
+                                        {% for stream in server.streams[:3] %}
+                                            {{ stream.name }}{% if not loop.last %}, {% endif %}
+                                        {% endfor %}
+                                        {% if server.streams|length > 3 %}
+                                            and {{ server.streams|length - 3 }} more...
+                                        {% endif %}
+                                    </div>
                                 {% endif %}
-                            </small>
-                        {% endif %}
-                    </dd>
-                </dl>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
             </div>
         </div>
 
         <div class="card mt-3">
             <div class="card-header">
-                <h6 class="card-title mb-0">
+                <h6 class="mb-0">
                     <i class="fas fa-info-circle"></i> Configuration Help
                 </h6>
             </div>
             <div class="card-body">
                 <h6>Common Ports:</h6>
-                <ul class="small">
-                    <li><strong>8089:</strong> TAK Server TLS (default)</li>
-                    <li><strong>8087:</strong> TAK Server TCP</li>
-                    <li><strong>4242:</strong> FreeTAK Server</li>
-                    <li><strong>8080:</strong> Alternative HTTP</li>
-                </ul>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <tr><td><strong>8089:</strong></td><td>TAK Server TLS (default)</td></tr>
+                        <tr><td><strong>8087:</strong></td><td>TAK Server TCP</td></tr>
+                        <tr><td><strong>4242:</strong></td><td>FreeTAK Server</td></tr>
+                        <tr><td><strong>8080:</strong></td><td>Alternative HTTP</td></tr>
+                    </table>
+                </div>
 
                 <h6 class="mt-3">Protocol Notes:</h6>
-                <ul class="small">
-                    <li><strong>TLS:</strong> Encrypted, recommended for production</li>
-                    <li><strong>TCP:</strong> Plain text, use for testing only</li>
-                    <li><strong>UDP:</strong> Connectionless, for specific use cases</li>
-                </ul>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <tr><td><span class="version-badge">TLS</span></td><td>Encrypted, recommended for production</td></tr>
+                        <tr><td><span class="version-badge">TCP</span></td><td>Plain text, use for testing only</td></tr>
+                        <tr><td><span class="version-badge">UDP</span></td><td>Connectionless, for specific use cases</td></tr>
+                    </table>
+                </div>
 
                 <h6 class="mt-3">Certificate Requirements:</h6>
                 <div class="small text-muted">
                     <p><strong>P12/PKCS#12 Format:</strong></p>
-                    <ul>
+                    <ul class="mb-0">
                         <li>Contains both certificate and private key</li>
                         <li>Usually has .p12, .pfx, or .pkcs12 extension</li>
                         <li>May be password protected</li>
@@ -292,14 +275,14 @@
 
         <div class="card mt-3">
             <div class="card-header">
-                <h6 class="card-title mb-0">
+                <h6 class="mb-0">
                     <i class="fas fa-shield-alt"></i> Security Notes
                 </h6>
             </div>
             <div class="card-body">
                 <div class="small">
                     <p><strong>Certificate Security:</strong></p>
-                    <ul>
+                    <ul class="mb-0">
                         <li>P12 files are stored securely in the database</li>
                         <li>Passwords are encrypted at rest</li>
                         <li>Certificates are only used for TAK connections</li>
@@ -314,13 +297,42 @@
 
 {% block scripts %}
 <script>
+// Custom styles for certificate validation
+const customStyles = `
+    .cert-validation-status {
+        padding: 0.5rem;
+        border-radius: 0.375rem;
+        margin-top: 0.5rem;
+    }
+    .cert-valid {
+        background-color: #d1edff;
+        border: 1px solid #0dcaf0;
+        color: #055160;
+    }
+    .cert-invalid {
+        background-color: #f8d7da;
+        border: 1px solid #dc3545;
+        color: #721c24;
+    }
+    .cert-validating {
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        color: #664d03;
+    }
+`;
+
+// Add custom styles to head
+const styleSheet = document.createElement('style');
+styleSheet.textContent = customStyles;
+document.head.appendChild(styleSheet);
+
 // Improved test server function with better visual feedback
 function testServerConfig() {
     const button = event.target.closest('button');
     const originalContent = button.innerHTML;
     
     // Show loading state
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
     button.disabled = true;
     
     // Collect form data
@@ -369,16 +381,24 @@ function sendTestRequest(formData, button, originalContent) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            button.innerHTML = '<i class="fas fa-check text-success"></i>';
+            button.innerHTML = '<i class="fas fa-check text-success"></i> Success';
+            button.classList.remove('btn-outline-secondary');
+            button.classList.add('btn-success');
             setTimeout(() => {
                 button.innerHTML = originalContent;
+                button.classList.remove('btn-success');
+                button.classList.add('btn-outline-secondary');
                 button.disabled = false;
             }, 2000);
             showAlert('Connection test successful!', 'success');
         } else {
-            button.innerHTML = '<i class="fas fa-times text-danger"></i>';
+            button.innerHTML = '<i class="fas fa-times text-danger"></i> Failed';
+            button.classList.remove('btn-outline-secondary');
+            button.classList.add('btn-danger');
             setTimeout(() => {
                 button.innerHTML = originalContent;
+                button.classList.remove('btn-danger');
+                button.classList.add('btn-outline-secondary');
                 button.disabled = false;
             }, 2000);
             showAlert('Connection test failed: ' + data.error, 'danger');
@@ -386,58 +406,57 @@ function sendTestRequest(formData, button, originalContent) {
     })
     .catch(error => {
         console.error('Error:', error);
-        button.innerHTML = '<i class="fas fa-times text-danger"></i>';
+        button.innerHTML = '<i class="fas fa-times text-danger"></i> Error';
+        button.classList.remove('btn-outline-secondary');
+        button.classList.add('btn-danger');
         setTimeout(() => {
             button.innerHTML = originalContent;
+            button.classList.remove('btn-danger');
+            button.classList.add('btn-outline-secondary');
             button.disabled = false;
         }, 2000);
         showAlert('Network error occurred during connection test', 'danger');
     });
 }
-     // Helper function to show alerts
-     function showAlert(message, type = 'info') {
-        // Remove existing alerts
-        const existingAlerts = document.querySelectorAll('.alert:not(.alert-warning):not(#cert_info)');
-        existingAlerts.forEach(alert => {
-            if (!alert.classList.contains('alert-warning') || !alert.innerHTML.includes('Warning:')) {
-                alert.remove();
-            }
-        });
 
-        // Create new alert
-        const alertDiv = document.createElement('div');
-        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-        alertDiv.setAttribute('role', 'alert');
-        alertDiv.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        `;
-
-        // Find the best place to insert the alert
-        const titleRow = document.querySelector('.d-flex.justify-content-between.flex-wrap');
-        const mainRow = document.querySelector('.row');
-
-        if (titleRow && titleRow.parentNode) {
-            // Insert after the title row
-            titleRow.parentNode.insertBefore(alertDiv, titleRow.nextSibling);
-        } else if (mainRow && mainRow.parentNode) {
-            // Insert before the main content row
-            mainRow.parentNode.insertBefore(alertDiv, mainRow);
-        } else {
-            // Fallback: prepend to body content
-            const contentDiv = document.querySelector('[role="main"]') || document.body;
-            contentDiv.insertBefore(alertDiv, contentDiv.firstChild);
+// Helper function to show alerts
+function showAlert(message, type = 'info') {
+    // Remove existing alerts
+    const existingAlerts = document.querySelectorAll('.alert:not(.alert-warning):not(#cert_info)');
+    existingAlerts.forEach(alert => {
+        if (!alert.classList.contains('alert-warning') || !alert.innerHTML.includes('Warning:')) {
+            alert.remove();
         }
+    });
 
-        // Auto-dismiss after 5 seconds for non-error messages
-        if (type !== 'danger') {
-            setTimeout(() => {
-                if (alertDiv && alertDiv.parentNode) {
-                    alertDiv.remove();
-                }
-            }, 5000);
-        }
+    // Create new alert
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.setAttribute('role', 'alert');
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+
+    // Insert after page header
+    const pageHeader = document.querySelector('.page-header');
+    if (pageHeader && pageHeader.parentNode) {
+        pageHeader.parentNode.insertBefore(alertDiv, pageHeader.nextSibling);
+    } else {
+        // Fallback: prepend to body content
+        const contentDiv = document.querySelector('[role="main"]') || document.body;
+        contentDiv.insertBefore(alertDiv, contentDiv.firstChild);
     }
+
+    // Auto-dismiss after 5 seconds for non-error messages
+    if (type !== 'danger') {
+        setTimeout(() => {
+            if (alertDiv && alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }
+}
     
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('editServerForm');
