@@ -3,11 +3,19 @@
 {% block title %}TAK Servers - Stream to TAK Server{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">TAK Servers</h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <div class="btn-group me-2">
-            <a href="{{ url_for('tak_servers.create_tak_server') }}" class="btn btn-sm btn-primary">
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>TAK Servers</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item active">Server Management</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="btn-toolbar">
+            <a href="{{ url_for('tak_servers.create_tak_server') }}" class="btn btn-primary">
                 <i class="fas fa-plus"></i> New Server
             </a>
         </div>
@@ -15,72 +23,92 @@
 </div>
 
 {% if servers %}
-<div class="table-responsive">
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Host</th>
-                <th>Port</th>
-                <th>Protocol</th>
-                <th>SSL Verify</th>
-                <th>Streams</th>
-                <th>Created</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for server in servers %}
-            <tr>
-                <td>
-                    <a href="{{ url_for('tak_servers.view_tak_server', server_id=server.id) }}">
-                        {{ server.name }}
-                    </a>
-                </td>
-                <td>{{ server.host }}</td>
-                <td>{{ server.port }}</td>
-                <td>
-                    <span class="badge bg-{% if server.protocol == 'tls' %}success{% else %}info{% endif %}">
-                        {{ server.protocol.upper() }}
-                    </span>
-                </td>
-                <td>
-                    <i class="fas fa-{% if server.verify_ssl %}shield-alt text-success{% else %}shield text-warning{% endif %}"></i>
-                    {% if server.verify_ssl %}Yes{% else %}No{% endif %}
-                </td>
-                <td>
-                    <span class="badge bg-secondary">{{ server.streams|length }}</span>
-                </td>
-                <td>{{ server.created_at.strftime('%Y-%m-%d') }}</td>
-                <td>
-                    <div class="btn-group btn-group-sm" role="group">
-                        <a href="{{ url_for('tak_servers.view_tak_server', server_id=server.id) }}" class="btn btn-outline-primary" title="View Details">
-                            <i class="fas fa-eye"></i>
-                        </a>
-                        <a href="{{ url_for('tak_servers.edit_tak_server', server_id=server.id) }}" class="btn btn-outline-warning" title="Edit Server">
-                            <i class="fas fa-edit"></i>
-                        </a>
-                        <button class="btn btn-outline-info" onclick="testServer({{ server.id }})" title="Test Connection">
-                            <i class="fas fa-network-wired"></i>
-                        </button>
-                        <button class="btn btn-outline-danger" onclick="deleteServer({{ server.id }})" title="Delete Server" {% if server.streams %}disabled{% endif %}>
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Server Configurations</h5>
+            <span class="text-muted">{{ servers|length }} server{{ 's' if servers|length != 1 else '' }}</span>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Host</th>
+                        <th>Port</th>
+                        <th>Protocol</th>
+                        <th>SSL Verify</th>
+                        <th>Streams</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for server in servers %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('tak_servers.view_tak_server', server_id=server.id) }}" class="text-decoration-none">
+                                <strong>{{ server.name }}</strong>
+                            </a>
+                        </td>
+                        <td>
+                            <span class="text-mono text-muted">{{ server.host }}</span>
+                        </td>
+                        <td>
+                            <span class="text-mono text-muted">{{ server.port }}</span>
+                        </td>
+                        <td>
+                            <span class="version-badge">{{ server.protocol.upper() }}</span>
+                        </td>
+                        <td>
+                            <span class="status-indicator {% if server.verify_ssl %}status-active{% else %}status-inactive{% endif %}">
+                                <span class="status-dot"></span>
+                                {% if server.verify_ssl %}Enabled{% else %}Disabled{% endif %}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="text-muted">{{ server.streams|length }}</span>
+                        </td>
+                        <td>
+                            <span class="text-mono text-muted">{{ server.created_at.strftime('%Y-%m-%d') }}</span>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a href="{{ url_for('tak_servers.view_tak_server', server_id=server.id) }}" class="btn btn-outline-primary" title="View Details">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="{{ url_for('tak_servers.edit_tak_server', server_id=server.id) }}" class="btn btn-outline-secondary" title="Edit Server">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <button class="btn btn-outline-secondary" onclick="testServer({{ server.id }})" title="Test Connection">
+                                    <i class="fas fa-network-wired"></i>
+                                </button>
+                                <button class="btn btn-outline-danger" onclick="deleteServer({{ server.id }})" title="Delete Server" {% if server.streams %}disabled{% endif %}>
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 {% else %}
-<div class="text-center py-5">
-    <i class="fas fa-server fa-3x text-muted mb-3"></i>
-    <h4>No TAK Servers Yet</h4>
-    <p class="text-muted">Create your first TAK server configuration to get started.</p>
-    <a href="{{ url_for('tak_servers.create_tak_server') }}" class="btn btn-primary">
-        <i class="fas fa-plus"></i> Create Server
-    </a>
+<div class="card">
+    <div class="card-body">
+        <div class="text-center py-4">
+            <i class="fas fa-server text-muted mb-3" style="font-size: 3rem; opacity: 0.3;"></i>
+            <h4>No TAK Servers Yet</h4>
+            <p class="text-muted mb-3">Create your first TAK server configuration to get started.</p>
+            <a href="{{ url_for('tak_servers.create_tak_server') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Create Server
+            </a>
+        </div>
+    </div>
 </div>
 {% endif %}
 {% endblock %}
@@ -106,8 +134,13 @@ function testServer(serverId) {
         if (data.success) {
             // Show success feedback
             button.innerHTML = '<i class="fas fa-check text-success"></i>';
+            button.classList.add('btn-success');
+            button.classList.remove('btn-outline-secondary');
+            
             setTimeout(() => {
                 button.innerHTML = originalContent;
+                button.classList.remove('btn-success');
+                button.classList.add('btn-outline-secondary');
                 button.disabled = false;
             }, 2000);
             
@@ -116,8 +149,13 @@ function testServer(serverId) {
         } else {
             // Show error feedback
             button.innerHTML = '<i class="fas fa-times text-danger"></i>';
+            button.classList.add('btn-danger');
+            button.classList.remove('btn-outline-secondary');
+            
             setTimeout(() => {
                 button.innerHTML = originalContent;
+                button.classList.remove('btn-danger');
+                button.classList.add('btn-outline-secondary');
                 button.disabled = false;
             }, 2000);
             
@@ -127,8 +165,13 @@ function testServer(serverId) {
     .catch(error => {
         console.error('Error:', error);
         button.innerHTML = '<i class="fas fa-times text-danger"></i>';
+        button.classList.add('btn-danger');
+        button.classList.remove('btn-outline-secondary');
+        
         setTimeout(() => {
             button.innerHTML = originalContent;
+            button.classList.remove('btn-danger');
+            button.classList.add('btn-outline-secondary');
             button.disabled = false;
         }, 2000);
         

@@ -3,27 +3,39 @@
 {% block title %}Edit Stream - {{ stream.name }} - Stream to TAK Server{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Edit Stream: {{ stream.name }}</h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}" class="btn btn-sm btn-outline-secondary">
-            <i class="fas fa-arrow-left"></i> Back to Stream
-        </a>
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>Edit Stream: {{ stream.name }}</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('streams.list_streams') }}">Streams</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}">{{ stream.name }}</a></li>
+                    <li class="breadcrumb-item active">Edit</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="btn-toolbar">
+            <a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left"></i> Back to Stream
+            </a>
+        </div>
     </div>
 </div>
 
 <div class="row">
-    <div class="col-md-8">
+    <div class="col-lg-8">
         <form id="streamForm" method="POST">
             <div class="card">
                 <div class="card-header">
-                    <h5>Stream Configuration</h5>
+                    <h5><i class="fas fa-cog"></i> Stream Configuration</h5>
                 </div>
                 <div class="card-body">
                     <div class="mb-3">
                         <label for="name" class="form-label">Stream Name</label>
                         <input type="text" class="form-control" id="name" name="name" value="{{ stream.name }}" required>
-                        <div class="form-text">A descriptive name for this stream</div>
+                        <div class="form-text text-muted">A descriptive name for this stream</div>
                     </div>
 
                     <div class="mb-3">
@@ -49,7 +61,7 @@
                             </option>
                             {% endfor %}
                         </select>
-                        <div class="form-text">TAK server where Stream data will be sent</div>
+                        <div class="form-text text-muted">TAK server where Stream data will be sent</div>
                     </div>
 
                     <div class="row">
@@ -58,7 +70,7 @@
                                 <label for="poll_interval" class="form-label">Poll Interval (seconds)</label>
                                 <input type="number" class="form-control" id="poll_interval" name="poll_interval"
                                        value="{{ stream.poll_interval }}" min="30" max="3600">
-                                <div class="form-text">How often to check for new Stream data</div>
+                                <div class="form-text text-muted">How often to check for new Stream data</div>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -66,7 +78,7 @@
                                 <label for="cot_stale_time" class="form-label">COT Stale Time (seconds)</label>
                                 <input type="number" class="form-control" id="cot_stale_time" name="cot_stale_time"
                                        value="{{ stream.cot_stale_time }}" min="60">
-                                <div class="form-text">When to consider position data stale</div>
+                                <div class="form-text text-muted">When to consider position data stale</div>
                             </div>
                         </div>
                     </div>
@@ -80,13 +92,12 @@
                             </option>
                             {% endfor %}
                         </select>
-                        <div class="form-text">Cursor-on-Target type identifier for tracked objects</div>
+                        <div class="form-text text-muted">Cursor-on-Target type identifier for tracked objects</div>
                     </div>
-
                 </div>
             </div>
 
-            <!-- Plugin-specific configuration will be inserted here -->
+            <!-- Plugin-specific configuration -->
             <div id="plugin-config-section" class="card mt-3">
                 <div class="card-header">
                     <h5 id="plugin-config-title">
@@ -95,14 +106,15 @@
                     </h5>
                 </div>
                 <div class="card-body" id="plugin-config-body">
+                    <p class="text-muted">Select a Stream provider to configure its settings.</p>
                 </div>
             </div>
 
-            <div class="mt-3">
+            <div class="mt-4">
                 <button type="submit" class="btn btn-primary">
                     <i class="fas fa-save"></i> Update Stream
                 </button>
-                <button type="button" class="btn btn-outline-info" onclick="testStreamConfig()" title="Test Connection">
+                <button type="button" class="btn btn-outline-secondary" onclick="testStreamConfig()" title="Test Connection">
                     <i class="fas fa-network-wired"></i> Test Connection
                 </button>
                 <a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}" class="btn btn-secondary">Cancel</a>
@@ -110,36 +122,37 @@
         </form>
     </div>
 
-    <div class="col-md-4">
+    <div class="col-lg-4">
         <!-- Current Status Card -->
-        <div class="card mb-3">
+        <div class="card">
             <div class="card-header">
                 <h5><i class="fas fa-info-circle"></i> Current Status</h5>
             </div>
             <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="d-flex justify-content-between align-items-center mb-3">
                     <span>Status:</span>
-                    <span class="badge {% if stream.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                    <span class="status-indicator {% if stream.is_active %}status-active{% else %}status-inactive{% endif %}">
+                        <span class="status-dot"></span>
                         {% if stream.is_active %}Active{% else %}Inactive{% endif %}
                     </span>
                 </div>
-                <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="d-flex justify-content-between align-items-center mb-3">
                     <span>Messages Sent:</span>
-                    <span class="badge bg-info">{{ stream.total_messages_sent }}</span>
+                    <span class="version-badge">{{ stream.total_messages_sent }}</span>
                 </div>
-                <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="d-flex justify-content-between align-items-center mb-3">
                     <span>Last Poll:</span>
-                    <small class="text-muted">
+                    <span class="text-mono text-muted">
                         {% if stream.last_poll %}
                             {{ stream.last_poll.strftime('%m/%d %H:%M') }}
                         {% else %}
                             Never
                         {% endif %}
-                    </small>
+                    </span>
                 </div>
 
                 {% if stream.last_error %}
-                <div class="alert alert-danger alert-sm mt-2">
+                <div class="alert alert-danger">
                     <small><strong>Last Error:</strong> {{ stream.last_error }}</small>
                 </div>
                 {% endif %}
@@ -149,7 +162,7 @@
         <!-- Help Card -->
         <div class="card">
             <div class="card-header">
-                <h5><i class="fas fa-info-circle"></i> Help</h5>
+                <h5><i class="fas fa-question-circle"></i> Help</h5>
             </div>
             <div class="card-body">
                 <div id="help-content">
@@ -159,7 +172,7 @@
         </div>
 
         <!-- Connection test results -->
-        <div id="test-results" class="card mt-3" style="display: none;">
+        <div id="test-results" class="card" style="display: none;">
             <div class="card-header">
                 <h5><i class="fas fa-flask"></i> Connection Test</h5>
             </div>
@@ -297,8 +310,8 @@ function generateFormField(field, currentConfig) {
             inputHtml = `<input type="text" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} value="${currentValue}" ${dataPluginAttr}>`;
     }
 
-    const requiredBadge = field.required ? '<span class="badge bg-danger ms-1">Required</span>' : '';
-    const helpText = field.help || field.help_text ? `<div class="form-text">${field.help || field.help_text}</div>` : '';
+    const requiredBadge = field.required ? '<span class="version-badge" style="background-color: var(--danger); color: white; margin-left: 0.5rem;">Required</span>' : '';
+    const helpText = field.help || field.help_text ? `<div class="form-text text-muted">${field.help || field.help_text}</div>` : '';
 
     // For checkbox fields, don't show the label again since it's already in the input HTML
     if (fieldType === 'checkbox') {
@@ -337,7 +350,7 @@ function renderHelpContent(pluginMeta) {
                 <div class="mb-3">
                     <h6>${section.title}</h6>
                     <ul class="list-unstyled">
-                        ${section.content.map(item => `<li><small>• ${item}</small></li>`).join('')}
+                        ${section.content.map(item => `<li class="text-muted" style="font-size: 0.9rem; margin-bottom: 0.25rem;">• ${item}</li>`).join('')}
                     </ul>
                 </div>
             `;
@@ -352,7 +365,7 @@ function testStreamConfig() {
     const originalContent = button.innerHTML;
     
     // Show loading state
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
     button.disabled = true;
     
     // Collect form data
@@ -384,16 +397,24 @@ function testStreamConfig() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            button.innerHTML = '<i class="fas fa-check text-success"></i>';
+            button.innerHTML = '<i class="fas fa-check"></i> Success';
+            button.classList.remove('btn-outline-secondary');
+            button.classList.add('btn-success');
             setTimeout(() => {
                 button.innerHTML = originalContent;
+                button.classList.remove('btn-success');
+                button.classList.add('btn-outline-secondary');
                 button.disabled = false;
             }, 2000);
             showAlert('Connection test successful!', 'success');
         } else {
-            button.innerHTML = '<i class="fas fa-times text-danger"></i>';
+            button.innerHTML = '<i class="fas fa-times"></i> Failed';
+            button.classList.remove('btn-outline-secondary');
+            button.classList.add('btn-danger');
             setTimeout(() => {
                 button.innerHTML = originalContent;
+                button.classList.remove('btn-danger');
+                button.classList.add('btn-outline-secondary');
                 button.disabled = false;
             }, 2000);
             showAlert('Connection test failed: ' + data.error, 'danger');
@@ -401,9 +422,13 @@ function testStreamConfig() {
     })
     .catch(error => {
         console.error('Error:', error);
-        button.innerHTML = '<i class="fas fa-times text-danger"></i>';
+        button.innerHTML = '<i class="fas fa-times"></i> Error';
+        button.classList.remove('btn-outline-secondary');
+        button.classList.add('btn-danger');
         setTimeout(() => {
             button.innerHTML = originalContent;
+            button.classList.remove('btn-danger');
+            button.classList.add('btn-outline-secondary');
             button.disabled = false;
         }, 2000);
         showAlert('Network error occurred during connection test', 'danger');
@@ -411,7 +436,11 @@ function testStreamConfig() {
 }
 
 function showAlert(message, type = 'info') {
-    // Create a simple alert (you can replace this with a better notification system)
+    // Remove existing alerts
+    const existingAlerts = document.querySelectorAll('.alert');
+    existingAlerts.forEach(alert => alert.remove());
+    
+    // Create new alert
     const alertDiv = document.createElement('div');
     alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
     alertDiv.innerHTML = `

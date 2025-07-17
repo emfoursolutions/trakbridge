@@ -1,52 +1,226 @@
 {% extends "base.html" %}
+
 {% block title %}Admin Dashboard{% endblock %}
+
 {% block content %}
-<div class="container py-4">
-    <h1 class="mb-4">Admin Dashboard</h1>
-    
-    <div class="row g-3">
-        <div class="col-md-3">
-            <div class="card shadow-sm">
-                <div class="card-body text-center">
-                    <h5>Uptime</h5>
-                    <p class="display-6">{{ uptime }}</p>
-                </div>
-            </div>
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>Admin Dashboard</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item active">System Overview</li>
+                </ol>
+            </nav>
         </div>
-        <div class="col-md-3">
-            <div class="card shadow-sm">
-                <div class="card-body text-center">
-                    <h5>Streams</h5>
-                    <p class="display-6">{{ streams_count }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card shadow-sm">
-                <div class="card-body text-center">
-                    <h5>Running</h5>
-                    <p class="display-6">{{ running_streams }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card shadow-sm">
-                <div class="card-body text-center">
-                    <h5>TAK Servers</h5>
-                    <p class="display-6">{{ servers_count }}</p>
-                </div>
-            </div>
+        <div class="btn-toolbar">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshMetrics()">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
         </div>
     </div>
-
-    <div class="mt-5">
-        <h5>System Info</h5>
-        <ul class="list-group">
-            <li class="list-group-item">TrakBridge Version: {{ version }}</li>
-            <li class="list-group-item">Python Version: {{ python_version }}</li>
-            <li class="list-group-item">System: {{ system }} {{ release }}</li>
-        </ul>
-    </div>
-
 </div>
+
+<!-- Metrics Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card metric-card">
+            <div class="card-body">
+                <div class="metric-value" data-metric="uptime">{{ uptime }}</div>
+                <div class="metric-label">System Uptime</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card metric-card">
+            <div class="card-body">
+                <div class="metric-value" data-metric="streams">{{ streams_count }}</div>
+                <div class="metric-label">Total Streams</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card metric-card">
+            <div class="card-body">
+                <div class="metric-value" data-metric="running">{{ running_streams }}</div>
+                <div class="metric-label">Running Streams</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card metric-card">
+            <div class="card-body">
+                <div class="metric-value" data-metric="servers">{{ servers_count }}</div>
+                <div class="metric-label">TAK Servers</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Content Cards -->
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <!-- System Information -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-info-circle"></i> System Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>TrakBridge Version:</strong></td>
+                                <td><span class="version-badge">{{ version }}</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Python Version:</strong></td>
+                                <td><span class="version-badge">{{ python_version }}</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Operating System:</strong></td>
+                                <td><span class="version-badge">{{ system }} {{ release }}</span></td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>Active Streams:</strong></td>
+                                <td><span class="text-success">{{ running_streams }}</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Total Streams:</strong></td>
+                                <td><span class="text-muted">{{ streams_count }}</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>System Uptime:</strong></td>
+                                <td><span class="text-info">{{ uptime }}</span></td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Status -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-heartbeat"></i> System Status
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-circle text-success me-3"></i>
+                            <span>Application Status: <strong>Online</strong></span>
+                        </div>
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-circle {% if running_streams > 0 %}text-success{% else %}text-warning{% endif %} me-3"></i>
+                            <span>Stream Processing: <strong>{% if running_streams > 0 %}Active{% else %}Idle{% endif %}</strong></span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-circle {% if servers_count > 0 %}text-success{% else %}text-warning{% endif %} me-3"></i>
+                            <span>TAK Connectivity: <strong>{% if servers_count > 0 %}Available{% else %}No Servers{% endif %}</strong></span>
+                        </div>
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-circle text-success me-3"></i>
+                            <span>Database: <strong>Connected</strong></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function refreshMetrics() {
+    const refreshBtn = document.querySelector('[onclick="refreshMetrics()"]');
+    const icon = refreshBtn.querySelector('i');
+    
+    // Show loading state
+    icon.classList.remove('fa-sync-alt');
+    icon.classList.add('fa-spinner', 'fa-spin');
+    refreshBtn.disabled = true;
+    
+    fetch('/api/metrics')
+        .then(response => response.json())
+        .then(data => {
+            // Update metrics if available
+            if (data.uptime) {
+                const uptimeElement = document.querySelector('[data-metric="uptime"]');
+                if (uptimeElement) {
+                    uptimeElement.textContent = data.uptime;
+                }
+            }
+            
+            if (data.streams_count !== undefined) {
+                const streamsElement = document.querySelector('[data-metric="streams"]');
+                if (streamsElement) {
+                    streamsElement.textContent = data.streams_count;
+                }
+            }
+            
+            if (data.running_streams !== undefined) {
+                const runningElement = document.querySelector('[data-metric="running"]');
+                if (runningElement) {
+                    runningElement.textContent = data.running_streams;
+                }
+            }
+            
+            if (data.servers_count !== undefined) {
+                const serversElement = document.querySelector('[data-metric="servers"]');
+                if (serversElement) {
+                    serversElement.textContent = data.servers_count;
+                }
+            }
+            
+            // Show success feedback
+            refreshBtn.classList.add('btn-success');
+            refreshBtn.classList.remove('btn-outline-secondary');
+            
+            setTimeout(() => {
+                refreshBtn.classList.remove('btn-success');
+                refreshBtn.classList.add('btn-outline-secondary');
+            }, 1000);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            
+            // Show error feedback
+            refreshBtn.classList.add('btn-danger');
+            refreshBtn.classList.remove('btn-outline-secondary');
+            
+            setTimeout(() => {
+                refreshBtn.classList.remove('btn-danger');
+                refreshBtn.classList.add('btn-outline-secondary');
+            }, 2000);
+        })
+        .finally(() => {
+            // Reset button state
+            icon.classList.remove('fa-spinner', 'fa-spin');
+            icon.classList.add('fa-sync-alt');
+            refreshBtn.disabled = false;
+        });
+}
+
+// Refresh metrics every 30 seconds
+setInterval(refreshMetrics, 30000);
+
+// Initial load
+document.addEventListener('DOMContentLoaded', function() {
+    refreshMetrics();
+});
+</script>
 {% endblock %}

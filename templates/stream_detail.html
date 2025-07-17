@@ -1,71 +1,132 @@
 {% extends "base.html" %}
 
-{% block title %}{{ stream.name }} - Stream to TAK Server{% endblock %}
+{% block title %}{{ stream.name }} - Stream Details{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">{{ stream.name }}</h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <div class="btn-group me-2">
-            {% if stream.is_active %}
-                <button class="btn btn-sm btn-outline-danger" onclick="controlStream({{ stream.id }}, 'stop')">
-                    <i class="fas fa-stop"></i> Stop Stream
-                </button>
-            {% else %}
-                <button class="btn btn-sm btn-outline-success" onclick="controlStream({{ stream.id }}, 'start')">
-                    <i class="fas fa-play"></i> Start Stream
-                </button>
-            {% endif %}
-            <a href="{{ url_for('streams.edit_stream', stream_id=stream.id) }}" class="btn btn-sm btn-outline-primary">
-                <i class="fas fa-edit"></i> Edit
-            </a>
-            <button class="btn btn-sm btn-outline-danger" onclick="deleteStream({{ stream.id }})">
-                <i class="fas fa-trash"></i> Delete
-            </button>
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center flex-wrap">
+        <div>
+            <h1>{{ stream.name }}</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('streams.list_streams') }}">Data Streams</a></li>
+                    <li class="breadcrumb-item active">{{ stream.name }}</li>
+                </ol>
+            </nav>
         </div>
-        <a href="{{ url_for('streams.list_streams') }}" class="btn btn-sm btn-outline-secondary">
-            <i class="fas fa-arrow-left"></i> Back to Streams
-        </a>
+        <div class="btn-toolbar">
+            <div class="btn-group me-2">
+                {% if stream.is_active %}
+                    <button class="btn btn-outline-danger btn-sm" onclick="controlStream({{ stream.id }}, 'stop')">
+                        <i class="fas fa-stop"></i> Stop Stream
+                    </button>
+                {% else %}
+                    <button class="btn btn-outline-success btn-sm" onclick="controlStream({{ stream.id }}, 'start')">
+                        <i class="fas fa-play"></i> Start Stream
+                    </button>
+                {% endif %}
+                <a href="{{ url_for('streams.edit_stream', stream_id=stream.id) }}" class="btn btn-outline-primary btn-sm">
+                    <i class="fas fa-edit"></i> Edit
+                </a>
+                <button class="btn btn-outline-danger btn-sm" onclick="deleteStream({{ stream.id }})">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+            </div>
+            <a href="{{ url_for('streams.list_streams') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left"></i> Back to Streams
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Metrics Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card {% if stream.is_active %}bg-light{% else %}bg-light{% endif %}">
+            <div class="card-body text-center">
+                <div class="metric-value {% if not stream.is_active %}text-muted{% endif %}">
+                    {% if stream.is_active %}ON{% else %}OFF{% endif %}
+                </div>
+                <div class="metric-label">Status</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <div class="metric-value text-primary">{{ stream.total_messages_sent }}</div>
+                <div class="metric-label">Messages Sent</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <div class="metric-value text-info">{{ stream.poll_interval }}s</div>
+                <div class="metric-label">Poll Interval</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <div class="metric-value text-warning">{{ stream.cot_stale_time }}s</div>
+                <div class="metric-label">Stale Time</div>
+            </div>
+        </div>
     </div>
 </div>
 
 <div class="row">
-    <div class="col-md-8">
-        <!-- Stream Status Card -->
-        <div class="card mb-3">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5><i class="fas fa-info-circle"></i> Stream Status</h5>
-                <span class="badge {% if stream.is_active %}bg-success{% else %}bg-secondary{% endif %}">
-                    {% if stream.is_active %}Active{% else %}Inactive{% endif %}
-                </span>
+    <div class="col-lg-8">
+        <!-- Stream Information Card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle"></i> Stream Information
+                    </h5>
+                    <span class="status-indicator {% if stream.is_active %}status-active{% else %}status-inactive{% endif %}">
+                        <span class="status-dot"></span>
+                        {% if stream.is_active %}Active{% else %}Inactive{% endif %}
+                    </span>
+                </div>
             </div>
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-6">
-                        <dl class="row">
-                            <dt class="col-sm-4">Name:</dt>
-                            <dd class="col-sm-8">{{ stream.name }}</dd>
-                            
-                            <dt class="col-sm-4">Provider:</dt>
-                            <dd class="col-sm-8">{{ stream.plugin_type|title }}</dd>
-                            
-                            <dt class="col-sm-4">TAK Server:</dt>
-                            <dd class="col-sm-8">
+                        <div class="info-group mb-3">
+                            <label class="info-label">Name</label>
+                            <div class="info-value">{{ stream.name }}</div>
+                        </div>
+                        
+                        <div class="info-group mb-3">
+                            <label class="info-label">Provider</label>
+                            <div class="info-value">
+                                <span class="version-badge">{{ stream.plugin_type|title }}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="info-group mb-3">
+                            <label class="info-label">TAK Server</label>
+                            <div class="info-value">
                                 {% if stream.tak_server %}
-                                    {{ stream.tak_server.name }} ({{ stream.tak_server.host }}:{{ stream.tak_server.port }})
+                                    <strong>{{ stream.tak_server.name }}</strong>
+                                    <br>
+                                    <span class="text-mono text-muted">
+                                        {{ stream.tak_server.host }}:{{ stream.tak_server.port }}
+                                    </span>
                                 {% else %}
-                                    Not configured
+                                    <span class="text-muted">Not configured</span>
                                 {% endif %}
-                            </dd>
-                            
-                            <dt class="col-sm-4">Poll Interval:</dt>
-                            <dd class="col-sm-8">{{ stream.poll_interval }} seconds</dd>
-                        </dl>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-md-6">
-                        <dl class="row">
-                            <dt class="col-sm-4">COT Type:</dt>
-                            <dd class="col-sm-8">
+                        <div class="info-group mb-3">
+                            <label class="info-label">COT Type</label>
+                            <div class="info-value">
                                 <div class="d-flex align-items-center">
                                     {% if stream.cot_type_sidc %}
                                         <img src="/static/cot_icons/{{ stream.cot_type_sidc }}"
@@ -75,37 +136,31 @@
                                              onerror="this.style.display='none'">
                                     {% endif %}
                                     <div>
+                                        <div class="fw-bold">{{ stream.cot_type_label or stream.cot_type }}</div>
                                         <small class="text-muted">{{ stream.cot_type }}</small>
                                     </div>
                                 </div>
-                            </dd>
+                            </div>
+                        </div>
 
-                            <dt class="col-sm-4">Stale Time:</dt>
-                            <dd class="col-sm-8">
-                                <div class="d-flex align-items-center">
-                                    <i class="fas fa-clock text-muted me-2"></i>
-                                    {{ stream.cot_stale_time }} seconds
-                                </div>
-                            </dd>
-
-                            <dt class="col-sm-4">Last Poll:</dt>
-                            <dd class="col-sm-8">
+                        <div class="info-group mb-3">
+                            <label class="info-label">Last Poll</label>
+                            <div class="info-value">
                                 {% if stream.last_poll %}
-                                    {{ stream.last_poll.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+                                    <span class="text-mono">{{ stream.last_poll.strftime('%Y-%m-%d %H:%M:%S UTC') }}</span>
                                 {% else %}
-                                    Never
+                                    <span class="text-muted">Never</span>
                                 {% endif %}
-                            </dd>
-
-                            <dt class="col-sm-4">Messages Sent:</dt>
-                            <dd class="col-sm-8">{{ stream.total_messages_sent }}</dd>
-                        </dl>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 {% if stream.last_error %}
                 <div class="alert alert-danger mt-3">
-                    <h6><i class="fas fa-exclamation-triangle"></i> Last Error:</h6>
+                    <h6 class="alert-heading">
+                        <i class="fas fa-exclamation-triangle"></i> Last Error
+                    </h6>
                     <p class="mb-0">{{ stream.last_error }}</p>
                 </div>
                 {% endif %}
@@ -113,44 +168,46 @@
         </div>
 
         <!-- Configuration Card -->
-        <div class="card mb-3">
+        <div class="card mb-4">
             <div class="card-header">
-                <h5><i class="fas fa-cog"></i> Configuration</h5>
+                <h5 class="mb-0">
+                    <i class="fas fa-cog"></i> {{ stream.plugin_type|title }} Configuration
+                </h5>
             </div>
             <div class="card-body">
-                <h6>{{ stream.plugin_type|title }} Settings:</h6>
-                <div class="table-responsive">
-                    <table class="table table-sm">
-                        <tbody>
-                            {% set config = stream.get_plugin_config() %}
-                            {% if config %}
-                                {% for key, value in config.items() %}
-                                <tr>
-                                    <td><strong>{{ key|title|replace('_', ' ') }}:</strong></td>
-                                    <td>
-                                        {% if key in ['password', 'feed_password'] %}
-                                            ••••••••
-                                        {% else %}
-                                            {{ value }}
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            {% else %}
-                                <tr>
-                                    <td colspan="2" class="text-muted">No configuration available</td>
-                                </tr>
-                            {% endif %}
-                        </tbody>
-                    </table>
-                </div>
+                {% set config = stream.get_plugin_config() %}
+                {% if config %}
+                    <div class="row">
+                        {% for key, value in config.items() %}
+                        <div class="col-md-6 mb-3">
+                            <div class="info-group">
+                                <label class="info-label">{{ key|title|replace('_', ' ') }}</label>
+                                <div class="info-value">
+                                    {% if key in ['password', 'feed_password'] %}
+                                        <span class="text-mono text-muted">••••••••</span>
+                                    {% else %}
+                                        <span class="text-mono">{{ value }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-cog text-muted mb-3" style="font-size: 3rem; opacity: 0.3;"></i>
+                        <p class="text-muted">No configuration available</p>
+                    </div>
+                {% endif %}
             </div>
         </div>
 
-        <!-- Activity Log Card -->
+        <!-- Activity Timeline Card -->
         <div class="card">
             <div class="card-header">
-                <h5><i class="fas fa-history"></i> Activity</h5>
+                <h5 class="mb-0">
+                    <i class="fas fa-history"></i> Activity Timeline
+                </h5>
             </div>
             <div class="card-body">
                 <div class="timeline">
@@ -191,11 +248,13 @@
         </div>
     </div>
 
-    <div class="col-md-4">
+    <div class="col-lg-4">
         <!-- COT Type Information Card -->
-        <div class="card mb-3">
+        <div class="card mb-4">
             <div class="card-header">
-                <h5><i class="fas fa-map-marker-alt"></i> COT Type Information</h5>
+                <h5 class="mb-0">
+                    <i class="fas fa-map-marker-alt"></i> COT Type Details
+                </h5>
             </div>
             <div class="card-body text-center">
                 {% if stream.cot_type_sidc %}
@@ -211,17 +270,17 @@
                     <i class="fas fa-map-marker-alt fa-3x text-muted mb-3"></i>
                 {% endif %}
 
-                <h6 class="card-title">{{ stream.cot_type_label }}</h6>
-                <p class="card-text">
-                    <small class="text-muted">{{ stream.cot_type }}</small>
+                <h6 class="fw-bold mb-2">{{ stream.cot_type_label or stream.cot_type }}</h6>
+                <p class="text-muted mb-3">
+                    <small class="text-mono">{{ stream.cot_type }}</small>
                 </p>
 
                 {% if stream.cot_type_description %}
-                <p class="card-text">{{ stream.cot_type_description }}</p>
+                <p class="text-muted mb-3">{{ stream.cot_type_description }}</p>
                 {% endif %}
 
                 {% if stream.cot_type_category %}
-                <span class="badge bg-{% if stream.cot_type_category == 'friendly' %}success{% elif stream.cot_type_category == 'hostile' %}danger{% elif stream.cot_type_category == 'neutral' %}warning{% else %}secondary{% endif %}">
+                <span class="version-badge {% if stream.cot_type_category == 'friendly' %}bg-success{% elif stream.cot_type_category == 'hostile' %}bg-danger{% elif stream.cot_type_category == 'neutral' %}bg-warning{% else %}bg-secondary{% endif %}">
                     {{ stream.cot_type_category|title }}
                 </span>
                 {% endif %}
@@ -229,9 +288,11 @@
         </div>
 
         <!-- Quick Actions Card -->
-        <div class="card mb-3">
+        <div class="card mb-4">
             <div class="card-header">
-                <h5><i class="fas fa-bolt"></i> Quick Actions</h5>
+                <h5 class="mb-0">
+                    <i class="fas fa-bolt"></i> Quick Actions
+                </h5>
             </div>
             <div class="card-body">
                 <div class="d-grid gap-2">
@@ -248,59 +309,45 @@
             </div>
         </div>
 
-        <!-- Statistics Card -->
-        <div class="card mb-3">
-            <div class="card-header">
-                <h5><i class="fas fa-chart-line"></i> Statistics</h5>
-            </div>
-            <div class="card-body">
-                <div class="row text-center">
-                    <div class="col-6">
-                        <h4 class="text-primary">{{ stream.total_messages_sent }}</h4>
-                        <small class="text-muted">Messages Sent</small>
-                    </div>
-                    <div class="col-6">
-                        <h4 class="{% if stream.is_active %}text-success{% else %}text-secondary{% endif %}">
-                            {% if stream.is_active %}ON{% else %}OFF{% endif %}
-                        </h4>
-                        <small class="text-muted">Current Status</small>
-                    </div>
-                </div>
-
-                {% if stream.last_poll %}
-                <hr>
-                <div class="text-center">
-                    <small class="text-muted">
-                        Last activity: {{ stream.last_poll.strftime('%H:%M:%S UTC') }}
-                    </small>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-
         <!-- Help Card -->
         <div class="card">
             <div class="card-header">
-                <h5><i class="fas fa-question-circle"></i> Help</h5>
+                <h5 class="mb-0">
+                    <i class="fas fa-question-circle"></i> Help & Troubleshooting
+                </h5>
             </div>
             <div class="card-body">
-                <h6>Stream Controls:</h6>
-                <ul class="list-unstyled">
-                    <li><strong>Start/Stop:</strong> Control stream execution</li>
-                    <li><strong>Edit:</strong> Modify stream configuration</li>
-                    <li><strong>Test:</strong> Verify connection to Stream provider</li>
-                    <li><strong>Restart:</strong> Stop and start the stream</li>
-                </ul>
+                <h6 class="mb-3">Stream Controls</h6>
+                <div class="help-item mb-3">
+                    <strong>Start/Stop:</strong> Control stream execution
+                </div>
+                <div class="help-item mb-3">
+                    <strong>Edit:</strong> Modify stream configuration
+                </div>
+                <div class="help-item mb-3">
+                    <strong>Test:</strong> Verify connection to data provider
+                </div>
+                <div class="help-item mb-4">
+                    <strong>Restart:</strong> Stop and start the stream
+                </div>
 
-                <hr>
-
-                <h6>Troubleshooting:</h6>
-                <ul class="list-unstyled">
-                    <li>• Check Stream provider credentials</li>
-                    <li>• Verify TAK server connectivity</li>
-                    <li>• Review error messages above</li>
-                    <li>• Test connection before starting</li>
-                </ul>
+                <h6 class="mb-3">Troubleshooting</h6>
+                <div class="help-item mb-2">
+                    <i class="fas fa-check-circle text-success me-2"></i>
+                    Check data provider credentials
+                </div>
+                <div class="help-item mb-2">
+                    <i class="fas fa-check-circle text-success me-2"></i>
+                    Verify TAK server connectivity
+                </div>
+                <div class="help-item mb-2">
+                    <i class="fas fa-check-circle text-success me-2"></i>
+                    Review error messages above
+                </div>
+                <div class="help-item">
+                    <i class="fas fa-check-circle text-success me-2"></i>
+                    Test connection before starting
+                </div>
             </div>
         </div>
     </div>
@@ -463,7 +510,18 @@ function restartStream() {
 }
 
 function refreshStatus() {
-    location.reload();
+    const refreshBtn = document.querySelector('button[onclick="refreshStatus()"]');
+    const originalText = refreshBtn.innerHTML;
+    const icon = refreshBtn.querySelector('i');
+
+    refreshBtn.disabled = true;
+    icon.classList.remove('fa-sync');
+    icon.classList.add('fa-spinner', 'fa-spin');
+
+    // Simple refresh for now - in a real app you'd fetch updated data
+    setTimeout(() => {
+        location.reload();
+    }, 500);
 }
 
 // Auto-refresh every 30 seconds if stream is active
@@ -484,6 +542,27 @@ document.addEventListener('click', function() {
 </script>
 
 <style>
+/* Info Groups */
+.info-group {
+    margin-bottom: 1rem;
+}
+
+.info-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
+    display: block;
+}
+
+.info-value {
+    font-size: 0.9rem;
+    color: var(--gray-800);
+    line-height: 1.4;
+}
+
 /* Timeline styles */
 .timeline {
     position: relative;
@@ -497,12 +576,16 @@ document.addEventListener('click', function() {
     top: 0;
     bottom: 0;
     width: 2px;
-    background: #dee2e6;
+    background: var(--gray-200);
 }
 
 .timeline-item {
     position: relative;
     margin-bottom: 20px;
+}
+
+.timeline-item:last-child {
+    margin-bottom: 0;
 }
 
 .timeline-marker {
@@ -512,7 +595,8 @@ document.addEventListener('click', function() {
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    border: 2px solid #fff;
+    border: 2px solid white;
+    box-shadow: var(--shadow-sm);
 }
 
 .timeline-content {
@@ -523,12 +607,13 @@ document.addEventListener('click', function() {
     margin-bottom: 5px;
     font-size: 0.9rem;
     font-weight: 600;
+    color: var(--gray-800);
 }
 
 .timeline-text {
     margin-bottom: 0;
     font-size: 0.8rem;
-    color: #6c757d;
+    color: var(--gray-600);
 }
 
 /* COT Type Icon styles */
@@ -550,22 +635,11 @@ document.addEventListener('click', function() {
     justify-content: center;
 }
 
-/* Status styles */
-.status-active {
-    color: #28a745 !important;
-}
-
-.status-inactive {
-    color: #6c757d !important;
-}
-
-/* Card enhancements */
-.card-header h5 {
-    margin-bottom: 0;
-}
-
-.badge {
-    font-size: 0.75em;
+/* Help Items */
+.help-item {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--gray-700);
 }
 
 /* Responsive adjustments */
@@ -581,6 +655,19 @@ document.addEventListener('click', function() {
 
     .timeline-marker {
         left: -20px;
+    }
+    
+    .btn-toolbar {
+        width: 100%;
+        margin-top: 1rem;
+    }
+    
+    .btn-toolbar .btn-group {
+        width: 100%;
+    }
+    
+    .btn-toolbar .btn {
+        flex: 1;
     }
 }
 </style>
