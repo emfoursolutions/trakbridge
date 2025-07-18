@@ -23,6 +23,9 @@
     </div>
 </div>
 
+<!-- Alert container for dynamic alerts -->
+<div id="alert-container"></div>
+
 <div class="row">
     <div class="col-lg-8">
         <form id="streamForm" method="POST">
@@ -350,8 +353,19 @@ function testStreamConfig() {
         },
         body: JSON.stringify(formData)
     })
-    .then(response => response.json())
+    .then(response => {
+        // First check if the HTTP response is ok
+        if (!response.ok) {
+            // If HTTP status is not 2xx, parse the error response
+            return response.json().then(errorData => {
+                throw new Error(errorData.error || `HTTP ${response.status} error`);
+            });
+        }
+        // If HTTP status is ok, parse the JSON response
+        return response.json();
+    })
     .then(data => {
+        // Now check the success field in the response data
         if (data.success) {
             button.innerHTML = '<i class="fas fa-check"></i> Success';
             button.classList.remove('btn-outline-secondary');
@@ -364,8 +378,13 @@ function testStreamConfig() {
                 button.disabled = false;
             }, 2000);
             
-            showAlert('Connection test successful!', 'success');
+            // Show success message with device count if available
+            const message = data.device_count ? 
+                `Connection test successful! Found ${data.device_count} device(s).` : 
+                'Connection test successful!';
+            showAlert(message, 'success');
         } else {
+            // Handle application-level failure (success: false in response)
             button.innerHTML = '<i class="fas fa-times"></i> Failed';
             button.classList.remove('btn-outline-secondary');
             button.classList.add('btn-danger');
@@ -377,10 +396,11 @@ function testStreamConfig() {
                 button.disabled = false;
             }, 2000);
             
-            showAlert('Connection test failed: ' + data.error, 'danger');
+            showAlert('Connection test failed: ' + (data.error || 'Unknown error'), 'danger');
         }
     })
     .catch(error => {
+        // Handle network errors or JSON parsing errors
         console.error('Error:', error);
         
         button.innerHTML = '<i class="fas fa-times"></i> Error';
@@ -394,7 +414,7 @@ function testStreamConfig() {
             button.disabled = false;
         }, 2000);
         
-        showAlert('Network error occurred during connection test', 'danger');
+        showAlert('Connection test failed: ' + error.message, 'danger');
     });
 }
 
@@ -407,10 +427,20 @@ function showAlert(message, type = 'info') {
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     `;
 
-    // Insert at the top of the content
-    const content = document.querySelector('.content-wrapper');
-    const firstCard = content.querySelector('.card');
-    content.insertBefore(alertDiv, firstCard);
+    // Insert into the dedicated alert container
+    const alertContainer = document.getElementById('alert-container');
+    if (alertContainer) {
+        alertContainer.appendChild(alertDiv);
+    } else {
+        // Fallback: insert at the beginning of the content block
+        const contentBlock = document.querySelector('[id^="content"], .content, main');
+        if (contentBlock) {
+            contentBlock.insertBefore(alertDiv, contentBlock.firstChild);
+        } else {
+            // Last resort: insert at the top of the body
+            document.body.insertBefore(alertDiv, document.body.firstChild);
+        }
+    }
 
     // Auto-remove after 5 seconds
     setTimeout(() => {
