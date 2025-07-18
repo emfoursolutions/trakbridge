@@ -15,8 +15,8 @@ Key features:
     - Status validation and error reporting
     - Multi-stream overview with categorized counts
 
-Author: {{AUTHOR}}
-Created: {{CREATED_DATE}}
+Author: Emfour Solutions
+Created: 18-Jul-2025
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """

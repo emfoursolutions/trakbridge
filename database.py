@@ -13,8 +13,8 @@ Key features:
 - Session configuration to prevent commit expiration issues
 - Reusable database components for model inheritance
 
-Author: {{AUTHOR}}
-Created: {{CREATED_DATE}}
+Author: Emfour Solutions
+Created: 18-Jul-2025
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """

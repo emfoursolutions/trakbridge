@@ -14,8 +14,8 @@ Key features:
     - Gracefully handles missing or malformed data with user-friendly error messaging
     - Supports logging for debugging and operational visibility
 
-Author: {{AUTHOR}}
-Created: {{CREATED_DATE}}
+Author: Emfour Solutions
+Created: 18-Jul-2025
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """

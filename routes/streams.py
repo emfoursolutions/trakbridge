@@ -23,8 +23,8 @@ Key features:
     - Service layer abstraction for maintainable architecture
     - Runtime service resolution for proper Flask application context
 
-Author: {{AUTHOR}}
-Created: {{CREATED_DATE}}
+Author: Emfour Solutions
+Created: 18-Jul-2025
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """

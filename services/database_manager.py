@@ -16,8 +16,8 @@ Key features:
     - Detached entity copying to prevent lazy loading issues across thread boundaries
 
 
-Author: {{AUTHOR}}
-Created: {{CREATED_DATE}}
+Author: Emfour Solutions
+Created: 18-Jul-2025
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """

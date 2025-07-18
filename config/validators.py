@@ -4,7 +4,7 @@ File: config/validators.py
 Description:
     Loads the configuration validation methods.
 
-Author: {{AUTHOR}}
+Author: Emfour Solutions
 Created: 2025-07-05
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}

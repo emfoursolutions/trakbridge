@@ -19,8 +19,8 @@ Key features:
     - Security status monitoring and configuration validation
     - Background cache cleanup to prevent memory leaks
 
-Author: {{AUTHOR}}
-Created: {{CREATED_DATE}}
+Author: Emfour Solutions
+Created: 18-Jul-2025
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """

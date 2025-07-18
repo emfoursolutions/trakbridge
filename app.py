@@ -7,8 +7,8 @@ TAK server integration, and plugin architecture for data processing workflows.
 Features: Application factory pattern, stream lifecycle management, database
 integration, plugin system, encryption services, and production-ready deployment.
 
-Author: {{AUTHOR}}
-Created: {{CREATED_DATE}}
+Author: Emfour Solutions
+Created: 18-Jul-2025
 License: GNU General Public License v3.0 (GPLv3)
 """
 

@@ -15,8 +15,8 @@ Key features:
 - Comprehensive error handling for network, SSL, and certificate issues
 - Temporary file management for certificate processing
 
-Author: {{AUTHOR}}
-Created: {{CREATED_DATE}}
+Author: Emfour Solutions
+Created: 18-Jul-2025
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """

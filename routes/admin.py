@@ -18,7 +18,7 @@ Key features:
    - `get_uptime()`: Calculates server uptime since application startup
    - `get_app_version()`: Retrieves version from package metadata or environment fallback
 
-Author: {{AUTHOR}}
+Author: Emfour Solutions
 Created: 2025-07-05
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}

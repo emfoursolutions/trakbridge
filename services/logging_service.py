@@ -5,8 +5,8 @@ Description:
     Logging service that provides detailed logging functions to the application.
     Configures and sets log files and displays detailed startup banners.
 
-Author: {{AUTHOR}}
-Created: {{CREATED_DATE}}
+Author: Emfour Solutions
+Created: 18-Jul-2025
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """

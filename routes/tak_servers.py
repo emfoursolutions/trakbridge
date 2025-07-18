@@ -22,8 +22,8 @@ Key features:
     - Asynchronous connection testing with proper error handling
     - Service layer integration for maintainable architecture and business logic separation
 
-Author: {{AUTHOR}}
-Created: {{CREATED_DATE}}
+Author: Emfour Solutions
+Created: 18-Jul-2025
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """

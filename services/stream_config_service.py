@@ -23,8 +23,8 @@ Key features:
     - Configuration field validation with type checking and format verification
     - Comprehensive error handling with detailed logging and fallback mechanisms
 
-Author: {{AUTHOR}}
-Created: {{CREATED_DATE}}
+Author: Emfour Solutions
+Created: 18-Jul-2025
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """

@@ -4,7 +4,7 @@ File: config/secrets.py
 Description:
     Loads the secrets manager for plugins and the database configuration.
 
-Author: {{AUTHOR}}
+Author: Emfour Solutions
 Created: 2025-07-05
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}

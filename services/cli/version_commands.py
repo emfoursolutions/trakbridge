@@ -6,8 +6,8 @@ Flask CLI commands for version management in TrakBridge application.
 This module provides CLI commands for displaying, validating, and managing
 version information in development and production environments.
 
-Author: {{AUTHOR}}
-Created: {{CREATED_DATE}}
+Author: Emfour Solutions
+Created: 18-Jul-2025
 Last Modified: {{LASTMOD}}
 """
 

@@ -23,7 +23,7 @@ Key features:
     - Provides async connection testing with detailed success/error feedback and device
       counts
 
-Author: {{AUTHOR}}
+Author: Emfour Solutions
 Created: 2025-07-05
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}

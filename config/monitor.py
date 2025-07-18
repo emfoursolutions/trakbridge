@@ -4,7 +4,7 @@ File: config/monitor.py
 Description:
     Loads the configuration monitor. Enables the dynamic reloading of configuration changes.
 
-Author: {{AUTHOR}}
+Author: Emfour Solutions
 Created: 2025-07-05
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}

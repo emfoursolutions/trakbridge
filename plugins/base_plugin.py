@@ -8,7 +8,7 @@ Description:
     methods to support plugin metadata, dynamic configuration UI generation, and
     asynchronous communication with TAK servers.
 
-Author: {{AUTHOR}}
+Author: Emfour Solutions
 Created: 2025-07-05
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}

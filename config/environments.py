@@ -4,7 +4,7 @@ File: config/environments.py
 Description:
     Loads the Environment Variable Configuration for TrakBridge
 
-Author: {{AUTHOR}}
+Author: Emfour Solutions
 Created: 2025-07-05
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}

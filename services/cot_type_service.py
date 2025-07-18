@@ -23,8 +23,8 @@ Key features:
     - Backward compatibility functions for legacy code integration
     - Efficient memory usage with on-demand loading and caching
 
-Author: {{AUTHOR}}
-Created: {{CREATED_DATE}}
+Author: Emfour Solutions
+Created: 18-Jul-2025
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """

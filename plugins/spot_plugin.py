@@ -16,7 +16,7 @@ Key features:
     - Validates SPOT-specific configuration parameters
     - Supports async connection testing with error handling and feedback
 
-Author: {{AUTHOR}}
+Author: Emfour Solutions
 Created: 2025-07-05
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}

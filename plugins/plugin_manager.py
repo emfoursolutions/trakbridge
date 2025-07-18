@@ -7,7 +7,7 @@ Description:
     runtime health checks, and dynamic reloading. Integrates with the stream model for
     system-wide plugin orchestration.
 
-Author: {{AUTHOR}}
+Author: Emfour Solutions
 Created: 2025-07-05
 Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
