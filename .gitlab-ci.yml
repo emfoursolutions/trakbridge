@@ -1,5 +1,5 @@
 # =============================================================================
-# .gitlab-ci.yml - GitLab CI/CD Configuration
+# .gitlab-ci.yml - Optimized Performance Configuration
 # =============================================================================
 
 stages:
@@ -7,7 +7,6 @@ stages:
   - test
   - security
   - build
-  - deploy
 
 # Global variables - OPTIMIZED
 variables:
@@ -107,6 +106,7 @@ validate-requirements:
       fi
     - echo "Checking requirements for known vulnerabilities..."
     - |
+      # Always create the audit report file
       if [ -f "requirements.txt" ]; then
         # Create a simple JSON report structure to avoid upload issues
         echo '{"vulnerabilities": []}' > audit-report.json
@@ -151,6 +151,7 @@ validate-pyproject:
     - pip install --no-cache-dir tomli validate-pyproject build setuptools-scm
   script:
     - echo "Validating pyproject.toml..."
+    - mkdir -p dist
     - |
       if [ -f "pyproject.toml" ]; then
         python -c "import tomli; tomli.load(open('pyproject.toml', 'rb'))"
@@ -162,7 +163,7 @@ validate-pyproject:
         echo "✅ pyproject.toml validation completed"
       else
         echo "ℹ️  No pyproject.toml found"
-        mkdir -p dist
+        echo "placeholder" > dist/.gitkeep
       fi
   artifacts:
     paths:
@@ -281,7 +282,7 @@ bandit-sast:
   script:
     - echo "Running Bandit security scan..."
     - |
-      # Create a minimal report structure
+      # Always create a bandit report file
       echo '{"metrics": {"_totals": {"nosec": 0, "skipped_tests": 0}}, "results": []}' > bandit-report.json
       
       # Run bandit on existing directories only
@@ -327,7 +328,7 @@ safety-check:
   script:
     - echo "Running Safety vulnerability check..."
     - |
-      # Create default report
+      # Always create default report first
       echo '{"vulnerabilities": [], "scanned_packages": 0}' > safety-report.json
       
       if [ -f "requirements.txt" ]; then
@@ -386,6 +387,7 @@ build-image-shell:
       echo "Branch: $CI_COMMIT_BRANCH"
       echo "Tag: $CI_COMMIT_TAG"
       echo "Ref name: $CI_COMMIT_REF_NAME"
+    - |
       # Set proper version for setuptools_scm
       if [ -n "$CI_COMMIT_TAG" ]; then
         export SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG"
@@ -447,6 +449,7 @@ build-tagged-image-shell:
       echo "Branch: $CI_COMMIT_BRANCH"
       echo "Tag: $CI_COMMIT_TAG"
       echo "Ref name: $CI_COMMIT_REF_NAME"
+    - |
       # For tagged builds, use the tag as version
       export SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG"
       echo "Using tag version: $CI_COMMIT_TAG"
@@ -474,54 +477,6 @@ build-tagged-image-shell:
     - if: $CI_COMMIT_TAG
 
 # =============================================================================
-# DEPLOY STAGE
-# =============================================================================
-
-deploy-staging:
-  stage: deploy
-  image: alpine:latest
-  tags:
-    - homelab
-    - deploy
-  timeout: 10m
-  before_script:
-    - apk add --no-cache curl
-  script:
-    - |
-      echo "Deploying to staging environment..."
-      echo "Image: $IMAGE_NAME:$CI_COMMIT_SHA"
-      echo "Staging deployment would happen here"
-      echo "✅ Staging deployment completed"
-  environment:
-    name: staging
-    url: https://staging.trakbridge.homelab.local
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  when: manual
-
-deploy-production:
-  stage: deploy
-  image: alpine:latest
-  tags:
-    - homelab
-    - deploy
-  timeout: 10m
-  before_script:
-    - apk add --no-cache curl
-  script:
-    - |
-      echo "Deploying to production environment..."
-      echo "Image: $IMAGE_NAME:$CI_COMMIT_TAG"
-      echo "Production deployment would happen here"
-      echo "✅ Production deployment completed"
-  environment:
-    name: production
-    url: https://trakbridge.homelab.local
-  rules:
-    - if: $CI_COMMIT_TAG
-  when: manual
-
-# =============================================================================
 # NOTIFICATION STAGE - OPTIMIZED
 # =============================================================================
 
@@ -532,8 +487,8 @@ notify-success:
     - homelab
   timeout: 2m
   script:
-    - echo "🎉 Pipeline completed successfully!"
-    - "echo \"Built image: $IMAGE_NAME:$CI_COMMIT_SHA\""
+    - echo "Pipeline completed successfully!"
+    - echo "Built image: $IMAGE_NAME:$CI_COMMIT_SHA"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
