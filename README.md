@@ -52,7 +52,6 @@ python app.py
 - [Plugin Development](../../wiki/Plugin-Development)
 - [API Reference](../../wiki/API-Reference)
 - [Troubleshooting](../../wiki/Troubleshooting)
-- [Security Guide](../../wiki/Security)
 
 ## Supported Providers
 
