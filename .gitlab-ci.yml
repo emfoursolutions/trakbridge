@@ -279,9 +279,8 @@ build-image-shell:
         --file Dockerfile \
         .
         
-    - echo "Pushing images to registry..."
-    - docker push "$IMAGE_NAME:$CI_COMMIT_SHA"
-    - docker push "$IMAGE_NAME:latest"
+    - echo "Untagged Commit - Not Pushing images to registry..."
+    
     - echo "✅ Container build and push completed"
   rules:
     - if: '$CI_COMMIT_TAG != null'
@@ -335,6 +334,7 @@ build-tagged-image-shell:
         --file Dockerfile \
         .
     - docker push "$IMAGE_NAME:$CI_COMMIT_TAG"
+    - docker push "$IMAGE_NAME:latest"
     - echo "✅ Tagged container build completed"
   rules:
     - if: $CI_COMMIT_TAG
