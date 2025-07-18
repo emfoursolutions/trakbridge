@@ -487,25 +487,11 @@ notify-success:
     - homelab
   timeout: 2m
   script:
-    - echo "Pipeline completed successfully!"
-    - echo "Built image: $IMAGE_NAME:$CI_COMMIT_SHA"
+    - |
+      echo "Pipeline completed successfully!"
+      echo "Built image: $IMAGE_NAME:$CI_COMMIT_SHA"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
   when: on_success
-
-notify-failure:
-  stage: .post
-  image: alpine:latest
-  tags:
-    - homelab
-  timeout: 2m
-  script:
-    - echo "❌ Pipeline failed!"
-    - echo "Check the logs for details"
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
-  when: on_failure
