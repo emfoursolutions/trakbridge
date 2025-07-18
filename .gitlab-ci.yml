@@ -1,5 +1,5 @@
 # =============================================================================
-# .gitlab-ci.yml - Optimized Performance Configuration
+# .gitlab-ci.yml - GitLab CI/CD Configuration
 # =============================================================================
 
 stages:
