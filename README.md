@@ -11,6 +11,9 @@ A comprehensive web application for bridging tracking devices and services to TA
 - **Plugin Architecture**: Extensible system for adding new data sources
 - **Enterprise Ready**: Multi-database support, SSL/TLS, backup & recovery
 
+<img width="1900" height="690" alt="image" src="https://github.com/user-attachments/assets/d09d3e17-de62-4524-a0d6-d1990c827ac7" />
+
+
 ## Quick Start
 
 ### Docker (Recommended)
