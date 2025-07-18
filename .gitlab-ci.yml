@@ -381,11 +381,11 @@ build-image-shell:
       git log --oneline -5 || echo "No git log available"
       git describe --tags --long --dirty || echo "No git describe available"
   script:
-    - echo "Building container image with host Docker..."
-    - echo "Branch: $CI_COMMIT_BRANCH"
-    - echo "Tag: $CI_COMMIT_TAG"
-    - echo "Ref name: $CI_COMMIT_REF_NAME"
     - |
+      echo "Building container image with host Docker..."
+      echo "Branch: $CI_COMMIT_BRANCH"
+      echo "Tag: $CI_COMMIT_TAG"
+      echo "Ref name: $CI_COMMIT_REF_NAME"
       # Set proper version for setuptools_scm
       if [ -n "$CI_COMMIT_TAG" ]; then
         export SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG"
@@ -394,7 +394,7 @@ build-image-shell:
         export SETUPTOOLS_SCM_PRETEND_VERSION="0.1.0.dev0+g$CI_COMMIT_SHORT_SHA"
         echo "Using dev version: 0.1.0.dev0+g$CI_COMMIT_SHORT_SHA"
       fi
-      
+    - |
       # Build with better error handling
       if ! DOCKER_BUILDKIT=1 docker build \
         --target=production \
@@ -411,7 +411,6 @@ build-image-shell:
         echo "❌ Docker build failed"
         exit 1
       fi
-      
     - echo "✅ Container build completed (not pushing untagged commits)"
   rules:
     - if: '$CI_COMMIT_TAG != null'
@@ -443,15 +442,15 @@ build-tagged-image-shell:
       git log --oneline -5 || echo "No git log available"
       git describe --tags --long --dirty || echo "No git describe available"
   script:
-    - echo "Building tagged container image with host Docker..."
-    - echo "Branch: $CI_COMMIT_BRANCH"
-    - echo "Tag: $CI_COMMIT_TAG"
-    - echo "Ref name: $CI_COMMIT_REF_NAME"
     - |
+      echo "Building tagged container image with host Docker..."
+      echo "Branch: $CI_COMMIT_BRANCH"
+      echo "Tag: $CI_COMMIT_TAG"
+      echo "Ref name: $CI_COMMIT_REF_NAME"
       # For tagged builds, use the tag as version
       export SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG"
       echo "Using tag version: $CI_COMMIT_TAG"
-      
+    - |
       if ! DOCKER_BUILDKIT=1 docker build \
         --target=production \
         --tag "$IMAGE_NAME:$CI_COMMIT_TAG" \
@@ -467,7 +466,6 @@ build-tagged-image-shell:
         echo "❌ Docker build failed"
         exit 1
       fi
-      
     - echo "Pushing tagged images..."
     - docker push "$IMAGE_NAME:$CI_COMMIT_TAG"
     - docker push "$IMAGE_NAME:latest"
@@ -489,10 +487,11 @@ deploy-staging:
   before_script:
     - apk add --no-cache curl
   script:
-    - echo "Deploying to staging environment..."
-    - echo "Image: $IMAGE_NAME:$CI_COMMIT_SHA"
-    - echo "Staging deployment would happen here"
-    - echo "✅ Staging deployment completed"
+    - |
+      echo "Deploying to staging environment..."
+      echo "Image: $IMAGE_NAME:$CI_COMMIT_SHA"
+      echo "Staging deployment would happen here"
+      echo "✅ Staging deployment completed"
   environment:
     name: staging
     url: https://staging.trakbridge.homelab.local
@@ -510,10 +509,11 @@ deploy-production:
   before_script:
     - apk add --no-cache curl
   script:
-    - echo "Deploying to production environment..."
-    - echo "Image: $IMAGE_NAME:$CI_COMMIT_TAG"
-    - echo "Production deployment would happen here"
-    - echo "✅ Production deployment completed"
+    - |
+      echo "Deploying to production environment..."
+      echo "Image: $IMAGE_NAME:$CI_COMMIT_TAG"
+      echo "Production deployment would happen here"
+      echo "✅ Production deployment completed"
   environment:
     name: production
     url: https://trakbridge.homelab.local
@@ -533,7 +533,7 @@ notify-success:
   timeout: 2m
   script:
     - echo "🎉 Pipeline completed successfully!"
-    - echo "Built image: $IMAGE_NAME:$CI_COMMIT_SHA"
+    - "echo \"Built image: $IMAGE_NAME:$CI_COMMIT_SHA\""
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
