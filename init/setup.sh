@@ -58,16 +58,12 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
-            echo "  -e, --env ENV        Set environment (default: production)"
             echo "  -f, --force          Force recreate secrets and config files"
             echo "  --enable-nginx       Enable nginx setup and download configuration"
             echo "  --nginx-ssl DOMAIN   Enable SSL for nginx with specified domain"
             echo "  -h, --help           Show this help"
             echo ""
             echo "Examples:"
-            echo "  $0                                    # Setup development environment"
-            echo "  $0 -e production                     # Setup production environment"
-            echo "  $0 -e development -f                 # Force recreate development setup"
             echo "  $0 --enable-nginx                    # Setup with nginx"
             echo "  $0 --nginx-ssl example.com           # Setup with SSL for example.com"
             exit 0
@@ -162,11 +158,11 @@ setup_nginx() {
         # Download nginx configuration
         if command -v curl &> /dev/null; then
             log_info "Downloading nginx configuration..."
-            curl -s -o docker/nginx/nginx.conf https://git.emfour.net/npoulter/trackbridge/-/raw/main/docker/nginx/nginx.conf
+            curl -s -o docker/nginx/nginx.conf https://raw.githubusercontent.com/emfoursolutions/trakbridge/refs/heads/main/init/nginx/nginx.conf
             log_info "nginx configuration downloaded to docker/nginx/nginx.conf"
         elif command -v wget &> /dev/null; then
             log_info "Downloading nginx configuration..."
-            wget -q -O docker/nginx/nginx.conf https://git.emfour.net/npoulter/trackbridge/-/raw/main/docker/nginx/nginx.conf
+            wget -q -O docker/nginx/nginx.conf https://raw.githubusercontent.com/emfoursolutions/trakbridge/refs/heads/main/init/nginx/nginx.conf
             log_info "nginx configuration downloaded to docker/nginx/nginx.conf"
         else
             log_error "Neither curl nor wget is available. Please install one of them to download nginx configuration."
