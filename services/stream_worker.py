@@ -24,6 +24,7 @@ Version: {{VERSION}}
 
 # Standard library imports
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Dict, List
@@ -428,6 +429,7 @@ class StreamWorker:
 
     async def _send_locations_to_persistent_tak(self, locations: List[Dict]) -> bool:
         """Send locations to persistent TAK server using the persistent service"""
+
         try:
             if not self._tak_worker_ensured:
                 self.logger.error("Persistent TAK worker not ensured")
@@ -462,14 +464,25 @@ class StreamWorker:
                 )
                 return True  # Don't treat this as a failure
 
+            # Get COT type mode from stream configuration
+            # Parse the plugin config to get the actual cot_type_mode
+            plugin_config = json.loads(self.stream.plugin_config)
+            cot_type_mode = plugin_config.get("cot_type_mode", "stream")
+
             # Create COT events directly
             from services.cot_service import EnhancedCOTService
 
-            cot_events = await EnhancedCOTService().create_cot_events(
-                locations,
-                self.stream.cot_type or "a-f-G-U-C",
-                self.stream.cot_stale_time or 300,
-            )
+            try:
+                cot_events = await EnhancedCOTService().create_cot_events(
+                    locations,
+                    self.stream.cot_type or "a-f-G-U-C",
+                    self.stream.cot_stale_time or 300,
+                    cot_type_mode,  # Pass the COT type mode
+                )
+                self.logger.info(f"Created {len(cot_events) if cot_events else 0} COT events")
+            except Exception as e:
+                self.logger.error(f"Error creating COT events: {e}", exc_info=True)
+                return False
 
             if not cot_events:
                 self.logger.warning("No COT events created from locations")

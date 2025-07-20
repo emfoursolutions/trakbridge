@@ -152,7 +152,9 @@ class BaseConfig:
 
         db_name = self.secret_manager.get_secret(
             "DB_NAME",
-            self.db_config.get("defaults", {}).get("sqlite", {}).get("name", "data/app.db"),
+            self.db_config.get("defaults", {})
+            .get("sqlite", {})
+            .get("name", "data/app.db"),
         )
 
         if self.environment == "testing":
@@ -162,7 +164,6 @@ class BaseConfig:
             os.path.abspath(os.path.dirname(__file__)), "..", db_name
         )
         return f"sqlite:///{db_path}"
-
 
     def _build_mysql_uri(self) -> str:
         """Build MySQL database URI."""

@@ -146,30 +146,35 @@ class EnhancedCOTService:
         locations: List[Dict[str, Any]],
         cot_type: str = "a-f-G-U-C",
         stale_time: int = 300,
+        cot_type_mode: str = "stream",
     ) -> List[bytes]:
         """
         Create COT events from location data
 
         Args:
             locations: List of location dictionaries
-            cot_type: COT type identifier
+            cot_type: COT type identifier (used when cot_type_mode is "stream")
             stale_time: Time in seconds before event becomes stale
+            cot_type_mode: "stream" or "per_point" to determine COT type source
 
         Returns:
             List of COT events as XML bytes
         """
         if self.use_pytak:
             return await EnhancedCOTService._create_pytak_events(
-                locations, cot_type, stale_time
+                locations, cot_type, stale_time, cot_type_mode
             )
         else:
             return await EnhancedCOTService._create_custom_events(
-                locations, cot_type, stale_time
+                locations, cot_type, stale_time, cot_type_mode
             )
 
     @staticmethod
     async def _create_pytak_events(
-        locations: List[Dict[str, Any]], cot_type: str, stale_time: int
+        locations: List[Dict[str, Any]],
+        cot_type: str,
+        stale_time: int,
+        cot_type_mode: str = "stream",
     ) -> List[bytes]:
         """Create COT events using PyTAK's XML generation"""
         events = []
@@ -226,10 +231,16 @@ class EnhancedCOTService:
                     )
                     event_time = datetime.now(timezone.utc)
 
+                # Determine COT type based on mode
+                if cot_type_mode == "per_point" and "cot_type" in location:
+                    point_cot_type = location["cot_type"]
+                else:
+                    point_cot_type = cot_type
+
                 # Create COT event data dictionary with safe conversions
                 event_data = {
                     "uid": str(location["uid"]),
-                    "type": str(cot_type),
+                    "type": str(point_cot_type),  # Use determined COT type
                     "time": event_time,
                     "start": event_time,
                     "stale": event_time + timedelta(seconds=int(stale_time)),
@@ -343,7 +354,10 @@ class EnhancedCOTService:
 
     @staticmethod
     async def _create_custom_events(
-        locations: List[Dict[str, Any]], cot_type: str, stale_time: int
+        locations: List[Dict[str, Any]],
+        cot_type: str,
+        stale_time: int,
+        cot_type_mode: str = "stream",
     ) -> List[bytes]:
         """Create COT events using custom XML generation (fallback)"""
         cot_events = []
@@ -380,11 +394,17 @@ class EnhancedCOTService:
 
                 uid = location["uid"]
 
+                # Determine COT type based on mode
+                if cot_type_mode == "per_point" and "cot_type" in location:
+                    point_cot_type = location["cot_type"]
+                else:
+                    point_cot_type = cot_type
+
                 # Create COT event element
                 cot_event = etree.Element("event")
                 cot_event.set("version", "2.0")
                 cot_event.set("uid", uid)
-                cot_event.set("type", cot_type)
+                cot_event.set("type", point_cot_type)
                 cot_event.set("time", time_str)
                 cot_event.set("start", time_str)
                 cot_event.set("stale", stale_str)
@@ -586,19 +606,28 @@ class EnhancedCOTService:
                     self.finished = False
 
                 async def run(self, number_of_iterations=-1):
-                    """Send all events then mark as finished"""
+                    """Send all events, then wait for queue to empty, then mark as finished."""
                     logger.debug(f"Starting to send {len(self.events_to_send)} events")
                     for event in self.events_to_send:
                         await self.put_queue(event)
                         self.events_sent += 1
-                        logger.debug(
-                            f"Queued event {self.events_sent}/{len(self.events_to_send)}"
-                        )
+                        logger.debug(f"Queued event {self.events_sent}/{len(self.events_to_send)}")
 
                     logger.info(f"Queued {self.events_sent} events for transmission")
 
-                    # Give some time for transmission to complete
-                    await asyncio.sleep(3.0)
+                    # Wait for the queue to empty (i.e., all events processed)
+                    max_wait = 60  # seconds
+                    waited = 0
+                    while not self.queue.empty() and waited < max_wait:
+                        logger.debug(f"Waiting for queue to empty... (size: {self.queue.qsize()})")
+                        await asyncio.sleep(1)
+                        waited += 1
+
+                    if self.queue.empty():
+                        logger.info("All events have been processed by PyTAK worker.")
+                    else:
+                        logger.warning("Timeout waiting for PyTAK queue to empty. Some events may not have been sent.")
+
                     self.finished = True
 
             # Create sender worker

@@ -70,6 +70,7 @@ class StreamOperationsService:
                 cot_type=data.get("cot_type", "a-f-G-U-C"),
                 cot_stale_time=int(data.get("cot_stale_time", 300)),
                 tak_server_id=int(data["tak_server_id"]),
+                cot_type_mode=data.get("cot_type_mode", "stream"),  # Add this line
             )
 
             # Set plugin configuration
@@ -234,6 +235,7 @@ class StreamOperationsService:
             stream.cot_type = data.get("cot_type", "a-f-G-U-C")
             stream.cot_stale_time = int(data.get("cot_stale_time", 300))
             stream.tak_server_id = int(data["tak_server_id"])
+            stream.cot_type_mode = data.get("cot_type_mode", "stream")
 
             # Update plugin configuration
             plugin_config: Dict[str, Any] = {}

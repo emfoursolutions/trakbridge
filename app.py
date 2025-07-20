@@ -65,7 +65,6 @@ load_dotenv()
 logger = logging.getLogger("main")
 
 
-
 def set_startup_complete(success=True, error=None):
     """Mark startup as complete"""
     global _startup_complete, _startup_error
@@ -90,45 +89,48 @@ def get_startup_status():
         "progress": _startup_progress,
     }
 
+
 def is_primary_process() -> bool:
     """
     Determine if this is the primary process that should handle full startup logging.
     Uses file-based coordination with proper locking.
     """
     global _is_primary_process
-    
+
     if _is_primary_process is not None:
         return _is_primary_process
-    
+
     # Create a lock file in the system temp directory
-    lock_file_path = Path(tempfile.gettempdir()) / 'trakbridge_startup.lock'
-    
+    lock_file_path = Path(tempfile.gettempdir()) / "trakbridge_startup.lock"
+
     try:
         # Try to create and lock the file
-        lock_file = open(lock_file_path, 'w')
-        
+        lock_file = open(lock_file_path, "w")
+
         try:
             # Try to acquire exclusive lock (non-blocking)
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            
+
             # Write our PID to the lock file
             lock_file.write(f"{os.getpid()}\n{time.time()}\n")
             lock_file.flush()
-            
+
             # We got the lock - we're the primary process
             _is_primary_process = True
-            
+
             # Register cleanup on exit
-            atexit.register(lambda: cleanup_startup_coordination(lock_file, lock_file_path))
-            
+            atexit.register(
+                lambda: cleanup_startup_coordination(lock_file, lock_file_path)
+            )
+
             return True
-            
+
         except (IOError, OSError):
             # Lock is already held by another process
             lock_file.close()
             _is_primary_process = False
             return False
-            
+
     except (IOError, OSError):
         # Couldn't create lock file - default to simple logging
         logger.warning("Could not create startup coordination lock file")
@@ -169,12 +171,16 @@ def log_full_startup_info(app):
         app.logger.info(f"Application: {format_version(include_build_info=True)}")
         app.logger.info(f"Version: {version_info.get('version', 'unknown')}")
         app.logger.info(f"Version Source: {version_info.get('source', 'unknown')}")
-        app.logger.info(f"Development Build: {'YES' if is_development_build() else 'NO'}")
+        app.logger.info(
+            f"Development Build: {'YES' if is_development_build() else 'NO'}"
+        )
 
         if build_info.get("git_commit"):
             app.logger.info(f"Git Commit: {build_info['git_commit']}")
 
-        app.logger.info(f"Python Version: {version_info.get('python_version', 'unknown')}")
+        app.logger.info(
+            f"Python Version: {version_info.get('python_version', 'unknown')}"
+        )
         app.logger.info(f"Platform: {version_info.get('platform', 'unknown')}")
         app.logger.info(f"Process ID: {os.getpid()}")
         app.logger.info(f"Working Directory: {os.getcwd()}")
@@ -185,6 +191,7 @@ def log_full_startup_info(app):
         # Fallback to basic logging
         try:
             from services.version import format_version
+
             app.logger.info(f"Starting {format_version(include_build_info=True)}")
         except Exception as fallback_e:
             app.logger.warning(f"Could not log even basic version info: {fallback_e}")
@@ -194,6 +201,7 @@ def log_simple_worker_init(app):
     """Log simple initialization message for worker processes"""
     try:
         from services.version import format_version
+
         app.logger.info(f"Worker process initialized - PID: {os.getpid()}")
         app.logger.debug(f"Application: {format_version(include_build_info=False)}")
     except Exception as e:
@@ -206,26 +214,26 @@ def should_run_delayed_startup() -> bool:
     Determine if this process should run the delayed startup tasks.
     Uses a separate coordination mechanism from the logging.
     """
-    startup_task_file = Path(tempfile.gettempdir()) / 'trakbridge_startup_tasks.lock'
-    
+    startup_task_file = Path(tempfile.gettempdir()) / "trakbridge_startup_tasks.lock"
+
     try:
         # Try to create and lock the file
-        with open(startup_task_file, 'w') as f:
+        with open(startup_task_file, "w") as f:
             try:
                 # Try to acquire exclusive lock (non-blocking)
                 fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                
+
                 # Write our PID and timestamp
                 f.write(f"{os.getpid()}\n{time.time()}\n")
                 f.flush()
-                
+
                 # We got the lock - we should run startup tasks
                 return True
-                
+
             except (IOError, OSError):
                 # Lock is already held by another process
                 return False
-                
+
     except (IOError, OSError):
         # Couldn't create lock file - default to not running
         logger.warning("Could not create startup tasks coordination lock file")
@@ -235,11 +243,8 @@ def should_run_delayed_startup() -> bool:
 def cleanup_all_startup_resources():
     """Clean up all startup coordination resources"""
     temp_dir = Path(tempfile.gettempdir())
-    lock_files = [
-        'trakbridge_startup.lock',
-        'trakbridge_startup_tasks.lock'
-    ]
-    
+    lock_files = ["trakbridge_startup.lock", "trakbridge_startup_tasks.lock"]
+
     for lock_file in lock_files:
         lock_path = temp_dir / lock_file
         try:
@@ -247,6 +252,7 @@ def cleanup_all_startup_resources():
                 lock_path.unlink()
         except OSError:
             pass  # Ignore cleanup errors
+
 
 def create_app(config_name=None):
     global _stream_manager_ref
@@ -378,7 +384,9 @@ def setup_version_context_processor(app):
                     f"{version_info['environment']['python_version_info'].minor}."
                     f"{version_info['environment']['python_version_info'].micro}"
                 ),
-                "platform": version_info.get("environment", {}).get("platform", "unknown"),
+                "platform": version_info.get("environment", {}).get(
+                    "platform", "unknown"
+                ),
                 "source": version_info.get("source", "unknown"),
             }
 
@@ -401,6 +409,7 @@ def setup_version_context_processor(app):
     @app.context_processor
     def inject_moment():
         """Inject moment function for date handling in templates."""
+
         class MomentWrapper:
             def format(self, fmt):
                 return dt.now().strftime(fmt)
@@ -462,8 +471,10 @@ def configure_flask_app(app, config_instance):
         issues = config_instance.validate_config()
         if issues:
             logger.warning(f"Configuration issues found: {issues}")
+
+
 #            if config_instance.environment == "production":
- #               raise ValueError(f"Configuration validation failed: {issues}")
+#               raise ValueError(f"Configuration validation failed: {issues}")
 
 
 def start_active_streams():
@@ -716,7 +727,7 @@ def setup_cleanup_handlers():
 
         # Clean up startup coordination resources
         cleanup_all_startup_resources()
-    
+
         logger.info("Application cleanup completed")
 
     def safe_stream_manager_shutdown():
@@ -863,15 +874,23 @@ def delayed_startup():
             # Log system status
             try:
                 logger.info("System Status Check:")
-                logger.info(f"Stream Manager: {'Ready' if hasattr(app, 'stream_manager') else 'Not Ready'}")
-                logger.info(f"Plugin Manager: {'Ready' if hasattr(app, 'plugin_manager') else 'Not Ready'}")
+                logger.info(
+                    f"Stream Manager: {'Ready' if hasattr(app, 'stream_manager') else 'Not Ready'}"
+                )
+                logger.info(
+                    f"Plugin Manager: {'Ready' if hasattr(app, 'plugin_manager') else 'Not Ready'}"
+                )
                 logger.info(f"Database: {'Ready' if db.engine else 'Not Ready'}")
-                logger.info(f"Encryption Service: {'Ready' if hasattr(app, 'encryption_service') else 'Not Ready'}")
+                logger.info(
+                    f"Encryption Service: {'Ready' if hasattr(app, 'encryption_service') else 'Not Ready'}"
+                )
 
                 add_startup_progress("System components verified")
             except Exception as e:
                 logger.warning(f"Could not log system status: {e}")
-                add_startup_progress(f"Warning: Could not verify all system components: {e}")
+                add_startup_progress(
+                    f"Warning: Could not verify all system components: {e}"
+                )
 
             # Start active streams
             add_startup_progress("Starting active streams...")
@@ -887,7 +906,9 @@ def delayed_startup():
             logger.info(f"Ready at: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
             logger.info("=" * 60)
 
-            add_startup_progress(f"Startup complete! Ready in {startup_time:.2f} seconds")
+            add_startup_progress(
+                f"Startup complete! Ready in {startup_time:.2f} seconds"
+            )
             set_startup_complete(True)
 
     except Exception as e:
@@ -907,9 +928,7 @@ def ensure_startup_thread():
 
             # Run startup in a separate thread to avoid blocking Flask initialization
             startup_thread = threading.Thread(
-                target=delayed_startup, 
-                daemon=True, 
-                name=f"StartupThread-{os.getpid()}"
+                target=delayed_startup, daemon=True, name=f"StartupThread-{os.getpid()}"
             )
             startup_thread.start()
             logger.info(f"Startup thread initiated for PID {os.getpid()}")
