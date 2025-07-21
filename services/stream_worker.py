@@ -479,7 +479,9 @@ class StreamWorker:
                     self.stream.cot_stale_time or 300,
                     cot_type_mode,  # Pass the COT type mode
                 )
-                self.logger.info(f"Created {len(cot_events) if cot_events else 0} COT events")
+                self.logger.info(
+                    f"Created {len(cot_events) if cot_events else 0} COT events"
+                )
             except Exception as e:
                 self.logger.error(f"Error creating COT events: {e}", exc_info=True)
                 return False
