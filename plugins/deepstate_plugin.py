@@ -17,8 +17,8 @@ Description:
 
 Author: Emfour Solutions
 Created: 2025-07-05
-Last Modified: {{LASTMOD}}
-Version: {{VERSION}}
+Last Modified: 2025-07-21
+Version: 1.0.0
 """
 
 # Standard library imports
@@ -67,7 +67,8 @@ class DeepstatePlugin(BaseGPSPlugin):
         """Return plugin metadata for UI generation"""
         return {
             "display_name": "Deepstate OSINT Platform",
-            "description": "Connect to DeepstateMAP OSINT platform to fetch latest battlefield positions and events from Ukraine. Only processes point-type features with English name extraction.",
+            "description": "Connect to DeepstateMAP OSINT platform to fetch "
+            "latest battlefield positions and events from Ukraine. ",
             "icon": "fas fa-map-marked-alt",
             "category": "osint",
             "help_sections": [
@@ -80,7 +81,8 @@ class DeepstatePlugin(BaseGPSPlugin):
                         "Only processes point-type features (ignores polygons/lines)",
                         "Automatically extracts English names from multilingual fields",
                         "Data is automatically updated from OSINT sources",
-                        "Filters out 'Direction of attack' records automatically",
+                        "If the COT Type Mode is set to Determine COT Type Per Point",
+                        "COT Type selection will be used for Unknown Points.",
                     ],
                 },
                 {
@@ -134,10 +136,14 @@ class DeepstatePlugin(BaseGPSPlugin):
                     required=False,
                     default_value="per_point",
                     options=[
-                        {"value": "stream", "label": "Use stream COT type for all points"},
-                        {"value": "per_point", "label": "Determine COT type per point"}
+                        {
+                            "value": "stream",
+                            "label": "Use stream COT type for all points",
+                        },
+                        {"value": "per_point", "label": "Determine COT type per point"},
                     ],
-                    help_text="Choose whether to use the stream's COT type for all points or determine COT type individually for each point",
+                    help_text="Choose whether to use the stream's COT type for all "
+                    "points or determine COT type individually for each point",
                 ),
                 PluginConfigField(
                     name="timeout",
@@ -225,20 +231,11 @@ class DeepstatePlugin(BaseGPSPlugin):
             english_name = re.sub(r"\s+", " ", english_name)  # Normalize whitespace
             return english_name if english_name else "Unknown Location"
 
-        # If no match, try to extract the first part before parentheses
-        if "(" in name_field:
-            first_part = name_field.split("(")[0].strip()
-            if first_part and re.match(r"^[A-Za-z\s\-\.\,\']+$", first_part):
-                return first_part
-
-        # If still no luck, check if the whole name is mostly English characters
-        if re.match(r"^[A-Za-z\s\-\.\,\'0-9]+$", name_field):
-            return name_field
-
         # Last resort - return a cleaned version
         return "Unknown Location"
 
-    def _generate_point_id(self, english_name: str) -> str:
+    @staticmethod
+    def _generate_point_id(english_name: str) -> str:
         """
         Generate a unique ID by hashing 'DEEPSTATE' + English name
 
@@ -252,14 +249,15 @@ class DeepstatePlugin(BaseGPSPlugin):
         hash_obj = hashlib.sha256(source_string.encode("utf-8"))
         return hash_obj.hexdigest()[:16]  # Return first 16 characters
 
-    def _should_process_feature(self, feature: Dict[str, Any]) -> bool:
+    @staticmethod
+    def _should_process_feature(feature: Dict[str, Any]) -> bool:
         """
         Check if a feature should be processed based on type and content
         """
         # Check if it's a Point geometry
         geometry = feature.get("geometry", {})
         geometry_type = geometry.get("type")
-        
+
         if geometry_type != "Point":
             logger.debug(f"Skipping non-Point geometry: {geometry_type}")
             return False
@@ -267,7 +265,7 @@ class DeepstatePlugin(BaseGPSPlugin):
         # Extract and check the name
         properties = feature.get("properties", {})
         name = properties.get("name", "")
-        
+
         # Skip if name contains "Direction of attack"
         if "Direction of attack" in name:
             logger.debug(f"Skipping 'Direction of attack' feature: {name}")
@@ -276,7 +274,9 @@ class DeepstatePlugin(BaseGPSPlugin):
         logger.debug(f"Processing Point feature: {name}")
         return True
 
-    async def fetch_locations(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
+    async def fetch_locations(
+        self, session: aiohttp.ClientSession
+    ) -> List[Dict[str, Any]]:
         """
         Fetch location data from Deepstate API
 
@@ -328,7 +328,7 @@ class DeepstatePlugin(BaseGPSPlugin):
 
             # Create timeout configuration
             timeout_config = aiohttp.ClientTimeout(total=timeout)
-            
+
             # Create SSL context for certificate verification
             ssl_context = self._create_ssl_context()
 
@@ -337,17 +337,21 @@ class DeepstatePlugin(BaseGPSPlugin):
                 "Accept": "application/json",
             }
             logger.info(f"API Url: {api_url}")
-            
+
             async with session.get(
-                api_url, 
-                timeout=timeout_config, 
-                headers=headers,
-                ssl=ssl_context
+                api_url, timeout=timeout_config, headers=headers, ssl=ssl_context
             ) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    logger.error(f"API request failed with status {response.status}: {error_text}")
-                    return [{"_error": str(response.status), "_error_message": f"HTTP {response.status} error"}]
+                    logger.error(
+                        f"API request failed with status {response.status}: {error_text}"
+                    )
+                    return [
+                        {
+                            "_error": str(response.status),
+                            "_error_message": f"HTTP {response.status} error",
+                        }
+                    ]
 
                 data = await response.json()
                 logger.info(f"Raw API response type: {type(data)}")
@@ -359,19 +363,35 @@ class DeepstatePlugin(BaseGPSPlugin):
                     # Try different possible structures
                     if "map" in data and isinstance(data["map"], dict):
                         features = data["map"].get("features", [])
-                        logger.info(f"Found {len(features)} features in nested map structure")
+                        logger.info(
+                            f"Found {len(features)} features in nested map structure"
+                        )
                     elif "features" in data:
                         features = data.get("features", [])
-                        logger.info(f"Found {len(features)} features in direct structure")
+                        logger.info(
+                            f"Found {len(features)} features in direct structure"
+                        )
                     else:
-                        logger.error(f"No features found in dict response. Available keys: {list(data.keys())}")
-                        return [{"_error": "json_error", "_error_message": "No features found in response"}]
+                        logger.error(
+                            f"No features found in dict response. Available keys: {list(data.keys())}"
+                        )
+                        return [
+                            {
+                                "_error": "json_error",
+                                "_error_message": "No features found in response",
+                            }
+                        ]
                 elif isinstance(data, list):
                     features = data
                     logger.info(f"Found {len(features)} features in list response")
                 else:
                     logger.error(f"Unexpected data format: {type(data)}")
-                    return [{"_error": "json_error", "_error_message": "Unexpected data format"}]
+                    return [
+                        {
+                            "_error": "json_error",
+                            "_error_message": "Unexpected data format",
+                        }
+                    ]
 
                 logger.info(f"Features to process: {len(features)}")
                 if features:
@@ -382,10 +402,10 @@ class DeepstatePlugin(BaseGPSPlugin):
                 if stream_cot_type == "stream":
                     # If using stream COT type, try to get it from the stream object if available
                     # Otherwise, use a default or fallback
-                    if hasattr(self, 'stream') and self.stream and self.stream.cot_type:
+                    if hasattr(self, "stream") and self.stream and self.stream.cot_type:
                         default_cot_type = self.stream.cot_type
                     else:
-                        default_cot_type = "a-f-G-U-C" # Default fallback
+                        default_cot_type = "a-f-G-U-C"  # Default fallback
                 else:
                     # If using per_point COT type, use the default from config
                     default_cot_type = config.get("cot_type", "a-h-G-U-C")
@@ -404,23 +424,31 @@ class DeepstatePlugin(BaseGPSPlugin):
 
                     geometry_type = feature.get("geometry", {}).get("type", "Unknown")
                     feature_name = feature.get("properties", {}).get("name", "Unknown")
-                    
-                    logger.debug(f"Checking feature: {feature_name} (geometry: {geometry_type})")
-                    
+
+                    logger.debug(
+                        f"Checking feature: {feature_name} (geometry: {geometry_type})"
+                    )
+
                     if not self._should_process_feature(feature):
                         continue
 
                     point_features += 1
                     # Pass the stream's COT type as default
-                    location = self._convert_feature_to_location(feature, default_cot_type)
+                    location = self._convert_feature_to_location(
+                        feature, default_cot_type
+                    )
                     if location:
                         locations.append(location)
                         processed_count += 1
-                        logger.debug(f"Successfully converted Point feature: {feature_name}")
+                        logger.debug(
+                            f"Successfully converted Point feature: {feature_name}"
+                        )
                     else:
                         logger.debug(f"Failed to convert Point feature: {feature_name}")
 
-                logger.info(f"Found {point_features} Point features out of {len(features)} total features")
+                logger.info(
+                    f"Found {point_features} Point features out of {len(features)} total features"
+                )
                 logger.info(f"Successfully processed {len(locations)} locations")
                 return locations
 
@@ -437,7 +465,9 @@ class DeepstatePlugin(BaseGPSPlugin):
             logger.error(f"Unexpected error fetching events: {e}")
             return [{"_error": "unknown", "_error_message": str(e)}]
 
-    def _convert_feature_to_location(self, feature: Dict[str, Any], default_cot_type: str = "a-n-G") -> Optional[Dict[str, Any]]:
+    def _convert_feature_to_location(
+        self, feature: Dict[str, Any], default_cot_type: str = "a-n-G"
+    ) -> Optional[Dict[str, Any]]:
         """
         Convert GeoJSON feature to standardized location format
 
@@ -452,7 +482,7 @@ class DeepstatePlugin(BaseGPSPlugin):
             # Extract coordinates from Point geometry
             geometry = feature.get("geometry", {})
             coordinates = geometry.get("coordinates", [])
-            
+
             if len(coordinates) < 2:
                 logger.debug("Invalid coordinates in feature")
                 return None
@@ -466,7 +496,7 @@ class DeepstatePlugin(BaseGPSPlugin):
 
             # Extract English name using regex
             english_name = self._extract_english_name(raw_name)
-            
+
             # Generate unique ID
             event_id = self._generate_point_id(english_name)
 
@@ -474,7 +504,12 @@ class DeepstatePlugin(BaseGPSPlugin):
             cot_type = self._get_cot_type(english_name, properties, default_cot_type)
 
             # Build description
-            description = f"Location: {english_name} | Source: Deepstate OSINT | Time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC"
+            description = (
+                f"Location: {english_name} | "
+                f"Source: Deepstate OSINT | "
+                f"Time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} "
+                f"UTC"
+            )
 
             # Create standardized location
             location = {
@@ -500,22 +535,29 @@ class DeepstatePlugin(BaseGPSPlugin):
             logger.debug(f"Error converting feature to location: {e}")
             return None
 
-    def _get_cot_type(self, english_name: str, properties: Dict[str, Any] = None, default_cot_type: str = "a-n-G") -> str:
+    @staticmethod
+    def _get_cot_type(
+        english_name: str,
+        properties: Dict[str, Any] = None,
+        default_cot_type: str = "a-n-G",
+    ) -> str:
         """
         Analyze English name and assign COT type based on content patterns
-        
+
         Args:
             english_name: The extracted English name
             properties: Additional properties from the feature (optional)
             default_cot_type: Default COT type to use if no patterns match (from stream config)
-            
+
         Returns:
             COT type string
         """
         # Convert to lowercase for case-insensitive matching
         name_id = english_name.lower()
-        cot_type = default_cot_type  # Use the passed default instead of hardcoded "a-n-G"
-        
+        cot_type = (
+            default_cot_type  # Use the passed default instead of hardcoded "a-n-G"
+        )
+
         # Check properties first for specific markers
         if properties and properties.get("description") == "{icon=enemy}":
             cot_type = "a-h-G-U-C-I"  # Hostile ground unit combat infantry
@@ -557,7 +599,9 @@ class DeepstatePlugin(BaseGPSPlugin):
         elif "paratrooper" in name_id:
             cot_type = "a-h-G-U-C-I-A"  # Hostile ground unit combat infantry airborne
         elif "air assault" in name_id:
-            cot_type = "a-h-G-U-C-I-S"  # Hostile ground unit combat infantry air assault
+            cot_type = (
+                "a-h-G-U-C-I-S"  # Hostile ground unit combat infantry air assault
+            )
         elif "coastal defense" in name_id:
             cot_type = "a-h-G-U-C-I-N"  # Hostile ground unit combat infantry naval
         elif "marine" in name_id:
@@ -565,7 +609,16 @@ class DeepstatePlugin(BaseGPSPlugin):
         elif "naval infantry" in name_id:
             cot_type = "a-h-G-U-C-I-N"  # Hostile ground unit combat infantry naval
         # Infrastructure and installations
-        elif any(keyword in name_id for keyword in ["airport", "airfield", "aerodrom", "air base", "helicopter base"]):
+        elif any(
+            keyword in name_id
+            for keyword in [
+                "airport",
+                "airfield",
+                "aerodrom",
+                "air base",
+                "helicopter base",
+            ]
+        ):
             cot_type = "a-h-G-I-B-A"  # Hostile ground installation base airfield
         # Special operations
         elif "special purpose" in name_id:
@@ -581,8 +634,10 @@ class DeepstatePlugin(BaseGPSPlugin):
             cot_type = "a-h-G-U-U-M"  # Hostile ground unit military intelligence
         # Weapons systems
         elif "cruise" in name_id:
-            cot_type = "a-h-S-C-L-C-C"  # Hostile sea surface combatant line combatant cruiser
-            
+            cot_type = (
+                "a-h-S-C-L-C-C"  # Hostile sea surface combatant line combatant cruiser
+            )
+
         return cot_type
 
     def validate_config(self) -> bool:
@@ -614,7 +669,9 @@ class DeepstatePlugin(BaseGPSPlugin):
                     if field_name == "timeout" and (num_value < 5 or num_value > 120):
                         logger.error("Timeout must be between 5 and 120 seconds")
                         return False
-                    elif field_name == "max_events" and (num_value < 1 or num_value > 1000):
+                    elif field_name == "max_events" and (
+                        num_value < 1 or num_value > 1000
+                    ):
                         logger.error("Max events must be between 1 and 1000")
                         return False
                 except (ValueError, TypeError):
