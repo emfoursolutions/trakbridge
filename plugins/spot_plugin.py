@@ -18,8 +18,8 @@ Key features:
 
 Author: Emfour Solutions
 Created: 2025-07-05
-Last Modified: {{LASTMOD}}
-Version: {{VERSION}}
+Last Modified: 2025-07-21
+Version: 1.0.0
 """
 
 # Standard library imports
@@ -316,26 +316,26 @@ class SpotPlugin(BaseGPSPlugin):
                         f"SPOT API error {error_code}: {error_text} - {error_desc}"
                     )
 
-                # Handle E-0195 as success (no devices found)
-                if error_code == "E-0195":
-                    logger.info(
-                        f"SPOT API: Authentication successful but no devices found ({error_text})"
-                    )
+                    # Handle E-0195 as success (no devices found)
+                    if error_code == "E-0195":
+                        logger.info(
+                            f"SPOT API: Authentication successful but no devices found ({error_text})"
+                        )
+                        return [
+                            {
+                                "_error": "no_devices",
+                                "_error_message": f"SPOT API error: {error_code} - {error_text}",
+                            }
+                        ]
+
+                    # Map other error codes
+                    mapped_error_code = self._map_spot_error_code(error_code)
                     return [
                         {
-                            "_error": "no_devices",
+                            "_error": mapped_error_code,
                             "_error_message": f"SPOT API error: {error_code} - {error_text}",
                         }
                     ]
-
-                # Map other error codes
-                mapped_error_code = self._map_spot_error_code(error_code)
-                return [
-                    {
-                        "_error": mapped_error_code,
-                        "_error_message": f"SPOT API error: {error_code} - {error_text}",
-                    }
-                ]
 
             messages_container = feed_response.get("messages", {})
             messages = messages_container.get("message", [])
