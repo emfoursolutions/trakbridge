@@ -279,19 +279,19 @@ class EnhancedCOTService:
                 events.append(cot_xml)
                 logger.debug(cot_xml)
                 logger.debug(
-                    f"Created PyTAK COT event for {cleaned_location.get('name', 'Unknown')}"
+                    f"Created COT event for {cleaned_location.get('name', 'Unknown')}"
                 )
 
             except Exception as e:
                 location_name = location.get("name", "Unknown")
                 logger.error(
-                    f"Error creating PyTAK COT event for location {location_name}: {e}"
+                    f"Error creating COT event for location {location_name}: {e}"
                 )
                 logger.error(f"Location data: {location}")
                 continue
 
         logger.debug(
-            f"Created {len(events)} PyTAK COT events from {len(locations)} locations"
+            f"Created {len(events)} COT events from {len(locations)} locations"
         )
         return events
 
