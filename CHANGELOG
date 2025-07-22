@@ -1,0 +1,17 @@
+📦 v1.0.0-beta.3 – First Public Beta
+This release introduces several key improvements and new features as we move toward a more flexible and maintainable plugin-based CoT processing system.
+
+✨ Added
+CoT Type Configuration
+You can now set the CoT Type dynamically, either per feed or for the entire stream, allowing greater control over how data is interpreted and routed.
+
+Deepstate Map Plugin
+A new plugin has been added to ingest and process Deepstate map data for CoT output.
+
+🔧 Changed
+Garmin Plugin Refactor
+The Garmin plugin has been refactored to remove redundant functions and methods. Timestamp handling and KML parsing have been centralized, improving consistency and simplifying maintenance.
+
+🛠 Improved
+cot_service Logging
+Logging within cot_service has been rationalized to reduce unnecessary output and improve debugging clarity.
