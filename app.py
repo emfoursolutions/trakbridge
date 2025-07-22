@@ -29,7 +29,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from flask import Flask, has_app_context, render_template, jsonify
 from flask_migrate import Migrate
-from sqlalchemy import event
+from sqlalchemy import event, inspect
 from sqlalchemy.pool import Pool
 
 # Local application imports
@@ -89,6 +89,71 @@ def get_startup_status():
         "progress": _startup_progress,
     }
 
+
+def initialize_database_safely():
+    """
+    Initialize database with proper migration handling.
+    Handles both first-time setup and existing installations without conflicts.
+    """
+    from flask_migrate import current, stamp, upgrade
+    import os
+
+    try:
+        # Check if migrations directory exists
+        migrations_dir = os.path.join(os.getcwd(), 'migrations')
+        if not os.path.exists(migrations_dir):
+            logger.info("No migrations directory found - creating database tables directly")
+            db.create_all()
+            return
+
+        # Check if database has migration version tracking
+        try:
+            current_revision = current()
+
+            if current_revision is None:
+                # Database exists but no migration version tracked
+                inspector = db.inspect(db.engine)
+                existing_tables = inspector.get_table_names()
+
+                if existing_tables:
+                    logger.info(f"Found existing tables: {existing_tables}")
+                    # Stamp database with current migration version (don't run migrations)
+                    try:
+                        stamp()
+                        logger.info("Database stamped with current migration version")
+                    except Exception as stamp_error:
+                        logger.warning(f"Could not stamp database: {stamp_error}")
+                        logger.info("Database tables already exist, skipping creation")
+                else:
+                    # No tables exist - run migrations
+                    logger.info("No tables found - running initial migration")
+                    upgrade()
+            else:
+                # Database is under migration control - run upgrade if needed
+                logger.info(f"Current migration revision: {current_revision}")
+                logger.info("Running database upgrade (if needed)...")
+                upgrade()
+
+        except Exception as migration_error:
+            logger.warning(f"Migration system not available: {migration_error}")
+            # Fall back to direct table creation only if no tables exist
+            try:
+                inspector = db.inspect(db.engine)
+                existing_tables = inspector.get_table_names()
+
+                if not existing_tables:
+                    logger.info("No tables found and migrations unavailable - creating tables directly")
+                    db.create_all()
+                else:
+                    logger.info("Tables exist, skipping database initialization")
+
+            except Exception as fallback_error:
+                logger.error(f"Could not inspect database or create tables: {fallback_error}")
+                raise
+
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}")
+        raise
 
 def is_primary_process() -> bool:
     """
@@ -267,6 +332,7 @@ def create_app(config_name=None):
 
     # Determine environment and get configuration
     flask_env = config_name or os.environ.get("FLASK_ENV", "development")
+    app.config['SKIP_DB_INIT'] = os.environ.get('SKIP_DB_INIT', 'false').lower() == 'true'
 
     # Get configuration instance using the new system
     config_instance = get_config(flask_env)
@@ -938,9 +1004,9 @@ def ensure_startup_thread():
 if __name__ == "__main__":
     ensure_startup_thread()
 
-    # Create tables within app context
+    # Initialize database safely within app context
     with app.app_context():
-        db.create_all()
+        initialize_database_safely()
 
     app.run(debug=False, port=8080, threaded=True)
 else:

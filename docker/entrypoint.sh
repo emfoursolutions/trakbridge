@@ -191,17 +191,42 @@ wait_for_database() {
 
 # Function to run database migrations
 run_migrations() {
-    log_info "Running database migrations..."
+    log_info "Checking database initialization..."
 
     if command -v flask >/dev/null 2>&1; then
+        # Check if Flask-Migrate is configured
         if flask db current >/dev/null 2>&1; then
-            log_info "Running Flask-Migrate migrations"
-            flask db upgrade
+            log_info "Flask-Migrate is configured"
+
+            # Get current revision
+            current_rev=$(flask db current 2>/dev/null || echo "")
+
+            if [[ -z "$current_rev" ]] || [[ "$current_rev" == *"None"* ]]; then
+                log_info "No current migration revision found"
+
+                # Check if database file exists (for SQLite)
+                if [[ "$DB_TYPE" == "sqlite" ]]; then
+                    db_path="${SQLALCHEMY_DATABASE_URI#sqlite:///}"
+                    if [[ -f "$db_path" ]]; then
+                        log_info "Database file exists, stamping with current revision"
+                        flask db stamp head || log_warn "Could not stamp database"
+                    else
+                        log_info "New database - will be handled by application"
+                    fi
+                else
+                    log_info "Database initialization will be handled by application"
+                fi
+            else
+                log_info "Running database migrations (current: $current_rev)"
+                flask db upgrade || {
+                    log_warn "Migration failed, will retry in application"
+                }
+            fi
         else
-            log_warn "Flask-Migrate not configured, skipping migrations"
+            log_info "Flask-Migrate not configured - database initialization handled by application"
         fi
     else
-        log_warn "Flask CLI not available, skipping migrations"
+        log_warn "Flask CLI not available - database initialization handled by application"
     fi
 }
 
