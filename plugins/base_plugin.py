@@ -10,8 +10,8 @@ Description:
 
 Author: Emfour Solutions
 Created: 2025-07-05
-Last Modified: {{LASTMOD}}
-Version: {{VERSION}}
+Last Modified: 2025-07-05
+Version: 1.0.0
 """
 
 # Standard library imports
@@ -241,6 +241,7 @@ class BaseGPSPlugin(ABC):
             - timestamp: UTC timestamp (datetime)
             - description: Optional description
             - additional_data: Dict of any additional data
+            - cot_type: Optional COT type (only used when cot_type_mode is "per_point")
         """
         pass
 

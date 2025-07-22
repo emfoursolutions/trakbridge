@@ -146,30 +146,35 @@ class EnhancedCOTService:
         locations: List[Dict[str, Any]],
         cot_type: str = "a-f-G-U-C",
         stale_time: int = 300,
+        cot_type_mode: str = "stream",
     ) -> List[bytes]:
         """
         Create COT events from location data
 
         Args:
             locations: List of location dictionaries
-            cot_type: COT type identifier
+            cot_type: COT type identifier (used when cot_type_mode is "stream")
             stale_time: Time in seconds before event becomes stale
+            cot_type_mode: "stream" or "per_point" to determine COT type source
 
         Returns:
             List of COT events as XML bytes
         """
         if self.use_pytak:
             return await EnhancedCOTService._create_pytak_events(
-                locations, cot_type, stale_time
+                locations, cot_type, stale_time, cot_type_mode
             )
         else:
             return await EnhancedCOTService._create_custom_events(
-                locations, cot_type, stale_time
+                locations, cot_type, stale_time, cot_type_mode
             )
 
     @staticmethod
     async def _create_pytak_events(
-        locations: List[Dict[str, Any]], cot_type: str, stale_time: int
+        locations: List[Dict[str, Any]],
+        cot_type: str,
+        stale_time: int,
+        cot_type_mode: str = "stream",
     ) -> List[bytes]:
         """Create COT events using PyTAK's XML generation"""
         events = []
@@ -226,10 +231,16 @@ class EnhancedCOTService:
                     )
                     event_time = datetime.now(timezone.utc)
 
+                # Determine COT type based on mode
+                if cot_type_mode == "per_point" and "cot_type" in location:
+                    point_cot_type = location["cot_type"]
+                else:
+                    point_cot_type = cot_type
+
                 # Create COT event data dictionary with safe conversions
                 event_data = {
                     "uid": str(location["uid"]),
-                    "type": str(cot_type),
+                    "type": str(point_cot_type),  # Use determined COT type
                     "time": event_time,
                     "start": event_time,
                     "stale": event_time + timedelta(seconds=int(stale_time)),
@@ -268,19 +279,19 @@ class EnhancedCOTService:
                 events.append(cot_xml)
                 logger.debug(cot_xml)
                 logger.debug(
-                    f"Created PyTAK COT event for {cleaned_location.get('name', 'Unknown')}"
+                    f"Created COT event for {cleaned_location.get('name', 'Unknown')}"
                 )
 
             except Exception as e:
                 location_name = location.get("name", "Unknown")
                 logger.error(
-                    f"Error creating PyTAK COT event for location {location_name}: {e}"
+                    f"Error creating COT event for location {location_name}: {e}"
                 )
                 logger.error(f"Location data: {location}")
                 continue
 
         logger.debug(
-            f"Created {len(events)} PyTAK COT events from {len(locations)} locations"
+            f"Created {len(events)} COT events from {len(locations)} locations"
         )
         return events
 
@@ -343,7 +354,10 @@ class EnhancedCOTService:
 
     @staticmethod
     async def _create_custom_events(
-        locations: List[Dict[str, Any]], cot_type: str, stale_time: int
+        locations: List[Dict[str, Any]],
+        cot_type: str,
+        stale_time: int,
+        cot_type_mode: str = "stream",
     ) -> List[bytes]:
         """Create COT events using custom XML generation (fallback)"""
         cot_events = []
@@ -380,11 +394,17 @@ class EnhancedCOTService:
 
                 uid = location["uid"]
 
+                # Determine COT type based on mode
+                if cot_type_mode == "per_point" and "cot_type" in location:
+                    point_cot_type = location["cot_type"]
+                else:
+                    point_cot_type = cot_type
+
                 # Create COT event element
                 cot_event = etree.Element("event")
                 cot_event.set("version", "2.0")
                 cot_event.set("uid", uid)
-                cot_event.set("type", cot_type)
+                cot_event.set("type", point_cot_type)
                 cot_event.set("time", time_str)
                 cot_event.set("start", time_str)
                 cot_event.set("stale", stale_str)
@@ -493,11 +513,11 @@ class EnhancedCOTService:
             return await EnhancedCOTService._send_with_custom(events, tak_server)
 
     async def send_to_persistent_service(
-        self,
-        locations: List[Dict[str, Any]],
-        tak_server,
-        cot_type: str = "a-f-G-U-C",
-        stale_time: int = 300,
+            self,
+            locations: List[Dict[str, Any]],
+            tak_server,
+            cot_type: str = "a-f-G-U-C",
+            stale_time: int = 300,
     ) -> bool:
         """
         Send locations to persistent COT service (queue-based)
@@ -510,20 +530,43 @@ class EnhancedCOTService:
                 logger.warning("No COT events created from locations")
                 return False
 
+            # Log the start of queue operations
+            logger.info(
+                f"Starting to enqueue {len(events)} COT events for TAK server '{tak_server.name}' "
+                f"(ID: {tak_server.id}). Queue operation initiated."
+            )
+
+            # Get initial queue size for comparison
+            initial_queue_size = 0
+            if tak_server.id in cot_service.queues:
+                initial_queue_size = cot_service.queues[tak_server.id].qsize()
+                logger.debug(f"Initial queue size for TAK server {tak_server.name}: {initial_queue_size}")
+
             # Send events to persistent service
             success_count = 0
-            for event in events:
+            for i, event in enumerate(events, 1):
                 success = await cot_service.enqueue_event(event, tak_server.id)
                 if success:
                     success_count += 1
+                    logger.debug(f"Enqueued event {i}/{len(events)} for TAK server {tak_server.name}")
+                else:
+                    logger.warning(f"Failed to enqueue event {i}/{len(events)} for TAK server {tak_server.name}")
+
+            # Log completion of queuing
+            final_queue_size = 0
+            if tak_server.id in cot_service.queues:
+                final_queue_size = cot_service.queues[tak_server.id].qsize()
 
             logger.info(
-                f"Enqueued {success_count}/{len(events)} events for TAK server {tak_server.name}"
+                f"Completed enqueueing for TAK server '{tak_server.name}': "
+                f"{success_count}/{len(events)} events successfully queued. "
+                f"Queue size: {initial_queue_size} → {final_queue_size}"
             )
+
             return success_count > 0
 
         except Exception as e:
-            logger.error(f"Failed to send to persistent service: {e}")
+            logger.error(f"Failed to send to persistent service for TAK server '{tak_server.name}': {e}")
             return False
 
     async def _send_with_pytak_clitool(self, events: List[bytes], tak_server) -> bool:
@@ -586,7 +629,7 @@ class EnhancedCOTService:
                     self.finished = False
 
                 async def run(self, number_of_iterations=-1):
-                    """Send all events then mark as finished"""
+                    """Send all events, then wait for queue to empty, then mark as finished."""
                     logger.debug(f"Starting to send {len(self.events_to_send)} events")
                     for event in self.events_to_send:
                         await self.put_queue(event)
@@ -597,8 +640,23 @@ class EnhancedCOTService:
 
                     logger.info(f"Queued {self.events_sent} events for transmission")
 
-                    # Give some time for transmission to complete
-                    await asyncio.sleep(3.0)
+                    # Wait for the queue to empty (i.e., all events processed)
+                    max_wait = 60  # seconds
+                    waited = 0
+                    while not self.queue.empty() and waited < max_wait:
+                        logger.debug(
+                            f"Waiting for queue to empty... (size: {self.queue.qsize()})"
+                        )
+                        await asyncio.sleep(1)
+                        waited += 1
+
+                    if self.queue.empty():
+                        logger.info("All events have been processed by PyTAK worker.")
+                    else:
+                        logger.warning(
+                            "Timeout waiting for PyTAK queue to empty. Some events may not have been sent."
+                        )
+
                     self.finished = True
 
             # Create sender worker
@@ -809,11 +867,11 @@ class EnhancedCOTService:
         logger.debug("COT service cleanup completed")
 
     async def process_and_send_locations(
-        self,
-        locations: List[Dict[str, Any]],
-        tak_server,
-        cot_type: str = "a-f-G-U-C",
-        stale_time: int = 300,
+            self,
+            locations: List[Dict[str, Any]],
+            tak_server,
+            cot_type: str = "a-f-G-U-C",
+            stale_time: int = 300,
     ) -> bool:
         """
         Complete workflow: convert locations to COT events and send to TAK server
@@ -824,36 +882,46 @@ class EnhancedCOTService:
                 return True
 
             logger.info(
-                f"Processing {len(locations)} locations for TAK server {tak_server.name}"
+                f"Starting location processing workflow for TAK server '{tak_server.name}': "
+                f"{len(locations)} locations to process"
             )
 
             # Create COT events
             events = await self.create_cot_events(locations, cot_type, stale_time)
 
             if not events:
-                logger.warning("No COT events created from locations")
+                logger.warning(f"No COT events created from {len(locations)} locations")
                 return False
 
-            logger.info(f"Created {len(events)} COT events, sending to TAK server...")
+            logger.info(
+                f"Successfully created {len(events)} COT events from {len(locations)} locations. "
+                f"Proceeding to send to TAK server '{tak_server.name}'"
+            )
 
             # Send to TAK server
             result = await self.send_to_tak_server(events, tak_server)
 
             if result:
                 logger.info(
-                    f"Successfully processed {len(locations)} locations to {tak_server.name}"
+                    f"Location processing workflow completed successfully: "
+                    f"{len(locations)} locations → {len(events)} events → "
+                    f"transmitted to '{tak_server.name}'"
                 )
             else:
-                logger.error(f"Failed to process locations for {tak_server.name}")
+                logger.error(
+                    f"Location processing workflow failed for TAK server '{tak_server.name}': "
+                    f"{len(locations)} locations processed, {len(events)} events created, "
+                    f"but transmission failed"
+                )
 
             return result
 
         except Exception as e:
-            logger.error(f"Failed to process and send locations: {str(e)}")
+            logger.error(
+                f"Location processing workflow exception for TAK server '{tak_server.name}': {e}. "
+                f"Input: {len(locations) if locations else 0} locations"
+            )
             return False
-
-
-# Replace the PersistentCOTService class with this implementation
 
 
 class PersistentCOTService:
@@ -997,40 +1065,68 @@ class PersistentCOTService:
     @staticmethod
     async def _transmission_worker(queue: asyncio.Queue, connection, tak_server):
         """Handle transmission of COT events from queue"""
-        logger.info(f"Starting transmission worker for TAK server {tak_server.name}")
+        logger.info(f"Starting transmission worker for TAK server '{tak_server.name}' (ID: {tak_server.id})")
+
+        # Track queue processing statistics
+        events_processed = 0
+        last_queue_size_log = None
+        queue_empty_logged = False
 
         # Handle the case where connection might be a tuple (reader, writer)
         if isinstance(connection, tuple) and len(connection) == 2:
             reader, writer = connection
-            logger.info(
-                f"Using (reader, writer) tuple for TAK server {tak_server.name}"
-            )
+            logger.info(f"Using (reader, writer) tuple for TAK server '{tak_server.name}'")
             use_writer = True
         else:
             reader = connection
             writer = None
             use_writer = False
-            logger.info(
-                f"Using single connection object for TAK server {tak_server.name}"
-            )
+            logger.info(f"Using single connection object for TAK server '{tak_server.name}'")
 
         try:
             while True:
                 try:
-                    logger.debug(
-                        f"Waiting for events from queue for TAK server {tak_server.name}"
-                    )
+                    # Check queue size periodically for logging
+                    current_queue_size = queue.qsize()
+
+                    # Log when queue becomes empty after having events
+                    if current_queue_size == 0 and not queue_empty_logged and events_processed > 0:
+                        logger.info(
+                            f"Queue cleared for TAK server '{tak_server.name}' - "
+                            f"all {events_processed} events have been processed and transmitted"
+                        )
+                        queue_empty_logged = True
+
+                    # Log significant queue size changes (every 10 events)
+                    if (last_queue_size_log is None or
+                            abs(current_queue_size - last_queue_size_log) >= 10):
+                        if current_queue_size > 0:
+                            logger.debug(
+                                f"Queue status for TAK server '{tak_server.name}': "
+                                f"{current_queue_size} events pending, "
+                                f"{events_processed} events processed so far"
+                            )
+                        last_queue_size_log = current_queue_size
+
+                    logger.debug(f"Waiting for events from queue for TAK server '{tak_server.name}'...")
+
                     # Get event from queue with timeout
                     event = await asyncio.wait_for(queue.get(), timeout=30.0)
 
                     if event is None:  # Shutdown signal
                         logger.info(
-                            f"Received shutdown signal for TAK server {tak_server.id}"
+                            f"Received shutdown signal for TAK server '{tak_server.name}'. "
+                            f"Total events processed: {events_processed}"
                         )
                         break
 
-                    logger.info(
-                        f"Received event from queue for TAK server {tak_server.name}, sending..."
+                    # Reset queue empty flag when we get an event
+                    if queue_empty_logged:
+                        queue_empty_logged = False
+                        logger.debug(f"Queue activity resumed for TAK server '{tak_server.name}'")
+
+                    logger.debug(
+                        f"Processing event {events_processed + 1} from queue for TAK server '{tak_server.name}'"
                     )
 
                     # Send the event using the appropriate method
@@ -1038,52 +1134,83 @@ class PersistentCOTService:
                         # Use writer for TCP connections
                         writer.write(event)
                         await writer.drain()
-                        logger.info(
-                            f"Successfully sent COT event to TAK server {tak_server.name}"
-                        )
+                        logger.debug(f"Successfully transmitted COT event to TAK server '{tak_server.name}'")
                     elif hasattr(reader, "send"):
                         # Use reader.send for other connection types
                         await reader.send(event)
-                        logger.info(
-                            f"Successfully sent COT event to TAK server {tak_server.name}"
-                        )
+                        logger.debug(f"Successfully transmitted COT event to TAK server '{tak_server.name}'")
                     else:
                         logger.error(
-                            f"No suitable send method found for TAK server {tak_server.name}"
+                            f"No suitable send method found for TAK server '{tak_server.name}'. "
+                            f"Event {events_processed + 1} not transmitted."
                         )
+                        queue.task_done()
                         continue
+
+                    events_processed += 1
+
+                    # Log milestone events (every 50 events)
+                    if events_processed % 50 == 0:
+                        logger.info(
+                            f"Transmission milestone for TAK server '{tak_server.name}': "
+                            f"{events_processed} events successfully transmitted"
+                        )
 
                     # Mark task as done
                     queue.task_done()
 
                 except asyncio.TimeoutError:
-                    # Timeout is normal, continue listening
-                    logger.debug(
-                        f"Timeout waiting for events from queue for TAK server {tak_server.name}"
-                    )
+                    # Timeout is normal when no events are available
+                    logger.debug(f"No events received (timeout) for TAK server '{tak_server.name}'")
                     continue
+
                 except Exception as e:
-                    logger.error(f"Error sending COT event to {tak_server.name}: {e}")
+                    logger.error(
+                        f"Error transmitting COT event to TAK server '{tak_server.name}': {e}. "
+                        f"Event {events_processed + 1} failed."
+                    )
                     # Mark task as done even on error
                     queue.task_done()
 
         except Exception as e:
-            logger.error(f"Transmission worker error for {tak_server.name}: {e}")
+            logger.error(f"Transmission worker error for TAK server '{tak_server.name}': {e}")
         finally:
+            # Log final statistics
+            logger.info(
+                f"Transmission worker shutting down for TAK server '{tak_server.name}'. "
+                f"Total events processed: {events_processed}"
+            )
+
             # Clean up connection
             if use_writer and writer:
                 try:
                     writer.close()
                     await writer.wait_closed()
-                    logger.info(f"Closed writer for TAK server {tak_server.name}")
+                    logger.info(f"Closed writer connection for TAK server '{tak_server.name}'")
                 except Exception as e:
-                    logger.debug(f"Error closing writer: {e}")
+                    logger.debug(f"Error closing writer for TAK server '{tak_server.name}': {e}")
             elif hasattr(reader, "close"):
                 try:
                     await reader.close()
-                    logger.info(f"Closed reader for TAK server {tak_server.name}")
+                    logger.info(f"Closed reader connection for TAK server '{tak_server.name}'")
                 except Exception as e:
-                    logger.debug(f"Error closing reader: {e}")
+                    logger.debug(f"Error closing reader for TAK server '{tak_server.name}': {e}")
+
+    def log_queue_status(self, tak_server_id: int, context: str = ""):
+        """Log current queue status for a TAK server"""
+        if tak_server_id not in self.queues:
+            logger.warning(f"No queue found for TAK server {tak_server_id} when logging status")
+            return
+
+        queue = self.queues[tak_server_id]
+        queue_size = queue.qsize()
+
+        context_str = f" ({context})" if context else ""
+
+        if queue_size == 0:
+            logger.info(f"Queue is empty for TAK server {tak_server_id}{context_str}")
+        else:
+            logger.info(f"Queue contains {queue_size} pending events for TAK server {tak_server_id}{context_str}")
 
     @staticmethod
     async def _create_pytak_config(tak_server):
@@ -1171,19 +1298,26 @@ class PersistentCOTService:
         Put a COT event onto the TAK server's queue.
         """
         if tak_server_id not in self.queues:
-            logger.error(f"No queue for TAK server {tak_server_id}. Event not sent.")
+            logger.error(f"No queue found for TAK server {tak_server_id}. Event not sent.")
             return False
 
         try:
             queue = self.queues[tak_server_id]
             queue_size_before = queue.qsize()
+
+            # Log if this is the first event being added to an empty queue
+            if queue_size_before == 0:
+                logger.info(f"Adding first event to empty queue for TAK server {tak_server_id}")
+
             await queue.put(event)
             queue_size_after = queue.qsize()
-            logger.info(
-                f"Enqueued COT event for TAK server {tak_server_id}. "
-                f"Queue size: {queue_size_before} -> {queue_size_after}"
+
+            logger.debug(
+                f"Successfully enqueued COT event for TAK server {tak_server_id}. "
+                f"Queue size: {queue_size_before} → {queue_size_after}"
             )
             return True
+
         except Exception as e:
             logger.error(f"Failed to enqueue event for TAK server {tak_server_id}: {e}")
             return False

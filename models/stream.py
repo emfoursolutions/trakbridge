@@ -35,6 +35,9 @@ class Stream(db.Model, TimestampMixin):
     last_poll = db.Column(db.DateTime)
     last_error = db.Column(db.Text)  # Last error message
     total_messages_sent = db.Column(db.Integer, default=0)  # Statistics
+    cot_type_mode = db.Column(
+        db.String(20), default="stream"
+    )  # "stream" or "per_point"
 
     # Relationship to TAK server
     tak_server = db.relationship("TakServer", back_populates="streams")
