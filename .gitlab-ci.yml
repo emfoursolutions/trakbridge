@@ -1,453 +1,407 @@
-# =============================================================================
-# .gitlab-ci.yml - Optimized Performance Configuration
-# =============================================================================
-
+# You can override the included template(s) by including variable overrides
+# SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
+# Secret Detection customization: https://docs.gitlab.com/user/application_security/secret_detection/pipeline/configure
+# Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
+# Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
+# Note that environment variables can be set in several places
+# See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
 stages:
-  - validate
-  - test
-  - security
-  - build
-
-# Global variables - OPTIMIZED
+- validate
+- test
+- security
+- build
+- secret-detection
 variables:
-  # Git configuration - CRITICAL for setuptools-scm
   GIT_DEPTH: 0
   GIT_STRATEGY: clone
   GIT_SUBMODULE_STRATEGY: none
   GIT_FETCH_EXTRA_FLAGS: "--tags"
-
-  # Python configuration
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
-  PYTHON_VERSION: "3.12"
-
-  # Build optimization
-  PIP_DISABLE_PIP_VERSION_CHECK: "1"
-  PIP_NO_CACHE_DIR: "false"
-
-  # Application configuration
-  APP_NAME: "trakbridge"
-
-  # Container registry configuration
-  REGISTRY: "docker.io"
+  PYTHON_VERSION: '3.12'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  PIP_NO_CACHE_DIR: 'false'
+  APP_NAME: trakbridge
+  REGISTRY: docker.io
   IMAGE_NAME: "$REGISTRY/$DOCKERHUB_USERNAME/$APP_NAME"
-
-  # Test configuration
   PYTEST_ADDOPTS: "--strict-markers --strict-config --tb=short"
   COVERAGE_FILE: "$CI_PROJECT_DIR/.coverage"
-
-  # Security scanning
-  SAST_EXCLUDED_PATHS: "tests, docs, scripts"
-  SECURE_LOG_LEVEL: "info"
-
-# Enhanced cache configuration
+  SAST_EXCLUDED_PATHS: tests, docs, scripts
+  SECURE_LOG_LEVEL: info
 cache:
-  - key: "pip-$CI_COMMIT_REF_SLUG-$PYTHON_VERSION"
-    paths:
-      - .pip-cache/
-    policy: pull-push
-  - key: "python-venv-$CI_COMMIT_REF_SLUG-$PYTHON_VERSION"
-    paths:
-      - .venv/
-    policy: pull-push
-
-# =============================================================================
-# VALIDATE STAGE - OPTIMIZED
-# =============================================================================
-
+- key: pip-$CI_COMMIT_REF_SLUG-$PYTHON_VERSION
+  paths:
+  - ".pip-cache/"
+  policy: pull-push
+- key: python-venv-$CI_COMMIT_REF_SLUG-$PYTHON_VERSION
+  paths:
+  - ".venv/"
+  policy: pull-push
 validate-yaml:
   stage: validate
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - homelab
-    - docker
+  - homelab
+  - docker
   timeout: 5m
   before_script:
-    - pip install --no-cache-dir pyyaml
+  - pip install --no-cache-dir pyyaml
   script:
-    - |
-      # Check if YAML files exist before validating
-      if ls config/settings/*.yaml 1> /dev/null 2>&1; then
-        echo "Validating YAML files..."
-        for file in config/settings/*.yaml; do
-          echo "Validating $file"
-          python -c "import yaml; yaml.safe_load(open('$file'))"
-        done
-        echo "✅ All YAML configuration files are valid"
-      else
-        echo "ℹ️  No YAML files found to validate"
-      fi
+  - |
+    # Check if YAML files exist before validating
+    if ls config/settings/*.yaml 1> /dev/null 2>&1; then
+      echo "Validating YAML files..."
+      for file in config/settings/*.yaml; do
+        echo "Validating $file"
+        python -c "import yaml; yaml.safe_load(open('$file'))"
+      done
+      echo "✅ All YAML configuration files are valid"
+    else
+      echo "ℹ️  No YAML files found to validate"
+    fi
   rules:
-    - changes:
-        - "config/**/*.yaml"
-        - "config/**/*.yml"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
-
+  - changes:
+    - config/**/*.yaml
+    - config/**/*.yml
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+  - if: "$CI_COMMIT_TAG"
 validate-requirements:
   stage: validate
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - homelab
-    - docker
+  - homelab
+  - docker
   timeout: 15m
   before_script:
-    - apt-get update && apt-get install -y git
-    - pip install --upgrade pip
-    - pip install --no-cache-dir pip-tools pip-audit
+  - apt-get update && apt-get install -y git
+  - pip install --upgrade pip
+  - pip install --no-cache-dir pip-tools pip-audit
   script:
-    - echo "Validating requirements.txt format..."
-    - |
-      if [ -f "requirements.txt" ]; then
-        python -m pip install --dry-run -r requirements.txt
-        echo "✅ Requirements are valid and installable"
-      else
-        echo "ℹ️  No requirements.txt found"
-      fi
-    - echo "Checking requirements for known vulnerabilities..."
-    - |
-      # Always create the audit report file
-      if [ -f "requirements.txt" ]; then
-        # Create a simple JSON report structure to avoid upload issues
-        echo '{"vulnerabilities": []}' > audit-report.json
-        
-        # Run audit but don't fail the job on vulnerabilities
-        if timeout 300 pip-audit --requirement requirements.txt --format json --output temp-audit.json; then
-          mv temp-audit.json audit-report.json
-        else
-          echo "Audit completed with warnings or timeout"
-        fi
-        
-        echo "✅ Requirements security check completed"
-      else
-        echo '{"vulnerabilities": [], "message": "No requirements.txt found"}' > audit-report.json
-      fi
+  - echo "Validating requirements.txt format..."
+  - |
+    if [ -f "requirements.txt" ]; then
+      python -m pip install --dry-run -r requirements.txt
+      echo "✅ Requirements are valid and installable"
+    else
+      echo "ℹ️  No requirements.txt found"
+    fi
+  - echo "Checking requirements for known vulnerabilities..."
+  - "# Always create the audit report file\nif [ -f \"requirements.txt\" ]; then\n
+    \ # Create a simple JSON report structure to avoid upload issues\n  echo '{\"vulnerabilities\":
+    []}' > audit-report.json\n  \n  # Run audit but don't fail the job on vulnerabilities\n
+    \ if timeout 300 pip-audit --requirement requirements.txt --format json --output
+    temp-audit.json; then\n    mv temp-audit.json audit-report.json\n  else\n    echo
+    \"Audit completed with warnings or timeout\"\n  fi\n  \n  echo \"✅ Requirements
+    security check completed\"\nelse\n  echo '{\"vulnerabilities\": [], \"message\":
+    \"No requirements.txt found\"}' > audit-report.json\nfi\n"
   artifacts:
     reports:
-      # Only include SAST report if it contains actual vulnerabilities
       sast: audit-report.json
     paths:
-      - audit-report.json
+    - audit-report.json
     expire_in: 1 day
     when: always
   rules:
-    - changes:
-        - "requirements.txt"
-        - "requirements.in"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
-
+  - changes:
+    - requirements.txt
+    - requirements.in
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+  - if: "$CI_COMMIT_TAG"
 validate-pyproject:
   stage: validate
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - homelab
-    - docker
+  - homelab
+  - docker
   timeout: 15m
   before_script:
-    - apt-get update && apt-get install -y git
-    - pip install --upgrade pip
-    - pip install --no-cache-dir tomli validate-pyproject build setuptools-scm
+  - apt-get update && apt-get install -y git
+  - pip install --upgrade pip
+  - pip install --no-cache-dir tomli validate-pyproject build setuptools-scm
   script:
-    - echo "Validating pyproject.toml..."
-    - mkdir -p dist
-    - |
-      if [ -f "pyproject.toml" ]; then
-        python -c "import tomli; tomli.load(open('pyproject.toml', 'rb'))"
-        validate-pyproject pyproject.toml
-        echo "Testing setuptools-scm version detection..."
-        python -c "import setuptools_scm; print(f'Version: {setuptools_scm.get_version()}')"
-        echo "Testing package build configuration..."
-        python -m build --sdist --wheel --outdir dist/ .
-        echo "✅ pyproject.toml validation completed"
-      else
-        echo "ℹ️  No pyproject.toml found"
-        echo "placeholder" > dist/.gitkeep
-      fi
+  - echo "Validating pyproject.toml..."
+  - mkdir -p dist
+  - |
+    if [ -f "pyproject.toml" ]; then
+      python -c "import tomli; tomli.load(open('pyproject.toml', 'rb'))"
+      validate-pyproject pyproject.toml
+      echo "Testing setuptools-scm version detection..."
+      python -c "import setuptools_scm; print(f'Version: {setuptools_scm.get_version()}')"
+      echo "Testing package build configuration..."
+      python -m build --sdist --wheel --outdir dist/ .
+      echo "✅ pyproject.toml validation completed"
+    else
+      echo "ℹ️  No pyproject.toml found"
+      echo "placeholder" > dist/.gitkeep
+    fi
   artifacts:
     paths:
-      - dist/
+    - dist/
     expire_in: 1 hour
     when: always
   rules:
-    - changes:
-        - "pyproject.toml"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
-
-# =============================================================================
-# TESTING STAGE - OPTIMIZED
-# =============================================================================
-
+  - changes:
+    - pyproject.toml
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+  - if: "$CI_COMMIT_TAG"
 code-quality:
   stage: test
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - homelab
-    - docker
+  - homelab
+  - docker
   timeout: 15m
   before_script:
-    - apt-get update && apt-get install -y git
-    - pip install --upgrade pip
-    - pip install --no-cache-dir black flake8 isort
+  - apt-get update && apt-get install -y git
+  - pip install --upgrade pip
+  - pip install --no-cache-dir black flake8 isort
   script:
-    - echo "Running code quality checks..."
-    - |
-      # Run checks in parallel and capture exit codes
-      black --check --diff . || BLACK_FAILED=1 &
-      BLACK_PID=$!
-      
-      flake8 . --max-line-length=100 --extend-ignore=E203,W503 \
-        --exclude=.git,__pycache__,build,dist,.venv || FLAKE8_FAILED=1 &
-      FLAKE8_PID=$!
-      
-      isort --check-only --diff . || ISORT_FAILED=1 &
-      ISORT_PID=$!
-      
-      wait $BLACK_PID $FLAKE8_PID $ISORT_PID
-      
-      if [ "$BLACK_FAILED" = "1" ] || [ "$FLAKE8_FAILED" = "1" ] || [ "$ISORT_FAILED" = "1" ]; then
-        echo "❌ Code quality checks failed"
-        exit 1
-      else
-        echo "✅ Code quality checks passed"
-      fi
+  - echo "Running code quality checks..."
+  - |
+    # Run checks in parallel and capture exit codes
+    black --check --diff . || BLACK_FAILED=1 &
+    BLACK_PID=$!
+
+    flake8 . --max-line-length=100 --extend-ignore=E203,W503 \
+      --exclude=.git,__pycache__,build,dist,.venv || FLAKE8_FAILED=1 &
+    FLAKE8_PID=$!
+
+    isort --check-only --diff . || ISORT_FAILED=1 &
+    ISORT_PID=$!
+
+    wait $BLACK_PID $FLAKE8_PID $ISORT_PID
+
+    if [ "$BLACK_FAILED" = "1" ] || [ "$FLAKE8_FAILED" = "1" ] || [ "$ISORT_FAILED" = "1" ]; then
+      echo "❌ Code quality checks failed"
+      exit 1
+    else
+      echo "✅ Code quality checks passed"
+    fi
   allow_failure: false
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
-
-# =============================================================================
-# SECURITY STAGE - OPTIMIZED
-# =============================================================================
-
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+  - if: "$CI_COMMIT_TAG"
 bandit-sast:
   stage: security
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - homelab
-    - docker
+  - homelab
+  - docker
   timeout: 15m
   before_script:
-    - apt-get update && apt-get install -y git
-    - pip install --upgrade pip
-    - pip install --no-cache-dir bandit[toml]
+  - apt-get update && apt-get install -y git
+  - pip install --upgrade pip
+  - pip install --no-cache-dir bandit[toml]
   script:
-    - echo "Running Bandit security scan..."
-    - |
-      # Always create a bandit report file
-      echo '{"metrics": {"_totals": {"nosec": 0, "skipped_tests": 0}}, "results": []}' > bandit-report.json
-      
-      # Run bandit on existing directories only
-      SCAN_DIRS=""
-      for dir in app.py services plugins routes models config; do
-        if [ -e "$dir" ]; then
-          SCAN_DIRS="$SCAN_DIRS $dir"
-        fi
-      done
-      
-      if [ -n "$SCAN_DIRS" ]; then
-        bandit -r $SCAN_DIRS -f json -o temp-bandit.json || true
-        if [ -f "temp-bandit.json" ]; then
-          mv temp-bandit.json bandit-report.json
-        fi
-        echo "✅ Bandit security scan completed"
-      else
-        echo "ℹ️  No directories found to scan"
+  - echo "Running Bandit security scan..."
+  - |
+    # Always create a bandit report file
+    echo '{"metrics": {"_totals": {"nosec": 0, "skipped_tests": 0}}, "results": []}' > bandit-report.json
+
+    # Run bandit on existing directories only
+    SCAN_DIRS=""
+    for dir in app.py services plugins routes models config; do
+      if [ -e "$dir" ]; then
+        SCAN_DIRS="$SCAN_DIRS $dir"
       fi
+    done
+
+    if [ -n "$SCAN_DIRS" ]; then
+      bandit -r $SCAN_DIRS -f json -o temp-bandit.json || true
+      if [ -f "temp-bandit.json" ]; then
+        mv temp-bandit.json bandit-report.json
+      fi
+      echo "✅ Bandit security scan completed"
+    else
+      echo "ℹ️  No directories found to scan"
+    fi
   artifacts:
     reports:
       sast: bandit-report.json
     paths:
-      - bandit-report.json
+    - bandit-report.json
     expire_in: 1 week
     when: always
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
-
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+  - if: "$CI_COMMIT_TAG"
 safety-check:
   stage: security
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - homelab
-    - docker
+  - homelab
+  - docker
   timeout: 10m
   before_script:
-    - apt-get update && apt-get install -y git
-    - pip install --upgrade pip
-    - pip install --no-cache-dir safety
+  - apt-get update && apt-get install -y git
+  - pip install --upgrade pip
+  - pip install --no-cache-dir safety
   script:
-    - echo "Running Safety vulnerability check..."
-    - |
-      # Always create default report first
-      echo '{"vulnerabilities": [], "scanned_packages": 0}' > safety-report.json
-      
-      if [ -f "requirements.txt" ]; then
-        # Use safety check with fallback
-        if [ -n "${SAFETY_API_KEY:-}" ]; then
-          safety check --json --output safety-report.json || echo "Safety check completed with warnings"
-        else
-          safety check --json --output safety-report.json --ignore-unpinned || echo "Safety check completed with warnings"
-        fi
+  - echo "Running Safety vulnerability check..."
+  - |
+    # Always create default report first
+    echo '{"vulnerabilities": [], "scanned_packages": 0}' > safety-report.json
+
+    if [ -f "requirements.txt" ]; then
+      # Use safety check with fallback
+      if [ -n "${SAFETY_API_KEY:-}" ]; then
+        safety check --json --output safety-report.json || echo "Safety check completed with warnings"
       else
-        echo "ℹ️  No requirements.txt found for safety check"
+        safety check --json --output safety-report.json --ignore-unpinned || echo "Safety check completed with warnings"
       fi
-      
-      echo "✅ Safety vulnerability check completed"
+    else
+      echo "ℹ️  No requirements.txt found for safety check"
+    fi
+
+    echo "✅ Safety vulnerability check completed"
   artifacts:
     paths:
-      - safety-report.json
+    - safety-report.json
     expire_in: 1 week
     when: always
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
-
-# =============================================================================
-# BUILD STAGE - HIGHLY OPTIMIZED
-# =============================================================================
-
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+  - if: "$CI_COMMIT_TAG"
 build-image-shell:
   stage: build
   tags:
-    - homelab
-    - shell
+  - homelab
+  - shell
   timeout: 45m
   variables:
     DOCKER_DRIVER: overlay2
-    DOCKER_TLS_CERTDIR: ""
+    DOCKER_TLS_CERTDIR: ''
   before_script:
-    - echo "Using host Docker daemon..."
-    - docker --version
-    - echo "Authenticating with container registry..."
-    - |
-      if [ -z "${DOCKERHUB_USERNAME}" ] || [ -z "${DOCKERHUB_TOKEN}" ]; then
-        echo "Error: DOCKERHUB_USERNAME and DOCKERHUB_TOKEN must be set"
-        exit 1
-      fi
-    - echo "${DOCKERHUB_TOKEN}" | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin "${REGISTRY}"
-    - |
-      echo "Git information:"
-      git --version
-      git log --oneline -5 || echo "No git log available"
-      git describe --tags --long --dirty || echo "No git describe available"
+  - echo "Using host Docker daemon..."
+  - docker --version
+  - echo "Authenticating with container registry..."
+  - |
+    if [ -z "${DOCKERHUB_USERNAME}" ] || [ -z "${DOCKERHUB_TOKEN}" ]; then
+      echo "Error: DOCKERHUB_USERNAME and DOCKERHUB_TOKEN must be set"
+      exit 1
+    fi
+  - echo "${DOCKERHUB_TOKEN}" | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin
+    "${REGISTRY}"
+  - |
+    echo "Git information:"
+    git --version
+    git log --oneline -5 || echo "No git log available"
+    git describe --tags --long --dirty || echo "No git describe available"
   script:
-    - |
-      echo "Building container image with host Docker..."
-      echo "Branch: $CI_COMMIT_BRANCH"
-      echo "Tag: $CI_COMMIT_TAG"
-      echo "Ref name: $CI_COMMIT_REF_NAME"
-    - |
-      # Set proper version for setuptools_scm
-      if [ -n "$CI_COMMIT_TAG" ]; then
-        export SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG"
-        echo "Using tag version: $CI_COMMIT_TAG"
-      else
-        export SETUPTOOLS_SCM_PRETEND_VERSION="0.1.0.dev0+g$CI_COMMIT_SHORT_SHA"
-        echo "Using dev version: 0.1.0.dev0+g$CI_COMMIT_SHORT_SHA"
-      fi
-    - |
-      # Build with better error handling
-      if ! DOCKER_BUILDKIT=1 docker build \
-        --target=production \
-        --tag "$IMAGE_NAME:$CI_COMMIT_SHA" \
-        --tag "$IMAGE_NAME:latest" \
-        --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
-        --label "org.opencontainers.image.revision=$CI_COMMIT_SHA" \
-        --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-        --label "org.opencontainers.image.version=$CI_COMMIT_REF_NAME" \
-        --label "org.opencontainers.image.title=$APP_NAME" \
-        --build-arg SETUPTOOLS_SCM_PRETEND_VERSION="$SETUPTOOLS_SCM_PRETEND_VERSION" \
-        --file Dockerfile \
-        . ; then
-        echo "❌ Docker build failed"
-        exit 1
-      fi
-    - echo "✅ Container build completed (not pushing untagged commits)"
+  - |
+    echo "Building container image with host Docker..."
+    echo "Branch: $CI_COMMIT_BRANCH"
+    echo "Tag: $CI_COMMIT_TAG"
+    echo "Ref name: $CI_COMMIT_REF_NAME"
+  - |
+    # Set proper version for setuptools_scm
+    if [ -n "$CI_COMMIT_TAG" ]; then
+      export SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG"
+      echo "Using tag version: $CI_COMMIT_TAG"
+    else
+      export SETUPTOOLS_SCM_PRETEND_VERSION="0.1.0.dev0+g$CI_COMMIT_SHORT_SHA"
+      echo "Using dev version: 0.1.0.dev0+g$CI_COMMIT_SHORT_SHA"
+    fi
+  - |
+    # Build with better error handling
+    if ! DOCKER_BUILDKIT=1 docker build \
+      --target=production \
+      --tag "$IMAGE_NAME:$CI_COMMIT_SHA" \
+      --tag "$IMAGE_NAME:latest" \
+      --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
+      --label "org.opencontainers.image.revision=$CI_COMMIT_SHA" \
+      --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --label "org.opencontainers.image.version=$CI_COMMIT_REF_NAME" \
+      --label "org.opencontainers.image.title=$APP_NAME" \
+      --build-arg SETUPTOOLS_SCM_PRETEND_VERSION="$SETUPTOOLS_SCM_PRETEND_VERSION" \
+      --file Dockerfile \
+      . ; then
+      echo "❌ Docker build failed"
+      exit 1
+    fi
+  - echo "✅ Container build completed (not pushing untagged commits)"
   rules:
-    - if: '$CI_COMMIT_TAG != null'
-      when: never
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_TAG == null
-
+  - if: "$CI_COMMIT_TAG != null"
+    when: never
+  - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_TAG == null"
 build-tagged-image-shell:
   stage: build
   tags:
-    - homelab
-    - shell
+  - homelab
+  - shell
   timeout: 45m
   variables:
     DOCKER_DRIVER: overlay2
-    DOCKER_TLS_CERTDIR: ""
+    DOCKER_TLS_CERTDIR: ''
   before_script:
-    - echo "Using host Docker daemon..."
-    - docker --version
-    - echo "Authenticating with container registry..."
-    - |
-      if [ -z "${DOCKERHUB_USERNAME}" ] || [ -z "${DOCKERHUB_TOKEN}" ]; then
-        echo "Error: DOCKERHUB_USERNAME and DOCKERHUB_TOKEN must be set"
-        exit 1
-      fi
-    - echo "${DOCKERHUB_TOKEN}" | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin "${REGISTRY}"
-    - |
-      echo "Git information:"
-      git --version
-      git log --oneline -5 || echo "No git log available"
-      git describe --tags --long --dirty || echo "No git describe available"
+  - echo "Using host Docker daemon..."
+  - docker --version
+  - echo "Authenticating with container registry..."
+  - |
+    if [ -z "${DOCKERHUB_USERNAME}" ] || [ -z "${DOCKERHUB_TOKEN}" ]; then
+      echo "Error: DOCKERHUB_USERNAME and DOCKERHUB_TOKEN must be set"
+      exit 1
+    fi
+  - echo "${DOCKERHUB_TOKEN}" | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin
+    "${REGISTRY}"
+  - |
+    echo "Git information:"
+    git --version
+    git log --oneline -5 || echo "No git log available"
+    git describe --tags --long --dirty || echo "No git describe available"
   script:
-    - |
-      echo "Building tagged container image with host Docker..."
-      echo "Branch: $CI_COMMIT_BRANCH"
-      echo "Tag: $CI_COMMIT_TAG"
-      echo "Ref name: $CI_COMMIT_REF_NAME"
-    - |
-      # For tagged builds, use the tag as version
-      export SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG"
-      echo "Using tag version: $CI_COMMIT_TAG"
-    - |
-      if ! DOCKER_BUILDKIT=1 docker build \
-        --target=production \
-        --tag "$IMAGE_NAME:$CI_COMMIT_TAG" \
-        --tag "$IMAGE_NAME:latest" \
-        --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
-        --label "org.opencontainers.image.revision=$CI_COMMIT_SHA" \
-        --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-        --label "org.opencontainers.image.version=$CI_COMMIT_TAG" \
-        --label "org.opencontainers.image.title=$APP_NAME" \
-        --build-arg SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG" \
-        --file Dockerfile \
-        . ; then
-        echo "❌ Docker build failed"
-        exit 1
-      fi
-    - echo "Pushing tagged images..."
-    - docker push "$IMAGE_NAME:$CI_COMMIT_TAG"
-    - docker push "$IMAGE_NAME:latest"
-    - echo "✅ Tagged container build and push completed"
+  - |
+    echo "Building tagged container image with host Docker..."
+    echo "Branch: $CI_COMMIT_BRANCH"
+    echo "Tag: $CI_COMMIT_TAG"
+    echo "Ref name: $CI_COMMIT_REF_NAME"
+  - |
+    # For tagged builds, use the tag as version
+    export SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG"
+    echo "Using tag version: $CI_COMMIT_TAG"
+  - |
+    if ! DOCKER_BUILDKIT=1 docker build \
+      --target=production \
+      --tag "$IMAGE_NAME:$CI_COMMIT_TAG" \
+      --tag "$IMAGE_NAME:latest" \
+      --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
+      --label "org.opencontainers.image.revision=$CI_COMMIT_SHA" \
+      --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --label "org.opencontainers.image.version=$CI_COMMIT_TAG" \
+      --label "org.opencontainers.image.title=$APP_NAME" \
+      --build-arg SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG" \
+      --file Dockerfile \
+      . ; then
+      echo "❌ Docker build failed"
+      exit 1
+    fi
+  - echo "Pushing tagged images..."
+  - docker push "$IMAGE_NAME:$CI_COMMIT_TAG"
+  - docker push "$IMAGE_NAME:latest"
+  - echo "✅ Tagged container build and push completed"
   rules:
-    - if: $CI_COMMIT_TAG
-
-# =============================================================================
-# NOTIFICATION STAGE - OPTIMIZED
-# =============================================================================
-
+  - if: "$CI_COMMIT_TAG"
 notify-success:
-  stage: .post
+  stage: ".post"
   image: alpine:latest
   tags:
-    - homelab
+  - homelab
   timeout: 2m
   script:
-    - |
-      echo "Pipeline completed successfully!"
-      echo "Built image: $IMAGE_NAME:$CI_COMMIT_SHA"
+  - |
+    echo "Pipeline completed successfully!"
+    echo "Built image: $IMAGE_NAME:$CI_COMMIT_SHA"
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+  - if: "$CI_COMMIT_TAG"
   when: on_success
+secret_detection:
+  stage: secret-detection
+include:
+- template: Security/Secret-Detection.gitlab-ci.yml
