@@ -219,6 +219,7 @@ code-quality:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
 
 # =============================================================================
 # SECURITY STAGE - OPTIMIZED
@@ -269,6 +270,7 @@ bandit-sast:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
 
 safety-check:
   stage: security
@@ -308,6 +310,7 @@ safety-check:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
 
 # =============================================================================
 # BUILD STAGE - HIGHLY OPTIMIZED
@@ -447,9 +450,16 @@ notify-success:
   script:
     - |
       echo "Pipeline completed successfully!"
-      echo "Built image: $IMAGE_NAME:$CI_COMMIT_SHA"
+      if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ] && [ -z "$CI_COMMIT_TAG" ]; then
+        echo "Built dev image: $IMAGE_NAME:dev"
+      elif [ -n "$CI_COMMIT_TAG" ]; then
+        echo "Built tagged image: $IMAGE_NAME:$CI_COMMIT_TAG"
+      else
+        echo "Code quality and security checks passed for branch: $CI_COMMIT_BRANCH"
+      fi
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
   when: on_success
