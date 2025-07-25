@@ -18,6 +18,7 @@ dependencies = [
     "cffi",
     "click",
     "cryptography",
+    "defusedxml",
     "fastkml",
     "Flask",
     "Flask-Migrate",

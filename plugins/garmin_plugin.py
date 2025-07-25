@@ -14,7 +14,7 @@ Version: 2.0.0
 import asyncio
 import logging
 import ssl
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
