@@ -12,10 +12,15 @@ Version: {{VERSION}}
 
 # Standard library imports
 import json
+import logging
 
 # Local application imports
 from database import db, TimestampMixin
 from plugins.base_plugin import BaseGPSPlugin
+from utils.json_validator import safe_json_loads, JSONValidationError
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 
 class Stream(db.Model, TimestampMixin):
@@ -68,20 +73,51 @@ class Stream(db.Model, TimestampMixin):
         if not self.plugin_config:
             return {}
         try:
-            config = json.loads(self.plugin_config)
+            # Use secure JSON parsing with validation
+            config = safe_json_loads(
+                self.plugin_config,
+                max_size=256 * 1024,  # 256KB limit for database configs
+                context=f"stream_{self.id}_plugin_config"
+            )
             # Decrypt sensitive fields for use
             return BaseGPSPlugin.decrypt_config_from_storage(self.plugin_type, config)
-        except json.JSONDecodeError:
+        except JSONValidationError as e:
+            logger.warning(
+                f"JSON validation failed for stream {self.id} plugin config: {e}. "
+                f"Details: {getattr(e, 'details', {})}"
+            )
+            return {}
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON decode error for stream {self.id} plugin config: {e}")
             return {}
 
     def set_plugin_config(self, config_dict):
         """Store plugin configuration as JSON with encryption for sensitive fields"""
         if config_dict:
-            # Encrypt sensitive fields before storage
-            encrypted_config = BaseGPSPlugin.encrypt_config_for_storage(
-                self.plugin_type, config_dict
-            )
-            self.plugin_config = json.dumps(encrypted_config)
+            try:
+                # Validate the config dict structure before encryption
+                if not isinstance(config_dict, dict):
+                    raise ValueError(f"Plugin config must be a dictionary, got {type(config_dict)}")
+                
+                # Check the serialized size before storage
+                test_json = json.dumps(config_dict)
+                if len(test_json.encode('utf-8')) > 256 * 1024:  # 256KB limit
+                    raise ValueError("Plugin configuration exceeds maximum size limit (256KB)")
+                
+                # Encrypt sensitive fields before storage
+                encrypted_config = BaseGPSPlugin.encrypt_config_for_storage(
+                    self.plugin_type, config_dict
+                )
+                self.plugin_config = json.dumps(encrypted_config)
+                
+                logger.debug(f"Set plugin config for stream {self.id}: {len(test_json)} bytes")
+                
+            except (ValueError, TypeError) as e:
+                logger.error(f"Failed to set plugin config for stream {self.id}: {e}")
+                raise ValueError(f"Invalid plugin configuration: {e}")
+            except Exception as e:
+                logger.error(f"Unexpected error setting plugin config for stream {self.id}: {e}")
+                raise
         else:
             self.plugin_config = None
 
@@ -90,8 +126,20 @@ class Stream(db.Model, TimestampMixin):
         if not self.plugin_config:
             return {}
         try:
-            return json.loads(self.plugin_config)
-        except json.JSONDecodeError:
+            # Use secure JSON parsing for raw config access
+            return safe_json_loads(
+                self.plugin_config,
+                max_size=256 * 1024,  # 256KB limit for database configs
+                context=f"stream_{self.id}_raw_config"
+            )
+        except JSONValidationError as e:
+            logger.warning(
+                f"JSON validation failed for stream {self.id} raw config: {e}. "
+                f"Details: {getattr(e, 'details', {})}"
+            )
+            return {}
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON decode error for stream {self.id} raw config: {e}")
             return {}
 
     def is_field_encrypted(self, field_name):
