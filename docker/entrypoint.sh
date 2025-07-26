@@ -222,10 +222,22 @@ run_migrations() {
                     log_info "Database initialization will be handled by application"
                 fi
             else
-                log_info "Running database migrations (current: $current_rev)"
-                flask db upgrade || {
-                    log_warn "Migration failed, will retry in application"
-                }
+                log_info "Current migration revision: $current_rev"
+                
+                # Check if there are pending migrations before running upgrade
+                if flask db heads >/dev/null 2>&1; then
+                    head_rev=$(flask db heads 2>/dev/null | head -n1 | awk '{print $1}')
+                    if [[ -n "$head_rev" ]] && [[ "$current_rev" != "$head_rev" ]]; then
+                        log_info "Pending migrations found (head: $head_rev), running upgrade..."
+                        flask db upgrade || {
+                            log_warn "Migration failed, will retry in application"
+                        }
+                    else
+                        log_info "Database is up to date, no migrations needed"
+                    fi
+                else
+                    log_info "Could not check migration heads, skipping migrations"
+                fi
             fi
         else
             log_info "Flask-Migrate not configured - database initialization handled by application"
