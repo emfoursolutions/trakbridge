@@ -32,6 +32,9 @@ from typing import (
     TYPE_CHECKING,
 )
 
+# Local imports for JSON validation
+from utils.json_validator import safe_json_loads, JSONValidationError
+
 # Third-party imports
 # (none for this file)
 
@@ -307,13 +310,23 @@ class PluginManager:
             if not config or config.strip() == "":
                 return {}
 
-            # Try to parse as JSON
+            # Try to parse as JSON with security validation
             try:
-                return json.loads(config)
-            except (json.JSONDecodeError, ValueError):
-                # If not JSON, treat as a configuration name or identifier
+                return safe_json_loads(
+                    config, 
+                    max_size=64 * 1024,  # 64KB limit for plugin configs
+                    context="plugin_config_string"
+                )
+            except JSONValidationError as e:
                 logger.warning(
-                    f"String config '{config}' could not be parsed as JSON, using empty config"
+                    f"JSON validation failed for config string: {e}. "
+                    f"Details: {getattr(e, 'details', {})}"
+                )
+                return {}
+            except (json.JSONDecodeError, ValueError) as e:
+                # Fallback for other JSON errors
+                logger.warning(
+                    f"String config '{config[:100]}...' could not be parsed as JSON: {e}"
                 )
                 return {}
 
