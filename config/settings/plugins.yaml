@@ -1,0 +1,40 @@
+# TrakBridge Plugin Configuration
+# 
+# This file allows administrators to add additional plugin modules
+# without modifying the core application code.
+#
+# SECURITY NOTE: Only add trusted plugin modules to this list.
+# All modules must be under the 'plugins.' namespace for security.
+
+# List of additional plugin modules to allow for dynamic loading
+allowed_plugin_modules:
+  # Example: Add custom plugins here
+  # - plugins.custom_gps_plugin
+  # - plugins.enterprise_tracker_plugin
+  # - plugins.third_party.special_plugin
+  
+  # External plugins (from Docker volume mounts)
+  # - external_plugins.sample_custom_tracker
+  # - external_plugins.company_specific_plugin
+  
+  # Built-in plugins (garmin_plugin, spot_plugin, traccar_plugin, deepstate_plugin) 
+  # are automatically allowed and don't need to be listed here.
+
+# Plugin loading settings
+plugin_settings:
+  # Whether to automatically scan for new plugins on startup
+  auto_discovery: true
+  
+  # Maximum number of plugins to load (safety limit)
+  max_plugins: 50
+  
+  # Whether to validate plugin signatures (future feature)
+  validate_signatures: false
+
+# Development settings (only effective in development mode)
+development:
+  # Allow loading plugins from additional directories in dev mode
+  allow_dev_plugins: false
+  
+  # Additional development plugin paths
+  dev_plugin_paths: []

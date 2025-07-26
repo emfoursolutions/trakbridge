@@ -13,6 +13,7 @@ certifi
 cffi
 click
 cryptography
+defusedxml
 fastkml
 Flask
 Flask-Migrate

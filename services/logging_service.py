@@ -46,7 +46,7 @@ def setup_logging(app):
 
     # Create formatters with version information
     detailed_formatter = logging.Formatter(
-        f"%(asctime)s [%(levelname)s] TrakBridge-v{version} %(name)s: %(message)s"
+        f"%(asctime)s [%(levelname)s] TrakBridge-{version} %(name)s: %(message)s"
     )
 
     # Set up file handler with version in filename

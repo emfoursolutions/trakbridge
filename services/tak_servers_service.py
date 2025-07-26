@@ -30,7 +30,7 @@ import socket
 import ssl
 import tempfile
 import uuid
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from configparser import ConfigParser
 from datetime import datetime, timezone
 

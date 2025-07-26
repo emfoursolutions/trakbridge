@@ -219,6 +219,7 @@ code-quality:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
 
 # =============================================================================
 # SECURITY STAGE - OPTIMIZED
@@ -269,6 +270,7 @@ bandit-sast:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
 
 safety-check:
   stage: security
@@ -308,6 +310,7 @@ safety-check:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
 
 # =============================================================================
 # BUILD STAGE - HIGHLY OPTIMIZED
@@ -357,7 +360,7 @@ build-image-shell:
       if ! DOCKER_BUILDKIT=1 docker build \
         --target=production \
         --tag "$IMAGE_NAME:$CI_COMMIT_SHA" \
-        --tag "$IMAGE_NAME:latest" \
+        --tag "$IMAGE_NAME:dev" \
         --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
         --label "org.opencontainers.image.revision=$CI_COMMIT_SHA" \
         --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -369,7 +372,9 @@ build-image-shell:
         echo "❌ Docker build failed"
         exit 1
       fi
-    - echo "✅ Container build completed (not pushing untagged commits)"
+    - echo "Pushing dev image..."
+    - docker push "$IMAGE_NAME:dev"
+    - echo "✅ Container build and push completed for dev image"
   rules:
     - if: '$CI_COMMIT_TAG != null'
       when: never
@@ -445,9 +450,16 @@ notify-success:
   script:
     - |
       echo "Pipeline completed successfully!"
-      echo "Built image: $IMAGE_NAME:$CI_COMMIT_SHA"
+      if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ] && [ -z "$CI_COMMIT_TAG" ]; then
+        echo "Built dev image: $IMAGE_NAME:dev"
+      elif [ -n "$CI_COMMIT_TAG" ]; then
+        echo "Built tagged image: $IMAGE_NAME:$CI_COMMIT_TAG"
+      else
+        echo "Code quality and security checks passed for branch: $CI_COMMIT_BRANCH"
+      fi
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
   when: on_success
