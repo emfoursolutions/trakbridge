@@ -367,6 +367,7 @@ def create_app(config_name=None):
 
         app.plugin_manager = PluginManager()
         app.plugin_manager.load_plugins_from_directory()
+        app.plugin_manager.load_external_plugins()
 
         # Initialize encryption service and attach to Flask app
         from services.encryption_service import EncryptionService

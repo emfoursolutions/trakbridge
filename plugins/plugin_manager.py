@@ -67,8 +67,8 @@ class PluginManager:
         This allows administrators to add new plugins without code changes.
         """
         config_locations = [
-            'config/settings/plugins.yaml',
-            'external_config/plugins.yaml',
+            'external_config/plugins.yaml',  # Docker volume mount config takes priority
+            'config/settings/plugins.yaml',  # Default config
             '/etc/trakbridge/plugins.yaml',
             os.path.expanduser('~/.trakbridge/plugins.yaml'),
             'plugins.yaml'
