@@ -24,7 +24,7 @@ Version: {{VERSION}}
 import logging
 
 # Third-party imports
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, jsonify
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -86,3 +86,33 @@ def list_cot_types():
             },
             error_message=f"Error loading COT types: {str(e)}",
         )
+
+
+@bp.route("/api/cot_types/export-data")
+def get_cot_export_data():
+    """API endpoint to get COT types data for secure export"""
+    from services.cot_type_service import cot_type_service
+    
+    try:
+        # Load COT data
+        cot_data = cot_type_service.get_template_data()
+        
+        if not cot_data:
+            return jsonify({"error": "Could not load COT types data"}), 500
+            
+        # Ensure cot_types exists
+        if "cot_types" not in cot_data:
+            cot_data["cot_types"] = []
+            
+        # Calculate statistics
+        cot_stats = cot_type_service.calculate_cot_statistics(cot_data)
+        
+        # Return safely serialized data
+        return jsonify({
+            "cot_data": cot_data,
+            "cot_stats": cot_stats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting COT export data: {e}")
+        return jsonify({"error": f"Failed to get COT export data: {str(e)}"}), 500

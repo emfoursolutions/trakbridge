@@ -182,20 +182,46 @@
     </div>
 </div>
 
-<!-- Store plugin metadata and current config for JavaScript -->
-<script type="application/json" id="plugin-metadata">
-{{ plugin_metadata | tojson }}
-</script>
-<script type="application/json" id="current-config">
-{{ stream.get_plugin_config() | tojson }}
-</script>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Load plugin metadata and current configuration from embedded JSON
-const pluginMetadata = JSON.parse(document.getElementById('plugin-metadata').textContent);
-const currentConfig = JSON.parse(document.getElementById('current-config').textContent);
+// Plugin metadata and current config - will be loaded via secure API calls
+let pluginMetadata = {};
+let currentConfig = {};
+
+// Load plugin metadata securely from API
+async function loadPluginMetadata() {
+    try {
+        const response = await fetch('/api/plugins/metadata');
+        if (response.ok) {
+            pluginMetadata = await response.json();
+        } else {
+            console.error('Failed to load plugin metadata:', response.status);
+            pluginMetadata = {};
+        }
+    } catch (error) {
+        console.error('Error loading plugin metadata:', error);
+        pluginMetadata = {};
+    }
+}
+
+// Load current stream configuration securely from API
+async function loadCurrentConfig() {
+    try {
+        const streamId = {{ stream.id }};
+        const response = await fetch(`/api/streams/${streamId}/config`);
+        if (response.ok) {
+            currentConfig = await response.json();
+        } else {
+            console.error('Failed to load current config:', response.status);
+            currentConfig = {};
+        }
+    } catch (error) {
+        console.error('Error loading current config:', error);
+        currentConfig = {};
+    }
+}
 
 function updatePluginConfig() {
     const pluginType = document.getElementById('plugin_type').value;
@@ -460,8 +486,12 @@ function showAlert(message, type = 'info') {
     }, 5000);
 }
 
-// Auto-update plugin config on page load if editing
-document.addEventListener('DOMContentLoaded', function() {
+// Initialize page when DOM is loaded
+document.addEventListener('DOMContentLoaded', async function() {
+    // Load plugin metadata and current config first
+    await Promise.all([loadPluginMetadata(), loadCurrentConfig()]);
+    
+    // Auto-update plugin config on page load if editing
     const pluginType = document.getElementById('plugin_type').value;
     if (pluginType) {
         updatePluginConfig();

@@ -313,7 +313,7 @@ function resetFilters() {
     filterAndSort();
 }
 
-function exportCotTypes() {
+async function exportCotTypes() {
     const button = event.target;
     const originalContent = button.innerHTML;
     
@@ -322,13 +322,21 @@ function exportCotTypes() {
     button.disabled = true;
     
     try {
+        // Fetch COT data securely from API
+        const response = await fetch('/admin/api/cot_types/export-data');
+        if (!response.ok) {
+            throw new Error(`Failed to fetch COT types data: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
         // Create export data
         const exportData = {
             timestamp: new Date().toISOString(),
-            total_types: {{ cot_data.cot_types|length }},
-            categories: {{ cot_stats.categories|tojson }},
-            statistics: {{ cot_stats|tojson }},
-            cot_types: {{ cot_data.cot_types|tojson }}
+            total_types: data.cot_data.cot_types.length,
+            categories: data.cot_stats.categories,
+            statistics: data.cot_stats,
+            cot_types: data.cot_data.cot_types
         };
         
         // Create and download file

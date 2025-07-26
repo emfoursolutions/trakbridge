@@ -360,6 +360,23 @@ def get_plugin_config(plugin_name):
         return jsonify({"error": "Failed to get plugin configuration"}), 500
 
 
+@bp.route("/plugins/metadata")
+def get_all_plugin_metadata():
+    """Get metadata for all available plugins"""
+    try:
+        metadata = get_config_service().get_all_plugin_metadata()
+        # Serialize all plugin metadata for safe JSON transmission
+        serialized_metadata = {
+            k: get_config_service().serialize_plugin_metadata(v)
+            for k, v in metadata.items()
+        }
+        return jsonify(serialized_metadata)
+        
+    except Exception as e:
+        logger.error(f"Error getting all plugin metadata: {e}")
+        return jsonify({"error": "Failed to get plugin metadata"}), 500
+
+
 @bp.route("/streams/<int:stream_id>/export-config")
 def export_stream_config(stream_id):
     """Export stream configuration (sensitive fields masked)"""
@@ -372,6 +389,21 @@ def export_stream_config(stream_id):
     except Exception as e:
         logger.error(f"Error exporting stream config {stream_id}: {e}")
         return jsonify({"error": "Failed to export configuration"}), 500
+
+
+@bp.route("/streams/<int:stream_id>/config")
+def get_stream_config(stream_id):
+    """Get stream configuration (sensitive fields masked) for editing"""
+    try:
+        from models.stream import Stream
+        stream = Stream.query.get_or_404(stream_id)
+        # Get plugin config with sensitive fields masked for security
+        config = stream.to_dict(include_sensitive=False)
+        return jsonify(config.get('plugin_config', {}))
+        
+    except Exception as e:
+        logger.error(f"Error getting stream config {stream_id}: {e}")
+        return jsonify({"error": "Failed to get stream configuration"}), 500
 
 
 @bp.route("/streams/security-status")
