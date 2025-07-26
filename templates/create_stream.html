@@ -156,16 +156,28 @@
     </div>
 </div>
 
-<!-- Store plugin metadata for JavaScript -->
-<script type="application/json" id="plugin-metadata">
-{{ plugin_metadata | tojson }}
-</script>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Load plugin metadata from embedded JSON
-const pluginMetadata = JSON.parse(document.getElementById('plugin-metadata').textContent);
+// Plugin metadata - will be loaded via secure API call
+let pluginMetadata = {};
+
+// Load plugin metadata securely from API
+async function loadPluginMetadata() {
+    try {
+        const response = await fetch('/api/plugins/metadata');
+        if (response.ok) {
+            pluginMetadata = await response.json();
+        } else {
+            console.error('Failed to load plugin metadata:', response.status);
+            pluginMetadata = {};
+        }
+    } catch (error) {
+        console.error('Error loading plugin metadata:', error);
+        pluginMetadata = {};
+    }
+}
 
 function updatePluginConfig() {
     const pluginType = document.getElementById('plugin_type').value;
@@ -450,8 +462,12 @@ function showAlert(message, type = 'info') {
     }, 5000);
 }
 
-// Auto-update plugin config on page load if editing
-document.addEventListener('DOMContentLoaded', function() {
+// Initialize page when DOM is loaded
+document.addEventListener('DOMContentLoaded', async function() {
+    // Load plugin metadata first
+    await loadPluginMetadata();
+    
+    // Auto-update plugin config on page load if editing
     const pluginType = document.getElementById('plugin_type').value;
     if (pluginType) {
         updatePluginConfig();
