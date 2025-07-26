@@ -23,6 +23,8 @@ x-environment: &common-environment
   FLASK_ENV: "production"
   FLASK_APP: "app.py"
   APP_PORT: "5000"
+  USER_ID: ${UID:-1000}
+  GROUP_ID: ${GID:-1000}
   
   # Database Configuration - Postresql
   DB_TYPE: "postgresql" 
