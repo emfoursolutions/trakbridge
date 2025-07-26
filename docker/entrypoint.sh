@@ -45,6 +45,7 @@ log_info "Environment: $FLASK_ENV"
 log_info "Database Type: $DB_TYPE"
 log_info "Log Level: $LOG_LEVEL"
 log_info "Running as UID: $(id -u), GID: $(id -g)"
+log_info "User: $(whoami), Home: $HOME"
 
 # Function to handle secrets permissions
 handle_secrets() {
@@ -112,6 +113,8 @@ ensure_permissions() {
     local current_uid=$(id -u)
     local current_gid=$(id -g)
 
+    log_debug "Checking permissions as UID:$current_uid GID:$current_gid"
+
     # Function to check and fix directory permissions
     check_and_fix_dir() {
         local dir="$1"
@@ -120,26 +123,28 @@ ensure_permissions() {
         if [[ -w "$dir" ]]; then
             log_debug "$dir_name directory is writable"
         else
-            log_warn "$dir_name directory is not writable, attempting to fix..."
-
-            # Try different approaches to fix permissions
-            chmod 755 "$dir" 2>/dev/null || {
-                log_warn "Could not chmod $dir_name directory"
-                # Try to make it writable by group/other as fallback
-                chmod 775 "$dir" 2>/dev/null || chmod 777 "$dir" 2>/dev/null || {
-                    log_error "Could not fix $dir_name directory permissions"
-                    log_error "You may need to fix permissions manually: sudo chown -R $current_uid:$current_gid $dir"
-                }
-            }
+            log_warn "$dir_name directory is not writable"
+            
+            # In the new security model, permissions should be handled by docker-entrypoint.sh
+            # We can only fix what we have permission to fix
+            if chmod 755 "$dir" 2>/dev/null; then
+                log_info "Fixed $dir_name directory permissions"
+            else
+                log_warn "Cannot fix $dir_name directory permissions"
+                log_warn "This should have been handled by the Docker entrypoint script"
+                log_warn "If using dynamic UID/GID, ensure USER_ID and GROUP_ID are set correctly"
+            fi
         fi
 
         # Ensure we can create files in the directory
-        local test_file="$dir/.write_test"
+        local test_file="$dir/.write_test_$(date +%s)"
         if touch "$test_file" 2>/dev/null; then
             rm -f "$test_file" 2>/dev/null
             log_debug "$dir_name directory write test passed"
         else
-            log_warn "$dir_name directory write test failed - may cause runtime issues"
+            log_error "$dir_name directory write test failed"
+            log_error "Application may not function correctly without write access to $dir"
+            log_error "Check Docker volume mount permissions and USER_ID/GROUP_ID settings"
         fi
     }
 
@@ -217,10 +222,22 @@ run_migrations() {
                     log_info "Database initialization will be handled by application"
                 fi
             else
-                log_info "Running database migrations (current: $current_rev)"
-                flask db upgrade || {
-                    log_warn "Migration failed, will retry in application"
-                }
+                log_info "Current migration revision: $current_rev"
+                
+                # Check if there are pending migrations before running upgrade
+                if flask db heads >/dev/null 2>&1; then
+                    head_rev=$(flask db heads 2>/dev/null | head -n1 | awk '{print $1}')
+                    if [[ -n "$head_rev" ]] && [[ "$current_rev" != "$head_rev" ]]; then
+                        log_info "Pending migrations found (head: $head_rev), running upgrade..."
+                        flask db upgrade || {
+                            log_warn "Migration failed, will retry in application"
+                        }
+                    else
+                        log_info "Database is up to date, no migrations needed"
+                    fi
+                else
+                    log_info "Could not check migration heads, skipping migrations"
+                fi
             fi
         else
             log_info "Flask-Migrate not configured - database initialization handled by application"
@@ -327,8 +344,8 @@ setup_logging() {
     mkdir -p /app/logs
 
     # Create log files if they don't exist
-    touch /app/logs/app.log 2>/dev/null || log_warn "Cannot create app.log"
-    touch /app/logs/error.log 2>/dev/null || log_warn "Cannot create error.log"
+    #touch /app/logs/app.log 2>/dev/null || log_warn "Cannot create app.log"
+    #touch /app/logs/error.log 2>/dev/null || log_warn "Cannot create error.log"
     touch /app/logs/hypercorn-access.log 2>/dev/null || log_warn "Cannot create hypercorn-access.log"
     touch /app/logs/hypercorn-error.log 2>/dev/null || log_warn "Cannot create hypercorn-error.log"
 
@@ -350,21 +367,24 @@ cleanup() {
 # Set up signal handlers
 trap cleanup SIGTERM SIGINT
 
-# Function to determine the appropriate server command
-get_server_command() {
+# Function to start the appropriate server (replaces eval-based approach)
+start_server() {
+    # Ensure we're in the correct directory
+    cd /app
+    
     case "$FLASK_ENV" in
         "development")
             log_info "Using Flask development server"
-            echo "python -m flask run --host=0.0.0.0 --port=5000 --debug"
+            exec python -m flask run --host=0.0.0.0 --port=5000 --debug
             ;;
         "production"|"staging")
             # Check if hypercorn.toml exists
             if [[ -f "/app/hypercorn.toml" ]]; then
                 log_info "Using Hypercorn production server with config file"
-                echo "cd /app && hypercorn --config /app/hypercorn.toml app:app"
+                exec hypercorn --config /app/hypercorn.toml app:app
             else
                 log_info "Using Hypercorn production server with inline configuration"
-                # Inline hypercorn configuration as fallback
+                # Sanitize and validate environment variables
                 local workers=${HYPERCORN_WORKERS:-4}
                 local worker_class=${HYPERCORN_WORKER_CLASS:-asyncio}
                 local bind=${HYPERCORN_BIND:-0.0.0.0:5000}
@@ -373,16 +393,67 @@ get_server_command() {
                 local max_requests_jitter=${HYPERCORN_MAX_REQUESTS_JITTER:-100}
                 local log_level=${HYPERCORN_LOG_LEVEL:-info}
 
-                echo "cd /app && hypercorn --bind $bind --workers $workers --worker-class $worker_class --keep-alive $keep_alive --max-requests $max_requests --max-requests-jitter $max_requests_jitter --log-level $log_level --access-logfile /app/logs/hypercorn-access.log --error-logfile /app/logs/hypercorn-error.log app:app"
+                # Validate numeric values to prevent injection
+                if ! [[ "$workers" =~ ^[0-9]+$ ]] || [[ "$workers" -lt 1 ]] || [[ "$workers" -gt 16 ]]; then
+                    log_warn "Invalid HYPERCORN_WORKERS value '$workers', using default: 4"
+                    workers=4
+                fi
+                
+                if ! [[ "$keep_alive" =~ ^[0-9]+$ ]] || [[ "$keep_alive" -lt 1 ]] || [[ "$keep_alive" -gt 300 ]]; then
+                    log_warn "Invalid HYPERCORN_KEEP_ALIVE value '$keep_alive', using default: 5"
+                    keep_alive=5
+                fi
+                
+                if ! [[ "$max_requests" =~ ^[0-9]+$ ]] || [[ "$max_requests" -lt 100 ]] || [[ "$max_requests" -gt 10000 ]]; then
+                    log_warn "Invalid HYPERCORN_MAX_REQUESTS value '$max_requests', using default: 1000"
+                    max_requests=1000
+                fi
+                
+                # Validate worker class
+                case "$worker_class" in
+                    "asyncio"|"trio"|"uvloop") ;;
+                    *) 
+                        log_warn "Invalid HYPERCORN_WORKER_CLASS value '$worker_class', using default: asyncio"
+                        worker_class="asyncio"
+                        ;;
+                esac
+                
+                # Validate log level
+                case "$log_level" in
+                    "critical"|"error"|"warning"|"info"|"debug") ;;
+                    *)
+                        log_warn "Invalid HYPERCORN_LOG_LEVEL value '$log_level', using default: info"
+                        log_level="info"
+                        ;;
+                esac
+                
+                # Validate bind address (basic validation)
+                if ! [[ "$bind" =~ ^[0-9a-zA-Z\.:_-]+$ ]]; then
+                    log_warn "Invalid HYPERCORN_BIND value '$bind', using default: 0.0.0.0:5000"
+                    bind="0.0.0.0:5000"
+                fi
+
+                log_info "Starting Hypercorn with: workers=$workers, bind=$bind, worker-class=$worker_class"
+                exec hypercorn \
+                    --bind "$bind" \
+                    --workers "$workers" \
+                    --worker-class "$worker_class" \
+                    --keep-alive "$keep_alive" \
+                    --max-requests "$max_requests" \
+                    --max-requests-jitter "$max_requests_jitter" \
+                    --log-level "$log_level" \
+                    --access-logfile /app/logs/hypercorn-access.log \
+                    --error-logfile /app/logs/hypercorn-error.log \
+                    app:app
             fi
             ;;
         *)
             # Default to production settings with Hypercorn
             log_info "Unknown environment '$FLASK_ENV', defaulting to Hypercorn"
             if [[ -f "/app/hypercorn.toml" ]]; then
-                echo "cd /app && hypercorn --config /app/hypercorn.toml app:app"
+                exec hypercorn --config /app/hypercorn.toml app:app
             else
-                echo "cd /app && hypercorn --bind 0.0.0.0:5000 --workers 4 --worker-class asyncio app:app"
+                exec hypercorn --bind 0.0.0.0:5000 --workers 4 --worker-class asyncio app:app
             fi
             ;;
     esac
@@ -450,12 +521,10 @@ main() {
 
     log_info "=== Starting Application ==="
 
-    # Execute the provided command or determine the appropriate server
+    # Execute the provided command or start the appropriate server
     if [[ $# -eq 0 ]]; then
-        # No command provided, use the appropriate server for the environment
-        server_cmd=$(get_server_command)
-        log_info "Starting server: $server_cmd"
-        eval $server_cmd
+        # No command provided, start the appropriate server for the environment
+        start_server
     else
         # Command provided, execute it
         exec "$@"

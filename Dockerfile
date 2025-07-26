@@ -74,35 +74,70 @@ COPY --from=builder /app/_version.py /app/
 # Make entrypoint executable
 RUN chmod +x /app/entrypoint.sh
 
-# Create a flexible user creation script
+# Create default non-root user for security
+RUN groupadd -g 1000 appuser && \
+    useradd -r -u 1000 -g appuser -d /app -s /bin/bash appuser
+
+# Set ownership for directories that appuser needs access to
+RUN chown -R appuser:appuser /app/logs /app/data /app/tmp /app/entrypoint.sh
+
+# Create enhanced security-focused user switching script
 RUN echo '#!/bin/bash\n\
 set -e\n\
-USER_ID=${USER_ID:-1000}\n\
-GROUP_ID=${GROUP_ID:-1000}\n\
 \n\
-# Create group if it doesn'\''t exist\n\
-if ! getent group $GROUP_ID > /dev/null 2>&1; then\n\
-    groupadd -g $GROUP_ID appuser\n\
-fi\n\
+# Get target UID/GID from environment or current user\n\
+TARGET_UID=${USER_ID:-$(id -u)}\n\
+TARGET_GID=${GROUP_ID:-$(id -g)}\n\
+CURRENT_UID=$(id -u)\n\
 \n\
-# Create user if it doesn'\''t exist\n\
-if ! getent passwd $USER_ID > /dev/null 2>&1; then\n\
-    useradd -r -u $USER_ID -g $GROUP_ID -d /app -s /bin/bash appuser\n\
-fi\n\
-\n\
-# Fix ownership of app directories\n\
-chown -R $USER_ID:$GROUP_ID /app/logs /app/data /app/tmp\n\
-\n\
-# Fix ownership and permissions of secrets if they exist\n\
-if [ -d "/app/secrets" ]; then\n\
-    chown -R $USER_ID:$GROUP_ID /app/secrets\n\
-    chmod -R 640 /app/secrets/*\n\
-fi\n\
-\n\
-# Execute the main entrypoint as the specified user\n\
-exec gosu $USER_ID:$GROUP_ID "$@"\n\
-' > /usr/local/bin/docker-entrypoint.sh && \
+# Security check: prevent running as root unless explicitly needed\n\
+if [[ $CURRENT_UID -eq 0 ]]; then\n\
+    # We are running as root - handle user switching securely\n\
+    if [[ $TARGET_UID -eq 0 ]] && [[ "${ALLOW_ROOT:-false}" != "true" ]]; then\n\
+        echo "ERROR: Running as root is not allowed for security reasons."\n\
+        echo "Set ALLOW_ROOT=true environment variable to override this protection."\n\
+        echo "For production deployments, consider using USER_ID and GROUP_ID instead."\n\
+        exit 1\n\
+    fi\n\
+    \n\
+    # Create or modify user if dynamic UID/GID is requested\n\
+    if [[ $TARGET_UID -ne 1000 ]] || [[ $TARGET_GID -ne 1000 ]]; then\n\
+        echo "Creating dynamic user with UID:$TARGET_UID GID:$TARGET_GID for host compatibility"\n\
+        \n\
+        # Create group if it doesn'\''t exist\n\
+        if ! getent group $TARGET_GID > /dev/null 2>&1; then\n\
+            groupadd -g $TARGET_GID appuser-dynamic\n\
+        fi\n\
+        \n\
+        # Create user if it doesn'\''t exist\n\
+        if ! getent passwd $TARGET_UID > /dev/null 2>&1; then\n\
+            useradd -r -u $TARGET_UID -g $TARGET_GID -d /app -s /bin/bash appuser-dynamic\n\
+        fi\n\
+        \n\
+        # Fix ownership of app directories for dynamic user\n\
+        chown -R $TARGET_UID:$TARGET_GID /app/logs /app/data /app/tmp\n\
+        \n\
+        # Fix ownership and permissions of secrets if they exist\n\
+        if [ -d "/app/secrets" ]; then\n\
+            chown -R $TARGET_UID:$TARGET_GID /app/secrets\n\
+            chmod -R 640 /app/secrets/* 2>/dev/null || true\n\
+        fi\n\
+    else\n\
+        echo "Using default appuser (1000:1000)"\n\
+    fi\n\
+    \n\
+    # Switch to target user using gosu\n\
+    echo "Switching to user $TARGET_UID:$TARGET_GID"\n\
+    exec gosu $TARGET_UID:$TARGET_GID "$@"\n\
+else\n\
+    # Already running as non-root user, proceed normally\n\
+    echo "Running as non-root user $(id -u):$(id -g)"\n\
+    exec "$@"\n\
+fi' > /usr/local/bin/docker-entrypoint.sh && \
     chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Switch to non-root user by default for security
+USER appuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

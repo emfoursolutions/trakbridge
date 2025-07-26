@@ -86,6 +86,13 @@ if [[ "$ENABLE_NGINX" == true ]] || [[ "$NGINX_SSL" == true ]]; then
     mkdir -p docker/nginx
 fi
 
+# Set UID and GID Environment Variables
+setup_uidgid() {
+    log_step "Setting UID and GID Environment Variables based on current UID and GID"
+    export UID=$(id -u)
+    export GID=$(id -g)
+}
+
 # Setup secrets
 setup_secrets() {
     log_step "Setting up secrets..."
@@ -286,6 +293,7 @@ main() {
     setup_docker_scripts
     setup_nginx
     setup_ssl
+    setup_uidgid
 
     log_info "Setup completed successfully!"
     echo ""
@@ -294,11 +302,13 @@ main() {
     if [[ "$ENABLE_NGINX" == true ]] || [[ "$NGINX_SSL" == true ]]; then
         log_info "2. Start the services: docker-compose --profile [postgres | mysql | sqlite] up -d"
         log_info "3. nginx configuration available at: docker/nginx/nginx.conf"
+        log_info "4. If you intend to run the docker container as a different user set the UID and GID Environment Variables to that users UID and GID"
         if [[ "$NGINX_SSL" == true ]]; then
             log_info "4. SSL certificates generated for domain: $NGINX_DOMAIN"
         fi
     else
         log_info "2. Start the services: docker-compose --profile [postgres | mysql | sqlite] up -d"
+        log_info "3. If you intend to run the docker container as a different user set the UID and GID Environment Variables to that users UID and GID"
     fi
     log_info "$(( [[ "$ENABLE_NGINX" == true ]] || [[ "$NGINX_SSL" == true ]] ) && echo "5" || echo "3"). Check logs: docker-compose logs -f"
 
