@@ -99,7 +99,7 @@ class PluginManager:
                                 else:
                                     logger.warning(f"Ignoring unsafe plugin module name: {module}")
                         else:
-                            logger.warning(f"Invalid allowed_plugin_modules format in {config_file}")
+                            logger.warning(f"No additional plugins configured in {config_file}")
                     break  # Use first config file found
                 except Exception as e:
                     logger.warning(f"Failed to load plugin config from {config_file}: {e}")

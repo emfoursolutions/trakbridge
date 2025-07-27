@@ -6,9 +6,8 @@ Description:
     Configures and sets log files and displays detailed startup banners.
 
 Author: Emfour Solutions
-Created: 18-Jul-2025
-Last Modified: {{LASTMOD}}
-Version: {{VERSION}}
+Created: 2025-07-18
+Last Modified: 2025-07-27
 """
 
 # Standard library imports
@@ -50,7 +49,7 @@ def setup_logging(app):
     )
 
     # Set up file handler with version in filename
-    log_filename = f'trakbridge-v{version.replace(".", "-")}.log'
+    log_filename = 'trakbridge.log'
     file_handler = logging.FileHandler(os.path.join(log_dir, log_filename))
     file_handler.setFormatter(detailed_formatter)
     file_handler.setLevel(log_level)
