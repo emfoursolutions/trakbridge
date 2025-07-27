@@ -45,6 +45,9 @@ from flask import (
 from services.key_rotation_service import get_key_rotation_service
 from services.version import get_version
 
+# Authentication imports
+from services.auth import admin_required
+
 # Module-level logger
 import logging
 
@@ -57,6 +60,7 @@ start_time = time.time()
 
 
 @bp.route("/system_info")
+@admin_required
 def admin_dashboard():
     from models.stream import Stream
     from models.tak_server import TakServer
@@ -89,11 +93,13 @@ def admin_dashboard():
 
 
 @bp.route("/about")
+@admin_required
 def admin_about():
     return render_template("admin/about.html")
 
 
 @bp.route("/key-rotation")
+@admin_required
 def key_rotation_page():
     """Key rotation management page"""
     try:
@@ -116,6 +122,7 @@ def key_rotation_page():
 
 
 @bp.route("/key-rotation/start", methods=["POST"])
+@admin_required
 def start_key_rotation():
     """Start key rotation process"""
     try:
@@ -138,6 +145,7 @@ def start_key_rotation():
 
 
 @bp.route("/key-rotation/status")
+@admin_required
 def get_rotation_status():
     """Get current rotation status"""
     try:
@@ -150,6 +158,7 @@ def get_rotation_status():
 
 
 @bp.route("/key-rotation/restart-info")
+@admin_required
 def get_restart_info():
     """Get application restart information"""
     try:

@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - TrakBridge</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+    
+    <!-- Fonts -->
+    <link href="{{ url_for('static', filename='css/google-fonts.css') }}" rel="stylesheet">
+    
+    <!-- Bootstrap & FontAwesome -->
+    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/all.min.css') }}" rel="stylesheet">
+    
+    <style>
+        :root {
+            /* Use same color palette as main app */
+            --primary-blue: #1e3a8a;
+            --primary-blue-light: #3b82f6;
+            --primary-blue-dark: #1e40af;
+            --accent-orange: #ea580c;
+            --accent-orange-light: #f97316;
+            --accent-orange-dark: #c2410c;
+            
+            --gray-50: #f8fafc;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
+            
+            --success: #059669;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --info: #0284c7;
+            
+            --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --border-radius: 8px;
+            --border-radius-sm: 4px;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        body {
+            font-family: var(--font-primary);
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-blue-light) 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .login-container {
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .login-header {
+            background: white;
+            padding: 2rem 2rem 1rem 2rem;
+            text-align: center;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .login-header img {
+            max-width: 150px;
+            height: auto;
+            margin-bottom: 1rem;
+        }
+
+        .login-header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--gray-900);
+            margin-bottom: 0.5rem;
+        }
+
+        .login-header p {
+            color: var(--gray-600);
+            margin: 0;
+            font-size: 0.9rem;
+        }
+
+        .login-body {
+            padding: 2rem;
+        }
+
+        .auth-tabs {
+            display: flex;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .auth-tab {
+            flex: 1;
+            background: none;
+            border: none;
+            padding: 0.75rem 1rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--gray-600);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .auth-tab.active {
+            color: var(--primary-blue);
+            border-bottom-color: var(--primary-blue);
+        }
+
+        .auth-tab:hover {
+            color: var(--primary-blue-light);
+        }
+
+        .auth-tab:disabled {
+            color: var(--gray-400);
+            cursor: not-allowed;
+        }
+
+        .auth-panel {
+            display: none;
+        }
+
+        .auth-panel.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--gray-700);
+            font-size: 0.9rem;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--border-radius-sm);
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+            background-color: white;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            border: 1px solid transparent;
+            border-radius: var(--border-radius-sm);
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-align: center;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            line-height: 1.5;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-blue);
+            color: white;
+            border-color: var(--primary-blue);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-blue-dark);
+            border-color: var(--primary-blue-dark);
+        }
+
+        .btn-primary:disabled {
+            background-color: var(--gray-400);
+            border-color: var(--gray-400);
+            cursor: not-allowed;
+        }
+
+        .btn-block {
+            width: 100%;
+        }
+
+        .alert {
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
+            border: 1px solid;
+            border-radius: var(--border-radius-sm);
+            font-size: 0.85rem;
+        }
+
+        .alert-danger {
+            background-color: #fef2f2;
+            border-color: #fecaca;
+            color: #991b1b;
+        }
+
+        .alert-warning {
+            background-color: #fffbeb;
+            border-color: #fed7aa;
+            color: #92400e;
+        }
+
+        .alert-info {
+            background-color: #eff6ff;
+            border-color: #bfdbfe;
+            color: #1e40af;
+        }
+
+        .provider-info {
+            background-color: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--border-radius-sm);
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+            font-size: 0.8rem;
+            color: var(--gray-600);
+        }
+
+        .footer {
+            text-align: center;
+            padding: 1rem 2rem;
+            background-color: var(--gray-50);
+            border-top: 1px solid var(--gray-200);
+            font-size: 0.8rem;
+            color: var(--gray-500);
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .mb-3 {
+            margin-bottom: 1rem;
+        }
+
+        .mt-3 {
+            margin-top: 1rem;
+        }
+
+        /* Loading states */
+        .loading {
+            position: relative;
+            pointer-events: none;
+        }
+
+        .loading::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 16px;
+            height: 16px;
+            margin: -8px 0 0 -8px;
+            border: 2px solid var(--primary-blue);
+            border-top: 2px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+            
+            .login-container {
+                max-width: 100%;
+            }
+            
+            .login-header,
+            .login-body {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <!-- Header -->
+        <div class="login-header">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="TrakBridge">
+            <h1>Welcome Back</h1>
+            <p>Sign in to your TrakBridge account</p>
+        </div>
+
+        <!-- Body -->
+        <div class="login-body">
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <!-- Authentication Tabs -->
+            {% set available_providers = [] %}
+            {% if providers.get('local', {}).get('enabled', True) %}
+                {% set _ = available_providers.append('local') %}
+            {% endif %}
+            {% if providers.get('ldap', {}).get('enabled', False) %}
+                {% set _ = available_providers.append('ldap') %}
+            {% endif %}
+            {% if providers.get('oidc', {}).get('enabled', False) %}
+                {% set _ = available_providers.append('oidc') %}
+            {% endif %}
+
+            {% if available_providers|length > 1 %}
+            <div class="auth-tabs">
+                {% if 'local' in available_providers %}
+                <button class="auth-tab active" onclick="switchTab('local')">Local</button>
+                {% endif %}
+                {% if 'ldap' in available_providers %}
+                <button class="auth-tab" onclick="switchTab('ldap')">Directory</button>
+                {% endif %}
+                {% if 'oidc' in available_providers %}
+                <button class="auth-tab" onclick="switchTab('oidc')">SSO</button>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Local Authentication -->
+            {% if 'local' in available_providers %}
+            <div id="local-panel" class="auth-panel {% if available_providers[0] == 'local' %}active{% endif %}">
+                <form method="POST" action="{{ url_for('auth.login') }}" id="local-form">
+                    <input type="hidden" name="auth_method" value="local">
+                    
+                    <div class="form-group">
+                        <label for="local_username" class="form-label">
+                            <i class="fas fa-user"></i> Username
+                        </label>
+                        <input type="text" 
+                               id="local_username" 
+                               name="username" 
+                               class="form-control" 
+                               placeholder="Enter your username"
+                               required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="local_password" class="form-label">
+                            <i class="fas fa-lock"></i> Password
+                        </label>
+                        <input type="password" 
+                               id="local_password" 
+                               name="password" 
+                               class="form-control" 
+                               placeholder="Enter your password"
+                               required>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-block">
+                        <i class="fas fa-sign-in-alt"></i> Sign In
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+
+            <!-- LDAP Authentication -->
+            {% if 'ldap' in available_providers %}
+            <div id="ldap-panel" class="auth-panel {% if available_providers[0] == 'ldap' %}active{% endif %}">
+                <div class="provider-info">
+                    <i class="fas fa-building"></i> 
+                    Sign in with your organization directory credentials
+                </div>
+                
+                <form method="POST" action="{{ url_for('auth.login') }}" id="ldap-form">
+                    <input type="hidden" name="auth_method" value="ldap">
+                    
+                    <div class="form-group">
+                        <label for="ldap_username" class="form-label">
+                            <i class="fas fa-user"></i> Username
+                        </label>
+                        <input type="text" 
+                               id="ldap_username" 
+                               name="username" 
+                               class="form-control" 
+                               placeholder="Enter your directory username"
+                               required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="ldap_password" class="form-label">
+                            <i class="fas fa-lock"></i> Password
+                        </label>
+                        <input type="password" 
+                               id="ldap_password" 
+                               name="password" 
+                               class="form-control" 
+                               placeholder="Enter your directory password"
+                               required>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-block">
+                        <i class="fas fa-building"></i> Sign In with Directory
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+
+            <!-- OIDC Authentication -->
+            {% if 'oidc' in available_providers %}
+            <div id="oidc-panel" class="auth-panel {% if available_providers[0] == 'oidc' %}active{% endif %}">
+                <div class="provider-info">
+                    <i class="fas fa-shield-alt"></i> 
+                    Sign in with your organization's Single Sign-On (SSO)
+                </div>
+                
+                <form method="POST" action="{{ url_for('auth.login') }}" id="oidc-form">
+                    <input type="hidden" name="auth_method" value="oidc">
+                    
+                    <button type="submit" class="btn btn-primary btn-block">
+                        <i class="fas fa-external-link-alt"></i> Continue with SSO
+                    </button>
+                </form>
+                
+                <div class="text-center mt-3">
+                    <small class="text-muted">
+                        You will be redirected to your organization's login page
+                    </small>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if not available_providers %}
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                No authentication providers are currently available. Please contact your administrator.
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <small>&copy; 2025 Emfour Solutions - TrakBridge</small>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/jquery.min.js') }}"></script>
+    <script>
+        function switchTab(provider) {
+            // Update tabs
+            document.querySelectorAll('.auth-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Update panels
+            document.querySelectorAll('.auth-panel').forEach(panel => {
+                panel.classList.remove('active');
+            });
+            document.getElementById(provider + '-panel').classList.add('active');
+        }
+
+        // Add loading states to forms
+        document.querySelectorAll('form').forEach(form => {
+            form.addEventListener('submit', function(e) {
+                const submitBtn = form.querySelector('button[type="submit"]');
+                const originalText = submitBtn.innerHTML;
+                
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
+                
+                // Re-enable button after 10 seconds in case of error
+                setTimeout(() => {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                }, 10000);
+            });
+        });
+
+        // Auto-focus first input
+        document.addEventListener('DOMContentLoaded', function() {
+            const activePanel = document.querySelector('.auth-panel.active');
+            if (activePanel) {
+                const firstInput = activePanel.querySelector('input[type="text"]');
+                if (firstInput) {
+                    firstInput.focus();
+                }
+            }
+        });
+    </script>
+</body>
+</html>

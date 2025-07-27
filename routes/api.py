@@ -47,6 +47,9 @@ from services.stream_status_service import StreamStatusService
 from services.version import get_version, format_version
 from utils.app_helpers import get_plugin_manager
 
+# Authentication imports
+from services.auth import require_auth, require_permission, api_key_or_auth_required, optional_auth
+
 # Module-level logger
 logger = logging.getLogger(__name__)
 
@@ -124,6 +127,7 @@ def get_cached_health_check(check_name, check_function, *args, **kwargs):
 
 
 @bp.route("/status")
+@optional_auth
 def api_status():
     """API endpoint for system status"""
     # Import models inside the route to avoid circular imports
@@ -164,6 +168,7 @@ def health_check():
 
 
 @bp.route("/health/detailed")
+@optional_auth
 def detailed_health_check():
     """Detailed health check with all components"""
     start_time = time.time()
@@ -261,6 +266,7 @@ def liveness_check():
 
 
 @bp.route("/health/database")
+@optional_auth
 def database_health():
     """Database-specific health check"""
     result = get_cached_health_check("database", health_service.run_all_database_checks)
@@ -288,6 +294,7 @@ def check_encryption_health():
 
 
 @bp.route("/health/plugins", methods=["GET"])
+@require_permission('api', 'read')
 def plugin_health():
     """Plugin health check with safe attribute access"""
     plugin_manager = getattr(current_app, "plugin_manager", None)
@@ -312,6 +319,7 @@ def plugin_health():
 
 
 @bp.route("/streams/stats")
+@api_key_or_auth_required
 def api_stats():
     """Get statistics for all streams"""
 
@@ -329,6 +337,7 @@ def api_stats():
 
 
 @bp.route("/streams/status")
+@api_key_or_auth_required
 def streams_status():
     """Get detailed status of all streams"""
 
@@ -346,6 +355,7 @@ def streams_status():
 
 
 @bp.route("/streams/plugins/<plugin_name>/config")
+@require_permission('api', 'read')
 def get_plugin_config(plugin_name):
     """Get plugin configuration metadata"""
     try:
@@ -361,6 +371,7 @@ def get_plugin_config(plugin_name):
 
 
 @bp.route("/plugins/metadata")
+@require_permission('api', 'read')
 def get_all_plugin_metadata():
     """Get metadata for all available plugins"""
     try:
@@ -378,6 +389,7 @@ def get_all_plugin_metadata():
 
 
 @bp.route("/streams/<int:stream_id>/export-config")
+@require_permission('streams', 'read')
 def export_stream_config(stream_id):
     """Export stream configuration (sensitive fields masked)"""
     try:
@@ -392,6 +404,7 @@ def export_stream_config(stream_id):
 
 
 @bp.route("/streams/<int:stream_id>/config")
+@require_permission('streams', 'read')
 def get_stream_config(stream_id):
     """Get stream configuration (sensitive fields masked) for editing"""
     try:
@@ -407,6 +420,7 @@ def get_stream_config(stream_id):
 
 
 @bp.route("/streams/security-status")
+@require_permission('admin', 'read')
 def security_status():
     """Get security status of all streams"""
     try:

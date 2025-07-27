@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Error - TrakBridge</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+    
+    <!-- Fonts -->
+    <link href="{{ url_for('static', filename='css/google-fonts.css') }}" rel="stylesheet">
+    
+    <!-- Bootstrap & FontAwesome -->
+    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/all.min.css') }}" rel="stylesheet">
+    
+    <style>
+        :root {
+            /* Use same color palette as main app */
+            --primary-blue: #1e3a8a;
+            --primary-blue-light: #3b82f6;
+            --primary-blue-dark: #1e40af;
+            --accent-orange: #ea580c;
+            --accent-orange-light: #f97316;
+            --accent-orange-dark: #c2410c;
+            
+            --gray-50: #f8fafc;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
+            
+            --success: #059669;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --info: #0284c7;
+            
+            --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --border-radius: 8px;
+            --border-radius-sm: 4px;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        body {
+            font-family: var(--font-primary);
+            background: linear-gradient(135deg, var(--danger) 0%, #dc2626 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .error-container {
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        .error-header {
+            background: var(--danger);
+            color: white;
+            padding: 2rem;
+        }
+
+        .error-header .error-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.9;
+        }
+
+        .error-header h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .error-header p {
+            margin: 0;
+            font-size: 1rem;
+            opacity: 0.9;
+        }
+
+        .error-body {
+            padding: 2rem;
+        }
+
+        .error-details {
+            background-color: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--border-radius-sm);
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            text-align: left;
+        }
+
+        .error-details h6 {
+            color: var(--gray-800);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .error-details p {
+            color: var(--gray-600);
+            margin: 0;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .error-actions {
+            text-align: center;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            margin: 0.25rem;
+            border: 1px solid transparent;
+            border-radius: var(--border-radius-sm);
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            line-height: 1.5;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-blue);
+            color: white;
+            border-color: var(--primary-blue);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-blue-dark);
+            border-color: var(--primary-blue-dark);
+            color: white;
+            text-decoration: none;
+        }
+
+        .btn-secondary {
+            background-color: var(--gray-500);
+            color: white;
+            border-color: var(--gray-500);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--gray-600);
+            border-color: var(--gray-600);
+            color: white;
+            text-decoration: none;
+        }
+
+        .btn-outline-secondary {
+            color: var(--gray-700);
+            border-color: var(--gray-300);
+            background-color: transparent;
+        }
+
+        .btn-outline-secondary:hover {
+            background-color: var(--gray-100);
+            border-color: var(--gray-400);
+            color: var(--gray-800);
+            text-decoration: none;
+        }
+
+        .error-footer {
+            background-color: var(--gray-50);
+            border-top: 1px solid var(--gray-200);
+            padding: 1rem 2rem;
+            font-size: 0.8rem;
+            color: var(--gray-500);
+        }
+
+        .error-footer a {
+            color: var(--primary-blue);
+            text-decoration: none;
+        }
+
+        .error-footer a:hover {
+            text-decoration: underline;
+        }
+
+        .troubleshooting {
+            background-color: var(--info);
+            background: linear-gradient(135deg, var(--info) 0%, #0284c7 100%);
+            color: white;
+            border-radius: var(--border-radius-sm);
+            padding: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .troubleshooting h6 {
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .troubleshooting ul {
+            margin: 0;
+            padding-left: 1.5rem;
+            font-size: 0.85rem;
+        }
+
+        .troubleshooting li {
+            margin-bottom: 0.25rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+            
+            .error-container {
+                max-width: 100%;
+            }
+            
+            .error-header,
+            .error-body {
+                padding: 1.5rem;
+            }
+            
+            .error-header .error-icon {
+                font-size: 3rem;
+            }
+            
+            .error-header h1 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <!-- Header -->
+        <div class="error-header">
+            <div class="error-icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <h1>Authentication Error</h1>
+            <p>Unable to complete authentication request</p>
+        </div>
+
+        <!-- Body -->
+        <div class="error-body">
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="error-details">
+                            <h6>
+                                {% if category == 'error' %}
+                                    <i class="fas fa-times-circle text-danger"></i> Error Details
+                                {% elif category == 'warning' %}
+                                    <i class="fas fa-exclamation-triangle text-warning"></i> Warning
+                                {% else %}
+                                    <i class="fas fa-info-circle text-info"></i> Information
+                                {% endif %}
+                            </h6>
+                            <p>{{ message }}</p>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="error-details">
+                        <h6><i class="fas fa-times-circle text-danger"></i> Authentication Failed</h6>
+                        <p>An unexpected error occurred during the authentication process. Please try again or contact your administrator if the problem persists.</p>
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <!-- Actions -->
+            <div class="error-actions">
+                <a href="{{ url_for('auth.login') }}" class="btn btn-primary">
+                    <i class="fas fa-sign-in-alt"></i> Try Again
+                </a>
+                <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-home"></i> Go to Dashboard
+                </a>
+            </div>
+
+            <!-- Troubleshooting Tips -->
+            <div class="troubleshooting">
+                <h6><i class="fas fa-question-circle"></i> Troubleshooting Tips</h6>
+                <ul>
+                    <li>Check your username and password are correct</li>
+                    <li>Ensure your account is not disabled or locked</li>
+                    <li>Try clearing your browser cookies and cache</li>
+                    <li>Contact your system administrator if using SSO or LDAP</li>
+                    <li>Make sure your network connection is stable</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="error-footer">
+            <p>
+                Having trouble? 
+                <a href="{{ url_for('admin.admin_about') }}">Contact Support</a> | 
+                <a href="{{ url_for('main.index') }}">Return to TrakBridge</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Auto-redirect to login after 30 seconds if no user interaction
+        let redirectTimer = setTimeout(function() {
+            window.location.href = "{{ url_for('auth.login') }}";
+        }, 30000);
+
+        // Cancel redirect if user interacts with page
+        document.addEventListener('click', function() {
+            clearTimeout(redirectTimer);
+        });
+
+        document.addEventListener('keydown', function() {
+            clearTimeout(redirectTimer);
+        });
+
+        // Show redirect countdown in console for debugging
+        let countdown = 30;
+        let countdownInterval = setInterval(function() {
+            countdown--;
+            if (countdown <= 0) {
+                clearInterval(countdownInterval);
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}User Profile{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>User Profile</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item active">Profile</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="btn-toolbar">
+            <a href="{{ url_for('auth.edit_profile') }}" class="btn btn-primary btn-sm">
+                <i class="fas fa-edit"></i> Edit Profile
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- User Information Card -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-user"></i> User Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-sm-4">
+                        <strong>Username:</strong>
+                    </div>
+                    <div class="col-sm-8">
+                        <span class="text-mono">{{ user.username }}</span>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-sm-4">
+                        <strong>Full Name:</strong>
+                    </div>
+                    <div class="col-sm-8">
+                        {{ user.full_name or 'Not set' }}
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-sm-4">
+                        <strong>Email:</strong>
+                    </div>
+                    <div class="col-sm-8">
+                        {{ user.email or 'Not set' }}
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-sm-4">
+                        <strong>Role:</strong>
+                    </div>
+                    <div class="col-sm-8">
+                        <span class="version-badge 
+                            {% if user.role.value == 'admin' %}release
+                            {% elif user.role.value == 'operator' %}dev
+                            {% else %}{% endif %}">
+                            {{ user.role.value.title() }}
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-sm-4">
+                        <strong>Authentication:</strong>
+                    </div>
+                    <div class="col-sm-8">
+                        <span class="version-badge">
+                            {% if user.auth_provider.value == 'local' %}
+                                <i class="fas fa-database"></i> Local
+                            {% elif user.auth_provider.value == 'ldap' %}
+                                <i class="fas fa-building"></i> Directory
+                            {% elif user.auth_provider.value == 'oidc' %}
+                                <i class="fas fa-shield-alt"></i> SSO
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-sm-4">
+                        <strong>Account Status:</strong>
+                    </div>
+                    <div class="col-sm-8">
+                        <span class="status-indicator 
+                            {% if user.status.value == 'active' %}status-active
+                            {% else %}status-inactive{% endif %}">
+                            <span class="status-dot"></span>
+                            {{ user.status.value.title() }}
+                        </span>
+                    </div>
+                </div>
+
+                {% if user.timezone %}
+                <div class="row mb-3">
+                    <div class="col-sm-4">
+                        <strong>Timezone:</strong>
+                    </div>
+                    <div class="col-sm-8">
+                        {{ user.timezone }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if user.language %}
+                <div class="row mb-3">
+                    <div class="col-sm-4">
+                        <strong>Language:</strong>
+                    </div>
+                    <div class="col-sm-8">
+                        {{ user.language }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Account Activity Card -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-clock"></i> Account Activity
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-sm-4">
+                        <strong>Created:</strong>
+                    </div>
+                    <div class="col-sm-8">
+                        <span class="text-mono">
+                            {{ user.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-sm-4">
+                        <strong>Last Updated:</strong>
+                    </div>
+                    <div class="col-sm-8">
+                        <span class="text-mono">
+                            {{ user.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                        </span>
+                    </div>
+                </div>
+                
+                {% if user.last_login %}
+                <div class="row mb-3">
+                    <div class="col-sm-4">
+                        <strong>Last Login:</strong>
+                    </div>
+                    <div class="col-sm-8">
+                        <span class="text-mono">
+                            {{ user.last_login.strftime('%Y-%m-%d %H:%M:%S') }}
+                        </span>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if user.auth_provider.value == 'local' %}
+                <div class="row mb-3">
+                    <div class="col-sm-4">
+                        <strong>Failed Logins:</strong>
+                    </div>
+                    <div class="col-sm-8">
+                        <span class="{% if user.failed_login_count > 0 %}text-warning{% endif %}">
+                            {{ user.failed_login_count }}
+                        </span>
+                        {% if user.failed_login_count > 0 %}
+                            <small class="text-muted">
+                                (will reset on successful login)
+                            </small>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Active Sessions -->
+                {% if user.sessions %}
+                {% set active_sessions = user.sessions | selectattr("is_active") | list %}
+                {% if active_sessions %}
+                <div class="row mb-3">
+                    <div class="col-sm-4">
+                        <strong>Active Sessions:</strong>
+                    </div>
+                    <div class="col-sm-8">
+                        <span class="version-badge">{{ active_sessions|length }}</span>
+                    </div>
+                </div>
+                {% endif %}
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Permissions Card -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-shield-alt"></i> Permissions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-12">
+                        <h6 class="text-muted mb-3">Your role grants access to:</h6>
+                        
+                        <div class="row">
+                            {% if user.can_access('streams', 'read') %}
+                            <div class="col-sm-6 mb-2">
+                                <i class="fas fa-check text-success"></i> View Streams
+                            </div>
+                            {% endif %}
+                            
+                            {% if user.can_access('streams', 'write') %}
+                            <div class="col-sm-6 mb-2">
+                                <i class="fas fa-check text-success"></i> Manage Streams
+                            </div>
+                            {% endif %}
+                            
+                            {% if user.can_access('tak_servers', 'read') %}
+                            <div class="col-sm-6 mb-2">
+                                <i class="fas fa-check text-success"></i> View TAK Servers
+                            </div>
+                            {% endif %}
+                            
+                            {% if user.can_access('tak_servers', 'write') %}
+                            <div class="col-sm-6 mb-2">
+                                <i class="fas fa-check text-success"></i> Manage TAK Servers
+                            </div>
+                            {% endif %}
+                            
+                            {% if user.can_access('admin', 'read') %}
+                            <div class="col-sm-6 mb-2">
+                                <i class="fas fa-check text-success"></i> System Administration
+                            </div>
+                            {% endif %}
+                            
+                            {% if user.can_access('api', 'read') %}
+                            <div class="col-sm-6 mb-2">
+                                <i class="fas fa-check text-success"></i> API Access
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Security Actions -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-security"></i> Security Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% if user.auth_provider.value == 'local' %}
+                    <div class="col-md-6 mb-3">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">Change Password</h6>
+                                <p class="text-muted mb-0 small">
+                                    Update your account password for better security
+                                </p>
+                            </div>
+                            <div class="ms-3">
+                                <a href="{{ url_for('auth.change_password') }}" class="btn btn-outline-primary btn-sm">
+                                    <i class="fas fa-key"></i> Change
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="col-md-6 mb-3">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">Sign Out</h6>
+                                <p class="text-muted mb-0 small">
+                                    Sign out of all sessions and devices
+                                </p>
+                            </div>
+                            <div class="ms-3">
+                                <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-secondary btn-sm">
+                                    <i class="fas fa-sign-out-alt"></i> Sign Out
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Auto-refresh page if session becomes invalid
+    function checkSession() {
+        fetch('/auth/api/session/check')
+            .then(response => {
+                if (!response.ok) {
+                    window.location.href = '/auth/login';
+                }
+            })
+            .catch(error => {
+                console.log('Session check failed:', error);
+            });
+    }
+
+    // Check session every 5 minutes
+    setInterval(checkSession, 300000);
+</script>
+{% endblock %}

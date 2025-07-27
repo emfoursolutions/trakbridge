@@ -1,0 +1,228 @@
+# TrakBridge Authentication Configuration Example
+# Copy this file to auth.yaml and customize for your environment
+
+authentication:
+  # Session management configuration
+  session:
+    # Session lifetime in hours
+    lifetime_hours: 8
+    
+    # How often to cleanup expired sessions (minutes)
+    cleanup_interval_minutes: 60
+    
+    # Use secure cookies (HTTPS required in production)
+    secure_cookies: true
+    
+    # Session cookie domain (optional)
+    # cookie_domain: ".yourdomain.com"
+    
+    # Session cookie path
+    cookie_path: "/"
+  
+  # Authentication provider priority order
+  # First successful authentication wins
+  provider_priority:
+    - oidc    # Try OIDC/SSO first
+    - ldap    # Fall back to LDAP/AD
+    - local   # Finally try local database
+  
+  # Individual provider configurations
+  providers:
+    # Local database authentication
+    local:
+      enabled: true
+      
+      # Password policy enforcement
+      password_policy:
+        min_length: 8
+        require_uppercase: true
+        require_lowercase: true
+        require_numbers: true
+        require_special: false
+        
+        # Optional: Maximum password age in days
+        # max_age_days: 90
+        
+        # Optional: Password history (prevent reuse)
+        # history_count: 5
+      
+      # Account lockout policy (future feature)
+      # lockout_policy:
+      #   enabled: true
+      #   max_attempts: 5
+      #   lockout_duration_minutes: 30
+    
+    # LDAP/Active Directory authentication
+    ldap:
+      enabled: false
+      
+      # LDAP server configuration
+      server: "ldap://your-ad-server.company.com"
+      port: 389
+      
+      # Security settings
+      use_ssl: false          # Use LDAPS (port 636)
+      use_tls: true           # Use StartTLS
+      ca_cert_file: null      # Path to CA certificate file
+      validate_cert: true     # Validate server certificate
+      
+      # Service account for LDAP binding
+      bind_dn: "CN=trakbridge,OU=Service Accounts,DC=company,DC=com"
+      bind_password: "${LDAP_BIND_PASSWORD}"  # Use environment variable
+      
+      # User search configuration
+      user_search_base: "OU=Users,DC=company,DC=com"
+      user_search_filter: "(sAMAccountName={username})"
+      user_search_scope: "SUBTREE"
+      
+      # Group search configuration for role mapping
+      group_search_base: "OU=Groups,DC=company,DC=com"
+      group_search_filter: "(member={user_dn})"
+      group_search_scope: "SUBTREE"
+      
+      # LDAP attribute mapping
+      attributes:
+        username: "sAMAccountName"
+        email: "mail"
+        first_name: "givenName"
+        last_name: "sn"
+        display_name: "displayName"
+        phone: "telephoneNumber"
+        department: "department"
+        title: "title"
+      
+      # Group DN to TrakBridge role mapping
+      role_mapping:
+        "CN=TrakBridge-Admins,OU=Groups,DC=company,DC=com": "admin"
+        "CN=TrakBridge-Operators,OU=Groups,DC=company,DC=com": "operator"
+        "CN=TrakBridge-Users,OU=Groups,DC=company,DC=com": "user"
+      
+      # Default role for users not in mapped groups
+      default_role: "user"
+      
+      # Connection settings
+      connection_timeout: 10
+      response_timeout: 30
+      
+      # Optional: Additional LDAP options
+      # options:
+      #   OPT_REFERRALS: 0
+      #   OPT_PROTOCOL_VERSION: 3
+    
+    # OpenID Connect (OIDC) authentication
+    oidc:
+      enabled: false
+      
+      # OIDC provider configuration
+      issuer: "https://your-identity-provider.com"
+      client_id: "trakbridge-client"
+      client_secret: "${OIDC_CLIENT_SECRET}"  # Use environment variable
+      
+      # OAuth 2.0 scopes to request
+      scopes:
+        - "openid"
+        - "email"
+        - "profile"
+        - "groups"  # For role mapping
+      
+      # Redirect URI (must match registered application)
+      redirect_uri: "https://trakbridge.company.com/auth/oidc/callback"
+      
+      # Additional authorization parameters
+      # auth_params:
+      #   prompt: "select_account"
+      #   hd: "company.com"  # G Suite domain hint
+      
+      # JWT validation settings
+      jwt_validation:
+        verify_signature: true
+        verify_audience: true
+        verify_issuer: true
+        verify_expiration: true
+        clock_skew_seconds: 30
+      
+      # Claim mapping configuration
+      claims:
+        username: "preferred_username"  # or "email"
+        email: "email"
+        first_name: "given_name"
+        last_name: "family_name"
+        display_name: "name"
+        groups: "groups"  # or custom claim name
+      
+      # Group/role mapping from OIDC claims to TrakBridge roles
+      role_claim: "groups"  # Which claim contains group information
+      role_mapping:
+        "trakbridge-admins": "admin"
+        "trakbridge-operators": "operator"
+        "trakbridge-users": "user"
+        # Can also use patterns
+        # "trakbridge-*": "user"  # Wildcard matching
+      
+      # Default role for users not in mapped groups
+      default_role: "user"
+      
+      # OIDC discovery and caching
+      discovery_cache_timeout: 3600  # Cache discovery document for 1 hour
+      jwks_cache_timeout: 3600       # Cache JWKS for 1 hour
+      
+      # Optional: Custom endpoints (override discovery)
+      # endpoints:
+      #   authorization_endpoint: "https://provider.com/auth"
+      #   token_endpoint: "https://provider.com/token"
+      #   userinfo_endpoint: "https://provider.com/userinfo"
+      #   jwks_uri: "https://provider.com/jwks"
+      
+      # Optional: Additional provider-specific settings
+      # provider_settings:
+      #   # Azure AD specific
+      #   tenant_id: "your-tenant-id"
+      #   
+      #   # Okta specific
+      #   okta_domain: "your-domain.okta.com"
+      #   
+      #   # Google specific
+      #   hosted_domain: "company.com"
+
+# Environment-specific overrides
+# These settings can be overridden based on FLASK_ENV
+
+development:
+  authentication:
+    session:
+      secure_cookies: false  # Allow HTTP in development
+      cleanup_interval_minutes: 5  # More frequent cleanup
+    providers:
+      local:
+        password_policy:
+          min_length: 4  # Relaxed for testing
+          require_uppercase: false
+          require_lowercase: false
+          require_numbers: false
+
+testing:
+  authentication:
+    session:
+      lifetime_hours: 1  # Shorter sessions for testing
+      secure_cookies: false
+    providers:
+      local:
+        enabled: true
+      ldap:
+        enabled: false  # Disable LDAP in tests by default
+      oidc:
+        enabled: false  # Disable OIDC in tests by default
+
+production:
+  authentication:
+    session:
+      secure_cookies: true  # Force HTTPS in production
+      cleanup_interval_minutes: 60
+    providers:
+      local:
+        password_policy:
+          min_length: 12  # Stronger passwords in production
+          require_special: true
+          max_age_days: 90
+        # lockout_policy:
+        #   enabled: true

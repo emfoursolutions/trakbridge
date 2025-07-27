@@ -26,6 +26,9 @@ import logging
 # Third-party imports
 from flask import Blueprint, render_template, jsonify
 
+# Authentication imports
+from services.auth import require_auth, require_permission
+
 # Module-level logger
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,7 @@ bp = Blueprint("cot_types", __name__)
 
 
 @bp.route("/cot_types")
+@require_auth
 def list_cot_types():
     """Display all COT types with filtering and search capabilities"""
     from services.cot_type_service import cot_type_service
@@ -89,6 +93,7 @@ def list_cot_types():
 
 
 @bp.route("/api/cot_types/export-data")
+@require_permission('api', 'read')
 def get_cot_export_data():
     """API endpoint to get COT types data for secure export"""
     from services.cot_type_service import cot_type_service

@@ -353,6 +353,104 @@ setup_logging() {
     chmod 644 /app/logs/*.log 2>/dev/null || log_debug "Could not set log file permissions"
 }
 
+# Function to install default configuration files to external mount
+install_config_files() {
+    local external_config_dir="${TRAKBRIDGE_CONFIG_DIR:-/app/config-external}"
+    local bundled_config_dir="/app/config/settings"
+    local auto_install="${TRAKBRIDGE_CONFIG_AUTO_INSTALL:-true}"
+    local update_mode="${TRAKBRIDGE_CONFIG_UPDATE_MODE:-preserve}"
+    
+    log_info "Checking configuration installation..."
+    log_debug "External config dir: $external_config_dir"
+    log_debug "Bundled config dir: $bundled_config_dir"
+    log_debug "Auto install: $auto_install"
+    log_debug "Update mode: $update_mode"
+    
+    # Skip if auto-install is disabled
+    if [[ "$auto_install" != "true" ]]; then
+        log_info "Configuration auto-install disabled"
+        return 0
+    fi
+    
+    # Skip if external config directory doesn't exist (no volume mount)
+    if [[ ! -d "$external_config_dir" ]]; then
+        log_debug "External config directory not found - no volume mounted"
+        return 0
+    fi
+    
+    # Skip if bundled config doesn't exist
+    if [[ ! -d "$bundled_config_dir" ]]; then
+        log_warn "Bundled configuration directory not found: $bundled_config_dir"
+        return 0
+    fi
+    
+    # Ensure external config directory is writable
+    if [[ ! -w "$external_config_dir" ]]; then
+        log_error "External config directory is not writable: $external_config_dir"
+        return 1
+    fi
+    
+    local files_installed=0
+    local files_updated=0
+    local files_skipped=0
+    
+    # Process each configuration file
+    for config_file in "$bundled_config_dir"/*.yaml; do
+        if [[ ! -f "$config_file" ]]; then
+            continue
+        fi
+        
+        local filename=$(basename "$config_file")
+        local external_file="$external_config_dir/$filename"
+        
+        if [[ -f "$external_file" ]]; then
+            # File exists in external config
+            case "$update_mode" in
+                "preserve")
+                    log_debug "Preserving existing config: $filename"
+                    files_skipped=$((files_skipped + 1))
+                    ;;
+                "overwrite")
+                    log_info "Overwriting config file: $filename"
+                    cp "$config_file" "$external_file"
+                    files_updated=$((files_updated + 1))
+                    ;;
+                "merge")
+                    # For now, preserve existing (merge could be implemented later)
+                    log_debug "Preserving existing config (merge mode): $filename"
+                    files_skipped=$((files_skipped + 1))
+                    ;;
+                *)
+                    log_warn "Unknown update mode: $update_mode, preserving existing file"
+                    files_skipped=$((files_skipped + 1))
+                    ;;
+            esac
+        else
+            # File doesn't exist, install it
+            log_info "Installing config file: $filename"
+            cp "$config_file" "$external_file"
+            files_installed=$((files_installed + 1))
+        fi
+    done
+    
+    # Set appropriate permissions on installed files
+    if [[ $files_installed -gt 0 ]] || [[ $files_updated -gt 0 ]]; then
+        chmod 644 "$external_config_dir"/*.yaml 2>/dev/null || log_debug "Could not set config file permissions"
+    fi
+    
+    # Log summary
+    if [[ $files_installed -gt 0 ]] || [[ $files_updated -gt 0 ]] || [[ $files_skipped -gt 0 ]]; then
+        log_info "Configuration installation complete:"
+        log_info "  Installed: $files_installed files"
+        log_info "  Updated: $files_updated files"
+        log_info "  Preserved: $files_skipped files"
+    else
+        log_debug "No configuration files processed"
+    fi
+    
+    return 0
+}
+
 # Function to handle shutdown signals
 cleanup() {
     log_info "Received shutdown signal, cleaning up..."
@@ -491,6 +589,12 @@ main() {
 
     # Setup logging
     setup_logging
+
+    # Install configuration files to external mount if needed
+    if ! install_config_files; then
+        log_error "Configuration installation failed"
+        exit 1
+    fi
 
     # Validate configuration
     if ! validate_config; then

@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Profile{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>Edit Profile</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('auth.profile') }}">Profile</a></li>
+                    <li class="breadcrumb-item active">Edit</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="btn-toolbar">
+            <a href="{{ url_for('auth.profile') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left"></i> Back to Profile
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-user-edit"></i> Profile Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('auth.edit_profile') }}" id="profile-form">
+                    <div class="row">
+                        <!-- Left Column -->
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="username" class="form-label">
+                                    <i class="fas fa-user"></i> Username
+                                </label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="username" 
+                                       value="{{ user.username }}" 
+                                       disabled>
+                                <div class="form-text">
+                                    Username cannot be changed
+                                </div>
+                            </div>
+
+                            <div class="form-group mb-3">
+                                <label for="full_name" class="form-label">
+                                    <i class="fas fa-id-card"></i> Full Name
+                                </label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="full_name" 
+                                       name="full_name" 
+                                       value="{{ user.full_name or '' }}"
+                                       placeholder="Enter your full name">
+                                <div class="form-text">
+                                    Your display name used throughout the application
+                                </div>
+                            </div>
+
+                            <div class="form-group mb-3">
+                                <label for="email" class="form-label">
+                                    <i class="fas fa-envelope"></i> Email Address
+                                </label>
+                                <input type="email" 
+                                       class="form-control" 
+                                       id="email" 
+                                       name="email" 
+                                       value="{{ user.email or '' }}"
+                                       placeholder="Enter your email address">
+                                <div class="form-text">
+                                    Used for notifications and account recovery
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column -->
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="auth_provider" class="form-label">
+                                    <i class="fas fa-shield-alt"></i> Authentication Provider
+                                </label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="auth_provider" 
+                                       value="
+                                       {% if user.auth_provider.value == 'local' %}Local Database
+                                       {% elif user.auth_provider.value == 'ldap' %}Directory (LDAP)
+                                       {% elif user.auth_provider.value == 'oidc' %}Single Sign-On (SSO)
+                                       {% endif %}" 
+                                       disabled>
+                                <div class="form-text">
+                                    Managed by system administrator
+                                </div>
+                            </div>
+
+                            <div class="form-group mb-3">
+                                <label for="timezone" class="form-label">
+                                    <i class="fas fa-clock"></i> Timezone
+                                </label>
+                                <select class="form-control" id="timezone" name="timezone">
+                                    <option value="UTC" {% if user.timezone == 'UTC' or not user.timezone %}selected{% endif %}>UTC</option>
+                                    <option value="America/New_York" {% if user.timezone == 'America/New_York' %}selected{% endif %}>Eastern Time</option>
+                                    <option value="America/Chicago" {% if user.timezone == 'America/Chicago' %}selected{% endif %}>Central Time</option>
+                                    <option value="America/Denver" {% if user.timezone == 'America/Denver' %}selected{% endif %}>Mountain Time</option>
+                                    <option value="America/Los_Angeles" {% if user.timezone == 'America/Los_Angeles' %}selected{% endif %}>Pacific Time</option>
+                                    <option value="Europe/London" {% if user.timezone == 'Europe/London' %}selected{% endif %}>London</option>
+                                    <option value="Europe/Paris" {% if user.timezone == 'Europe/Paris' %}selected{% endif %}>Paris</option>
+                                    <option value="Europe/Berlin" {% if user.timezone == 'Europe/Berlin' %}selected{% endif %}>Berlin</option>
+                                    <option value="Asia/Tokyo" {% if user.timezone == 'Asia/Tokyo' %}selected{% endif %}>Tokyo</option>
+                                    <option value="Asia/Shanghai" {% if user.timezone == 'Asia/Shanghai' %}selected{% endif %}>Shanghai</option>
+                                    <option value="Australia/Sydney" {% if user.timezone == 'Australia/Sydney' %}selected{% endif %}>Sydney</option>
+                                </select>
+                                <div class="form-text">
+                                    Affects how timestamps are displayed
+                                </div>
+                            </div>
+
+                            <div class="form-group mb-3">
+                                <label for="language" class="form-label">
+                                    <i class="fas fa-globe"></i> Language
+                                </label>
+                                <select class="form-control" id="language" name="language">
+                                    <option value="en" {% if user.language == 'en' or not user.language %}selected{% endif %}>English</option>
+                                    <option value="es" {% if user.language == 'es' %}selected{% endif %}>Español</option>
+                                    <option value="fr" {% if user.language == 'fr' %}selected{% endif %}>Français</option>
+                                    <option value="de" {% if user.language == 'de' %}selected{% endif %}>Deutsch</option>
+                                    <option value="zh" {% if user.language == 'zh' %}selected{% endif %}>中文</option>
+                                    <option value="ja" {% if user.language == 'ja' %}selected{% endif %}>日本語</option>
+                                </select>
+                                <div class="form-text">
+                                    Interface language preference
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Read-only Information -->
+                    <hr class="my-4">
+                    <div class="row">
+                        <div class="col-12">
+                            <h6 class="text-muted mb-3">Account Information (Read-only)</h6>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label class="form-label">
+                                    <i class="fas fa-user-tag"></i> Role
+                                </label>
+                                <div class="form-control-plaintext">
+                                    <span class="version-badge 
+                                        {% if user.role.value == 'admin' %}release
+                                        {% elif user.role.value == 'operator' %}dev
+                                        {% else %}{% endif %}">
+                                        {{ user.role.value.title() }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label class="form-label">
+                                    <i class="fas fa-calendar-alt"></i> Account Created
+                                </label>
+                                <div class="form-control-plaintext text-mono">
+                                    {{ user.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Submit Buttons -->
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('auth.profile') }}" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Additional Actions -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-cog"></i> Additional Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% if user.auth_provider.value == 'local' %}
+                    <div class="col-md-6 mb-3">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">
+                                    <i class="fas fa-key text-warning"></i> Change Password
+                                </h6>
+                                <p class="text-muted mb-0 small">
+                                    Update your account password for better security
+                                </p>
+                            </div>
+                            <div class="ms-3">
+                                <a href="{{ url_for('auth.change_password') }}" class="btn btn-outline-warning btn-sm">
+                                    <i class="fas fa-key"></i> Change Password
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="col-md-6 mb-3">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">
+                                    <i class="fas fa-info-circle text-info"></i> Password Management
+                                </h6>
+                                <p class="text-muted mb-0 small">
+                                    Password is managed by your authentication provider
+                                    {% if user.auth_provider.value == 'ldap' %}(Directory)
+                                    {% elif user.auth_provider.value == 'oidc' %}(SSO){% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="col-md-6 mb-3">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">
+                                    <i class="fas fa-sign-out-alt text-secondary"></i> Sign Out
+                                </h6>
+                                <p class="text-muted mb-0 small">
+                                    Sign out of all sessions and return to login
+                                </p>
+                            </div>
+                            <div class="ms-3">
+                                <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-secondary btn-sm">
+                                    <i class="fas fa-sign-out-alt"></i> Sign Out
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Form validation
+    document.getElementById('profile-form').addEventListener('submit', function(e) {
+        const email = document.getElementById('email').value.trim();
+        
+        // Basic email validation if provided
+        if (email && !isValidEmail(email)) {
+            e.preventDefault();
+            alert('Please enter a valid email address.');
+            document.getElementById('email').focus();
+            return false;
+        }
+        
+        // Show loading state
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+        
+        // Re-enable after 10 seconds in case of error
+        setTimeout(() => {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        }, 10000);
+    });
+
+    function isValidEmail(email) {
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailPattern.test(email);
+    }
+
+    // Auto-save warning on changes
+    let formChanged = false;
+    const formElements = document.querySelectorAll('#profile-form input, #profile-form select');
+    
+    formElements.forEach(element => {
+        element.addEventListener('change', function() {
+            formChanged = true;
+        });
+    });
+
+    // Warn if leaving page with unsaved changes
+    window.addEventListener('beforeunload', function(e) {
+        if (formChanged) {
+            e.preventDefault();
+            e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+            return e.returnValue;
+        }
+    });
+
+    // Reset flag when form is submitted
+    document.getElementById('profile-form').addEventListener('submit', function() {
+        formChanged = false;
+    });
+</script>
+{% endblock %}

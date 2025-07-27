@@ -11,6 +11,14 @@
 #
 # Configuration:
 #   Edit the 'x-environment' section below to customize your deployment
+#   
+#   Persistent Configuration:
+#   The application supports persistent configuration through the ./config volume mount.
+#   Default configuration files are automatically installed on first run.
+#   Set TRAKBRIDGE_CONFIG_UPDATE_MODE to control how configs are updated:
+#     - "preserve": Keep existing configs (default)
+#     - "overwrite": Replace with container defaults  
+#     - "merge": Smart merge (future feature)
 #
 # =============================================================================
 
@@ -25,6 +33,11 @@ x-environment: &common-environment
   APP_PORT: "5000"
   USER_ID: ${UID:-1000}
   GROUP_ID: ${GID:-1000}
+  
+  # Configuration Management
+  TRAKBRIDGE_CONFIG_DIR: "/app/config-external"
+  TRAKBRIDGE_CONFIG_AUTO_INSTALL: "true"
+  TRAKBRIDGE_CONFIG_UPDATE_MODE: "preserve"
   
   # Database Configuration - Postresql
   DB_TYPE: "postgresql" 
@@ -85,6 +98,8 @@ services:
       - ./logs:/app/logs
       - ./data:/app/data
       - ./secrets:/app/secrets
+      - ./config:/app/external-config
+      - ./plugins:/app/external-plugins
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]

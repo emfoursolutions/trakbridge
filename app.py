@@ -353,6 +353,7 @@ def create_app(config_name=None):
         # Import them individually rather than through the __init__.py
         from models.tak_server import TakServer
         from models.stream import Stream
+        from models.user import User, UserSession
 
         # Register models with SQLAlchemy
         db.Model.metadata.create_all(bind=db.engine)
@@ -373,6 +374,18 @@ def create_app(config_name=None):
         from services.encryption_service import EncryptionService
 
         app.encryption_service = EncryptionService()
+
+        # Initialize authentication system
+        from services.auth import AuthenticationManager
+        from services.auth.decorators import create_auth_context_processor
+        
+        # Get authentication configuration
+        auth_config = config_instance.get_auth_config()
+        app.auth_manager = AuthenticationManager(auth_config)
+        
+        # Add authentication context processor for templates
+        auth_context_processor = create_auth_context_processor()
+        app.context_processor(auth_context_processor)
 
         # Store global reference for cleanup
         _stream_manager_ref = app.stream_manager
@@ -399,6 +412,7 @@ def create_app(config_name=None):
     from routes.admin import bp as admin_bp
     from routes.api import bp as api_bp
     from routes.cot_types import bp as cot_types_bp
+    from routes.auth import bp as auth_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(streams_bp, url_prefix="/streams")
@@ -406,6 +420,7 @@ def create_app(config_name=None):
     app.register_blueprint(admin_bp, url_prefix="/admin")
     app.register_blueprint(cot_types_bp, url_prefix="/admin")
     app.register_blueprint(api_bp, url_prefix="/api")
+    app.register_blueprint(auth_bp, url_prefix="/auth")
 
     # Add context processors and error handlers
     setup_template_helpers(app)
@@ -886,6 +901,10 @@ def setup_startup_routes(app):
 
         # Allow startup-related routes and static files
         if request.endpoint in ["startup_page", "startup_status", "static"]:
+            return None
+
+        # Allow authentication routes
+        if request.path.startswith("/auth/"):
             return None
 
         # Allow API health checks

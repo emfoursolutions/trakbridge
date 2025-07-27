@@ -621,16 +621,25 @@
                             <i class="fas fa-tags"></i>
                             <span>CoT Types</span>
                         </a>
+                        {% if is_admin %}
+                        <a class="nav-link {% if request.endpoint == 'auth.admin_users' %}active{% endif %}"
+                           href="{{ url_for('auth.admin_users') }}" onclick="closeSidebarOnMobile()">
+                            <i class="fas fa-users"></i>
+                            <span>User Management</span>
+                        </a>
+                        {% endif %}
                         <a class="nav-link {% if request.endpoint == 'admin.admin_dashboard' %}active{% endif %}"
                            href="{{ url_for('admin.admin_dashboard') }}" onclick="closeSidebarOnMobile()">
                             <i class="fas fa-info-circle"></i>
                             <span>System Info</span>
                         </a>
+                        {% if is_admin %}
                         <a class="nav-link {% if request.endpoint == 'admin.key_rotation_page' %}active{% endif %}"
                            href="{{ url_for('admin.key_rotation_page') }}" onclick="closeSidebarOnMobile()">
                             <i class="fas fa-key"></i>
                             <span>Key Rotation</span>
                         </a>
+                        {% endif %}
                         <a class="nav-link {% if request.endpoint == 'admin.admin_about' %}active{% endif %}"
                            href="{{ url_for('admin.admin_about') }}" onclick="closeSidebarOnMobile()">
                             <i class="fas fa-info"></i>
@@ -638,6 +647,24 @@
                         </a>
                     </div>
                 </div>
+                
+                <!-- User Menu -->
+                {% if current_user %}
+                <div class="nav-section">
+                    <a class="nav-link {% if request.endpoint == 'auth.profile' %}active{% endif %}"
+                       href="{{ url_for('auth.profile') }}" onclick="closeSidebarOnMobile()">
+                        <i class="fas fa-user"></i>
+                        <span>Profile</span>
+                    </a>
+                </div>
+                
+                <div class="nav-section">
+                    <a class="nav-link" href="{{ url_for('auth.logout') }}" onclick="closeSidebarOnMobile()">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>Sign Out</span>
+                    </a>
+                </div>
+                {% endif %}
             </div>
         </nav>
 
