@@ -33,7 +33,7 @@ class ConfigLoader:
         self.environment = environment
         
         # Multi-source configuration directories
-        self.external_config_dir = Path(os.environ.get("TRAKBRIDGE_CONFIG_DIR", "/app/config-external"))
+        self.external_config_dir = Path(os.environ.get("TRAKBRIDGE_CONFIG_DIR", "/app/external_config"))
         self.bundled_config_dir = Path(__file__).parent / "settings"
         
         # Legacy compatibility

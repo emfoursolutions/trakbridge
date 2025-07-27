@@ -35,7 +35,7 @@ x-environment: &common-environment
   GROUP_ID: ${GID:-1000}
   
   # Configuration Management
-  TRAKBRIDGE_CONFIG_DIR: "/app/config-external"
+  TRAKBRIDGE_CONFIG_DIR: "/app/external_config"
   TRAKBRIDGE_CONFIG_AUTO_INSTALL: "true"
   TRAKBRIDGE_CONFIG_UPDATE_MODE: "preserve"
   

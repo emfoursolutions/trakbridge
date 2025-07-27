@@ -355,7 +355,7 @@ setup_logging() {
 
 # Function to install default configuration files to external mount
 install_config_files() {
-    local external_config_dir="${TRAKBRIDGE_CONFIG_DIR:-/app/config-external}"
+    local external_config_dir="${TRAKBRIDGE_CONFIG_DIR:-/app/external_config}"
     local bundled_config_dir="/app/config/settings"
     local auto_install="${TRAKBRIDGE_CONFIG_AUTO_INSTALL:-true}"
     local update_mode="${TRAKBRIDGE_CONFIG_UPDATE_MODE:-preserve}"
