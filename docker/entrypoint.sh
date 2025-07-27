@@ -364,6 +364,23 @@ cleanup() {
     exit 0
 }
 
+# Setup External Plugins
+setup_plugins(){
+    log_info "Setting up External Plugins..."
+
+    # Ensure plugins directory exists and is writable
+    mkdir -p /app/external_plugins
+    mkdir -p /app/external_config
+
+    # Create required files
+    touch /app/external_plugins/__init__.py 2>/dev/null || log_warn "Cannot create module init in external_plugins"
+    touch /app/external_config/__init__.py 2>/dev/null || log_warn "Cannot create module init in external_config"
+
+    # Set appropriate permissions if possible
+    chmod 644 /app/external_plugins/*.py 2>/dev/null || log_debug "Could not set plugins file permissions"
+    chmod 644 /app/external_config/*.yaml 2>/dev/null || log_debug "Could not set pluing config file permissions"
+}
+
 # Set up signal handlers
 trap cleanup SIGTERM SIGINT
 
@@ -491,6 +508,9 @@ main() {
 
     # Setup logging
     setup_logging
+
+    # Setup External Plugins
+    setup_plugins
 
     # Validate configuration
     if ! validate_config; then
