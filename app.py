@@ -559,6 +559,36 @@ def configure_flask_app(app, config_instance):
 #               raise ValueError(f"Configuration validation failed: {issues}")
 
 
+def initialize_admin_user_if_needed():
+    """Initialize admin user using bootstrap service"""
+    try:
+        from services.auth.bootstrap_service import initialize_admin_user
+        
+        logger.info("Checking if initial admin user creation is needed...")
+        add_startup_progress("Checking if initial admin user creation is needed...")
+        
+        # Attempt to create initial admin user
+        admin_user = initialize_admin_user()
+        
+        if admin_user:
+            logger.warning("=" * 60)
+            logger.warning("INITIAL ADMIN USER CREATED")
+            logger.warning(f"Username: {admin_user.username}")
+            logger.warning("Password: TrakBridge-Setup-2025!")
+            logger.warning("⚠️  CHANGE PASSWORD ON FIRST LOGIN  ⚠️")
+            logger.warning("=" * 60)
+            
+            add_startup_progress(f"✓ Initial admin user '{admin_user.username}' created")
+            add_startup_progress("⚠️  Default password must be changed on first login")
+        else:
+            logger.info("Initial admin user creation not needed - admin users already exist")
+            add_startup_progress("✓ Admin users already exist, bootstrap not needed")
+            
+    except Exception as e:
+        logger.error(f"Error during admin user bootstrap: {e}")
+        add_startup_progress(f"Error during admin user bootstrap: {e}")
+
+
 def start_active_streams():
     """Start all active streams with enhanced logging and proper error handling."""
     from flask import current_app
@@ -978,6 +1008,10 @@ def delayed_startup():
                     f"Warning: Could not verify all system components: {e}"
                 )
 
+            # Initialize admin user if needed
+            add_startup_progress("Checking admin user bootstrap...")
+            initialize_admin_user_if_needed()
+            
             # Start active streams
             add_startup_progress("Starting active streams...")
             start_active_streams()

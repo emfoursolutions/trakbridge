@@ -392,6 +392,7 @@ class UserSession(db.Model, TimestampMixin):
     # Session information
     ip_address = Column(String(45), nullable=True)  # IPv6 compatible
     user_agent = Column(Text, nullable=True)
+    provider = Column(SQLEnum(AuthProvider), nullable=False, default=AuthProvider.LOCAL)
     
     # Session lifecycle
     expires_at = Column(DateTime, nullable=False)
@@ -408,14 +409,15 @@ class UserSession(db.Model, TimestampMixin):
         return f'<UserSession {self.session_id} for {self.user.username}>'
 
     @classmethod
-    def create_session(cls, user: User, expires_in_hours: int = 24, 
-                      ip_address: str = None, user_agent: str = None,
-                      provider_session_data: Dict[str, Any] = None) -> 'UserSession':
+    def create_session(cls, user: User, provider: AuthProvider = AuthProvider.LOCAL,
+                      expires_in_hours: int = 24, ip_address: str = None, 
+                      user_agent: str = None, provider_session_data: Dict[str, Any] = None) -> 'UserSession':
         """
         Create a new user session
         
         Args:
             user: User to create session for
+            provider: Authentication provider used for this session
             expires_in_hours: Session duration in hours
             ip_address: Client IP address
             user_agent: Client user agent string
@@ -432,6 +434,7 @@ class UserSession(db.Model, TimestampMixin):
             user_id=user.id,
             ip_address=ip_address,
             user_agent=user_agent,
+            provider=provider,
             expires_at=expires_at,
             last_activity=datetime.utcnow(),
             is_active=True
@@ -474,6 +477,7 @@ class UserSession(db.Model, TimestampMixin):
             'session_id': self.session_id,
             'user_id': self.user_id,
             'ip_address': self.ip_address,
+            'provider': self.provider.value,
             'expires_at': self.expires_at.isoformat(),
             'last_activity': self.last_activity.isoformat(),
             'is_active': self.is_active,

@@ -242,12 +242,39 @@ class PluginManager:
         Validate that a module name is in the allowed whitelist to prevent
         arbitrary code execution via dynamic imports.
         
+        Enhanced with additional security checks to prevent path traversal
+        and malicious module names.
+        
         Args:
             module_name: The module name to validate
             
         Returns:
             bool: True if the module is allowed, False otherwise
         """
+        import re
+        
+        # Basic input validation
+        if not module_name or not isinstance(module_name, str):
+            logger.error(f"Invalid module name type or empty: {type(module_name)}")
+            return False
+            
+        # Security: Check for path traversal attempts
+        if '..' in module_name or '/' in module_name or '\\' in module_name:
+            logger.error(f"Path traversal attempt detected in module name: {module_name}")
+            return False
+            
+        # Security: Check for invalid characters that could be used for injection
+        if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)*$', module_name):
+            logger.error(f"Invalid characters in module name: {module_name}")
+            return False
+            
+        # Security: Prevent loading of system/dangerous modules
+        dangerous_prefixes = ['os', 'sys', 'subprocess', 'importlib', '__builtins__', 'eval', 'exec']
+        for prefix in dangerous_prefixes:
+            if module_name.startswith(prefix + '.') or module_name == prefix:
+                logger.error(f"Attempted to load dangerous system module: {module_name}")
+                return False
+        
         # Check if the module name is in our allowed modules set
         if module_name in self._allowed_modules:
             return True
@@ -556,7 +583,15 @@ class PluginManager:
             if not self._validate_module_name(directory):
                 logger.error(f"Unauthorized attempt to load plugin directory: {directory}")
                 return
-            plugins_package = importlib.import_module(directory)
+            
+            try:
+                plugins_package = importlib.import_module(directory)
+            except ImportError as e:
+                logger.error(f"Failed to import plugin directory '{directory}': {e}")
+                return
+            except Exception as e:
+                logger.error(f"Unexpected error importing plugin directory '{directory}': {e}")
+                return
 
             # Iterate through all modules in the plugins package
             for importer, modname, ispkg in pkgutil.iter_modules(
@@ -571,8 +606,16 @@ class PluginManager:
                     if not self._validate_module_name(modname):
                         logger.error(f"Unauthorized attempt to load plugin module: {modname}")
                         continue
-                    # Import the module
-                    module = importlib.import_module(modname)
+                    
+                    # Import the module with enhanced error handling
+                    try:
+                        module = importlib.import_module(modname)
+                    except ImportError as e:
+                        logger.error(f"Failed to import plugin module '{modname}': {e}")
+                        continue
+                    except Exception as e:
+                        logger.error(f"Unexpected error importing plugin module '{modname}': {e}")
+                        continue
 
                     # Look for classes that inherit from BaseGPSPlugin
                     for name, obj in inspect.getmembers(module, inspect.isclass):

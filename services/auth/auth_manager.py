@@ -409,6 +409,7 @@ class AuthenticationManager:
             
             session = UserSession.create_session(
                 user=user,
+                provider=provider_type or user.auth_provider,
                 expires_in_hours=self.session_timeout,
                 ip_address=request_info.get('ip_address') if request_info else None,
                 user_agent=request_info.get('user_agent') if request_info else None

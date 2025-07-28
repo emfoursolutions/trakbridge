@@ -290,6 +290,7 @@ class BaseAuthenticationProvider(ABC):
         
         session = UserSession.create_session(
             user=user,
+            provider=self.provider_type,
             expires_in_hours=self.config.get('session_timeout_hours', 24),
             ip_address=request_info.get('ip_address'),
             user_agent=request_info.get('user_agent'),

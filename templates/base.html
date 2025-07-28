@@ -590,28 +590,34 @@
                         <span>Dashboard</span>
                     </a>
                 </div>
-                
-                <div class="nav-section">
-                    <a class="nav-link {% if request.blueprint == 'streams' %}active{% endif %}"
-                       href="{{ url_for('streams.list_streams') }}" onclick="closeSidebarOnMobile()">
-                        <i class="fas fa-stream"></i>
-                        <span>Data Streams</span>
-                    </a>
-                </div>
-                
-                <div class="nav-section">
-                    <a class="nav-link {% if request.blueprint == 'tak_servers' %}active{% endif %}"
-                       href="{{ url_for('tak_servers.list_tak_servers') }}" onclick="closeSidebarOnMobile()">
-                        <i class="fas fa-server"></i>
-                        <span>TAK Servers</span>
-                    </a>
+                <div class="nav-section settings-menu">
+                    <div class="nav-link settings-toggle" onclick="toggleServices()">
+                        <div>
+                            <i class="fas fa-play"></i>
+                            <span>Services</span>
+                        </div>
+                        <i class="fas fa-chevron-right settings-chevron"></i>
+                    </div>
+                    <div class="settings-submenu" id="servicesSubmenu">
+                        <a class="nav-link {% if request.blueprint == 'streams' %}active{% endif %}"
+                        href="{{ url_for('streams.list_streams') }}" onclick="closeSidebarOnMobile()">
+                            <i class="fas fa-stream"></i>
+                            <span>Data Streams</span>
+                        </a>
+
+                        <a class="nav-link {% if request.blueprint == 'tak_servers' %}active{% endif %}"
+                        href="{{ url_for('tak_servers.list_tak_servers') }}" onclick="closeSidebarOnMobile()">
+                            <i class="fas fa-server"></i>
+                            <span>TAK Servers</span>
+                        </a>
+                    </div>
                 </div>
                 
                 <div class="nav-section settings-menu">
                     <div class="nav-link settings-toggle" onclick="toggleSettings()">
                         <div>
                             <i class="fas fa-cog"></i>
-                            <span>Settings</span>
+                            <span>System</span>
                         </div>
                         <i class="fas fa-chevron-right settings-chevron"></i>
                     </div>
@@ -729,7 +735,13 @@
             submenu.classList.toggle('expanded');
             chevron.classList.toggle('rotated');
         }
-
+        function toggleServices() {
+            const submenu = document.getElementById('servicesSubmenu');
+            const chevron = document.querySelector('.settings-chevron');
+            
+            submenu.classList.toggle('expanded');
+            chevron.classList.toggle('rotated');
+        }
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebarOverlay');

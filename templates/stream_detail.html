@@ -17,6 +17,7 @@
         </div>
         <div class="btn-toolbar">
             <div class="btn-group me-2">
+                {% if current_user.can_access('streams', 'write') %}
                 {% if stream.is_active %}
                     <button class="btn btn-outline-danger btn-sm" onclick="controlStream({{ stream.id }}, 'stop')">
                         <i class="fas fa-stop"></i> Stop Stream
@@ -32,6 +33,7 @@
                 <button class="btn btn-outline-danger btn-sm" onclick="deleteStream({{ stream.id }})">
                     <i class="fas fa-trash"></i> Delete
                 </button>
+                {% endif %}
             </div>
             <a href="{{ url_for('streams.list_streams') }}" class="btn btn-outline-secondary btn-sm">
                 <i class="fas fa-arrow-left"></i> Back to Streams
@@ -296,12 +298,19 @@
             </div>
             <div class="card-body">
                 <div class="d-grid gap-2">
+                    <!-- Test Connection - Available to all users for verification -->
                     <button class="btn btn-outline-info" onclick="testConnection()">
                         <i class="fas fa-link"></i> Test Connection
                     </button>
+                    
+                    <!-- Management actions - Require write permissions -->
+                    {% if current_user.can_access('streams', 'write') %}
                     <button class="btn btn-outline-warning" onclick="restartStream()">
                         <i class="fas fa-redo"></i> Restart Stream
                     </button>
+                    {% endif %}
+                    
+                    <!-- Refresh Status - Available to all users -->
                     <button class="btn btn-outline-secondary" onclick="refreshStatus()">
                         <i class="fas fa-sync"></i> Refresh Status
                     </button>

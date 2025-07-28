@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+
+{% block title %}Edit User - {{ user.username }}{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>Edit User</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('admin.admin_dashboard') }}">Administration</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('auth.admin_users') }}">Users</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('auth.admin_user_detail', user_id=user.id) }}">{{ user.username }}</a></li>
+                    <li class="breadcrumb-item active">Edit</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="btn-toolbar">
+            <a href="{{ url_for('auth.admin_user_detail', user_id=user.id) }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left"></i> Back to User
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Flash Messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<!-- User Header Card -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="user-avatar me-3">
+                        <i class="fas fa-user-circle text-muted" style="font-size: 3rem;"></i>
+                    </div>
+                    <div>
+                        <h4 class="mb-1">{{ user.username }}</h4>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="version-badge">
+                                {% if user.auth_provider.value == 'local' %}
+                                    <i class="fas fa-database"></i> Local
+                                {% elif user.auth_provider.value == 'ldap' %}
+                                    <i class="fas fa-building"></i> LDAP
+                                {% elif user.auth_provider.value == 'oidc' %}
+                                    <i class="fas fa-shield-alt"></i> SSO
+                                {% endif %}
+                            </span>
+                            <span class="status-indicator 
+                                {% if user.status.value == 'active' %}status-active
+                                {% else %}status-inactive{% endif %}">
+                                <span class="status-dot"></span>
+                                {{ user.status.value.title() }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit User Form -->
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-user-edit"></i> Edit User Information
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if user.auth_provider.value != 'local' %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>External User:</strong> This user authenticates via {{ user.auth_provider.value.upper() }}.
+                    Some fields may be read-only as they are managed by the external provider.
+                </div>
+                {% endif %}
+
+                <form method="POST" novalidate>
+                    <!-- Username (Read-only) -->
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="username" 
+                               value="{{ user.username }}" 
+                               readonly>
+                        <div class="form-text">
+                            Username cannot be changed after creation
+                        </div>
+                    </div>
+
+                    <!-- Email -->
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email Address</label>
+                        <input type="email" 
+                               class="form-control" 
+                               id="email" 
+                               name="email"
+                               value="{{ user.email or '' }}"
+                               maxlength="255"
+                               {% if user.auth_provider.value != 'local' %}readonly{% endif %}>
+                        <div class="form-text">
+                            {% if user.auth_provider.value != 'local' %}
+                                Email is managed by {{ user.auth_provider.value.upper() }} provider
+                            {% else %}
+                                Used for notifications and recovery
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Full Name -->
+                    <div class="mb-3">
+                        <label for="full_name" class="form-label">Full Name</label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="full_name" 
+                               name="full_name"
+                               value="{{ user.full_name or '' }}"
+                               maxlength="255"
+                               {% if user.auth_provider.value not in ['local'] %}readonly{% endif %}>
+                        <div class="form-text">
+                            {% if user.auth_provider.value != 'local' %}
+                                Display name is managed by {{ user.auth_provider.value.upper() }} provider
+                            {% else %}
+                                Display name for the user
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Role -->
+                    <div class="mb-3">
+                        <label for="role" class="form-label">User Role</label>
+                        <select class="form-control" 
+                                id="role" 
+                                name="role" 
+                                {% if user.id == current_user.id %}disabled{% endif %}>
+                            <option value="user" {% if user.role.value == 'user' %}selected{% endif %}>
+                                User - Basic access
+                            </option>
+                            <option value="viewer" {% if user.role.value == 'viewer' %}selected{% endif %}>
+                                Viewer - Read-only access
+                            </option>
+                            <option value="operator" {% if user.role.value == 'operator' %}selected{% endif %}>
+                                Operator - Stream management
+                            </option>
+                            <option value="admin" {% if user.role.value == 'admin' %}selected{% endif %}>
+                                Administrator - Full system access
+                            </option>
+                        </select>
+                        <div class="form-text">
+                            {% if user.id == current_user.id %}
+                                You cannot change your own role
+                            {% else %}
+                                Determines user permissions in the system
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Authentication Provider (Read-only) -->
+                    <div class="mb-3">
+                        <label for="auth_provider" class="form-label">Authentication Provider</label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="auth_provider" 
+                               value="{{ user.auth_provider.value.upper() }}" 
+                               readonly>
+                        <div class="form-text">
+                            Authentication method for this user
+                        </div>
+                    </div>
+
+                    <!-- Account Status Display -->
+                    <div class="mb-3">
+                        <label class="form-label">Account Status</label>
+                        <div>
+                            <span class="status-indicator 
+                                {% if user.status.value == 'active' %}status-active
+                                {% else %}status-inactive{% endif %}">
+                                <span class="status-dot"></span>
+                                {{ user.status.value.title() }}
+                            </span>
+                        </div>
+                        <div class="form-text">
+                            Use Enable/Disable buttons in user details to change status
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('auth.admin_user_detail', user_id=user.id) }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Additional Actions -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-tools"></i> Additional Actions
+                </h6>
+            </div>
+            <div class="card-body">
+                {% if user.auth_provider.value == 'local' %}
+                <!-- Password Reset for Local Users -->
+                <div class="mb-3">
+                    <h6>Password Management</h6>
+                    <p class="text-muted small">
+                        Reset the user's password and force them to change it on next login.
+                    </p>
+                    <form method="POST" action="{{ url_for('auth.admin_reset_password', user_id=user.id) }}" 
+                          onsubmit="return confirm('Are you sure you want to reset this user\'s password? They will need to change it on next login.')">
+                        <button type="submit" class="btn btn-warning btn-sm">
+                            <i class="fas fa-key"></i> Reset Password
+                        </button>
+                    </form>
+                </div>
+                <hr>
+                {% endif %}
+
+                <!-- Account Status Management -->
+                <div class="mb-3">
+                    <h6>Account Status</h6>
+                    {% if user.id != current_user.id %}
+                        {% if user.status.value == 'active' %}
+                        <p class="text-muted small">
+                            Disable the user account to prevent login.
+                        </p>
+                        <form method="POST" action="{{ url_for('auth.admin_disable_user', user_id=user.id) }}" 
+                              onsubmit="return confirm('Are you sure you want to disable this user? They will be logged out of all sessions.')">
+                            <button type="submit" class="btn btn-outline-warning btn-sm">
+                                <i class="fas fa-user-slash"></i> Disable User
+                            </button>
+                        </form>
+                        {% else %}
+                        <p class="text-muted small">
+                            Enable the user account to allow login.
+                        </p>
+                        <form method="POST" action="{{ url_for('auth.admin_enable_user', user_id=user.id) }}" 
+                              onsubmit="return confirm('Are you sure you want to enable this user?')">
+                            <button type="submit" class="btn btn-outline-success btn-sm">
+                                <i class="fas fa-user-check"></i> Enable User
+                            </button>
+                        </form>
+                        {% endif %}
+                    {% else %}
+                    <p class="text-muted small">
+                        You cannot modify your own account status.
+                    </p>
+                    {% endif %}
+                </div>
+
+                <!-- User Information -->
+                <hr>
+                <div>
+                    <h6>User Information</h6>
+                    <small class="text-muted">
+                        <strong>Created:</strong> {{ user.created_at.strftime('%Y-%m-%d %H:%M:%S') }}<br>
+                        {% if user.last_login %}
+                        <strong>Last Login:</strong> {{ user.last_login.strftime('%Y-%m-%d %H:%M:%S') }}<br>
+                        {% endif %}
+                        {% if user.password_changed_at %}
+                        <strong>Password Changed:</strong> {{ user.password_changed_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                        {% else %}
+                        <strong>Password:</strong> <span class="text-warning">Never changed</span>
+                        {% endif %}
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Form validation
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.querySelector('form[method="POST"]:not([action])');
+        
+        form.addEventListener('submit', function(e) {
+            if (!form.checkValidity()) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            form.classList.add('was-validated');
+        });
+    });
+</script>
+{% endblock %}

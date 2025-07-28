@@ -21,6 +21,9 @@
             <a href="{{ url_for('auth.admin_users') }}" class="btn btn-outline-secondary btn-sm me-2">
                 <i class="fas fa-arrow-left"></i> Back to Users
             </a>
+            <a href="{{ url_for('auth.admin_edit_user', user_id=user.id) }}" class="btn btn-primary btn-sm me-2">
+                <i class="fas fa-edit"></i> Edit User
+            </a>
             <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshUserData()">
                 <i class="fas fa-sync-alt"></i> Refresh
             </button>
@@ -229,10 +232,10 @@
                         <strong>Failed Logins:</strong>
                     </div>
                     <div class="col-sm-7">
-                        <span class="{% if user.failed_login_count > 0 %}text-warning{% endif %}">
-                            {{ user.failed_login_count }}
+                        <span class="{% if user.failed_login_attempts > 0 %}text-warning{% endif %}">
+                            {{ user.failed_login_attempts }}
                         </span>
-                        {% if user.failed_login_count > 0 %}
+                        {% if user.failed_login_attempts > 0 %}
                             <small class="text-muted d-block">
                                 Will reset on successful login
                             </small>

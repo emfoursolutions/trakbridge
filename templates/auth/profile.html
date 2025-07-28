@@ -180,10 +180,10 @@
                         <strong>Failed Logins:</strong>
                     </div>
                     <div class="col-sm-8">
-                        <span class="{% if user.failed_login_count > 0 %}text-warning{% endif %}">
-                            {{ user.failed_login_count }}
+                        <span class="{% if user.failed_login_attempts > 0 %}text-warning{% endif %}">
+                            {{ user.failed_login_attempts }}
                         </span>
-                        {% if user.failed_login_count > 0 %}
+                        {% if user.failed_login_attempts > 0 %}
                             <small class="text-muted">
                                 (will reset on successful login)
                             </small>

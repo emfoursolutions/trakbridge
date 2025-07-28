@@ -29,6 +29,14 @@ Version: {{VERSION}}
 import os
 import shutil
 import subprocess
+from utils.security_helpers import (
+    validate_database_params, 
+    create_secure_backup_path,
+    validate_backup_directory,
+    SecureSubprocessRunner,
+    secure_file_permissions,
+    validate_safe_path
+)
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -158,16 +166,26 @@ class KeyRotationService:
     def _backup_mysql(
         db_info: Dict[str, Any], backup_dir: Path, timestamp: str
     ) -> Dict[str, Any]:
-        """Backup MySQL database"""
+        """Backup MySQL database with security validation"""
         try:
-            # Extract database name from URI
+            # Validate backup directory
+            if not validate_backup_directory(backup_dir):
+                raise ValueError("Invalid backup directory")
+            
+            # Extract and validate database name from URI
             uri = db_info["uri"]
-            # Parse mysql://user:pass@host:port/dbname
             db_name = uri.split("/")[-1].split("?")[0]
+            if not db_name or not db_name.replace('_', '').replace('-', '').isalnum():
+                raise ValueError("Invalid database name")
 
-            backup_path = backup_dir / f"trakbridge_mysql_{timestamp}.sql"
+            # Create secure backup path
+            filename = f"trakbridge_mysql_{timestamp}.sql"
+            backup_path = create_secure_backup_path(backup_dir, filename)
 
-            # Use mysqldump
+            # Initialize secure subprocess runner
+            runner = SecureSubprocessRunner(['mysqldump'])
+            
+            # Build base command
             cmd = [
                 "mysqldump",
                 "--single-transaction",
@@ -176,19 +194,39 @@ class KeyRotationService:
                 db_name,
             ]
 
-            # Add credentials if in URI
+            # Handle credentials securely if in URI
+            env = os.environ.copy()
             if "@" in uri:
-                # Extract user:pass@host:port
-                auth_host = uri.split("://")[1].split("/")[0]
-                if ":" in auth_host.split("@")[0]:
-                    user_pass = auth_host.split("@")[0]
-                    user, password = user_pass.split(":", 1)
-                    cmd.extend(["-u", user, f"-p{password}"])
+                try:
+                    # Extract and validate credentials
+                    auth_host = uri.split("://")[1].split("/")[0]
+                    if ":" in auth_host.split("@")[0]:
+                        user_pass = auth_host.split("@")[0]
+                        user, password = user_pass.split(":", 1)
+                        
+                        # Validate credentials
+                        db_params = validate_database_params({
+                            'username': user
+                        })
+                        
+                        # Use environment variable for password (safer than command line)
+                        env['MYSQL_PWD'] = password
+                        cmd.extend(["-u", db_params['username']])
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"Failed to parse database credentials: {e}")
+                    raise ValueError("Invalid database URI format")
+
+            # Validate command before execution
+            if not runner.validate_command(cmd):
+                raise ValueError("Command failed security validation")
 
             with open(backup_path, "w") as f:
                 result = subprocess.run(
-                    cmd, stdout=f, stderr=subprocess.PIPE, text=True
+                    cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env, shell=False
                 )
+
+            # Set secure file permissions on backup file
+            secure_file_permissions(backup_path, 0o600)
 
             if result.returncode == 0:
                 return {
@@ -211,13 +249,21 @@ class KeyRotationService:
     def _backup_postgresql(
         db_info: Dict[str, Any], backup_dir: Path, timestamp: str
     ) -> Dict[str, Any]:
-        """Backup PostgreSQL database"""
+        """Backup PostgreSQL database with security validation"""
         try:
-            # Extract database name from URI
+            # Validate backup directory
+            if not validate_backup_directory(backup_dir):
+                raise ValueError("Invalid backup directory")
+            
+            # Extract and validate database name from URI
             uri = db_info["uri"]
             db_name = uri.split("/")[-1]
+            if not db_name or not db_name.replace('_', '').replace('-', '').isalnum():
+                raise ValueError("Invalid database name")
 
-            backup_path = backup_dir / f"trakbridge_postgresql_{timestamp}.sql"
+            # Create secure backup path
+            filename = f"trakbridge_postgresql_{timestamp}.sql"
+            backup_path = create_secure_backup_path(backup_dir, filename)
 
             # Use pg_dump
             cmd = [
@@ -229,26 +275,40 @@ class KeyRotationService:
                 db_name,
             ]
 
-            # Add credentials if in URI
+            # Handle credentials securely if in URI
+            env = os.environ.copy()
             if "@" in uri:
-                # Extract user:pass@host:port
-                auth_host = uri.split("://")[1].split("/")[0]
-                if ":" in auth_host.split("@")[0]:
-                    user_pass = auth_host.split("@")[0]
-                    user, password = user_pass.split(":", 1)
-                    cmd.extend(["-U", user])
-                    # Set password environment variable
-                    env = os.environ.copy()
-                    env["PGPASSWORD"] = password
-                else:
-                    env = os.environ.copy()
-            else:
-                env = os.environ.copy()
+                try:
+                    # Extract and validate credentials
+                    auth_host = uri.split("://")[1].split("/")[0]
+                    if ":" in auth_host.split("@")[0]:
+                        user_pass = auth_host.split("@")[0]
+                        user, password = user_pass.split(":", 1)
+                        
+                        # Validate credentials
+                        db_params = validate_database_params({
+                            'username': user
+                        })
+                        
+                        cmd.extend(["-U", db_params['username']])
+                        # Set password environment variable
+                        env["PGPASSWORD"] = password
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"Failed to parse database credentials: {e}")
+                    raise ValueError("Invalid database URI format")
+
+            # Initialize secure subprocess runner and validate command
+            runner = SecureSubprocessRunner(['pg_dump'])
+            if not runner.validate_command(cmd):
+                raise ValueError("Command failed security validation")
 
             with open(backup_path, "w") as f:
                 result = subprocess.run(
-                    cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env
+                    cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env, shell=False
                 )
+
+            # Set secure file permissions on backup file
+            secure_file_permissions(backup_path, 0o600)
 
             if result.returncode == 0:
                 return {
@@ -328,9 +388,17 @@ class KeyRotationService:
                         # Create directory if it doesn't exist
                         os.makedirs(os.path.dirname(key_file_path), exist_ok=True)
 
+                        # Validate path security before writing
+                        allowed_dirs = [os.path.dirname(key_file_path), os.path.join(current_app.root_path, "secrets")]
+                        if not validate_safe_path(key_file_path, allowed_dirs):
+                            return {"success": False, "error": "Invalid key file path"}
+                        
                         # Write new key to file
                         with open(key_file_path, "w") as f:
                             f.write(new_key)
+                        
+                        # Set secure file permissions
+                        secure_file_permissions(key_file_path, 0o600)
 
                         return {
                             "success": True,
@@ -345,8 +413,16 @@ class KeyRotationService:
                     key_file_path = os.path.join(app_root, "secrets", "tb_master_key")
                     os.makedirs(os.path.dirname(key_file_path), exist_ok=True)
 
+                    # Validate path security before writing
+                    allowed_dirs = [os.path.join(current_app.root_path, "secrets")]
+                    if not validate_safe_path(key_file_path, allowed_dirs):
+                        return {"success": False, "error": "Invalid key file path"}
+                    
                     with open(key_file_path, "w") as f:
                         f.write(new_key)
+                    
+                    # Set secure file permissions
+                    secure_file_permissions(key_file_path, 0o600)
 
                     return {
                         "success": True,
@@ -552,9 +628,17 @@ class KeyRotationService:
                     # Create directory if it doesn't exist
                     os.makedirs(os.path.dirname(key_file_path), exist_ok=True)
 
+                    # Validate path security before writing
+                    allowed_dirs = [os.path.dirname(key_file_path), os.path.join(app_root, "secrets")]
+                    if not validate_safe_path(key_file_path, allowed_dirs):
+                        return {"success": False, "error": "Invalid key file path"}
+                    
                     # Write new key to file
                     with open(key_file_path, "w") as f:
                         f.write(new_key)
+                    
+                    # Set secure file permissions
+                    secure_file_permissions(key_file_path, 0o600)
 
                     return {
                         "success": True,
@@ -568,8 +652,16 @@ class KeyRotationService:
                 key_file_path = os.path.join(app_root, "secrets", "tb_master_key")
                 os.makedirs(os.path.dirname(key_file_path), exist_ok=True)
 
+                # Validate path security before writing
+                allowed_dirs = [os.path.join(app_root, "secrets")]
+                if not validate_safe_path(key_file_path, allowed_dirs):
+                    return {"success": False, "error": "Invalid key file path"}
+                
                 with open(key_file_path, "w") as f:
                     f.write(new_key)
+                
+                # Set secure file permissions
+                secure_file_permissions(key_file_path, 0o600)
 
                 return {
                     "success": True,
@@ -595,31 +687,39 @@ class KeyRotationService:
 
             # Check if we're running with systemd
             try:
-                result = subprocess.run(
-                    ["systemctl", "is-active", "trakbridge"],
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode == 0:
-                    return {
-                        "success": True,
-                        "method": "systemd",
-                        "instruction": "Run: sudo systemctl restart trakbridge",
-                    }
+                runner = SecureSubprocessRunner(['systemctl'])
+                cmd = ["systemctl", "is-active", "trakbridge"]
+                if runner.validate_command(cmd):
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        shell=False,
+                    )
+                    if result.returncode == 0:
+                        return {
+                            "success": True,
+                            "method": "systemd",
+                            "instruction": "Run: sudo systemctl restart trakbridge",
+                        }
             except FileNotFoundError:
                 pass
 
             # Check if we're running with supervisor
             try:
-                result = subprocess.run(
-                    ["supervisorctl", "status", "trakbridge"],
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode == 0:
-                    return {
-                        "success": True,
-                        "method": "supervisor",
+                runner = SecureSubprocessRunner(['supervisorctl'])
+                cmd = ["supervisorctl", "status", "trakbridge"]
+                if runner.validate_command(cmd):
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        shell=False,
+                    )
+                    if result.returncode == 0:
+                        return {
+                            "success": True,
+                            "method": "supervisor",
                         "instruction": "Run: supervisorctl restart trakbridge",
                     }
             except FileNotFoundError:

@@ -399,6 +399,14 @@ class BaseConfig:
         )
 
     @property
+    def APPLICATION_URL(self) -> str:
+        """Get application URL from secure sources."""
+        return self.secret_manager.get_secret(
+            "TRAKBRIDGE_APPLICATION_URL",
+            self.app_config.get("application_url", "https://localhost"),
+        )
+
+    @property
     def TESTING(self) -> bool:
         """Get testing mode setting."""
         return self.environment == "testing"

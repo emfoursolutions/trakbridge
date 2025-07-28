@@ -17,6 +17,9 @@
             </nav>
         </div>
         <div class="btn-toolbar">
+            <a href="{{ url_for('auth.admin_create_user') }}" class="btn btn-primary btn-sm me-2">
+                <i class="fas fa-user-plus"></i> Create User
+            </a>
             <button type="button" class="btn btn-outline-secondary btn-sm me-2" onclick="refreshUsers()">
                 <i class="fas fa-sync-alt"></i> Refresh
             </button>
@@ -198,9 +201,9 @@
                                         <span class="status-dot"></span>
                                         {{ user.status.value.title() }}
                                     </span>
-                                    {% if user.status.value == 'locked' and user.failed_login_count > 0 %}
+                                    {% if user.status.value == 'locked' and user.failed_login_attempts > 0 %}
                                         <div class="text-muted small">
-                                            {{ user.failed_login_count }} failed attempts
+                                            {{ user.failed_login_attempts }} failed attempts
                                         </div>
                                     {% endif %}
                                 </td>
@@ -230,6 +233,12 @@
                                            class="btn btn-outline-primary btn-sm"
                                            title="View Details">
                                             <i class="fas fa-eye"></i>
+                                        </a>
+                                        
+                                        <a href="{{ url_for('auth.admin_edit_user', user_id=user.id) }}" 
+                                           class="btn btn-outline-info btn-sm"
+                                           title="Edit User">
+                                            <i class="fas fa-edit"></i>
                                         </a>
                                         
                                         {% if user.id != current_user.id %}

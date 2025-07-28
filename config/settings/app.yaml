@@ -5,6 +5,9 @@
 
 # Default application settings
 default:
+  # Application URL configuration
+  application_url: "https://trakbridge.local"  # Override via TRAKBRIDGE_APPLICATION_URL env var
+  
   # Stream management
   default_poll_interval: 120
   max_concurrent_streams: 50

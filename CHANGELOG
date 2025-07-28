@@ -1,17 +1,42 @@
-📦 v1.0.0-beta.3
-This release introduces several key improvements and new features as we move toward a more flexible and maintainable plugin-based CoT processing system.
+## [v1.0.0-beta.4] - 2025-07-25
+### Added
+- Support for loading external plugins
+- Module name verification for plugin safety
+- Protections against unsafe dynamic imports
+- Path traversal prevention for plugin resolution
+- JSON validation:
+  - Size limits (64KB plugins, 256KB DB, 1MB default)
+  - Max depth: 32 levels
+  - Max 1,000 keys per object and 10,000 array elements
+  - Schema-based type validation per plugin
 
-✨ Added
-CoT Type Configuration
-You can now set the CoT Type dynamically, either per feed or for the entire stream, allowing greater control over how data is interpreted and routed.
+### Changed
+- Docker container now runs as a non-root user
+- Dockerfile and entrypoint.sh security hardened
+- Prevented reapplication of already-run database migrations
 
-Deepstate Map Plugin
-A new plugin has been added to ingest and process Deepstate map data for CoT output.
+### Fixed
+- Removed XSS vectors from API endpoints
+- Improved data validation across APIs
 
-🔧 Changed
-Garmin Plugin Refactor
-The Garmin plugin has been refactored to remove redundant functions and methods. Timestamp handling and KML parsing have been centralized, improving consistency and simplifying maintenance.
+### Removed
+- Remote asset loading:
+  - All external CSS/JS/fonts now local:
+    - bootstrap, all.min, google-fonts, jQuery, and fonts
+  
+## [v1.0.0-beta.3] - 2025-07-25
 
-🛠 Improved
-cot_service Logging
-Logging within cot_service has been rationalized to reduce unnecessary output and improve debugging clarity.
+### Added
+- **CoT Type Configuration**  
+  Dynamically configure CoT Type per feed or for the entire stream, enabling greater flexibility in data interpretation and routing.
+  
+- **Deepstate Map Plugin**  
+  Added support for ingesting and processing Deepstate map data into CoT format.
+
+### Changed
+- **Garmin Plugin Refactor**  
+  Removed redundant functions and centralized timestamp handling and KML parsing for improved maintainability and consistency.
+
+### Improved
+- **cot_service Logging**  
+  Reduced log noise and enhanced debugging clarity with more targeted log output.

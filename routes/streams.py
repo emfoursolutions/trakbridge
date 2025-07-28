@@ -174,7 +174,7 @@ def _render_create_form():
 
 
 @bp.route("/test-connection", methods=["POST"])
-@require_permission('streams', 'write')
+@require_permission('streams', 'read')
 def test_connection():
     """Test connection to a GPS provider without saving"""
 
@@ -268,7 +268,7 @@ def restart_stream(stream_id):
 
 
 @bp.route("/<int:stream_id>/test", methods=["POST"])
-@require_permission('streams', 'write')
+@require_permission('streams', 'read')
 def test_stream(stream_id):
     """Test an existing stream's connection"""
 

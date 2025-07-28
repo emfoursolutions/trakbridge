@@ -438,7 +438,7 @@ def delete_tak_server(server_id):
 
 
 @bp.route("/<int:server_id>/test", methods=["POST"])
-@require_permission('tak_servers', 'write')
+@require_permission('tak_servers', 'read')
 def test_tak_server(server_id):
     """Test connection to existing TAK server using pytak"""
     from models.tak_server import TakServer

@@ -113,6 +113,15 @@ def _handle_local_login(auth_manager: AuthenticationManager):
     response = auth_manager.authenticate(username, password)
     
     if response.success:
+        # Check if password change is required
+        from services.auth.bootstrap_service import check_password_change_required
+        
+        if check_password_change_required(response.user):
+            # Store user info in session for password change
+            session['password_change_user_id'] = response.user.id
+            flash('You must change your password before continuing', 'warning')
+            return redirect(url_for('auth.force_password_change'))
+        
         # Create session
         user_session = auth_manager.create_session(
             response.user, 
@@ -196,8 +205,9 @@ def _handle_oidc_login(auth_manager: AuthenticationManager):
         state = secrets.token_urlsafe(32)
         session['oidc_state'] = state
         
-        # Build redirect URI
-        redirect_uri = url_for('auth.oidc_callback', _external=True)
+        # Build redirect URI using secure configured URL to prevent host header injection
+        from flask import current_app
+        redirect_uri = f"{current_app.config['APPLICATION_URL']}/auth/oidc/callback"
         
         # Get authorization URL
         auth_url, state = oidc_provider.get_authorization_url(redirect_uri, state)
@@ -514,6 +524,282 @@ def admin_enable_user(user_id):
         flash('Error enabling user', 'error')
     
     return redirect(url_for('auth.admin_user_detail', user_id=user_id))
+
+
+@bp.route('/admin/users/create', methods=['GET', 'POST'])
+@admin_required
+def admin_create_user():
+    """
+    Admin function to create a new user (local only)
+    """
+    if request.method == 'GET':
+        return render_template('auth/admin_create_user.html')
+    
+    # Handle POST request
+    try:
+        # Get form data
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip()
+        full_name = request.form.get('full_name', '').strip()
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        role_str = request.form.get('role', 'user')
+        
+        # Validation
+        if not username:
+            flash('Username is required', 'error')
+            return render_template('auth/admin_create_user.html')
+        
+        if not password:
+            flash('Password is required', 'error')
+            return render_template('auth/admin_create_user.html')
+        
+        if password != confirm_password:
+            flash('Passwords do not match', 'error')
+            return render_template('auth/admin_create_user.html')
+        
+        # Check if username already exists
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            flash(f'Username "{username}" already exists', 'error')
+            return render_template('auth/admin_create_user.html')
+        
+        # Check if email already exists (if provided)
+        if email:
+            existing_email = User.query.filter_by(email=email).first()
+            if existing_email:
+                flash(f'Email "{email}" is already in use', 'error')
+                return render_template('auth/admin_create_user.html')
+        
+        # Validate role
+        try:
+            role = UserRole(role_str)
+        except ValueError:
+            flash('Invalid role selected', 'error')
+            return render_template('auth/admin_create_user.html')
+        
+        # Create the user
+        user = User.create_local_user(
+            username=username,
+            password=password,
+            email=email if email else None,
+            full_name=full_name if full_name else None,
+            role=role
+        )
+        
+        from database import db
+        db.session.add(user)
+        db.session.commit()
+        
+        current_user = get_current_user()
+        logger.info(f"Admin {current_user.username} created user {username} with role {role.value}")
+        flash(f'User "{username}" created successfully', 'success')
+        
+        return redirect(url_for('auth.admin_users'))
+        
+    except Exception as e:
+        from database import db
+        db.session.rollback()
+        logger.error(f"Failed to create user: {e}")
+        flash('Error creating user. Please try again.', 'error')
+        return render_template('auth/admin_create_user.html')
+
+
+@bp.route('/admin/users/<int:user_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def admin_edit_user(user_id):
+    """
+    Admin function to edit a user
+    """
+    user = User.query.get_or_404(user_id)
+    current_user = get_current_user()
+    
+    if request.method == 'GET':
+        return render_template('auth/admin_edit_user.html', user=user)
+    
+    # Handle POST request
+    try:
+        # Get form data
+        email = request.form.get('email', '').strip()
+        full_name = request.form.get('full_name', '').strip()
+        role_str = request.form.get('role')
+        
+        # Check if email already exists (if changed and provided)
+        if email and email != user.email:
+            existing_email = User.query.filter_by(email=email).first()
+            if existing_email:
+                flash(f'Email "{email}" is already in use', 'error')
+                return render_template('auth/admin_edit_user.html', user=user)
+        
+        # Validate role change
+        if role_str and role_str != user.role.value:
+            try:
+                new_role = UserRole(role_str)
+                
+                # Prevent self role change
+                if user.id == current_user.id:
+                    flash('You cannot change your own role', 'error')
+                    return render_template('auth/admin_edit_user.html', user=user)
+                
+                # Prevent removing last admin
+                if user.role == UserRole.ADMIN and new_role != UserRole.ADMIN:
+                    admin_count = User.query.filter_by(role=UserRole.ADMIN).count()
+                    if admin_count <= 1:
+                        flash('Cannot remove admin role from the last administrator', 'error')
+                        return render_template('auth/admin_edit_user.html', user=user)
+                
+                user.role = new_role
+                logger.info(f"Admin {current_user.username} changed user {user.username} role to {new_role.value}")
+                
+            except ValueError:
+                flash('Invalid role selected', 'error')
+                return render_template('auth/admin_edit_user.html', user=user)
+        
+        # Update user information (only for local users or allowed fields)
+        if user.auth_provider == AuthProvider.LOCAL or email or full_name:
+            if email:
+                user.email = email
+            if full_name:
+                user.full_name = full_name
+        
+        from database import db
+        db.session.commit()
+        
+        logger.info(f"Admin {current_user.username} updated user {user.username}")
+        flash(f'User "{user.username}" updated successfully', 'success')
+        
+        return redirect(url_for('auth.admin_user_detail', user_id=user.id))
+        
+    except Exception as e:
+        from database import db
+        db.session.rollback()
+        logger.error(f"Failed to update user {user.username}: {e}")
+        flash('Error updating user. Please try again.', 'error')
+        return render_template('auth/admin_edit_user.html', user=user)
+
+
+@bp.route('/admin/users/<int:user_id>/reset-password', methods=['POST'])
+@admin_required
+def admin_reset_password(user_id):
+    """
+    Admin function to reset a user's password (local users only)
+    """
+    user = User.query.get_or_404(user_id)
+    current_user = get_current_user()
+    
+    # Only allow for local users
+    if user.auth_provider != AuthProvider.LOCAL:
+        flash('Cannot reset password for external authentication users', 'error')
+        return redirect(url_for('auth.admin_user_detail', user_id=user.id))
+    
+    try:
+        # Generate a secure temporary password
+        import secrets
+        import string
+        
+        # Generate secure temporary password
+        alphabet = string.ascii_letters + string.digits + "!@#$%&*"
+        temp_password = ''.join(secrets.choice(alphabet) for _ in range(12))
+        
+        # Reset password
+        user.set_password(temp_password)
+        user.password_changed_at = None  # Force password change on next login
+        
+        from database import db
+        db.session.commit()
+        
+        logger.info(f"Admin {current_user.username} reset password for user {user.username}")
+        flash(f'Password reset for "{user.username}". Temporary password: {temp_password}', 'warning')
+        flash('User must change password on next login', 'info')
+        
+        return redirect(url_for('auth.admin_user_detail', user_id=user.id))
+        
+    except Exception as e:
+        from database import db
+        db.session.rollback()
+        logger.error(f"Failed to reset password for user {user.username}: {e}")
+        flash('Error resetting password. Please try again.', 'error')
+        return redirect(url_for('auth.admin_user_detail', user_id=user.id))
+
+
+@bp.route('/force-password-change', methods=['GET', 'POST'])
+def force_password_change():
+    """
+    Force password change for users who need to update their password
+    """
+    user_id = session.get('password_change_user_id')
+    if not user_id:
+        flash('No password change required', 'info')
+        return redirect(url_for('auth.login'))
+    
+    user = User.query.get(user_id)
+    if not user:
+        session.pop('password_change_user_id', None)
+        flash('User not found', 'error')
+        return redirect(url_for('auth.login'))
+    
+    if request.method == 'GET':
+        return render_template('auth/force_password_change.html', user=user)
+    
+    # Handle POST request
+    try:
+        current_password = request.form.get('current_password', '')
+        new_password = request.form.get('new_password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        
+        # Validation
+        if not current_password or not new_password or not confirm_password:
+            flash('All fields are required', 'error')
+            return render_template('auth/force_password_change.html', user=user)
+        
+        if new_password != confirm_password:
+            flash('New passwords do not match', 'error')
+            return render_template('auth/force_password_change.html', user=user)
+        
+        # Verify current password
+        if not user.check_password(current_password):
+            flash('Current password is incorrect', 'error')
+            return render_template('auth/force_password_change.html', user=user)
+        
+        # Change password
+        user.set_password(new_password)
+        user.password_changed_at = datetime.utcnow()
+        
+        from database import db
+        db.session.commit()
+        
+        # Clear password change session
+        session.pop('password_change_user_id', None)
+        
+        logger.info(f"User {user.username} completed forced password change")
+        flash('Password changed successfully. You can now continue.', 'success')
+        
+        # Now create the session and log the user in
+        auth_manager = get_auth_manager()
+        if auth_manager:
+            request_info = {
+                'ip_address': request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr),
+                'user_agent': request.headers.get('User-Agent', '')
+            }
+            
+            user_session = auth_manager.create_session(
+                user, 
+                AuthProvider.LOCAL, 
+                request_info
+            )
+            
+            session['session_id'] = user_session.session_id
+            session.permanent = True
+        
+        # Redirect to dashboard
+        return redirect(url_for('main.index'))
+        
+    except Exception as e:
+        from database import db
+        db.session.rollback()
+        logger.error(f"Failed to change password for user {user.username}: {e}")
+        flash('Error changing password. Please try again.', 'error')
+        return render_template('auth/force_password_change.html', user=user)
 
 
 @bp.route('/api/session/check')
