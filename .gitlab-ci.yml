@@ -1118,9 +1118,10 @@ pipeline-complete:
 # =============================================================================
 
 # Include GitLab's built-in security scanning templates
+# Note: License-Scanning.gitlab-ci.yml was deprecated in GitLab 15.9 and removed in 16.3
+# License compliance is now handled through Dependency-Scanning.gitlab-ci.yml
 include:
   - template: Security/SAST.gitlab-ci.yml
   - template: Security/Dependency-Scanning.gitlab-ci.yml
   - template: Security/Container-Scanning.gitlab-ci.yml
-  - template: Security/License-Scanning.gitlab-ci.yml
   - template: Security/Secret-Detection.gitlab-ci.yml
