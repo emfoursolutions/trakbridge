@@ -69,8 +69,7 @@ validate-yaml:
   stage: validate
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - homelab
-    - docker
+    - trakbridge-ci
   timeout: 5m
   before_script:
     - pip install --no-cache-dir pyyaml
@@ -98,8 +97,7 @@ validate-requirements:
   stage: validate
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - homelab
-    - docker
+    - trakbridge-ci
   timeout: 15m
   before_script:
     - apt-get update && apt-get install -y git
@@ -153,8 +151,7 @@ validate-pyproject:
   stage: validate
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - homelab
-    - docker
+    - trakbridge-ci
   timeout: 15m
   before_script:
     - apt-get update && apt-get install -y git
@@ -196,8 +193,7 @@ code-quality:
   stage: test
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - homelab
-    - docker
+    - trakbridge-ci
   timeout: 15m
   before_script:
     - apt-get update && apt-get install -y git
@@ -253,8 +249,7 @@ unit-tests:
   image: python:${PYTHON_VERSION}-slim
   <<: *postgres_service
   tags:
-    - homelab
-    - docker
+    - trakbridge-ci
   timeout: 20m
   coverage: '/TOTAL.+?(\d+\%)$/'
   
@@ -347,8 +342,7 @@ integration-tests:
   image: python:${PYTHON_VERSION}-slim
   <<: *postgres_service
   tags:
-    - homelab
-    - docker
+    - trakbridge-ci
   timeout: 15m
   
   variables:
@@ -440,8 +434,7 @@ bandit-sast:
   stage: security
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - homelab
-    - docker
+    - trakbridge-ci
   timeout: 15m
   before_script:
     - apt-get update && apt-get install -y git
@@ -487,8 +480,7 @@ safety-check:
   stage: security
   image: python:${PYTHON_VERSION}-slim
   tags:
-    - homelab
-    - docker
+    - trakbridge-ci
   timeout: 10m
   before_script:
     - apt-get update && apt-get install -y git
@@ -529,8 +521,7 @@ safety-check:
 build-image-shell:
   stage: build
   tags:
-    - homelab
-    - shell
+    - trakbridge-cd
   timeout: 45m
   variables:
     DOCKER_DRIVER: overlay2
@@ -592,8 +583,7 @@ build-image-shell:
 build-tagged-image-shell:
   stage: build
   tags:
-    - homelab
-    - shell
+    - trakbridge-cd
   timeout: 45m
   variables:
     DOCKER_DRIVER: overlay2
@@ -649,8 +639,7 @@ build-tagged-image-shell:
 build-feature-branch-shell:
   stage: build
   tags:
-    - homelab
-    - shell
+    - trakbridge-cd
   timeout: 45m
   variables:
     DOCKER_DRIVER: overlay2
@@ -714,8 +703,7 @@ build-feature-branch-shell:
 deploy-development:
   stage: deploy
   tags:
-    - homelab
-    - shell
+    - trakbridge-cd
   timeout: 30m
   
   environment:
@@ -767,8 +755,7 @@ deploy-development:
 deploy-staging:
   stage: deploy
   tags:
-    - homelab
-    - shell
+    - trakbridge-cd
   timeout: 30m
   
   environment:
@@ -828,8 +815,7 @@ deploy-staging:
 deploy-production:
   stage: deploy
   tags:
-    - homelab
-    - shell
+    - trakbridge-cd
   timeout: 30m
   
   environment:
@@ -903,8 +889,7 @@ deploy-production:
 deploy-feature-branch:
   stage: deploy
   tags:
-    - homelab
-    - shell
+    - trakbridge-cd
   timeout: 30m
   
   environment:
@@ -990,8 +975,7 @@ deploy-feature-branch:
 stop-feature-branch:
   stage: deploy
   tags:
-    - homelab
-    - shell
+    - trakbridge-cd
   timeout: 15m
   
   environment:
@@ -1050,7 +1034,7 @@ pipeline-complete:
   stage: .post
   image: alpine:latest
   tags:
-    - homelab
+    - trakbridge-ops
   timeout: 2m
   script: |
     echo "TrakBridge GitLab CI/CD Pipeline completed successfully!"
@@ -1115,3 +1099,20 @@ include:
   - template: Security/Dependency-Scanning.gitlab-ci.yml
   - template: Security/Container-Scanning.gitlab-ci.yml
   - template: Security/Secret-Detection.gitlab-ci.yml
+
+# Override GitLab security templates to use TrakBridge runner tags
+sast:
+  tags:
+    - trakbridge-ci
+
+gemnasium-dependency_scanning:
+  tags:
+    - trakbridge-ci
+
+container_scanning:
+  tags:
+    - trakbridge-cd  # Needs Docker daemon access for container scanning
+
+.secret-analyzer:
+  tags:
+    - trakbridge-ci
