@@ -1,4 +1,5 @@
 """Unit tests for TrakBridge models."""
+
 import pytest
 from datetime import datetime, timedelta, timezone
 from models.user import User, UserRole, UserSession
@@ -9,80 +10,73 @@ from database import db
 
 class TestUserModel:
     """Test the User model."""
-    
+
     def test_user_creation(self, app, db_session):
         """Test creating a user."""
         with app.app_context():
             user = User(
-                username='testuser',
-                email='test@example.com',
-                first_name='Test',
-                last_name='User',
-                role=UserRole.USER
+                username="testuser",
+                email="test@example.com",
+                first_name="Test",
+                last_name="User",
+                role=UserRole.USER,
             )
             db_session.add(user)
             db_session.commit()
-            
+
             assert user.id is not None
-            assert user.username == 'testuser'
-            assert user.email == 'test@example.com'
+            assert user.username == "testuser"
+            assert user.email == "test@example.com"
             assert user.role == UserRole.USER
-    
+
     def test_user_password_hashing(self, app, db_session):
         """Test password hashing and verification."""
         with app.app_context():
-            user = User(username='testuser', email='test@example.com')
-            user.set_password('testpassword')
-            
+            user = User(username="testuser", email="test@example.com")
+            user.set_password("testpassword")
+
             assert user.password_hash is not None
-            assert user.check_password('testpassword') is True
-            assert user.check_password('wrongpassword') is False
-    
+            assert user.check_password("testpassword") is True
+            assert user.check_password("wrongpassword") is False
+
     def test_user_roles(self, app):
         """Test user role enumeration."""
         with app.app_context():
-            assert UserRole.ADMIN.value == 'admin'
-            assert UserRole.OPERATOR.value == 'operator' 
-            assert UserRole.USER.value == 'user'
+            assert UserRole.ADMIN.value == "admin"
+            assert UserRole.OPERATOR.value == "operator"
+            assert UserRole.USER.value == "user"
 
 
 class TestStreamModel:
     """Test the Stream model."""
-    
+
     def test_stream_creation(self, app, db_session):
         """Test creating a stream."""
         with app.app_context():
-            stream = Stream(
-                name='Test Stream',
-                plugin_type='garmin',
-                config={'test': 'config'},
-                is_active=True
-            )
+            stream = Stream(name="Test Stream", plugin_type="garmin", is_active=True)
+            stream.set_plugin_config({"test": "config"})
             db_session.add(stream)
             db_session.commit()
-            
+
             assert stream.id is not None
-            assert stream.name == 'Test Stream'
-            assert stream.plugin_type == 'garmin'
+            assert stream.name == "Test Stream"
+            assert stream.plugin_type == "garmin"
             assert stream.is_active is True
 
 
 class TestTakServerModel:
     """Test the TakServer model."""
-    
+
     def test_tak_server_creation(self, app, db_session):
         """Test creating a TAK server."""
         with app.app_context():
             server = TakServer(
-                name='Test Server',
-                host='localhost',
-                port=8089,
-                protocol='tcp'
+                name="Test Server", host="localhost", port=8089, protocol="tcp"
             )
             db_session.add(server)
             db_session.commit()
-            
+
             assert server.id is not None
-            assert server.name == 'Test Server'
-            assert server.host == 'localhost'
+            assert server.name == "Test Server"
+            assert server.host == "localhost"
             assert server.port == 8089

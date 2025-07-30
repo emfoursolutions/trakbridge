@@ -48,7 +48,12 @@ from services.version import get_version, format_version
 from utils.app_helpers import get_plugin_manager
 
 # Authentication imports
-from services.auth import require_auth, require_permission, api_key_or_auth_required, optional_auth
+from services.auth import (
+    require_auth,
+    require_permission,
+    api_key_or_auth_required,
+    optional_auth,
+)
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -294,7 +299,7 @@ def check_encryption_health():
 
 
 @bp.route("/health/plugins", methods=["GET"])
-@require_permission('api', 'read')
+@require_permission("api", "read")
 def plugin_health():
     """Plugin health check with safe attribute access"""
     plugin_manager = getattr(current_app, "plugin_manager", None)
@@ -355,7 +360,7 @@ def streams_status():
 
 
 @bp.route("/streams/plugins/<plugin_name>/config")
-@require_permission('api', 'read')
+@require_permission("api", "read")
 def get_plugin_config(plugin_name):
     """Get plugin configuration metadata"""
     try:
@@ -371,7 +376,7 @@ def get_plugin_config(plugin_name):
 
 
 @bp.route("/plugins/metadata")
-@require_permission('api', 'read')
+@require_permission("api", "read")
 def get_all_plugin_metadata():
     """Get metadata for all available plugins"""
     try:
@@ -382,14 +387,14 @@ def get_all_plugin_metadata():
             for k, v in metadata.items()
         }
         return jsonify(serialized_metadata)
-        
+
     except Exception as e:
         logger.error(f"Error getting all plugin metadata: {e}")
         return jsonify({"error": "Failed to get plugin metadata"}), 500
 
 
 @bp.route("/streams/<int:stream_id>/export-config")
-@require_permission('streams', 'read')
+@require_permission("streams", "read")
 def export_stream_config(stream_id):
     """Export stream configuration (sensitive fields masked)"""
     try:
@@ -404,23 +409,24 @@ def export_stream_config(stream_id):
 
 
 @bp.route("/streams/<int:stream_id>/config")
-@require_permission('streams', 'read')
+@require_permission("streams", "read")
 def get_stream_config(stream_id):
     """Get stream configuration (sensitive fields masked) for editing"""
     try:
         from models.stream import Stream
+
         stream = Stream.query.get_or_404(stream_id)
         # Get plugin config with sensitive fields masked for security
         config = stream.to_dict(include_sensitive=False)
-        return jsonify(config.get('plugin_config', {}))
-        
+        return jsonify(config.get("plugin_config", {}))
+
     except Exception as e:
         logger.error(f"Error getting stream config {stream_id}: {e}")
         return jsonify({"error": "Failed to get stream configuration"}), 500
 
 
 @bp.route("/streams/security-status")
-@require_permission('admin', 'read')
+@require_permission("admin", "read")
 def security_status():
     """Get security status of all streams"""
     try:

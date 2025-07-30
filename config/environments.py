@@ -219,7 +219,7 @@ class ProductionConfig(BaseConfig):
         return issues
 
 
-class TestingConfig(BaseConfig):
+class TestEnvironmentConfig(BaseConfig):
     """Testing environment configuration."""
 
     def __init__(self):
@@ -243,6 +243,7 @@ class TestingConfig(BaseConfig):
     @property
     def SQLALCHEMY_ENGINE_OPTIONS(self) -> Dict[str, Any]:
         """Simplified engine options for testing."""
+        # For testing, always use SQLite with appropriate options
         return {"pool_pre_ping": False, "connect_args": {"check_same_thread": False}}
 
     @property
@@ -353,7 +354,7 @@ def get_config(environment: str = None) -> BaseConfig:
     config_map = {
         "development": DevelopmentConfig,
         "production": ProductionConfig,
-        "testing": TestingConfig,
+        "testing": TestEnvironmentConfig,
         "staging": StagingConfig,
     }
 
@@ -369,7 +370,7 @@ def get_config(environment: str = None) -> BaseConfig:
 config = {
     "development": DevelopmentConfig,
     "production": ProductionConfig,
-    "testing": TestingConfig,
+    "testing": TestEnvironmentConfig,
     "staging": StagingConfig,
     "default": DevelopmentConfig,
 }

@@ -23,7 +23,7 @@ from .base_provider import (
     AuthenticationResponse,
     AuthenticationException,
     ProviderConfigurationException,
-    ProviderConnectionException
+    ProviderConnectionException,
 )
 
 # Authentication manager
@@ -48,26 +48,23 @@ from .decorators import (
     is_authenticated,
     logout_user,
     get_user_permissions,
-    create_auth_context_processor
+    create_auth_context_processor,
 )
 
 __all__ = [
     # Base provider and responses
     "BaseAuthenticationProvider",
-    "AuthenticationResult", 
+    "AuthenticationResult",
     "AuthenticationResponse",
-    
     # Authentication manager
     "AuthenticationManager",
-    
     # Providers
     "LocalAuthProvider",
     "LDAPAuthProvider",
     "OIDCAuthProvider",
-    
     # Decorators and utilities
     "require_auth",
-    "require_role", 
+    "require_role",
     "require_permission",
     "admin_required",
     "operator_required",
@@ -79,10 +76,9 @@ __all__ = [
     "logout_user",
     "get_user_permissions",
     "create_auth_context_processor",
-    
     # Exceptions
     "AuthenticationException",
-    "ProviderConfigurationException", 
+    "ProviderConfigurationException",
     "ProviderConnectionException",
     "PasswordPolicyViolation",
 ]

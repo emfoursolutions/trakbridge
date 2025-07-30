@@ -66,6 +66,7 @@ class HealthService:
 
             # Test basic connectivity using SQLAlchemy ORM (safer than raw SQL)
             from sqlalchemy import select, literal
+
             db.session.execute(select(literal(1)))
 
             # Test table access
@@ -145,7 +146,7 @@ class HealthService:
             from sqlalchemy import select, literal, func
             from models.stream import Stream
             from models.tak_server import TakServer
-            
+
             results = {}
             total_time = 0
 
@@ -181,9 +182,11 @@ class HealthService:
 
             # Active streams count
             query_start = time.time()
-            active_streams = db.session.query(func.count(Stream.id)).filter(
-                Stream.is_active == True
-            ).scalar()
+            active_streams = (
+                db.session.query(func.count(Stream.id))
+                .filter(Stream.is_active == True)
+                .scalar()
+            )
             query_time = (time.time() - query_start) * 1000
             total_time += query_time
             results["active_streams"] = {
@@ -222,10 +225,9 @@ class HealthService:
         try:
             # For security reasons, we don't run complex database monitoring queries
             # that could be vulnerable to injection. Instead, we provide basic monitoring
-            
+
             locks = []  # Simplified - no direct system table queries
             long_running = []
-
 
             if long_running:
                 status = "warning"
@@ -264,7 +266,7 @@ class HealthService:
         try:
             # For security reasons, avoid direct database system queries
             # Use file system approach for SQLite or estimate from table counts
-            
+
             if self.db_type == "sqlite":
                 # SQLite - check file size directly
                 db_uri = current_app.config_instance.SQLALCHEMY_DATABASE_URI
@@ -281,10 +283,10 @@ class HealthService:
                 from models.stream import Stream
                 from models.tak_server import TakServer
                 from sqlalchemy import func
-                
+
                 stream_count = db.session.query(func.count(Stream.id)).scalar()
                 tak_server_count = db.session.query(func.count(TakServer.id)).scalar()
-                
+
                 # Rough estimate: 1KB per stream, 0.5KB per TAK server
                 estimated_size_bytes = (stream_count * 1024) + (tak_server_count * 512)
                 size_bytes = estimated_size_bytes
@@ -320,7 +322,7 @@ class HealthService:
             from sqlalchemy import func
 
             results = {}
-            
+
             # Check streams table
             try:
                 stream_count = db.session.query(func.count(Stream.id)).scalar()
@@ -331,24 +333,31 @@ class HealthService:
             # Check TAK servers table
             try:
                 tak_server_count = db.session.query(func.count(TakServer.id)).scalar()
-                results["tak_servers"] = {"count": tak_server_count, "status": "healthy"}
+                results["tak_servers"] = {
+                    "count": tak_server_count,
+                    "status": "healthy",
+                }
             except Exception as e:
                 results["tak_servers"] = {"error": str(e), "status": "unhealthy"}
 
             # Check active streams
             try:
-                active_count = db.session.query(func.count(Stream.id)).filter(
-                    Stream.is_active == True
-                ).scalar()
+                active_count = (
+                    db.session.query(func.count(Stream.id))
+                    .filter(Stream.is_active == True)
+                    .scalar()
+                )
                 results["active_streams"] = {"count": active_count, "status": "healthy"}
             except Exception as e:
                 results["active_streams"] = {"error": str(e), "status": "unhealthy"}
 
             # Check error streams
             try:
-                error_count = db.session.query(func.count(Stream.id)).filter(
-                    Stream.last_error.isnot(None)
-                ).scalar()
+                error_count = (
+                    db.session.query(func.count(Stream.id))
+                    .filter(Stream.last_error.isnot(None))
+                    .scalar()
+                )
                 results["error_streams"] = {"count": error_count, "status": "healthy"}
             except Exception as e:
                 results["error_streams"] = {"error": str(e), "status": "unhealthy"}

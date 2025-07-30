@@ -100,9 +100,11 @@ def initialize_database_safely():
 
     try:
         # Check if migrations directory exists
-        migrations_dir = os.path.join(os.getcwd(), 'migrations')
+        migrations_dir = os.path.join(os.getcwd(), "migrations")
         if not os.path.exists(migrations_dir):
-            logger.info("No migrations directory found - creating database tables directly")
+            logger.info(
+                "No migrations directory found - creating database tables directly"
+            )
             db.create_all()
             return
 
@@ -142,18 +144,23 @@ def initialize_database_safely():
                 existing_tables = inspector.get_table_names()
 
                 if not existing_tables:
-                    logger.info("No tables found and migrations unavailable - creating tables directly")
+                    logger.info(
+                        "No tables found and migrations unavailable - creating tables directly"
+                    )
                     db.create_all()
                 else:
                     logger.info("Tables exist, skipping database initialization")
 
             except Exception as fallback_error:
-                logger.error(f"Could not inspect database or create tables: {fallback_error}")
+                logger.error(
+                    f"Could not inspect database or create tables: {fallback_error}"
+                )
                 raise
 
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
         raise
+
 
 def is_primary_process() -> bool:
     """
@@ -332,7 +339,9 @@ def create_app(config_name=None):
 
     # Determine environment and get configuration
     flask_env = config_name or os.environ.get("FLASK_ENV", "development")
-    app.config['SKIP_DB_INIT'] = os.environ.get('SKIP_DB_INIT', 'false').lower() == 'true'
+    app.config["SKIP_DB_INIT"] = (
+        os.environ.get("SKIP_DB_INIT", "false").lower() == "true"
+    )
 
     # Get configuration instance using the new system
     config_instance = get_config(flask_env)
@@ -378,11 +387,11 @@ def create_app(config_name=None):
         # Initialize authentication system
         from services.auth import AuthenticationManager
         from services.auth.decorators import create_auth_context_processor
-        
+
         # Get authentication configuration
         auth_config = config_instance.get_auth_config()
         app.auth_manager = AuthenticationManager(auth_config)
-        
+
         # Add authentication context processor for templates
         auth_context_processor = create_auth_context_processor()
         app.context_processor(auth_context_processor)
@@ -563,13 +572,13 @@ def initialize_admin_user_if_needed():
     """Initialize admin user using bootstrap service"""
     try:
         from services.auth.bootstrap_service import initialize_admin_user
-        
+
         logger.info("Checking if initial admin user creation is needed...")
         add_startup_progress("Checking if initial admin user creation is needed...")
-        
+
         # Attempt to create initial admin user
         admin_user = initialize_admin_user()
-        
+
         if admin_user:
             logger.warning("=" * 60)
             logger.warning("INITIAL ADMIN USER CREATED")
@@ -577,13 +586,17 @@ def initialize_admin_user_if_needed():
             logger.warning("Password: TrakBridge-Setup-2025!")
             logger.warning("⚠️  CHANGE PASSWORD ON FIRST LOGIN  ⚠️")
             logger.warning("=" * 60)
-            
-            add_startup_progress(f"✓ Initial admin user '{admin_user.username}' created")
+
+            add_startup_progress(
+                f"✓ Initial admin user '{admin_user.username}' created"
+            )
             add_startup_progress("⚠️  Default password must be changed on first login")
         else:
-            logger.info("Initial admin user creation not needed - admin users already exist")
+            logger.info(
+                "Initial admin user creation not needed - admin users already exist"
+            )
             add_startup_progress("✓ Admin users already exist, bootstrap not needed")
-            
+
     except Exception as e:
         logger.error(f"Error during admin user bootstrap: {e}")
         add_startup_progress(f"Error during admin user bootstrap: {e}")
@@ -1011,7 +1024,7 @@ def delayed_startup():
             # Initialize admin user if needed
             add_startup_progress("Checking admin user bootstrap...")
             initialize_admin_user_if_needed()
-            
+
             # Start active streams
             add_startup_progress("Starting active streams...")
             start_active_streams()

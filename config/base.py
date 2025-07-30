@@ -31,26 +31,32 @@ class ConfigLoader:
 
     def __init__(self, environment: str = "development"):
         self.environment = environment
-        
+
         # Multi-source configuration directories
-        self.external_config_dir = Path(os.environ.get("TRAKBRIDGE_CONFIG_DIR", "/app/external_config"))
+        self.external_config_dir = Path(
+            os.environ.get("TRAKBRIDGE_CONFIG_DIR", "/app/external_config")
+        )
         self.bundled_config_dir = Path(__file__).parent / "settings"
-        
+
         # Legacy compatibility
         self.config_dir = self.bundled_config_dir
-        
+
         self.secret_manager = get_secret_manager(environment)
         self._config_cache: Dict[str, Any] = {}
-        
+
         # Log configuration source information
         logger.info(f"Configuration sources:")
-        logger.info(f"  External: {self.external_config_dir} (exists: {self.external_config_dir.exists()})")
-        logger.info(f"  Bundled:  {self.bundled_config_dir} (exists: {self.bundled_config_dir.exists()})")
+        logger.info(
+            f"  External: {self.external_config_dir} (exists: {self.external_config_dir.exists()})"
+        )
+        logger.info(
+            f"  Bundled:  {self.bundled_config_dir} (exists: {self.bundled_config_dir.exists()})"
+        )
 
     def load_config_file(self, filename: str) -> Dict[str, Any]:
         """
         Load a YAML configuration file with multi-source support.
-        
+
         Priority order:
         1. External config directory (mounted volume)
         2. Bundled config directory (container defaults)
@@ -80,7 +86,7 @@ class ConfigLoader:
             try:
                 with open(bundled_path, "r") as f:
                     bundled_config = yaml.safe_load(f) or {}
-                
+
                 # If we have external config, merge bundled as defaults
                 if config:
                     # Deep merge: bundled provides defaults, external overrides
@@ -91,14 +97,16 @@ class ConfigLoader:
                     # No external config, use bundled as primary
                     config = bundled_config
                     config_sources.append(f"bundled:{bundled_path}")
-                
+
                 logger.debug(f"Loaded bundled config from {bundled_path}")
             except Exception as e:
                 logger.error(f"Failed to load bundled config {bundled_path}: {e}")
 
         # Log the effective configuration source
         if config_sources:
-            logger.info(f"Configuration '{filename}' loaded from: {', '.join(config_sources)}")
+            logger.info(
+                f"Configuration '{filename}' loaded from: {', '.join(config_sources)}"
+            )
         else:
             logger.warning(f"Configuration file '{filename}' not found in any source")
 
@@ -106,27 +114,33 @@ class ConfigLoader:
         self._config_cache[cache_key] = config
         return config
 
-    def _deep_merge_configs(self, base_config: Dict[str, Any], override_config: Dict[str, Any]) -> Dict[str, Any]:
+    def _deep_merge_configs(
+        self, base_config: Dict[str, Any], override_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Deep merge two configuration dictionaries.
-        
+
         Args:
             base_config: Base configuration (provides defaults)
             override_config: Override configuration (takes precedence)
-            
+
         Returns:
             Merged configuration dictionary
         """
         result = base_config.copy()
-        
+
         for key, value in override_config.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(value, dict)
+            ):
                 # Recursively merge nested dictionaries
                 result[key] = self._deep_merge_configs(result[key], value)
             else:
                 # Override the value
                 result[key] = value
-                
+
         return result
 
     @staticmethod
@@ -193,16 +207,18 @@ class BaseConfig:
 
         # Load authentication configuration
         auth_config_raw = self.loader.load_config_file("authentication.yaml")
-        
+
         # Handle the authentication config format - it has the main config under 'authentication' key
         # and environment overrides at the top level
         base_auth_config = auth_config_raw.get("authentication", {})
-        env_overrides = auth_config_raw.get(self.environment, {}).get("authentication", {})
-        
+        env_overrides = auth_config_raw.get(self.environment, {}).get(
+            "authentication", {}
+        )
+
         # Deep merge environment overrides into base config
         if env_overrides:
             self.loader._deep_merge(base_auth_config, env_overrides)
-        
+
         # Resolve environment variable placeholders in authentication config
         self.auth_config = self._resolve_config_secrets(base_auth_config)
 
@@ -460,52 +476,56 @@ class BaseConfig:
     def _resolve_config_secrets(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Recursively resolve environment variable placeholders in configuration.
-        
+
         Replaces ${VARIABLE_NAME} patterns with actual environment variable values
         using the SecretManager.
-        
+
         Args:
             config: Configuration dictionary potentially containing placeholders
-            
+
         Returns:
             Configuration dictionary with resolved values
         """
         import re
         import copy
-        
+
         logger = logging.getLogger(__name__)
-        
+
         # Deep copy to avoid modifying original config
         resolved_config = copy.deepcopy(config)
-        
+
         def resolve_value(value):
             """Resolve placeholders in a single value."""
             if not isinstance(value, str):
                 return value
-                
+
             # Pattern to match ${VARIABLE_NAME} placeholders
-            pattern = r'\$\{([^}]+)\}'
+            pattern = r"\$\{([^}]+)\}"
             matches = re.findall(pattern, value)
-            
+
             if not matches:
                 return value
-            
+
             resolved_value = value
             for var_name in matches:
                 # Get the secret value using SecretManager
                 secret_value = self.secret_manager.get_secret(var_name.strip())
-                
+
                 if secret_value is not None:
                     # Replace the placeholder with the actual value
                     placeholder = f"${{{var_name}}}"
                     resolved_value = resolved_value.replace(placeholder, secret_value)
-                    logger.debug(f"Resolved authentication config placeholder: {placeholder}")
+                    logger.debug(
+                        f"Resolved authentication config placeholder: {placeholder}"
+                    )
                 else:
                     # Log warning if environment variable is not found
-                    logger.warning(f"Environment variable '{var_name}' not found for authentication config placeholder: ${{{var_name}}}")
-                    
+                    logger.warning(
+                        f"Environment variable '{var_name}' not found for authentication config placeholder: ${{{var_name}}}"
+                    )
+
             return resolved_value
-        
+
         def resolve_recursive(obj):
             """Recursively resolve placeholders in nested structures."""
             if isinstance(obj, dict):
@@ -514,7 +534,7 @@ class BaseConfig:
                 return [resolve_recursive(item) for item in obj]
             else:
                 return resolve_value(obj)
-        
+
         return resolve_recursive(resolved_config)
 
     def reload_config(self):
@@ -559,15 +579,17 @@ class BaseConfig:
     def get_auth_setting(self, setting_path: str, default: Any = None) -> Any:
         """
         Get authentication setting using dot notation.
-        
+
         Args:
             setting_path: Dot-separated path to setting (e.g., 'security.max_login_attempts')
             default: Default value if setting not found
-            
+
         Returns:
             Setting value or default
         """
-        return self._get_nested_value(self.auth_config, setting_path.split(".")) or default
+        return (
+            self._get_nested_value(self.auth_config, setting_path.split(".")) or default
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary (for debugging/inspection)."""
@@ -595,8 +617,18 @@ class BaseConfig:
                 "directory": self.LOG_DIR,
             },
             "authentication": {
-                "providers_enabled": len([p for p in self.auth_config.get("providers", []) if p.get("enabled", False)]),
-                "max_login_attempts": self.get_auth_setting("security.max_login_attempts", 5),
-                "session_timeout": self.get_auth_setting("security.session_timeout_hours", 24),
+                "providers_enabled": len(
+                    [
+                        p
+                        for p in self.auth_config.get("providers", [])
+                        if p.get("enabled", False)
+                    ]
+                ),
+                "max_login_attempts": self.get_auth_setting(
+                    "security.max_login_attempts", 5
+                ),
+                "session_timeout": self.get_auth_setting(
+                    "security.session_timeout_hours", 24
+                ),
             },
         }

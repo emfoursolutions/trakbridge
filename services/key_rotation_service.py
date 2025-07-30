@@ -30,12 +30,12 @@ import os
 import shutil
 import subprocess
 from utils.security_helpers import (
-    validate_database_params, 
+    validate_database_params,
     create_secure_backup_path,
     validate_backup_directory,
     SecureSubprocessRunner,
     secure_file_permissions,
-    validate_safe_path
+    validate_safe_path,
 )
 import threading
 from datetime import datetime
@@ -171,11 +171,11 @@ class KeyRotationService:
             # Validate backup directory
             if not validate_backup_directory(backup_dir):
                 raise ValueError("Invalid backup directory")
-            
+
             # Extract and validate database name from URI
             uri = db_info["uri"]
             db_name = uri.split("/")[-1].split("?")[0]
-            if not db_name or not db_name.replace('_', '').replace('-', '').isalnum():
+            if not db_name or not db_name.replace("_", "").replace("-", "").isalnum():
                 raise ValueError("Invalid database name")
 
             # Create secure backup path
@@ -183,8 +183,8 @@ class KeyRotationService:
             backup_path = create_secure_backup_path(backup_dir, filename)
 
             # Initialize secure subprocess runner
-            runner = SecureSubprocessRunner(['mysqldump'])
-            
+            runner = SecureSubprocessRunner(["mysqldump"])
+
             # Build base command
             cmd = [
                 "mysqldump",
@@ -203,15 +203,13 @@ class KeyRotationService:
                     if ":" in auth_host.split("@")[0]:
                         user_pass = auth_host.split("@")[0]
                         user, password = user_pass.split(":", 1)
-                        
+
                         # Validate credentials
-                        db_params = validate_database_params({
-                            'username': user
-                        })
-                        
+                        db_params = validate_database_params({"username": user})
+
                         # Use environment variable for password (safer than command line)
-                        env['MYSQL_PWD'] = password
-                        cmd.extend(["-u", db_params['username']])
+                        env["MYSQL_PWD"] = password
+                        cmd.extend(["-u", db_params["username"]])
                 except (ValueError, IndexError) as e:
                     logger.warning(f"Failed to parse database credentials: {e}")
                     raise ValueError("Invalid database URI format")
@@ -222,7 +220,12 @@ class KeyRotationService:
 
             with open(backup_path, "w") as f:
                 result = subprocess.run(
-                    cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env, shell=False
+                    cmd,
+                    stdout=f,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=env,
+                    shell=False,
                 )
 
             # Set secure file permissions on backup file
@@ -254,11 +257,11 @@ class KeyRotationService:
             # Validate backup directory
             if not validate_backup_directory(backup_dir):
                 raise ValueError("Invalid backup directory")
-            
+
             # Extract and validate database name from URI
             uri = db_info["uri"]
             db_name = uri.split("/")[-1]
-            if not db_name or not db_name.replace('_', '').replace('-', '').isalnum():
+            if not db_name or not db_name.replace("_", "").replace("-", "").isalnum():
                 raise ValueError("Invalid database name")
 
             # Create secure backup path
@@ -284,13 +287,11 @@ class KeyRotationService:
                     if ":" in auth_host.split("@")[0]:
                         user_pass = auth_host.split("@")[0]
                         user, password = user_pass.split(":", 1)
-                        
+
                         # Validate credentials
-                        db_params = validate_database_params({
-                            'username': user
-                        })
-                        
-                        cmd.extend(["-U", db_params['username']])
+                        db_params = validate_database_params({"username": user})
+
+                        cmd.extend(["-U", db_params["username"]])
                         # Set password environment variable
                         env["PGPASSWORD"] = password
                 except (ValueError, IndexError) as e:
@@ -298,13 +299,18 @@ class KeyRotationService:
                     raise ValueError("Invalid database URI format")
 
             # Initialize secure subprocess runner and validate command
-            runner = SecureSubprocessRunner(['pg_dump'])
+            runner = SecureSubprocessRunner(["pg_dump"])
             if not runner.validate_command(cmd):
                 raise ValueError("Command failed security validation")
 
             with open(backup_path, "w") as f:
                 result = subprocess.run(
-                    cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env, shell=False
+                    cmd,
+                    stdout=f,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=env,
+                    shell=False,
                 )
 
             # Set secure file permissions on backup file
@@ -389,14 +395,17 @@ class KeyRotationService:
                         os.makedirs(os.path.dirname(key_file_path), exist_ok=True)
 
                         # Validate path security before writing
-                        allowed_dirs = [os.path.dirname(key_file_path), os.path.join(current_app.root_path, "secrets")]
+                        allowed_dirs = [
+                            os.path.dirname(key_file_path),
+                            os.path.join(current_app.root_path, "secrets"),
+                        ]
                         if not validate_safe_path(key_file_path, allowed_dirs):
                             return {"success": False, "error": "Invalid key file path"}
-                        
+
                         # Write new key to file
                         with open(key_file_path, "w") as f:
                             f.write(new_key)
-                        
+
                         # Set secure file permissions
                         secure_file_permissions(key_file_path, 0o600)
 
@@ -417,10 +426,10 @@ class KeyRotationService:
                     allowed_dirs = [os.path.join(current_app.root_path, "secrets")]
                     if not validate_safe_path(key_file_path, allowed_dirs):
                         return {"success": False, "error": "Invalid key file path"}
-                    
+
                     with open(key_file_path, "w") as f:
                         f.write(new_key)
-                    
+
                     # Set secure file permissions
                     secure_file_permissions(key_file_path, 0o600)
 
@@ -629,14 +638,17 @@ class KeyRotationService:
                     os.makedirs(os.path.dirname(key_file_path), exist_ok=True)
 
                     # Validate path security before writing
-                    allowed_dirs = [os.path.dirname(key_file_path), os.path.join(app_root, "secrets")]
+                    allowed_dirs = [
+                        os.path.dirname(key_file_path),
+                        os.path.join(app_root, "secrets"),
+                    ]
                     if not validate_safe_path(key_file_path, allowed_dirs):
                         return {"success": False, "error": "Invalid key file path"}
-                    
+
                     # Write new key to file
                     with open(key_file_path, "w") as f:
                         f.write(new_key)
-                    
+
                     # Set secure file permissions
                     secure_file_permissions(key_file_path, 0o600)
 
@@ -656,10 +668,10 @@ class KeyRotationService:
                 allowed_dirs = [os.path.join(app_root, "secrets")]
                 if not validate_safe_path(key_file_path, allowed_dirs):
                     return {"success": False, "error": "Invalid key file path"}
-                
+
                 with open(key_file_path, "w") as f:
                     f.write(new_key)
-                
+
                 # Set secure file permissions
                 secure_file_permissions(key_file_path, 0o600)
 
@@ -687,7 +699,7 @@ class KeyRotationService:
 
             # Check if we're running with systemd
             try:
-                runner = SecureSubprocessRunner(['systemctl'])
+                runner = SecureSubprocessRunner(["systemctl"])
                 cmd = ["systemctl", "is-active", "trakbridge"]
                 if runner.validate_command(cmd):
                     result = subprocess.run(
@@ -707,7 +719,7 @@ class KeyRotationService:
 
             # Check if we're running with supervisor
             try:
-                runner = SecureSubprocessRunner(['supervisorctl'])
+                runner = SecureSubprocessRunner(["supervisorctl"])
                 cmd = ["supervisorctl", "status", "trakbridge"]
                 if runner.validate_command(cmd):
                     result = subprocess.run(
@@ -720,8 +732,8 @@ class KeyRotationService:
                         return {
                             "success": True,
                             "method": "supervisor",
-                        "instruction": "Run: supervisorctl restart trakbridge",
-                    }
+                            "instruction": "Run: supervisorctl restart trakbridge",
+                        }
             except FileNotFoundError:
                 pass
 

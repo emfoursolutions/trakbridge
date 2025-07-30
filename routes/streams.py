@@ -90,7 +90,7 @@ def get_stream_services():
 
 
 @bp.route("/")
-@require_permission('streams', 'read')
+@require_permission("streams", "read")
 def list_streams():
     """Display list of all streams"""
     try:
@@ -118,7 +118,7 @@ def list_streams():
 
 
 @bp.route("/create", methods=["GET", "POST"])
-@require_permission('streams', 'write')
+@require_permission("streams", "write")
 def create_stream():
     """Create a new stream"""
     if request.method == "GET":
@@ -174,7 +174,7 @@ def _render_create_form():
 
 
 @bp.route("/test-connection", methods=["POST"])
-@require_permission('streams', 'read')
+@require_permission("streams", "read")
 def test_connection():
     """Test connection to a GPS provider without saving"""
 
@@ -200,7 +200,7 @@ def test_connection():
 
 
 @bp.route("/<int:stream_id>")
-@require_permission('streams', 'read')
+@require_permission("streams", "read")
 def view_stream(stream_id):
     """View stream details"""
     try:
@@ -268,7 +268,7 @@ def restart_stream(stream_id):
 
 
 @bp.route("/<int:stream_id>/test", methods=["POST"])
-@require_permission('streams', 'read')
+@require_permission("streams", "read")
 def test_stream(stream_id):
     """Test an existing stream's connection"""
 
@@ -286,7 +286,7 @@ def test_stream(stream_id):
 
 
 @bp.route("/<int:stream_id>/delete", methods=["DELETE"])
-@require_permission('streams', 'delete')
+@require_permission("streams", "delete")
 def delete_stream(stream_id):
     """Delete a stream"""
 
@@ -304,7 +304,7 @@ def delete_stream(stream_id):
 
 
 @bp.route("/<int:stream_id>/edit", methods=["GET", "POST"])
-@require_permission('streams', 'write')
+@require_permission("streams", "write")
 def edit_stream(stream_id):
     """Edit an existing stream"""
 
@@ -361,7 +361,7 @@ def _render_edit_form(stream_id):
 
 
 @bp.route("/test-config", methods=["POST"])
-@require_permission('streams', 'write')
+@require_permission("streams", "write")
 def test_stream_config():
     """Test stream configuration without saving to database"""
     try:

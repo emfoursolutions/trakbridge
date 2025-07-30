@@ -513,11 +513,11 @@ class EnhancedCOTService:
             return await EnhancedCOTService._send_with_custom(events, tak_server)
 
     async def send_to_persistent_service(
-            self,
-            locations: List[Dict[str, Any]],
-            tak_server,
-            cot_type: str = "a-f-G-U-C",
-            stale_time: int = 300,
+        self,
+        locations: List[Dict[str, Any]],
+        tak_server,
+        cot_type: str = "a-f-G-U-C",
+        stale_time: int = 300,
     ) -> bool:
         """
         Send locations to persistent COT service (queue-based)
@@ -540,7 +540,9 @@ class EnhancedCOTService:
             initial_queue_size = 0
             if tak_server.id in cot_service.queues:
                 initial_queue_size = cot_service.queues[tak_server.id].qsize()
-                logger.debug(f"Initial queue size for TAK server {tak_server.name}: {initial_queue_size}")
+                logger.debug(
+                    f"Initial queue size for TAK server {tak_server.name}: {initial_queue_size}"
+                )
 
             # Send events to persistent service
             success_count = 0
@@ -548,9 +550,13 @@ class EnhancedCOTService:
                 success = await cot_service.enqueue_event(event, tak_server.id)
                 if success:
                     success_count += 1
-                    logger.debug(f"Enqueued event {i}/{len(events)} for TAK server {tak_server.name}")
+                    logger.debug(
+                        f"Enqueued event {i}/{len(events)} for TAK server {tak_server.name}"
+                    )
                 else:
-                    logger.warning(f"Failed to enqueue event {i}/{len(events)} for TAK server {tak_server.name}")
+                    logger.warning(
+                        f"Failed to enqueue event {i}/{len(events)} for TAK server {tak_server.name}"
+                    )
 
             # Log completion of queuing
             final_queue_size = 0
@@ -566,7 +572,9 @@ class EnhancedCOTService:
             return success_count > 0
 
         except Exception as e:
-            logger.error(f"Failed to send to persistent service for TAK server '{tak_server.name}': {e}")
+            logger.error(
+                f"Failed to send to persistent service for TAK server '{tak_server.name}': {e}"
+            )
             return False
 
     async def _send_with_pytak_clitool(self, events: List[bytes], tak_server) -> bool:
@@ -867,11 +875,11 @@ class EnhancedCOTService:
         logger.debug("COT service cleanup completed")
 
     async def process_and_send_locations(
-            self,
-            locations: List[Dict[str, Any]],
-            tak_server,
-            cot_type: str = "a-f-G-U-C",
-            stale_time: int = 300,
+        self,
+        locations: List[Dict[str, Any]],
+        tak_server,
+        cot_type: str = "a-f-G-U-C",
+        stale_time: int = 300,
     ) -> bool:
         """
         Complete workflow: convert locations to COT events and send to TAK server
@@ -1065,7 +1073,9 @@ class PersistentCOTService:
     @staticmethod
     async def _transmission_worker(queue: asyncio.Queue, connection, tak_server):
         """Handle transmission of COT events from queue"""
-        logger.info(f"Starting transmission worker for TAK server '{tak_server.name}' (ID: {tak_server.id})")
+        logger.info(
+            f"Starting transmission worker for TAK server '{tak_server.name}' (ID: {tak_server.id})"
+        )
 
         # Track queue processing statistics
         events_processed = 0
@@ -1075,13 +1085,17 @@ class PersistentCOTService:
         # Handle the case where connection might be a tuple (reader, writer)
         if isinstance(connection, tuple) and len(connection) == 2:
             reader, writer = connection
-            logger.info(f"Using (reader, writer) tuple for TAK server '{tak_server.name}'")
+            logger.info(
+                f"Using (reader, writer) tuple for TAK server '{tak_server.name}'"
+            )
             use_writer = True
         else:
             reader = connection
             writer = None
             use_writer = False
-            logger.info(f"Using single connection object for TAK server '{tak_server.name}'")
+            logger.info(
+                f"Using single connection object for TAK server '{tak_server.name}'"
+            )
 
         try:
             while True:
@@ -1090,7 +1104,11 @@ class PersistentCOTService:
                     current_queue_size = queue.qsize()
 
                     # Log when queue becomes empty after having events
-                    if current_queue_size == 0 and not queue_empty_logged and events_processed > 0:
+                    if (
+                        current_queue_size == 0
+                        and not queue_empty_logged
+                        and events_processed > 0
+                    ):
                         logger.info(
                             f"Queue cleared for TAK server '{tak_server.name}' - "
                             f"all {events_processed} events have been processed and transmitted"
@@ -1098,8 +1116,10 @@ class PersistentCOTService:
                         queue_empty_logged = True
 
                     # Log significant queue size changes (every 10 events)
-                    if (last_queue_size_log is None or
-                            abs(current_queue_size - last_queue_size_log) >= 10):
+                    if (
+                        last_queue_size_log is None
+                        or abs(current_queue_size - last_queue_size_log) >= 10
+                    ):
                         if current_queue_size > 0:
                             logger.debug(
                                 f"Queue status for TAK server '{tak_server.name}': "
@@ -1108,7 +1128,9 @@ class PersistentCOTService:
                             )
                         last_queue_size_log = current_queue_size
 
-                    logger.debug(f"Waiting for events from queue for TAK server '{tak_server.name}'...")
+                    logger.debug(
+                        f"Waiting for events from queue for TAK server '{tak_server.name}'..."
+                    )
 
                     # Get event from queue with timeout
                     event = await asyncio.wait_for(queue.get(), timeout=30.0)
@@ -1123,7 +1145,9 @@ class PersistentCOTService:
                     # Reset queue empty flag when we get an event
                     if queue_empty_logged:
                         queue_empty_logged = False
-                        logger.debug(f"Queue activity resumed for TAK server '{tak_server.name}'")
+                        logger.debug(
+                            f"Queue activity resumed for TAK server '{tak_server.name}'"
+                        )
 
                     logger.debug(
                         f"Processing event {events_processed + 1} from queue for TAK server '{tak_server.name}'"
@@ -1134,11 +1158,15 @@ class PersistentCOTService:
                         # Use writer for TCP connections
                         writer.write(event)
                         await writer.drain()
-                        logger.debug(f"Successfully transmitted COT event to TAK server '{tak_server.name}'")
+                        logger.debug(
+                            f"Successfully transmitted COT event to TAK server '{tak_server.name}'"
+                        )
                     elif hasattr(reader, "send"):
                         # Use reader.send for other connection types
                         await reader.send(event)
-                        logger.debug(f"Successfully transmitted COT event to TAK server '{tak_server.name}'")
+                        logger.debug(
+                            f"Successfully transmitted COT event to TAK server '{tak_server.name}'"
+                        )
                     else:
                         logger.error(
                             f"No suitable send method found for TAK server '{tak_server.name}'. "
@@ -1161,7 +1189,9 @@ class PersistentCOTService:
 
                 except asyncio.TimeoutError:
                     # Timeout is normal when no events are available
-                    logger.debug(f"No events received (timeout) for TAK server '{tak_server.name}'")
+                    logger.debug(
+                        f"No events received (timeout) for TAK server '{tak_server.name}'"
+                    )
                     continue
 
                 except Exception as e:
@@ -1173,7 +1203,9 @@ class PersistentCOTService:
                     queue.task_done()
 
         except Exception as e:
-            logger.error(f"Transmission worker error for TAK server '{tak_server.name}': {e}")
+            logger.error(
+                f"Transmission worker error for TAK server '{tak_server.name}': {e}"
+            )
         finally:
             # Log final statistics
             logger.info(
@@ -1186,20 +1218,30 @@ class PersistentCOTService:
                 try:
                     writer.close()
                     await writer.wait_closed()
-                    logger.info(f"Closed writer connection for TAK server '{tak_server.name}'")
+                    logger.info(
+                        f"Closed writer connection for TAK server '{tak_server.name}'"
+                    )
                 except Exception as e:
-                    logger.debug(f"Error closing writer for TAK server '{tak_server.name}': {e}")
+                    logger.debug(
+                        f"Error closing writer for TAK server '{tak_server.name}': {e}"
+                    )
             elif hasattr(reader, "close"):
                 try:
                     await reader.close()
-                    logger.info(f"Closed reader connection for TAK server '{tak_server.name}'")
+                    logger.info(
+                        f"Closed reader connection for TAK server '{tak_server.name}'"
+                    )
                 except Exception as e:
-                    logger.debug(f"Error closing reader for TAK server '{tak_server.name}': {e}")
+                    logger.debug(
+                        f"Error closing reader for TAK server '{tak_server.name}': {e}"
+                    )
 
     def log_queue_status(self, tak_server_id: int, context: str = ""):
         """Log current queue status for a TAK server"""
         if tak_server_id not in self.queues:
-            logger.warning(f"No queue found for TAK server {tak_server_id} when logging status")
+            logger.warning(
+                f"No queue found for TAK server {tak_server_id} when logging status"
+            )
             return
 
         queue = self.queues[tak_server_id]
@@ -1210,7 +1252,9 @@ class PersistentCOTService:
         if queue_size == 0:
             logger.info(f"Queue is empty for TAK server {tak_server_id}{context_str}")
         else:
-            logger.info(f"Queue contains {queue_size} pending events for TAK server {tak_server_id}{context_str}")
+            logger.info(
+                f"Queue contains {queue_size} pending events for TAK server {tak_server_id}{context_str}"
+            )
 
     @staticmethod
     async def _create_pytak_config(tak_server):
@@ -1298,7 +1342,9 @@ class PersistentCOTService:
         Put a COT event onto the TAK server's queue.
         """
         if tak_server_id not in self.queues:
-            logger.error(f"No queue found for TAK server {tak_server_id}. Event not sent.")
+            logger.error(
+                f"No queue found for TAK server {tak_server_id}. Event not sent."
+            )
             return False
 
         try:
@@ -1307,7 +1353,9 @@ class PersistentCOTService:
 
             # Log if this is the first event being added to an empty queue
             if queue_size_before == 0:
-                logger.info(f"Adding first event to empty queue for TAK server {tak_server_id}")
+                logger.info(
+                    f"Adding first event to empty queue for TAK server {tak_server_id}"
+                )
 
             await queue.put(event)
             queue_size_after = queue.qsize()

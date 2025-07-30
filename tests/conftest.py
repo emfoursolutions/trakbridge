@@ -31,27 +31,37 @@ from models.user import User, UserRole, UserSession
 
 @pytest.fixture(scope="session")
 def app():
-    """Create test Flask application for session scope"""
-    app = Flask(__name__)
-    
-    # Test configuration
-    app.config.update({
-        'TESTING': True,
-        'SECRET_KEY': 'test-secret-key-for-sessions',
-        'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
-        'SQLALCHEMY_TRACK_MODIFICATIONS': False,
-        'WTF_CSRF_ENABLED': False,
-        'LOGIN_DISABLED': False,
-        'TRAKBRIDGE_ENCRYPTION_KEY': 'test-encryption-key-for-testing-12345'
-    })
-    
-    # Initialize database
-    db.init_app(app)
-    
-    with app.app_context():
-        db.create_all()
-        yield app
-        db.drop_all()
+    """Create test Flask application using the actual app factory"""
+    # Import here to avoid circular imports
+    from app import create_app
+
+    # Set environment variables for clean testing
+    original_env = {}
+    test_env_vars = {
+        "FLASK_ENV": "testing",
+        "DB_TYPE": "sqlite",
+        "TRAKBRIDGE_ENCRYPTION_KEY": "test-encryption-key-for-testing-12345",
+        "SECRET_KEY": "test-secret-key-for-sessions",
+    }
+
+    # Save original values and set test values
+    for key, value in test_env_vars.items():
+        original_env[key] = os.environ.get(key)
+        os.environ[key] = value
+
+    try:
+        # Create app using the testing configuration
+        app = create_app("testing")
+
+        with app.app_context():
+            yield app
+    finally:
+        # Restore original environment variables
+        for key, original_value in original_env.items():
+            if original_value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = original_value
 
 
 @pytest.fixture
@@ -66,10 +76,10 @@ def db_session(app):
     with app.app_context():
         # Create tables
         db.create_all()
-        
+
         # Provide the session
         yield db.session
-        
+
         # Cleanup
         db.session.rollback()
         db.session.remove()
@@ -81,56 +91,58 @@ def auth_manager(app):
     with app.app_context():
         # Mock configuration loading
         test_config = {
-            'session': {
-                'lifetime_hours': 8,
-                'cleanup_interval_minutes': 60,
-                'secure_cookies': False  # For testing
+            "session": {
+                "lifetime_hours": 8,
+                "cleanup_interval_minutes": 60,
+                "secure_cookies": False,  # For testing
             },
-            'provider_priority': ['local', 'ldap', 'oidc'],
-            'providers': {
-                'local': {
-                    'enabled': True,
-                    'password_policy': {
-                        'min_length': 8,
-                        'require_uppercase': True,
-                        'require_lowercase': True,
-                        'require_numbers': True,
-                        'require_special': False
-                    }
+            "provider_priority": ["local", "ldap", "oidc"],
+            "providers": {
+                "local": {
+                    "enabled": True,
+                    "password_policy": {
+                        "min_length": 8,
+                        "require_uppercase": True,
+                        "require_lowercase": True,
+                        "require_numbers": True,
+                        "require_special": False,
+                    },
                 },
-                'ldap': {
-                    'enabled': False,
-                    'server': 'ldap://test-server.com',
-                    'port': 389,
-                    'use_ssl': False,
-                    'use_tls': True,
-                    'bind_dn': 'CN=test,DC=test,DC=com',
-                    'bind_password': 'test_password',
-                    'user_search_base': 'OU=Users,DC=test,DC=com',
-                    'user_search_filter': '(sAMAccountName={username})',
-                    'role_mapping': {
-                        'CN=Admins,DC=test,DC=com': 'admin',
-                        'CN=Operators,DC=test,DC=com': 'operator',
-                        'CN=Users,DC=test,DC=com': 'user'
-                    }
+                "ldap": {
+                    "enabled": False,
+                    "server": "ldap://test-server.com",
+                    "port": 389,
+                    "use_ssl": False,
+                    "use_tls": True,
+                    "bind_dn": "CN=test,DC=test,DC=com",
+                    "bind_password": "test_password",
+                    "user_search_base": "OU=Users,DC=test,DC=com",
+                    "user_search_filter": "(sAMAccountName={username})",
+                    "role_mapping": {
+                        "CN=Admins,DC=test,DC=com": "admin",
+                        "CN=Operators,DC=test,DC=com": "operator",
+                        "CN=Users,DC=test,DC=com": "user",
+                    },
                 },
-                'oidc': {
-                    'enabled': False,
-                    'issuer': 'https://test-issuer.com',
-                    'client_id': 'test-client',
-                    'client_secret': 'test-secret',
-                    'scopes': ['openid', 'email', 'profile'],
-                    'role_claim': 'groups',
-                    'role_mapping': {
-                        'admins': 'admin',
-                        'operators': 'operator',
-                        'users': 'user'
-                    }
-                }
-            }
+                "oidc": {
+                    "enabled": False,
+                    "issuer": "https://test-issuer.com",
+                    "client_id": "test-client",
+                    "client_secret": "test-secret",
+                    "scopes": ["openid", "email", "profile"],
+                    "role_claim": "groups",
+                    "role_mapping": {
+                        "admins": "admin",
+                        "operators": "operator",
+                        "users": "user",
+                    },
+                },
+            },
         }
-        
-        with patch('services.auth.auth_manager.load_auth_config', return_value=test_config):
+
+        with patch(
+            "services.auth.auth_manager.load_auth_config", return_value=test_config
+        ):
             manager = AuthenticationManager()
             yield manager
 
@@ -139,89 +151,89 @@ def auth_manager(app):
 def test_users(app, db_session):
     """Create test users for authentication tests"""
     users = {}
-    
+
     # Admin user
     admin = User(
-        username='admin',
-        email='admin@test.com',
-        first_name='Admin',
-        last_name='User',
+        username="admin",
+        email="admin@test.com",
+        first_name="Admin",
+        last_name="User",
         role=UserRole.ADMIN,
-        auth_provider='local',
-        is_active=True
+        auth_provider="local",
+        is_active=True,
     )
-    admin.set_password('AdminPass123')
+    admin.set_password("AdminPass123")
     db_session.add(admin)
-    users['admin'] = admin
-    
+    users["admin"] = admin
+
     # Operator user
     operator = User(
-        username='operator',
-        email='operator@test.com',
-        first_name='Operator',
-        last_name='User',
+        username="operator",
+        email="operator@test.com",
+        first_name="Operator",
+        last_name="User",
         role=UserRole.OPERATOR,
-        auth_provider='local',
-        is_active=True
+        auth_provider="local",
+        is_active=True,
     )
-    operator.set_password('OperatorPass123')
+    operator.set_password("OperatorPass123")
     db_session.add(operator)
-    users['operator'] = operator
-    
+    users["operator"] = operator
+
     # Regular user
     user = User(
-        username='user',
-        email='user@test.com',
-        first_name='Regular',
-        last_name='User',
+        username="user",
+        email="user@test.com",
+        first_name="Regular",
+        last_name="User",
         role=UserRole.USER,
-        auth_provider='local',
-        is_active=True
+        auth_provider="local",
+        is_active=True,
     )
-    user.set_password('UserPass123')
+    user.set_password("UserPass123")
     db_session.add(user)
-    users['user'] = user
-    
+    users["user"] = user
+
     # Inactive user
     inactive = User(
-        username='inactive',
-        email='inactive@test.com',
-        first_name='Inactive',
-        last_name='User',
+        username="inactive",
+        email="inactive@test.com",
+        first_name="Inactive",
+        last_name="User",
         role=UserRole.USER,
-        auth_provider='local',
-        is_active=False
+        auth_provider="local",
+        is_active=False,
     )
-    inactive.set_password('InactivePass123')
+    inactive.set_password("InactivePass123")
     db_session.add(inactive)
-    users['inactive'] = inactive
-    
+    users["inactive"] = inactive
+
     # LDAP user
     ldap_user = User(
-        username='ldapuser',
-        email='ldapuser@test.com',
-        first_name='LDAP',
-        last_name='User',
+        username="ldapuser",
+        email="ldapuser@test.com",
+        first_name="LDAP",
+        last_name="User",
         role=UserRole.USER,
-        auth_provider='ldap',
-        is_active=True
+        auth_provider="ldap",
+        is_active=True,
     )
     db_session.add(ldap_user)
-    users['ldap_user'] = ldap_user
-    
+    users["ldap_user"] = ldap_user
+
     # OIDC user
     oidc_user = User(
-        username='oidcuser',
-        email='oidcuser@test.com',
-        first_name='OIDC',
-        last_name='User',
+        username="oidcuser",
+        email="oidcuser@test.com",
+        first_name="OIDC",
+        last_name="User",
         role=UserRole.OPERATOR,
-        auth_provider='oidc',
-        is_active=True
+        auth_provider="oidc",
+        is_active=True,
     )
     db_session.add(oidc_user)
-    users['oidc_user'] = oidc_user
-    
+    users["oidc_user"] = oidc_user
+
     db_session.commit()
     return users
 
@@ -230,20 +242,20 @@ def test_users(app, db_session):
 def test_sessions(app, db_session, test_users):
     """Create test sessions"""
     sessions = {}
-    
+
     # Active session for admin
-    admin_session = UserSession.create_session(test_users['admin'])
-    sessions['admin'] = admin_session
-    
+    admin_session = UserSession.create_session(test_users["admin"])
+    sessions["admin"] = admin_session
+
     # Active session for regular user
-    user_session = UserSession.create_session(test_users['user'])
-    sessions['user'] = user_session
-    
+    user_session = UserSession.create_session(test_users["user"])
+    sessions["user"] = user_session
+
     # Expired session
-    expired_session = UserSession.create_session(test_users['operator'])
+    expired_session = UserSession.create_session(test_users["operator"])
     expired_session.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
-    sessions['expired'] = expired_session
-    
+    sessions["expired"] = expired_session
+
     db_session.commit()
     return sessions
 
@@ -251,95 +263,100 @@ def test_sessions(app, db_session, test_users):
 @pytest.fixture
 def mock_ldap_connection():
     """Mock LDAP connection for testing"""
-    with patch('ldap3.Server') as mock_server, \
-         patch('ldap3.Connection') as mock_connection:
-        
+    with (
+        patch("ldap3.Server") as mock_server,
+        patch("ldap3.Connection") as mock_connection,
+    ):
+
         # Configure mocks
         mock_server_instance = Mock()
         mock_server.return_value = mock_server_instance
-        
+
         mock_conn_instance = Mock()
         mock_connection.return_value = mock_conn_instance
-        
+
         # Default successful responses
         mock_conn_instance.bind.return_value = True
         mock_conn_instance.search.return_value = True
         mock_conn_instance.entries = [
             Mock(
-                entry_dn='CN=testuser,OU=Users,DC=test,DC=com',
-                sAMAccountName='testuser',
-                mail='testuser@test.com',
-                givenName='Test',
-                sn='User',
-                displayName='Test User'
+                entry_dn="CN=testuser,OU=Users,DC=test,DC=com",
+                sAMAccountName="testuser",
+                mail="testuser@test.com",
+                givenName="Test",
+                sn="User",
+                displayName="Test User",
             )
         ]
-        
+
         yield {
-            'server': mock_server,
-            'connection': mock_connection,
-            'server_instance': mock_server_instance,
-            'connection_instance': mock_conn_instance
+            "server": mock_server,
+            "connection": mock_connection,
+            "server_instance": mock_server_instance,
+            "connection_instance": mock_conn_instance,
         }
 
 
 @pytest.fixture
 def mock_oidc_provider():
     """Mock OIDC provider for testing"""
-    with patch('requests.get') as mock_get, \
-         patch('requests.post') as mock_post, \
-         patch('jose.jwt.decode') as mock_jwt_decode:
-        
+    with (
+        patch("requests.get") as mock_get,
+        patch("requests.post") as mock_post,
+        patch("jose.jwt.decode") as mock_jwt_decode,
+    ):
+
         # Mock discovery document
         discovery_response = Mock()
         discovery_response.json.return_value = {
-            'authorization_endpoint': 'https://test-issuer.com/auth',
-            'token_endpoint': 'https://test-issuer.com/token',
-            'userinfo_endpoint': 'https://test-issuer.com/userinfo',
-            'jwks_uri': 'https://test-issuer.com/jwks'
+            "authorization_endpoint": "https://test-issuer.com/auth",
+            "token_endpoint": "https://test-issuer.com/token",
+            "userinfo_endpoint": "https://test-issuer.com/userinfo",
+            "jwks_uri": "https://test-issuer.com/jwks",
         }
         mock_get.return_value = discovery_response
-        
+
         # Mock token exchange
         token_response = Mock()
         token_response.json.return_value = {
-            'access_token': 'test_access_token',
-            'id_token': 'test_id_token',
-            'token_type': 'Bearer',
-            'expires_in': 3600
+            "access_token": "test_access_token",
+            "id_token": "test_id_token",
+            "token_type": "Bearer",
+            "expires_in": 3600,
         }
         mock_post.return_value = token_response
-        
+
         # Mock JWT decode
         mock_jwt_decode.return_value = {
-            'sub': 'user123',
-            'email': 'user@test.com',
-            'name': 'Test User',
-            'groups': ['users']
+            "sub": "user123",
+            "email": "user@test.com",
+            "name": "Test User",
+            "groups": ["users"],
         }
-        
+
         yield {
-            'get': mock_get,
-            'post': mock_post,
-            'jwt_decode': mock_jwt_decode,
-            'discovery_response': discovery_response,
-            'token_response': token_response
+            "get": mock_get,
+            "post": mock_post,
+            "jwt_decode": mock_jwt_decode,
+            "discovery_response": discovery_response,
+            "token_response": token_response,
         }
 
 
 @pytest.fixture
 def authenticated_client(client, app, test_users, auth_manager):
     """Create authenticated test client"""
+
     def _authenticate_as(username):
         user = test_users[username]
         session_id = auth_manager.create_session(user)
-        
+
         with client.session_transaction() as sess:
-            sess['session_id'] = session_id
-            sess['user_id'] = user.id
-        
+            sess["session_id"] = session_id
+            sess["user_id"] = user.id
+
         return client
-    
+
     return _authenticate_as
 
 
@@ -347,11 +364,11 @@ def authenticated_client(client, app, test_users, auth_manager):
 def temp_config_dir():
     """Create temporary configuration directory"""
     temp_dir = tempfile.mkdtemp()
-    config_dir = os.path.join(temp_dir, 'config', 'settings')
+    config_dir = os.path.join(temp_dir, "config", "settings")
     os.makedirs(config_dir, exist_ok=True)
-    
+
     yield config_dir
-    
+
     # Cleanup
     shutil.rmtree(temp_dir)
 
@@ -408,25 +425,27 @@ authentication:
         "trakbridge-operators": "operator"
         "trakbridge-users": "user"
 """
-    
-    config_file = os.path.join(temp_config_dir, 'auth.yaml')
-    with open(config_file, 'w') as f:
+
+    config_file = os.path.join(temp_config_dir, "auth.yaml")
+    with open(config_file, "w") as f:
         f.write(config_content)
-    
+
     return config_file
 
 
 # Test utilities
-def create_test_user(username, email, role=UserRole.USER, auth_provider='local', password='TestPass123'):
+def create_test_user(
+    username, email, role=UserRole.USER, auth_provider="local", password="TestPass123"
+):
     """Utility function to create test users"""
     user = User(
         username=username,
         email=email,
         first_name=username.title(),
-        last_name='User',
+        last_name="User",
         role=role,
         auth_provider=auth_provider,
-        is_active=True
+        is_active=True,
     )
     if password:
         user.set_password(password)
@@ -437,8 +456,8 @@ def create_test_session(user, expires_in_hours=8):
     """Utility function to create test sessions"""
     session = UserSession(
         user_id=user.id,
-        session_id=f'test_session_{user.username}',
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=expires_in_hours)
+        session_id=f"test_session_{user.username}",
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=expires_in_hours),
     )
     return session
 
@@ -446,21 +465,11 @@ def create_test_session(user, expires_in_hours=8):
 # Pytest hooks
 def pytest_configure(config):
     """Configure pytest with custom markers"""
-    config.addinivalue_line(
-        "markers", "integration: mark test as integration test"
-    )
-    config.addinivalue_line(
-        "markers", "ldap: mark test as requiring LDAP server"
-    )
-    config.addinivalue_line(
-        "markers", "oidc: mark test as requiring OIDC provider"
-    )
-    config.addinivalue_line(
-        "markers", "performance: mark test as performance test"
-    )
-    config.addinivalue_line(
-        "markers", "security: mark test as security test"
-    )
+    config.addinivalue_line("markers", "integration: mark test as integration test")
+    config.addinivalue_line("markers", "ldap: mark test as requiring LDAP server")
+    config.addinivalue_line("markers", "oidc: mark test as requiring OIDC provider")
+    config.addinivalue_line("markers", "performance: mark test as performance test")
+    config.addinivalue_line("markers", "security: mark test as security test")
 
 
 def pytest_collection_modifyitems(config, items):
@@ -469,19 +478,19 @@ def pytest_collection_modifyitems(config, items):
         # Add integration marker for integration tests
         if "integration" in item.nodeid.lower():
             item.add_marker(pytest.mark.integration)
-        
+
         # Add LDAP marker for LDAP tests
         if "ldap" in item.nodeid.lower():
             item.add_marker(pytest.mark.ldap)
-        
+
         # Add OIDC marker for OIDC tests
         if "oidc" in item.nodeid.lower():
             item.add_marker(pytest.mark.oidc)
-        
+
         # Add performance marker for performance tests
         if "performance" in item.nodeid.lower():
             item.add_marker(pytest.mark.performance)
-        
+
         # Add security marker for security tests
         if "security" in item.nodeid.lower():
             item.add_marker(pytest.mark.security)

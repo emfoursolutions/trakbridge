@@ -51,7 +51,7 @@ bp = Blueprint("tak_servers", __name__)
 
 
 @bp.route("/validate-certificate", methods=["POST"])
-@require_permission('tak_servers', 'write')
+@require_permission("tak_servers", "write")
 def validate_certificate():
     """Validate uploaded P12 certificate"""
     try:
@@ -107,7 +107,7 @@ def validate_certificate():
 
 
 @bp.route("/<int:server_id>/validate-certificate", methods=["POST"])
-@require_permission('tak_servers', 'write')
+@require_permission("tak_servers", "write")
 def validate_stored_certificate(server_id):
     try:
         server = TakServer.query.get_or_404(server_id)
@@ -130,7 +130,7 @@ def validate_stored_certificate(server_id):
 
 
 @bp.route("/")
-@require_permission('tak_servers', 'read')
+@require_permission("tak_servers", "read")
 def list_tak_servers():
     """List all TAK servers"""
     from models.tak_server import TakServer
@@ -140,7 +140,7 @@ def list_tak_servers():
 
 
 @bp.route("/create", methods=["GET", "POST"])
-@require_permission('tak_servers', 'write')
+@require_permission("tak_servers", "write")
 def create_tak_server():
     """Create a new TAK server"""
     if request.method == "GET":
@@ -272,7 +272,7 @@ def create_tak_server():
 
 
 @bp.route("/<int:server_id>")
-@require_permission('tak_servers', 'read')
+@require_permission("tak_servers", "read")
 def view_tak_server(server_id):
     """View TAK server details"""
     from models.tak_server import TakServer
@@ -282,7 +282,7 @@ def view_tak_server(server_id):
 
 
 @bp.route("/<int:server_id>/edit", methods=["GET", "POST"])
-@require_permission('tak_servers', 'write')
+@require_permission("tak_servers", "write")
 def edit_tak_server(server_id):
     """Edit TAK server"""
     from models.tak_server import TakServer
@@ -406,7 +406,7 @@ def edit_tak_server(server_id):
 
 
 @bp.route("/<int:server_id>/delete", methods=["DELETE"])
-@require_permission('tak_servers', 'delete')
+@require_permission("tak_servers", "delete")
 def delete_tak_server(server_id):
     """Delete TAK server"""
     try:
@@ -438,7 +438,7 @@ def delete_tak_server(server_id):
 
 
 @bp.route("/<int:server_id>/test", methods=["POST"])
-@require_permission('tak_servers', 'read')
+@require_permission("tak_servers", "read")
 def test_tak_server(server_id):
     """Test connection to existing TAK server using pytak"""
     from models.tak_server import TakServer
@@ -457,7 +457,7 @@ def test_tak_server(server_id):
 
 
 @bp.route("/test-config", methods=["POST"])
-@require_permission('tak_servers', 'write')
+@require_permission("tak_servers", "write")
 def test_tak_server_config():
     """Test TAK server configuration without saving to database"""
     try:
