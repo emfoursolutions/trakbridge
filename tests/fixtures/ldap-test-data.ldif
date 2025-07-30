@@ -1,0 +1,197 @@
+# Test LDAP data for TrakBridge authentication testing
+# This file is used to populate the test LDAP server with users and groups
+
+# Create organizational units
+dn: ou=Users,dc=test,dc=trakbridge,dc=com
+objectClass: organizationalUnit
+ou: Users
+description: Container for user accounts
+
+dn: ou=Groups,dc=test,dc=trakbridge,dc=com
+objectClass: organizationalUnit
+ou: Groups
+description: Container for security groups
+
+dn: ou=Service Accounts,dc=test,dc=trakbridge,dc=com
+objectClass: organizationalUnit
+ou: Service Accounts
+description: Container for service accounts
+
+# Create test users
+dn: cn=testuser,ou=Users,dc=test,dc=trakbridge,dc=com
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+cn: testuser
+sn: User
+givenName: Test
+uid: testuser
+uidNumber: 1001
+gidNumber: 1001
+homeDirectory: /home/testuser
+loginShell: /bin/bash
+mail: testuser@test.trakbridge.com
+telephoneNumber: +1-555-0001
+title: Test User
+department: Testing
+displayName: Test User
+description: Standard test user account
+userPassword: {SSHA}testpassword123
+
+dn: cn=adminuser,ou=Users,dc=test,dc=trakbridge,dc=com
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+cn: adminuser
+sn: Admin
+givenName: Admin
+uid: adminuser
+uidNumber: 1002
+gidNumber: 1002
+homeDirectory: /home/adminuser
+loginShell: /bin/bash
+mail: admin@test.trakbridge.com
+telephoneNumber: +1-555-0002
+title: System Administrator
+department: IT
+displayName: Admin User
+description: Administrative test user account
+userPassword: {SSHA}adminpassword123
+
+dn: cn=operatoruser,ou=Users,dc=test,dc=trakbridge,dc=com
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+cn: operatoruser
+sn: Operator
+givenName: Operator
+uid: operatoruser
+uidNumber: 1003
+gidNumber: 1003
+homeDirectory: /home/operatoruser
+loginShell: /bin/bash
+mail: operator@test.trakbridge.com
+telephoneNumber: +1-555-0003
+title: System Operator
+department: Operations
+displayName: Operator User
+description: Operator test user account
+userPassword: {SSHA}operatorpassword123
+
+dn: cn=disableduser,ou=Users,dc=test,dc=trakbridge,dc=com
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+cn: disableduser
+sn: Disabled
+givenName: Disabled
+uid: disableduser
+uidNumber: 1004
+gidNumber: 1004
+homeDirectory: /home/disableduser
+loginShell: /bin/false
+mail: disabled@test.trakbridge.com
+telephoneNumber: +1-555-0004
+title: Disabled User
+department: Testing
+displayName: Disabled User
+description: Disabled test user account
+userPassword: {SSHA}disabledpassword123
+# Account disabled by setting shell to /bin/false
+
+# Create service account for TrakBridge
+dn: cn=trakbridge,ou=Service Accounts,dc=test,dc=trakbridge,dc=com
+objectClass: inetOrgPerson
+objectClass: posixAccount
+cn: trakbridge
+sn: Service
+givenName: TrakBridge
+uid: trakbridge
+uidNumber: 2001
+gidNumber: 2001
+homeDirectory: /opt/trakbridge
+loginShell: /bin/bash
+mail: trakbridge@test.trakbridge.com
+title: TrakBridge Service Account
+department: IT
+displayName: TrakBridge Service
+description: Service account for TrakBridge application LDAP binding
+userPassword: {SSHA}trakbridge_service_password
+
+# Create security groups
+dn: cn=TrakBridge-Admins,ou=Groups,dc=test,dc=trakbridge,dc=com
+objectClass: groupOfNames
+objectClass: posixGroup
+cn: TrakBridge-Admins
+gidNumber: 3001
+description: TrakBridge administrators with full system access
+member: cn=adminuser,ou=Users,dc=test,dc=trakbridge,dc=com
+memberUid: adminuser
+
+dn: cn=TrakBridge-Operators,ou=Groups,dc=test,dc=trakbridge,dc=com
+objectClass: groupOfNames
+objectClass: posixGroup
+cn: TrakBridge-Operators
+gidNumber: 3002
+description: TrakBridge operators with stream and server management access
+member: cn=operatoruser,ou=Users,dc=test,dc=trakbridge,dc=com
+member: cn=adminuser,ou=Users,dc=test,dc=trakbridge,dc=com
+memberUid: operatoruser
+memberUid: adminuser
+
+dn: cn=TrakBridge-Users,ou=Groups,dc=test,dc=trakbridge,dc=com
+objectClass: groupOfNames
+objectClass: posixGroup
+cn: TrakBridge-Users
+gidNumber: 3003
+description: TrakBridge standard users with read-only access
+member: cn=testuser,ou=Users,dc=test,dc=trakbridge,dc=com
+member: cn=operatoruser,ou=Users,dc=test,dc=trakbridge,dc=com
+member: cn=adminuser,ou=Users,dc=test,dc=trakbridge,dc=com
+memberUid: testuser
+memberUid: operatoruser
+memberUid: adminuser
+
+dn: cn=Domain Users,ou=Groups,dc=test,dc=trakbridge,dc=com
+objectClass: groupOfNames
+objectClass: posixGroup
+cn: Domain Users
+gidNumber: 3004
+description: All domain users
+member: cn=testuser,ou=Users,dc=test,dc=trakbridge,dc=com
+member: cn=adminuser,ou=Users,dc=test,dc=trakbridge,dc=com
+member: cn=operatoruser,ou=Users,dc=test,dc=trakbridge,dc=com
+member: cn=disableduser,ou=Users,dc=test,dc=trakbridge,dc=com
+memberUid: testuser
+memberUid: adminuser
+memberUid: operatoruser
+memberUid: disableduser
+
+# Additional test groups for complex scenarios
+dn: cn=IT-Department,ou=Groups,dc=test,dc=trakbridge,dc=com
+objectClass: groupOfNames
+objectClass: posixGroup
+cn: IT-Department
+gidNumber: 3005
+description: IT Department members
+member: cn=adminuser,ou=Users,dc=test,dc=trakbridge,dc=com
+memberUid: adminuser
+
+dn: cn=Operations-Department,ou=Groups,dc=test,dc=trakbridge,dc=com
+objectClass: groupOfNames
+objectClass: posixGroup
+cn: Operations-Department
+gidNumber: 3006
+description: Operations Department members
+member: cn=operatoruser,ou=Users,dc=test,dc=trakbridge,dc=com
+memberUid: operatoruser
+
+# Test nested group (for advanced group membership testing)
+dn: cn=TrakBridge-SuperAdmins,ou=Groups,dc=test,dc=trakbridge,dc=com
+objectClass: groupOfNames
+objectClass: posixGroup
+cn: TrakBridge-SuperAdmins
+gidNumber: 3007
+description: TrakBridge super administrators
+member: cn=TrakBridge-Admins,ou=Groups,dc=test,dc=trakbridge,dc=com
+memberUid: adminuser

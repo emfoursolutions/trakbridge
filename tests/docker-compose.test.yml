@@ -1,0 +1,181 @@
+version: '3.8'
+
+services:
+  # Test LDAP server for integration tests
+  test-ldap:
+    image: osixia/openldap:1.5.0
+    container_name: trakbridge-test-ldap
+    environment:
+      LDAP_ORGANISATION: "TrakBridge Test Organization"
+      LDAP_DOMAIN: "test.trakbridge.com"
+      LDAP_ADMIN_PASSWORD: "admin_test_password"
+      LDAP_CONFIG_PASSWORD: "config_test_password"
+      LDAP_READONLY_USER: "true"
+      LDAP_READONLY_USER_USERNAME: "readonly"
+      LDAP_READONLY_USER_PASSWORD: "readonly_password"
+      LDAP_RFC2307BIS_SCHEMA: "false"
+      LDAP_BACKEND: "mdb"
+      LDAP_TLS: "true"
+      LDAP_TLS_CRT_FILENAME: "ldap.crt"
+      LDAP_TLS_KEY_FILENAME: "ldap.key"
+      LDAP_TLS_DH_PARAM_FILENAME: "dhparam.pem"
+      LDAP_TLS_CA_CRT_FILENAME: "ca.crt"
+      LDAP_TLS_ENFORCE: "false"
+      LDAP_TLS_CIPHER_SUITE: "SECURE256:-VERS-SSL3.0"
+      LDAP_TLS_PROTOCOL_MIN: "3.1"
+      LDAP_TLS_VERIFY_CLIENT: "demand"
+      LDAP_REPLICATION: "false"
+      KEEP_EXISTING_CONFIG: "false"
+      LDAP_REMOVE_CONFIG_AFTER_SETUP: "true"
+      LDAP_SSL_HELPER_PREFIX: "ldap"
+    ports:
+      - "389:389"
+      - "636:636"
+    volumes:
+      - ./fixtures/ldap-data:/container/service/slapd/assets/config/bootstrap/ldif/custom
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost", "-b", "dc=test,dc=trakbridge,dc=com", "-D", "cn=admin,dc=test,dc=trakbridge,dc=com", "-w", "admin_test_password"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Test LDAP admin interface (optional)
+  test-ldap-admin:
+    image: osixia/phpldapadmin:latest
+    container_name: trakbridge-test-ldap-admin
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: test-ldap
+      PHPLDAPADMIN_HTTPS: "false"
+    ports:
+      - "8080:80"
+    depends_on:
+      - test-ldap
+    networks:
+      - test-network
+
+  # Mock OIDC provider for testing
+  mock-oidc:
+    image: mockserver/mockserver:latest
+    container_name: trakbridge-mock-oidc
+    environment:
+      MOCKSERVER_PROPERTY_FILE: /config/mockserver.properties
+    ports:
+      - "1080:1080"
+    volumes:
+      - ./fixtures/oidc-mock:/config
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Redis for session storage testing
+  test-redis:
+    image: redis:6.2-alpine
+    container_name: trakbridge-test-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass test_redis_password
+    volumes:
+      - test-redis-data:/data
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # PostgreSQL for database testing
+  test-postgres:
+    image: postgres:13-alpine
+    container_name: trakbridge-test-postgres
+    environment:
+      POSTGRES_DB: trakbridge_test
+      POSTGRES_USER: trakbridge_test
+      POSTGRES_PASSWORD: test_postgres_password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    ports:
+      - "5432:5432"
+    volumes:
+      - test-postgres-data:/var/lib/postgresql/data
+      - ./fixtures/postgres-init:/docker-entrypoint-initdb.d
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trakbridge_test -d trakbridge_test"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # TrakBridge test application
+  trakbridge-test:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: development
+    container_name: trakbridge-test-app
+    environment:
+      FLASK_ENV: testing
+      TESTING: "true"
+      SECRET_KEY: "test-secret-key-for-ci-sessions"
+      TRAKBRIDGE_ENCRYPTION_KEY: "test-encryption-key-for-ci-testing"
+      
+      # Database configuration
+      SQLALCHEMY_DATABASE_URI: "postgresql://trakbridge_test:test_postgres_password@test-postgres:5432/trakbridge_test"
+      
+      # LDAP test configuration
+      LDAP_TEST_ENABLED: "true"
+      LDAP_TEST_SERVER: "test-ldap"
+      LDAP_TEST_PORT: "389"
+      LDAP_TEST_BIND_DN: "cn=admin,dc=test,dc=trakbridge,dc=com"
+      LDAP_TEST_BIND_PASSWORD: "admin_test_password"
+      LDAP_TEST_USER_BASE: "ou=Users,dc=test,dc=trakbridge,dc=com"
+      LDAP_TEST_GROUP_BASE: "ou=Groups,dc=test,dc=trakbridge,dc=com"
+      
+      # OIDC test configuration
+      OIDC_TEST_ENABLED: "true"
+      OIDC_TEST_ISSUER: "http://mock-oidc:1080"
+      OIDC_TEST_CLIENT_ID: "test-client"
+      OIDC_TEST_CLIENT_SECRET: "test-secret"
+      
+      # Redis session storage
+      SESSION_TYPE: "redis"
+      SESSION_REDIS: "redis://:test_redis_password@test-redis:6379/0"
+    ports:
+      - "8000:8080"
+    depends_on:
+      test-ldap:
+        condition: service_healthy
+      mock-oidc:
+        condition: service_healthy
+      test-postgres:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
+    volumes:
+      - ..:/app
+      - test-app-logs:/app/logs
+    networks:
+      - test-network
+    command: >
+      sh -c "
+        echo 'Waiting for dependencies...' &&
+        sleep 30 &&
+        echo 'Running tests...' &&
+        python -m pytest tests/test_authentication.py -v --tb=short
+      "
+
+volumes:
+  test-redis-data:
+  test-postgres-data:
+  test-app-logs:
+
+networks:
+  test-network:
+    driver: bridge

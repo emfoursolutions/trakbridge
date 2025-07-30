@@ -17,9 +17,6 @@ build/
 # Development version files
 .setuptools-scm-info.json
 
-# Tests for now
-tests/
-
 # Scripts
 scripts/
 
