@@ -234,9 +234,13 @@ class BaseConfig:
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         """Build database URI from configuration and secrets."""
-        db_type = self.secret_manager.get_secret(
-            "DB_TYPE", self.db_config.get("type", "sqlite")
-        )
+        # Check for explicit DATABASE_URL first (common in CI/production)
+        database_url = self.secret_manager.get_secret("DATABASE_URL")
+        if database_url:
+            return database_url
+        
+        # Fall back to building URI from components
+        db_type = self._get_database_type()
 
         if db_type == "sqlite":
             return self._build_sqlite_uri()
@@ -308,12 +312,38 @@ class BaseConfig:
         password_encoded = quote_plus(password) if password else ""
         return f"postgresql://{user}:{password_encoded}@{host}:{port}/{name}"
 
+    def _get_database_type(self) -> str:
+        """
+        Determine database type from configuration or DATABASE_URL.
+        
+        Priority order:
+        1. Explicit DB_TYPE environment variable
+        2. Database type from DATABASE_URL scheme
+        3. Configuration file default
+        4. Fallback to sqlite
+        """
+        # Check explicit DB_TYPE first
+        explicit_type = self.secret_manager.get_secret("DB_TYPE")
+        if explicit_type:
+            return explicit_type
+        
+        # Try to detect from DATABASE_URL scheme
+        database_url = self.secret_manager.get_secret("DATABASE_URL")
+        if database_url:
+            if database_url.startswith("postgresql://") or database_url.startswith("postgres://"):
+                return "postgresql"
+            elif database_url.startswith("mysql://") or database_url.startswith("mysql+"):
+                return "mysql"
+            elif database_url.startswith("sqlite://"):
+                return "sqlite"
+        
+        # Fall back to config file or default
+        return self.db_config.get("type", "sqlite")
+
     @property
     def SQLALCHEMY_ENGINE_OPTIONS(self) -> Dict[str, Any]:
         """Get database engine options."""
-        db_type = self.secret_manager.get_secret(
-            "DB_TYPE", self.db_config.get("type", "sqlite")
-        )
+        db_type = self._get_database_type()
         return self.db_config.get("engine_options", {}).get(db_type, {})
 
     @property
@@ -596,9 +626,7 @@ class BaseConfig:
         return {
             "environment": self.environment,
             "database": {
-                "type": self.secret_manager.get_secret(
-                    "DB_TYPE", self.db_config.get("type", "sqlite")
-                ),
+                "type": self._get_database_type(),
                 "track_modifications": self.SQLALCHEMY_TRACK_MODIFICATIONS,
                 "record_queries": self.SQLALCHEMY_RECORD_QUERIES,
             },
