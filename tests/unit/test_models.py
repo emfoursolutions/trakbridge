@@ -2,7 +2,7 @@
 
 import pytest
 from datetime import datetime, timedelta, timezone
-from models.user import User, UserRole, UserSession
+from models.user import User, UserRole, UserSession, AuthProvider
 from models.stream import Stream
 from models.tak_server import TakServer
 from database import db
@@ -17,8 +17,7 @@ class TestUserModel:
             user = User(
                 username="testuser",
                 email="test@example.com",
-                first_name="Test",
-                last_name="User",
+                full_name="Test User",
                 role=UserRole.USER,
             )
             db_session.add(user)
@@ -27,12 +26,17 @@ class TestUserModel:
             assert user.id is not None
             assert user.username == "testuser"
             assert user.email == "test@example.com"
+            assert user.full_name == "Test User"
             assert user.role == UserRole.USER
 
     def test_user_password_hashing(self, app, db_session):
         """Test password hashing and verification."""
         with app.app_context():
-            user = User(username="testuser", email="test@example.com")
+            user = User(
+                username="testuser", 
+                email="test@example.com",
+                auth_provider=AuthProvider.LOCAL
+            )
             user.set_password("testpassword")
 
             assert user.password_hash is not None

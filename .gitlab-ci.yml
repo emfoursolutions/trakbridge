@@ -247,14 +247,14 @@ code-quality:
 unit-tests:
   stage: test
   image: python:${PYTHON_VERSION}-slim
-  <<: *postgres_service
   tags:
     - trakbridge-ci
   timeout: 20m
   coverage: '/TOTAL.+?(\d+\%)$/'
   
   variables:
-    DATABASE_URL: "postgresql://test_user:test_password@postgres:5432/test_db"
+    # Use SQLite for fast unit tests
+    DB_TYPE: "sqlite"
     FLASK_ENV: "testing"
     SECRET_KEY: "test-secret-key-for-gitlab-ci"
     TRAKBRIDGE_ENCRYPTION_KEY: "test-encryption-key-for-gitlab-ci-12345"
@@ -348,6 +348,8 @@ integration-tests:
   timeout: 15m
   
   variables:
+    # Use PostgreSQL for production-like integration tests
+    DB_TYPE: "postgresql"
     DATABASE_URL: "postgresql://test_user:test_password@postgres:5432/test_db"
     FLASK_ENV: "testing"
     SECRET_KEY: "test-secret-key-for-gitlab-ci"
