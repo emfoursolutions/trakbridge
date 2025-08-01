@@ -1,6 +1,7 @@
 """Unit tests for the main TrakBridge application."""
 
 import pytest
+import os
 from unittest.mock import Mock, patch, MagicMock
 from app import create_app, setup_cleanup_handlers, setup_template_helpers
 
@@ -10,9 +11,18 @@ class TestAppCreation:
 
     def test_create_app_development(self):
         """Test creating app with development config."""
-        app = create_app("development")
-        assert app is not None
-        assert app.config["DEBUG"] is True
+        # Set environment variables for testing to avoid file system issues
+        test_env = {
+            "DB_TYPE": "sqlite",
+            "FLASK_ENV": "testing",
+            "SECRET_KEY": "test-secret-key",
+            "TRAKBRIDGE_ENCRYPTION_KEY": "test-encryption-key-for-testing-12345",
+        }
+
+        with patch.dict(os.environ, test_env, clear=False):
+            app = create_app("development")
+            assert app is not None
+            assert app.config["DEBUG"] is True
 
     def test_create_app_testing(self):
         """Test creating app with testing config."""
@@ -22,9 +32,18 @@ class TestAppCreation:
 
     def test_create_app_production(self):
         """Test creating app with production config."""
-        app = create_app("production")
-        assert app is not None
-        assert app.config["DEBUG"] is False
+        # Set environment variables for testing to avoid file system issues
+        test_env = {
+            "DB_TYPE": "sqlite",
+            "FLASK_ENV": "testing",
+            "SECRET_KEY": "test-secret-key-for-production-test",
+            "TRAKBRIDGE_ENCRYPTION_KEY": "test-encryption-key-for-testing-12345",
+        }
+
+        with patch.dict(os.environ, test_env, clear=False):
+            app = create_app("production")
+            assert app is not None
+            assert app.config["DEBUG"] is False
 
     def test_app_has_required_attributes(self):
         """Test that app has required attributes."""

@@ -19,24 +19,23 @@ class TestPluginManager:
     def test_get_available_plugins(self):
         """Test getting available plugins."""
         manager = PluginManager()
-        plugins = manager.get_available_plugins()
-        assert isinstance(plugins, dict)
+        plugins = manager.list_plugins()
+        assert isinstance(plugins, list)
 
     def test_get_plugin_info(self):
         """Test getting plugin information."""
         manager = PluginManager()
 
-        # Mock a plugin for testing
-        mock_plugin = Mock()
-        mock_plugin.name = "Test Plugin"
-        mock_plugin.description = "Test Description"
-        mock_plugin.version = "1.0.0"
-
-        manager.plugins["test"] = mock_plugin
-
-        info = manager.get_plugin_info("test")
-        assert info is not None
-        assert "name" in info or info == {}  # May be empty if plugin not found
+        # Test with a real plugin name (if any exist) or handle None return
+        plugin_names = manager.list_plugins()
+        if plugin_names:
+            # Test with first available plugin
+            info = manager.get_plugin_metadata(plugin_names[0])
+            assert info is None or isinstance(info, dict)  # May be None if no metadata
+        else:
+            # Test with non-existent plugin
+            info = manager.get_plugin_metadata("nonexistent")
+            assert info is None
 
     def test_load_plugins_from_directory(self):
         """Test loading plugins from directory."""
@@ -71,54 +70,75 @@ class TestBaseGPSPlugin:
 
         # Create a concrete implementation for testing
         class TestPlugin(BaseGPSPlugin):
-            name = "Test Plugin"
-            description = "Test plugin for unit testing"
-            version = "1.0.0"
+            @property
+            def plugin_name(self) -> str:
+                return "Test Plugin"
 
-            def fetch_data(self):
-                return {"test": "data"}
+            @property
+            def plugin_metadata(self) -> dict:
+                return {
+                    "display_name": "Test Plugin",
+                    "description": "Test plugin for unit testing",
+                    "version": "1.0.0",
+                    "icon": "fa-test",
+                    "category": "test",
+                    "config_fields": [],
+                }
 
-            def transform_data(self, data):
-                return {"transformed": data}
+            async def fetch_locations(self, session):
+                return [{"test": "location"}]
 
         plugin = TestPlugin({})
-        assert plugin.name == "Test Plugin"
-        assert plugin.description == "Test plugin for unit testing"
-        assert plugin.version == "1.0.0"
+        assert plugin.plugin_name == "Test Plugin"
+        assert plugin.plugin_metadata["description"] == "Test plugin for unit testing"
+        assert plugin.plugin_metadata["version"] == "1.0.0"
 
     def test_base_plugin_methods(self):
         """Test base plugin methods."""
 
         class TestPlugin(BaseGPSPlugin):
-            name = "Test Plugin"
+            @property
+            def plugin_name(self) -> str:
+                return "Test Plugin"
 
-            def fetch_data(self):
-                return {"test": "data"}
+            @property
+            def plugin_metadata(self) -> dict:
+                return {
+                    "display_name": "Test Plugin",
+                    "description": "Test plugin for unit testing",
+                    "config_fields": [],
+                }
 
-            def transform_data(self, data):
-                return {"transformed": data}
+            async def fetch_locations(self, session):
+                return [{"test": "data"}]
 
         plugin = TestPlugin({"test_config": "value"})
 
-        # Test fetch_data
-        data = plugin.fetch_data()
-        assert data == {"test": "data"}
+        # Test plugin properties
+        assert plugin.plugin_name == "Test Plugin"
+        assert plugin.plugin_metadata["description"] == "Test plugin for unit testing"
 
-        # Test transform_data
-        transformed = plugin.transform_data({"input": "data"})
-        assert transformed == {"transformed": {"input": "data"}}
+        # Test configuration access
+        assert plugin.config["test_config"] == "value"
 
     def test_plugin_configuration(self):
         """Test plugin configuration handling."""
 
         class TestPlugin(BaseGPSPlugin):
-            name = "Test Plugin"
+            @property
+            def plugin_name(self) -> str:
+                return "Test Plugin"
 
-            def fetch_data(self):
-                return {}
+            @property
+            def plugin_metadata(self) -> dict:
+                return {
+                    "display_name": "Test Plugin",
+                    "description": "Test plugin for configuration testing",
+                    "config_fields": [],
+                }
 
-            def transform_data(self, data):
-                return data
+            async def fetch_locations(self, session):
+                return []
 
         config = {"api_key": "test123", "endpoint": "http://test.com"}
         plugin = TestPlugin(config)

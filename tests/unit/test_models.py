@@ -1,6 +1,7 @@
 """Unit tests for TrakBridge models."""
 
 import pytest
+import uuid
 from datetime import datetime, timedelta, timezone
 from models.user import User, UserRole, UserSession, AuthProvider
 from models.stream import Stream
@@ -33,9 +34,9 @@ class TestUserModel:
         """Test password hashing and verification."""
         with app.app_context():
             user = User(
-                username="testuser", 
+                username="testuser",
                 email="test@example.com",
-                auth_provider=AuthProvider.LOCAL
+                auth_provider=AuthProvider.LOCAL,
             )
             user.set_password("testpassword")
 
@@ -74,13 +75,15 @@ class TestTakServerModel:
     def test_tak_server_creation(self, app, db_session):
         """Test creating a TAK server."""
         with app.app_context():
+            # Use unique name to avoid constraint violations between tests
+            unique_name = f"Test Server {uuid.uuid4().hex[:8]}"
             server = TakServer(
-                name="Test Server", host="localhost", port=8089, protocol="tcp"
+                name=unique_name, host="localhost", port=8089, protocol="tcp"
             )
             db_session.add(server)
             db_session.commit()
 
             assert server.id is not None
-            assert server.name == "Test Server"
+            assert server.name == unique_name
             assert server.host == "localhost"
             assert server.port == 8089

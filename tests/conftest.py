@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 # Import application components
 from database import db
 from services.auth.auth_manager import AuthenticationManager
-from models.user import User, UserRole, UserSession
+from models.user import User, UserRole, UserSession, AuthProvider
 
 
 @pytest.fixture(scope="session")
@@ -156,11 +156,9 @@ def test_users(app, db_session):
     admin = User(
         username="admin",
         email="admin@test.com",
-        first_name="Admin",
-        last_name="User",
+        full_name="Admin User",
         role=UserRole.ADMIN,
-        auth_provider="local",
-        is_active=True,
+        auth_provider=AuthProvider.LOCAL,
     )
     admin.set_password("AdminPass123")
     db_session.add(admin)
@@ -170,11 +168,9 @@ def test_users(app, db_session):
     operator = User(
         username="operator",
         email="operator@test.com",
-        first_name="Operator",
-        last_name="User",
+        full_name="Operator User",
         role=UserRole.OPERATOR,
-        auth_provider="local",
-        is_active=True,
+        auth_provider=AuthProvider.LOCAL,
     )
     operator.set_password("OperatorPass123")
     db_session.add(operator)
@@ -184,11 +180,9 @@ def test_users(app, db_session):
     user = User(
         username="user",
         email="user@test.com",
-        first_name="Regular",
-        last_name="User",
+        full_name="Regular User",
         role=UserRole.USER,
-        auth_provider="local",
-        is_active=True,
+        auth_provider=AuthProvider.LOCAL,
     )
     user.set_password("UserPass123")
     db_session.add(user)
@@ -198,12 +192,14 @@ def test_users(app, db_session):
     inactive = User(
         username="inactive",
         email="inactive@test.com",
-        first_name="Inactive",
-        last_name="User",
+        full_name="Inactive User",
         role=UserRole.USER,
-        auth_provider="local",
-        is_active=False,
+        auth_provider=AuthProvider.LOCAL,
     )
+    # Set status to inactive instead of using is_active
+    from models.user import AccountStatus
+
+    inactive.status = AccountStatus.DISABLED
     inactive.set_password("InactivePass123")
     db_session.add(inactive)
     users["inactive"] = inactive
@@ -212,11 +208,9 @@ def test_users(app, db_session):
     ldap_user = User(
         username="ldapuser",
         email="ldapuser@test.com",
-        first_name="LDAP",
-        last_name="User",
+        full_name="LDAP User",
         role=UserRole.USER,
-        auth_provider="ldap",
-        is_active=True,
+        auth_provider=AuthProvider.LDAP,
     )
     db_session.add(ldap_user)
     users["ldap_user"] = ldap_user
@@ -225,11 +219,9 @@ def test_users(app, db_session):
     oidc_user = User(
         username="oidcuser",
         email="oidcuser@test.com",
-        first_name="OIDC",
-        last_name="User",
+        full_name="OIDC User",
         role=UserRole.OPERATOR,
-        auth_provider="oidc",
-        is_active=True,
+        auth_provider=AuthProvider.OIDC,
     )
     db_session.add(oidc_user)
     users["oidc_user"] = oidc_user
@@ -435,17 +427,19 @@ authentication:
 
 # Test utilities
 def create_test_user(
-    username, email, role=UserRole.USER, auth_provider="local", password="TestPass123"
+    username,
+    email,
+    role=UserRole.USER,
+    auth_provider=AuthProvider.LOCAL,
+    password="TestPass123",
 ):
     """Utility function to create test users"""
     user = User(
         username=username,
         email=email,
-        first_name=username.title(),
-        last_name="User",
+        full_name=f"{username.title()} User",
         role=role,
         auth_provider=auth_provider,
-        is_active=True,
     )
     if password:
         user.set_password(password)

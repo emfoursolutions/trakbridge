@@ -242,7 +242,7 @@ class TestEnvironmentConfig(BaseConfig):
         database_url = self.secret_manager.get_secret("DATABASE_URL")
         if database_url:
             return database_url
-        
+
         # Default to SQLite in-memory for unit tests
         return "sqlite:///:memory:"
 
@@ -250,10 +250,13 @@ class TestEnvironmentConfig(BaseConfig):
     def SQLALCHEMY_ENGINE_OPTIONS(self) -> Dict[str, Any]:
         """Engine options appropriate for the testing database type."""
         db_type = self._get_database_type()
-        
+
         if db_type == "sqlite":
             # SQLite options for unit tests
-            return {"pool_pre_ping": False, "connect_args": {"check_same_thread": False}}
+            return {
+                "pool_pre_ping": False,
+                "connect_args": {"check_same_thread": False},
+            }
         elif db_type == "postgresql":
             # PostgreSQL options for integration tests
             return {
@@ -261,7 +264,7 @@ class TestEnvironmentConfig(BaseConfig):
                 "pool_recycle": 300,
                 "pool_size": 5,
                 "max_overflow": 10,
-                "connect_args": {"connect_timeout": 10}
+                "connect_args": {"connect_timeout": 10},
             }
         elif db_type == "mysql":
             # MySQL options for integration tests
@@ -270,11 +273,14 @@ class TestEnvironmentConfig(BaseConfig):
                 "pool_recycle": 300,
                 "pool_size": 5,
                 "max_overflow": 10,
-                "connect_args": {"connect_timeout": 10}
+                "connect_args": {"connect_timeout": 10},
             }
         else:
             # Default to SQLite options
-            return {"pool_pre_ping": False, "connect_args": {"check_same_thread": False}}
+            return {
+                "pool_pre_ping": False,
+                "connect_args": {"check_same_thread": False},
+            }
 
     @property
     def MAX_WORKER_THREADS(self) -> int:

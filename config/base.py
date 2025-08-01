@@ -238,7 +238,7 @@ class BaseConfig:
         database_url = self.secret_manager.get_secret("DATABASE_URL")
         if database_url:
             return database_url
-        
+
         # Fall back to building URI from components
         db_type = self._get_database_type()
 
@@ -315,7 +315,7 @@ class BaseConfig:
     def _get_database_type(self) -> str:
         """
         Determine database type from configuration or DATABASE_URL.
-        
+
         Priority order:
         1. Explicit DB_TYPE environment variable
         2. Database type from DATABASE_URL scheme
@@ -326,17 +326,21 @@ class BaseConfig:
         explicit_type = self.secret_manager.get_secret("DB_TYPE")
         if explicit_type:
             return explicit_type
-        
+
         # Try to detect from DATABASE_URL scheme
         database_url = self.secret_manager.get_secret("DATABASE_URL")
         if database_url:
-            if database_url.startswith("postgresql://") or database_url.startswith("postgres://"):
+            if database_url.startswith("postgresql://") or database_url.startswith(
+                "postgres://"
+            ):
                 return "postgresql"
-            elif database_url.startswith("mysql://") or database_url.startswith("mysql+"):
+            elif database_url.startswith("mysql://") or database_url.startswith(
+                "mysql+"
+            ):
                 return "mysql"
             elif database_url.startswith("sqlite://"):
                 return "sqlite"
-        
+
         # Fall back to config file or default
         return self.db_config.get("type", "sqlite")
 
