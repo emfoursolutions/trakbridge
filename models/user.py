@@ -27,7 +27,7 @@ Version: 1.0.0
 """
 
 # Standard library imports
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as utc_timezone
 from enum import Enum
 from typing import Optional, Dict, Any, List
 import uuid
@@ -140,7 +140,7 @@ class User(db.Model, TimestampMixin):
         self.password_hash = bcrypt.hashpw(password.encode("utf-8"), salt).decode(
             "utf-8"
         )
-        self.password_changed_at = datetime.utcnow()
+        self.password_changed_at = datetime.now(utc_timezone.utc)
 
     def check_password(self, password: str) -> bool:
         """
@@ -165,7 +165,7 @@ class User(db.Model, TimestampMixin):
             return False
 
         # Check if account is temporarily locked
-        if self.locked_until and self.locked_until > datetime.utcnow():
+        if self.locked_until and self.locked_until > datetime.now(utc_timezone.utc):
             return False
 
         return True
@@ -173,7 +173,7 @@ class User(db.Model, TimestampMixin):
     def is_locked(self) -> bool:
         """Check if user account is locked"""
         return self.status == AccountStatus.LOCKED or (
-            self.locked_until and self.locked_until > datetime.utcnow()
+            self.locked_until and self.locked_until > datetime.now(utc_timezone.utc)
         )
 
     def lock_account(self, duration_minutes: int = 30) -> None:
@@ -183,7 +183,7 @@ class User(db.Model, TimestampMixin):
         Args:
             duration_minutes: How long to lock the account in minutes
         """
-        self.locked_until = datetime.utcnow() + timedelta(minutes=duration_minutes)
+        self.locked_until = datetime.now(utc_timezone.utc) + timedelta(minutes=duration_minutes)
         self.status = AccountStatus.LOCKED
 
     def unlock_account(self) -> None:
@@ -208,7 +208,7 @@ class User(db.Model, TimestampMixin):
     def reset_failed_login(self) -> None:
         """Reset failed login attempts after successful login"""
         self.failed_login_attempts = 0
-        self.last_login = datetime.utcnow()
+        self.last_login = datetime.now(utc_timezone.utc)
 
     def has_role(self, role: UserRole) -> bool:
         """
@@ -443,7 +443,7 @@ class UserSession(db.Model, TimestampMixin):
 
     # Session lifecycle
     expires_at = Column(DateTime, nullable=False)
-    last_activity = Column(DateTime, nullable=False, default=datetime.utcnow)
+    last_activity = Column(DateTime, nullable=False, default=lambda: datetime.now(utc_timezone.utc))
     is_active = Column(Boolean, default=True)
 
     # Provider-specific session data
@@ -480,7 +480,7 @@ class UserSession(db.Model, TimestampMixin):
             New UserSession instance
         """
         session_id = str(uuid.uuid4())
-        expires_at = datetime.utcnow() + timedelta(hours=expires_in_hours)
+        expires_at = datetime.now(utc_timezone.utc) + timedelta(hours=expires_in_hours)
 
         session = cls(
             session_id=session_id,
@@ -489,7 +489,7 @@ class UserSession(db.Model, TimestampMixin):
             user_agent=user_agent,
             provider=provider,
             expires_at=expires_at,
-            last_activity=datetime.utcnow(),
+            last_activity=datetime.now(utc_timezone.utc),
             is_active=True,
         )
 
@@ -504,7 +504,7 @@ class UserSession(db.Model, TimestampMixin):
         """Check if session is still valid"""
         return (
             self.is_active
-            and self.expires_at > datetime.utcnow()
+            and self.expires_at > datetime.now(utc_timezone.utc)
             and self.user.is_active()
         )
 
@@ -515,8 +515,8 @@ class UserSession(db.Model, TimestampMixin):
         Args:
             hours: Number of hours to extend session
         """
-        self.expires_at = datetime.utcnow() + timedelta(hours=hours)
-        self.last_activity = datetime.utcnow()
+        self.expires_at = datetime.now(utc_timezone.utc) + timedelta(hours=hours)
+        self.last_activity = datetime.now(utc_timezone.utc)
 
     def invalidate(self) -> None:
         """Invalidate the session"""
@@ -524,7 +524,7 @@ class UserSession(db.Model, TimestampMixin):
 
     def update_activity(self) -> None:
         """Update last activity timestamp"""
-        self.last_activity = datetime.utcnow()
+        self.last_activity = datetime.now(utc_timezone.utc)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert session to dictionary representation"""

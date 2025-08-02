@@ -27,7 +27,7 @@ Version: 1.0.0
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
 from models.user import User, UserRole, AuthProvider, AccountStatus
@@ -179,7 +179,7 @@ class BootstrapService:
 
             # Write timestamp and details
             with open(bootstrap_file, "w") as f:
-                f.write(f"Bootstrap completed: {datetime.utcnow().isoformat()}\n")
+                f.write(f"Bootstrap completed: {datetime.now(timezone.utc).isoformat()}\n")
                 f.write(f"Initial admin user: {self.default_admin_username}\n")
 
             # Set secure permissions
@@ -203,7 +203,7 @@ class BootstrapService:
                 "admin_count": User.query.filter_by(role=UserRole.ADMIN).count(),
                 "should_create_admin": self.should_create_initial_admin(),
                 "default_username": self.default_admin_username,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         except Exception as e:
             logger.error(f"Error getting bootstrap info: {e}")
@@ -212,7 +212,7 @@ class BootstrapService:
                 "admin_count": 0,
                 "should_create_admin": False,
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     def force_password_change_required(self, user: User) -> bool:

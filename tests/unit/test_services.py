@@ -41,12 +41,13 @@ class TestStreamManager:
             mock_worker_instance = Mock()
             mock_worker.return_value = mock_worker_instance
 
-            # Mock the async coroutine execution
-            with patch.object(
-                stream_manager, "_run_coroutine_threadsafe", return_value=True
-            ):
-                result = stream_manager.start_stream_sync(1)
-                assert result is True
+            # Mock the async start_stream method directly to avoid unawaited coroutine
+            with patch.object(stream_manager, "start_stream", return_value=True) as mock_start_stream:
+                with patch.object(
+                    stream_manager, "_run_coroutine_threadsafe", return_value=True
+                ):
+                    result = stream_manager.start_stream_sync(1)
+                    assert result is True
 
             # Verify database lookup was called
             mock_db_instance.get_stream.assert_called_once_with(1)

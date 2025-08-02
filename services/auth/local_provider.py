@@ -31,7 +31,7 @@ Version: 1.0.0
 import logging
 import re
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional, Tuple
 
 # Third-party imports
@@ -317,7 +317,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
                 "bcrypt_rounds": self.bcrypt_rounds,
                 "allow_registration": self.allow_registration,
                 "password_policy_enabled": bool(self.password_policy),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -325,7 +325,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
                 "status": "unhealthy",
                 "provider": "local",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     def create_user(
@@ -635,7 +635,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
                 "disabled_users": disabled_users,
                 "users_by_role": users_by_role,
                 "registration_enabled": self.allow_registration,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -660,7 +660,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
             return True
 
         expiry_date = user.password_changed_at + timedelta(days=self.max_age_days)
-        return datetime.utcnow() > expiry_date
+        return datetime.now(timezone.utc) > expiry_date
 
     def supports_feature(self, feature: str) -> bool:
         """
