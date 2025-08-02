@@ -1187,15 +1187,11 @@ gemnasium-dependency_scanning:
 
 container_scanning:
   stage: security
-  image: alpine:latest
   tags:
     - trakbridge-cd  # Needs Docker daemon access for container scanning
   timeout: 15m
   variables:
     CS_DOCKERFILE_PATH: "Dockerfile"
-  before_script:
-    - apk add --no-cache curl docker-cli
-    - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
   script: |
     echo "Running Trivy container scanning on $CS_IMAGE"
     if [ -n "$CS_IMAGE" ]; then
