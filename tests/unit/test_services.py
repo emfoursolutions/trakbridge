@@ -41,8 +41,12 @@ class TestStreamManager:
             mock_worker_instance = Mock()
             mock_worker.return_value = mock_worker_instance
 
-            # Mock the async start_stream method directly to avoid unawaited coroutine
-            with patch.object(stream_manager, "start_stream", return_value=True) as mock_start_stream:
+            # Mock start_stream to return a non-coroutine value instead of an actual coroutine
+            def mock_start_stream(stream_id):
+                # Return a simple value instead of a coroutine
+                return True
+            
+            with patch.object(stream_manager, "start_stream", side_effect=mock_start_stream):
                 with patch.object(
                     stream_manager, "_run_coroutine_threadsafe", return_value=True
                 ):
