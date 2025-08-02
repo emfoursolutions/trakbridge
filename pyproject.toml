@@ -125,3 +125,10 @@ local_scheme = "node-and-date"
 
 # Don't normalize version (keep original format)
 normalize = false
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning:pyasn1.*",
+    "ignore::DeprecationWarning:aiohttp.*",
+    "ignore:enable_cleanup_closed ignored:DeprecationWarning:aiohttp.*"
+]

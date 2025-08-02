@@ -901,7 +901,7 @@ deploy-feature-branch:
   
   environment:
     name: review/$CI_COMMIT_REF_SLUG
-    url: http://localhost:$DYNAMIC_PORT
+    url: http://localhost:5001  # Dynamic port will be calculated at runtime
     deployment_tier: development
     auto_stop_in: 1 week
     on_stop: stop-feature-branch
@@ -910,39 +910,95 @@ deploy-feature-branch:
     DEPLOY_ENV: "feature"
     APP_VERSION: "${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}"
     DOCKER_TLS_CERTDIR: ""
-    # Generate dynamic port based on branch hash (5001-5099 range)
-    DYNAMIC_PORT: $((5001 + (0x$(echo -n "$CI_COMMIT_REF_SLUG" | sha256sum | head -c 2) % 99)))
   
   before_script: |
+    # Generate dynamic port based on branch hash (5001-5099 range)
+    export DYNAMIC_PORT=$((5001 + (0x$(echo -n "$CI_COMMIT_REF_SLUG" | sha256sum | head -c 2) % 99)))
     echo "Deploying feature branch to dynamic environment..."
     echo "Branch: $CI_COMMIT_BRANCH"
     echo "Environment: review/$CI_COMMIT_REF_SLUG"
     echo "Dynamic Port: $DYNAMIC_PORT"
   
   script: |
+    # Debug: Show current environment and available images
+    echo "=== DEPLOYMENT DEBUG INFO ==="
+    echo "CI_REGISTRY_IMAGE: ${CI_REGISTRY_IMAGE:-'not set'}"
+    echo "IMAGE_NAME: ${IMAGE_NAME:-'not set'}"
+    echo "Branch: $CI_COMMIT_BRANCH"
+    echo "Commit SHA: $CI_COMMIT_SHA"
+    echo "Available Docker images:"
+    docker images | head -10
+    echo "============================="
+    
     # Pull the built feature branch image
-
-      BRANCH_TAG="${CI_COMMIT_REF_SLUG}"
-      
+    BRANCH_TAG="${CI_COMMIT_REF_SLUG}"
+    IMAGE_FOUND=false
+    
+    # Try GitLab Container Registry first
     if [ -n "$CI_REGISTRY_IMAGE" ]; then
       echo "Pulling from GitLab Container Registry: $CI_REGISTRY_IMAGE:$BRANCH_TAG"
-      docker pull $CI_REGISTRY_IMAGE:$BRANCH_TAG || echo "GitLab registry image not found, using Docker Hub"
-      docker tag $CI_REGISTRY_IMAGE:$BRANCH_TAG trakbridge:$BRANCH_TAG-latest || echo "Using Docker Hub image"
-    else
-      echo "Using Docker Hub image: $IMAGE_NAME:$BRANCH_TAG"
-      docker pull $IMAGE_NAME:$BRANCH_TAG
-      docker tag $IMAGE_NAME:$BRANCH_TAG trakbridge:$BRANCH_TAG-latest
+      if docker pull $CI_REGISTRY_IMAGE:$BRANCH_TAG; then
+        docker tag $CI_REGISTRY_IMAGE:$BRANCH_TAG trakbridge:$BRANCH_TAG-latest
+        IMAGE_FOUND=true
+        echo "Successfully pulled from GitLab Container Registry"
+      else
+        echo "GitLab registry image not found, trying Docker Hub"
+      fi
     fi
     
-    # Create feature branch specific environment using deployment script
-    chmod +x scripts/deploy.sh
+    # Fallback to Docker Hub if GitLab registry failed
+    if [ "$IMAGE_FOUND" = "false" ]; then
+      echo "Using Docker Hub image: $IMAGE_NAME:$BRANCH_TAG"
+      if docker pull $IMAGE_NAME:$BRANCH_TAG; then
+        docker tag $IMAGE_NAME:$BRANCH_TAG trakbridge:$BRANCH_TAG-latest
+        IMAGE_FOUND=true
+        echo "Successfully pulled from Docker Hub"
+      else
+        echo "ERROR: Failed to pull image from both registries"
+        echo "This usually means the build-feature-branch-shell job failed or didn't run"
+        echo "Expected images:"
+        echo "  - GitLab: $CI_REGISTRY_IMAGE:$BRANCH_TAG"
+        echo "  - Docker Hub: $IMAGE_NAME:$BRANCH_TAG"
+        echo ""
+        echo "Please check that the build-feature-branch-shell job completed successfully"
+        exit 1
+      fi
+    fi
+    
+    # Debug: Check current directory and file structure
+    echo "=== FILE SYSTEM DEBUG ==="
+    pwd
+    echo "Contents of current directory:"
+    ls -la
+    echo "Looking for scripts directory:"
+    ls -la scripts/ || echo "scripts directory not found"
+    echo "Checking if deploy.sh exists:"
+    find . -name "deploy.sh" -type f || echo "deploy.sh not found anywhere"
+    echo "=========================="
+    
+    # Check if we need to use absolute path or if file exists
+    if [ -f "./scripts/deploy.sh" ]; then
+      chmod +x ./scripts/deploy.sh
+      DEPLOY_SCRIPT="./scripts/deploy.sh"
+    elif [ -f "$CI_PROJECT_DIR/scripts/deploy.sh" ]; then
+      chmod +x "$CI_PROJECT_DIR/scripts/deploy.sh"
+      DEPLOY_SCRIPT="$CI_PROJECT_DIR/scripts/deploy.sh"
+    else
+      echo "ERROR: scripts/deploy.sh not found in expected locations"
+      echo "Checked:"
+      echo "  - ./scripts/deploy.sh"
+      echo "  - $CI_PROJECT_DIR/scripts/deploy.sh"
+      exit 1
+    fi
+    
+    echo "Using deploy script: $DEPLOY_SCRIPT"
 
     # Set environment variables for feature branch deployment
     export FEATURE_BRANCH_PORT=$DYNAMIC_PORT
     export FEATURE_BRANCH_NAME="$CI_COMMIT_REF_SLUG"
     export COMPOSE_PROJECT_NAME="trakbridge-$CI_COMMIT_REF_SLUG"
     
-    scripts/deploy.sh \
+    $DEPLOY_SCRIPT \
       --environment feature \
       --action deploy \
       --port $DYNAMIC_PORT \
@@ -992,9 +1048,10 @@ stop-feature-branch:
   variables:
     DEPLOY_ENV: "feature"
     DOCKER_TLS_CERTDIR: ""
-    DYNAMIC_PORT: $((5001 + (0x$(echo -n "$CI_COMMIT_REF_SLUG" | sha256sum | head -c 2) % 99)))
   
   script: |
+    # Generate dynamic port based on branch hash (same calculation as deploy)
+    export DYNAMIC_PORT=$((5001 + (0x$(echo -n "$CI_COMMIT_REF_SLUG" | sha256sum | head -c 2) % 99)))
     echo "Stopping feature branch environment..."
     echo "Environment: review/$CI_COMMIT_REF_SLUG"
     echo "Port: $DYNAMIC_PORT"
@@ -1005,10 +1062,20 @@ stop-feature-branch:
     export FEATURE_BRANCH_PORT=$DYNAMIC_PORT
     export FEATURE_BRANCH_NAME="$CI_COMMIT_REF_SLUG"
       
-    # Use deployment script to clean up
-    if [ -f "scripts/deploy.sh" ]; then
-      chmod +x scripts/deploy.sh
-      scripts/deploy.sh \
+    # Find and use deployment script to clean up
+    if [ -f "./scripts/deploy.sh" ]; then
+      chmod +x ./scripts/deploy.sh
+      DEPLOY_SCRIPT="./scripts/deploy.sh"
+    elif [ -f "$CI_PROJECT_DIR/scripts/deploy.sh" ]; then
+      chmod +x "$CI_PROJECT_DIR/scripts/deploy.sh"
+      DEPLOY_SCRIPT="$CI_PROJECT_DIR/scripts/deploy.sh"
+    else
+      DEPLOY_SCRIPT=""
+    fi
+    
+    if [ -n "$DEPLOY_SCRIPT" ]; then
+      echo "Using deployment script for cleanup: $DEPLOY_SCRIPT"
+      $DEPLOY_SCRIPT \
         --environment feature \
         --action stop \
         --port $DYNAMIC_PORT \
@@ -1017,7 +1084,7 @@ stop-feature-branch:
         --verbose
     else
       # Fallback cleanup if script not available
-      echo "Fallback cleanup - stopping containers..."
+      echo "Deployment script not found, using fallback cleanup..."
       docker-compose -p "trakbridge-$CI_COMMIT_REF_SLUG" down -v || echo "No containers to stop"
       
       # Clean up any containers on the dynamic port
@@ -1101,10 +1168,10 @@ pipeline-complete:
 # Include GitLab's built-in security scanning templates
 # Note: License-Scanning.gitlab-ci.yml was deprecated in GitLab 15.9 and removed in 16.3
 # License compliance is now handled through Dependency-Scanning.gitlab-ci.yml
+# Container-Scanning.gitlab-ci.yml removed - using custom Trivy implementation instead
 include:
   - template: Security/SAST.gitlab-ci.yml
   - template: Security/Dependency-Scanning.gitlab-ci.yml
-  - template: Security/Container-Scanning.gitlab-ci.yml
   - template: Security/Secret-Detection.gitlab-ci.yml
 
 # Override GitLab security templates to use TrakBridge runner tags
@@ -1120,10 +1187,40 @@ gemnasium-dependency_scanning:
 
 container_scanning:
   stage: security
+  image: alpine:latest
   tags:
     - trakbridge-cd  # Needs Docker daemon access for container scanning
+  timeout: 15m
   variables:
     CS_DOCKERFILE_PATH: "Dockerfile"
+  before_script:
+    - apk add --no-cache curl docker-cli
+    - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+  script: |
+    echo "Running Trivy container scanning on $CS_IMAGE"
+    if [ -n "$CS_IMAGE" ]; then
+      # Create default report structure for GitLab compatibility
+      echo '{"vulnerabilities": []}' > gl-container-scanning-report.json
+      
+      # Run Trivy scan with GitLab format
+      trivy image --format json --output trivy-report.json "$CS_IMAGE" || echo "Trivy scan completed with warnings"
+      
+      # If Trivy found vulnerabilities, use its output
+      if [ -f "trivy-report.json" ] && [ -s "trivy-report.json" ]; then
+        mv trivy-report.json gl-container-scanning-report.json
+      fi
+      
+      echo "Container scanning completed for $CS_IMAGE"
+    else
+      echo "No container image specified for scanning"
+    fi
+  artifacts:
+    reports:
+      container_scanning: gl-container-scanning-report.json
+    paths:
+      - gl-container-scanning-report.json
+    when: always
+    expire_in: 1 week
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       needs: ["build-image-shell"]

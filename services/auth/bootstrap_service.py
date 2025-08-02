@@ -54,6 +54,14 @@ class BootstrapService:
             True if initial admin should be created, False otherwise
         """
         try:
+            # Check if database tables exist first
+            inspector = db.inspect(db.engine)
+            existing_tables = inspector.get_table_names()
+            
+            if 'users' not in existing_tables:
+                logger.debug("Users table does not exist yet, skipping bootstrap check")
+                return False
+
             # Check if bootstrap has already been performed
             if self._is_bootstrap_completed():
                 logger.debug(
@@ -77,7 +85,11 @@ class BootstrapService:
             return True
 
         except Exception as e:
-            logger.error(f"Error checking bootstrap status: {e}")
+            try:
+                logger.error(f"Error checking bootstrap status: {e}")
+            except (ValueError, OSError):
+                # Handle cases where logging files are closed during shutdown
+                pass
             return False
 
     def create_initial_admin(self) -> Optional[User]:

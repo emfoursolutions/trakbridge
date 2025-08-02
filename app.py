@@ -659,7 +659,11 @@ def start_active_streams():
                     )
 
         except Exception as db_e:
-            logger.error(f"Failed to fetch active streams from database: {db_e}")
+            try:
+                logger.error(f"Failed to fetch active streams from database: {db_e}")
+            except (ValueError, OSError):
+                # Handle cases where logging files are closed during shutdown
+                pass
             add_startup_progress(
                 f"Error: Failed to fetch active streams from database: {db_e}"
             )
@@ -1032,12 +1036,16 @@ def delayed_startup():
             # Calculate startup time
             startup_time = (dt.now() - startup_start_time).total_seconds()
 
-            # Log startup completion
-            logger.info("=" * 60)
-            logger.info("TrakBridge Application Startup Complete!")
-            logger.info(f"Total Startup Time: {startup_time:.2f} seconds")
-            logger.info(f"Ready at: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            logger.info("=" * 60)
+            # Log startup completion with safe logging
+            try:
+                logger.info("=" * 60)
+                logger.info("TrakBridge Application Startup Complete!")
+                logger.info(f"Total Startup Time: {startup_time:.2f} seconds")
+                logger.info(f"Ready at: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                logger.info("=" * 60)
+            except (ValueError, OSError):
+                # Handle cases where logging files are closed during shutdown
+                pass
 
             add_startup_progress(
                 f"Startup complete! Ready in {startup_time:.2f} seconds"
@@ -1045,7 +1053,11 @@ def delayed_startup():
             set_startup_complete(True)
 
     except Exception as e:
-        logger.error(f"Error during startup: {e}", exc_info=True)
+        try:
+            logger.error(f"Error during startup: {e}", exc_info=True)
+        except (ValueError, OSError):
+            # Handle cases where logging files are closed during shutdown
+            pass
         add_startup_progress(f"Startup failed: {str(e)}")
         set_startup_complete(False, str(e))
 
