@@ -44,13 +44,13 @@ class TestAPIRoutes:
 
     def test_api_streams_endpoint_exists(self, client):
         """Test that streams API endpoint exists."""
-        response = client.get("/api/streams")
+        response = client.get("/streams")
         # Should not return 404 (endpoint exists), but may require auth
         assert response.status_code != 404
 
     def test_api_tak_servers_endpoint_exists(self, client):
         """Test that TAK servers API endpoint exists."""
-        response = client.get("/api/tak-servers")
+        response = client.get("/tak-servers")
         # Should not return 404 (endpoint exists), but may require auth
         assert response.status_code != 404
 

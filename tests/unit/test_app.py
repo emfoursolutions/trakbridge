@@ -1,8 +1,7 @@
 """Unit tests for the main TrakBridge application."""
 
-import pytest
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 from app import create_app, setup_cleanup_handlers, setup_template_helpers
 
 
@@ -16,7 +15,8 @@ class TestAppCreation:
             "DB_TYPE": "sqlite",
             "FLASK_ENV": "testing",
             "SECRET_KEY": "test-secret-key",
-            "TRAKBRIDGE_ENCRYPTION_KEY": "test-encryption-key-for-testing-12345",
+            "TRAKBRIDGE_ENCRYPTION_KEY": ("test-encryption-key-for-testing-12345"),
+            "DATABASE_URL": "sqlite:///:memory:",
         }
 
         with patch.dict(os.environ, test_env, clear=False):
@@ -37,7 +37,8 @@ class TestAppCreation:
             "DB_TYPE": "sqlite",
             "FLASK_ENV": "testing",
             "SECRET_KEY": "test-secret-key-for-production-test",
-            "TRAKBRIDGE_ENCRYPTION_KEY": "test-encryption-key-for-testing-12345",
+            "TRAKBRIDGE_ENCRYPTION_KEY": ("test-encryption-key-for-testing-12345"),
+            "DATABASE_URL": "sqlite:///:memory:",
         }
 
         with patch.dict(os.environ, test_env, clear=False):

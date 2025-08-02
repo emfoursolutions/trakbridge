@@ -18,21 +18,38 @@ class TestStreamManager:
             assert stream_manager is not None
 
     @patch("services.stream_manager.StreamWorker")
-    def test_start_stream(self, mock_worker, app):
+    @patch("services.database_manager.DatabaseManager")
+    def test_start_stream(self, mock_db_manager, mock_worker, app):
         """Test starting a stream."""
         with app.app_context():
             stream_manager = StreamManager()
-            mock_worker_instance = Mock()
-            mock_worker.return_value = mock_worker_instance
 
-            # Mock a stream
+            # Mock the database manager
+            mock_db_instance = Mock()
+            mock_db_manager.return_value = mock_db_instance
+            stream_manager.db_manager = mock_db_instance
+
+            # Mock a stream from database
             mock_stream = Mock()
             mock_stream.id = 1
             mock_stream.name = "Test Stream"
             mock_stream.plugin_type = "garmin"
+            mock_stream.is_active = True
+            mock_db_instance.get_stream.return_value = mock_stream
 
-            result = stream_manager._start_stream_worker(mock_stream)
-            assert result is True
+            # Mock the worker
+            mock_worker_instance = Mock()
+            mock_worker.return_value = mock_worker_instance
+
+            # Mock the async coroutine execution
+            with patch.object(
+                stream_manager, "_run_coroutine_threadsafe", return_value=True
+            ):
+                result = stream_manager.start_stream_sync(1)
+                assert result is True
+
+            # Verify database lookup was called
+            mock_db_instance.get_stream.assert_called_once_with(1)
 
 
 class TestEncryptionService:
@@ -53,12 +70,12 @@ class TestEncryptionService:
             test_data = "sensitive information"
 
             # Encrypt
-            encrypted = encryption_service.encrypt(test_data)
+            encrypted = encryption_service.encrypt_value(test_data)
             assert encrypted != test_data
             assert encrypted is not None
 
             # Decrypt
-            decrypted = encryption_service.decrypt(encrypted)
+            decrypted = encryption_service.decrypt_value(encrypted)
             assert decrypted == test_data
 
 

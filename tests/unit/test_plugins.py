@@ -156,8 +156,8 @@ class TestPluginValidation:
         manager = PluginManager()
 
         # These methods should exist
-        assert hasattr(manager, "validate_plugin") or hasattr(
-            manager, "_validate_plugin_security"
+        assert hasattr(manager, "validate_plugin_config") or hasattr(
+            manager, "_validate_module_name"
         )
 
     def test_plugin_loading_security(self):
@@ -165,7 +165,7 @@ class TestPluginValidation:
         manager = PluginManager()
 
         # Test that dangerous modules are blocked
-        with pytest.raises((ImportError, ValueError, SecurityError, Exception)):
+        with pytest.raises((ImportError, ValueError, Exception)):
             # This should fail safely
             manager._load_plugin_module("__builtin__")
 
