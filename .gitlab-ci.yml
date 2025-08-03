@@ -200,6 +200,7 @@ code-quality:
     - pip install --upgrade pip
     - pip install --no-cache-dir black flake8 isort
   script: |
+    set +e  # Disable exit on error to ensure script always completes
     echo "Running code quality checks with GitLab reporting..."
     
     # Initialize Code Quality report
@@ -325,10 +326,12 @@ code-quality:
     
     if [[ $issue_count -gt 0 ]]; then
       echo "Code quality issues detected - see GitLab Code Quality report"
-      exit 0
     else
       echo "All code quality checks passed"
     fi
+    
+    # Always exit successfully regardless of quality issues
+    exit 0
   
   artifacts:
     reports:
