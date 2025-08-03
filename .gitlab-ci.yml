@@ -654,13 +654,13 @@ build-feature-branch-shell:
   before_script: |
     echo "Using host Docker daemon..."
     docker --version
-    echo "Authenticating with container registry..."
+    echo "Authenticating with GitLab Container Registry..."
 
-    if [ -z "${DOCKERHUB_USERNAME}" ] || [ -z "${DOCKERHUB_TOKEN}" ]; then
-      echo "Error: DOCKERHUB_USERNAME and DOCKERHUB_TOKEN must be set"
+    if [ -z "${CI_REGISTRY_USER}" ] || [ -z "${CI_REGISTRY_PASSWORD}" ]; then
+      echo "Error: CI_REGISTRY_USER and CI_REGISTRY_PASSWORD must be set"
       exit 1
     fi
-    echo "${DOCKERHUB_TOKEN}" | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin "${REGISTRY}"
+    echo "${CI_REGISTRY_PASSWORD}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
 
     echo "Git information:"
     git --version
@@ -681,8 +681,8 @@ build-feature-branch-shell:
     
     if ! DOCKER_BUILDKIT=1 docker build \
       --target=production \
-      --tag "$IMAGE_NAME:$CI_COMMIT_SHA" \
-      --tag "$IMAGE_NAME:$BRANCH_TAG" \
+      --tag "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" \
+      --tag "$CI_REGISTRY_IMAGE:$BRANCH_TAG" \
       --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
       --label "org.opencontainers.image.revision=$CI_COMMIT_SHA" \
       --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -695,9 +695,10 @@ build-feature-branch-shell:
       echo "Docker build failed"
       exit 1
     fi
-    echo "Pushing feature branch image..."
-    docker push "$IMAGE_NAME:$BRANCH_TAG"
+    echo "Pushing feature branch image to GitLab Container Registry..."
+    docker push "$CI_REGISTRY_IMAGE:$BRANCH_TAG"
     echo "Feature branch container build and push completed for $BRANCH_TAG"
+    echo "Pushed to: $CI_REGISTRY_IMAGE:$BRANCH_TAG"
   rules:
     - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_COMMIT_TAG == null
       when: on_success
@@ -930,39 +931,20 @@ deploy-feature-branch:
     docker images | head -10
     echo "============================="
     
-    # Pull the built feature branch image
+    # Pull the built feature branch image from GitLab Container Registry
     BRANCH_TAG="${CI_COMMIT_REF_SLUG}"
-    IMAGE_FOUND=false
     
-    # Try GitLab Container Registry first
-    if [ -n "$CI_REGISTRY_IMAGE" ]; then
-      echo "Pulling from GitLab Container Registry: $CI_REGISTRY_IMAGE:$BRANCH_TAG"
-      if docker pull $CI_REGISTRY_IMAGE:$BRANCH_TAG; then
-        docker tag $CI_REGISTRY_IMAGE:$BRANCH_TAG trakbridge:$BRANCH_TAG-latest
-        IMAGE_FOUND=true
-        echo "Successfully pulled from GitLab Container Registry"
-      else
-        echo "GitLab registry image not found, trying Docker Hub"
-      fi
-    fi
-    
-    # Fallback to Docker Hub if GitLab registry failed
-    if [ "$IMAGE_FOUND" = "false" ]; then
-      echo "Using Docker Hub image: $IMAGE_NAME:$BRANCH_TAG"
-      if docker pull $IMAGE_NAME:$BRANCH_TAG; then
-        docker tag $IMAGE_NAME:$BRANCH_TAG trakbridge:$BRANCH_TAG-latest
-        IMAGE_FOUND=true
-        echo "Successfully pulled from Docker Hub"
-      else
-        echo "ERROR: Failed to pull image from both registries"
-        echo "This usually means the build-feature-branch-shell job failed or didn't run"
-        echo "Expected images:"
-        echo "  - GitLab: $CI_REGISTRY_IMAGE:$BRANCH_TAG"
-        echo "  - Docker Hub: $IMAGE_NAME:$BRANCH_TAG"
-        echo ""
-        echo "Please check that the build-feature-branch-shell job completed successfully"
-        exit 1
-      fi
+    echo "Pulling from GitLab Container Registry: $CI_REGISTRY_IMAGE:$BRANCH_TAG"
+    if docker pull $CI_REGISTRY_IMAGE:$BRANCH_TAG; then
+      docker tag $CI_REGISTRY_IMAGE:$BRANCH_TAG trakbridge:$BRANCH_TAG-latest
+      echo "Successfully pulled from GitLab Container Registry"
+    else
+      echo "ERROR: Failed to pull image from GitLab Container Registry"
+      echo "This usually means the build-feature-branch-shell job failed or didn't run"
+      echo "Expected image: $CI_REGISTRY_IMAGE:$BRANCH_TAG"
+      echo ""
+      echo "Please check that the build-feature-branch-shell job completed successfully"
+      exit 1
     fi
     
     # Debug: Check current directory and file structure
