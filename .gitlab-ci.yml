@@ -536,13 +536,13 @@ build-image-shell:
   before_script: |
     echo "Using host Docker daemon..."
     docker --version
-    echo "Authenticating with container registry..."
+    echo "Authenticating with GitLab Container Registry..."
 
-    if [ -z "${DOCKERHUB_USERNAME}" ] || [ -z "${DOCKERHUB_TOKEN}" ]; then
-      echo "Error: DOCKERHUB_USERNAME and DOCKERHUB_TOKEN must be set"
+    if [ -z "${CI_REGISTRY_USER}" ] || [ -z "${CI_REGISTRY_PASSWORD}" ]; then
+      echo "Error: CI_REGISTRY_USER and CI_REGISTRY_PASSWORD must be set"
       exit 1
     fi
-    echo "${DOCKERHUB_TOKEN}" | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin "${REGISTRY}"
+    echo "${CI_REGISTRY_PASSWORD}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
 
     echo "Git information:"
     git --version
@@ -566,8 +566,8 @@ build-image-shell:
     # Build with better error handling
     if ! DOCKER_BUILDKIT=1 docker build \
       --target=production \
-      --tag "$IMAGE_NAME:$CI_COMMIT_SHA" \
-      --tag "$IMAGE_NAME:dev" \
+      --tag "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" \
+      --tag "$CI_REGISTRY_IMAGE:dev" \
       --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
       --label "org.opencontainers.image.revision=$CI_COMMIT_SHA" \
       --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -579,9 +579,10 @@ build-image-shell:
       echo "Docker build failed"
       exit 1
     fi
-    echo "Pushing dev image..."
-    docker push "$IMAGE_NAME:dev"
+    echo "Pushing dev image to GitLab Container Registry..."
+    docker push "$CI_REGISTRY_IMAGE:dev"
     echo "Container build and push completed for dev image"
+    echo "Pushed to: $CI_REGISTRY_IMAGE:dev"
   rules:
     - if: '$CI_COMMIT_TAG != null'
       when: never
@@ -724,19 +725,17 @@ deploy-development:
     APP_VERSION: "${CI_COMMIT_REF_NAME}-${CI_COMMIT_SHORT_SHA}"
     DOCKER_TLS_CERTDIR: ""
   
+  before_script: |
+    # Authenticate with GitLab Container Registry
+    echo "${CI_REGISTRY_PASSWORD}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
+  
   script: |
     echo "Deploying to development environment..."
     
     # Pull the built image from GitLab Container Registry
-    if [ -n "$CI_REGISTRY_IMAGE" ]; then
-      echo "Pulling from GitLab Container Registry: $CI_REGISTRY_IMAGE:dev"
-      docker pull $CI_REGISTRY_IMAGE:dev || echo "Using local dev image"
-      docker tag $CI_REGISTRY_IMAGE:dev trakbridge:dev-latest || echo "Using existing local image"
-    else
-      echo "Using local Docker Hub image: $IMAGE_NAME:dev"
-      docker pull $IMAGE_NAME:dev
-      docker tag $IMAGE_NAME:dev trakbridge:dev-latest
-    fi
+    echo "Pulling from GitLab Container Registry: $CI_REGISTRY_IMAGE:dev"
+    docker pull $CI_REGISTRY_IMAGE:dev
+    docker tag $CI_REGISTRY_IMAGE:dev trakbridge:dev-latest
     
     # Set up development environment using deployment script
     chmod +x scripts/deploy.sh
@@ -776,20 +775,17 @@ deploy-staging:
     APP_VERSION: "${CI_COMMIT_TAG:-${CI_COMMIT_REF_NAME}-${CI_COMMIT_SHORT_SHA}}"
     DOCKER_TLS_CERTDIR: ""
   
+  before_script: |
+    # Authenticate with GitLab Container Registry
+    echo "${CI_REGISTRY_PASSWORD}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
+  
   script: |
     echo "🔄 Deploying to staging environment..."
     
-    # Pull the built image
-
-    if [ -n "$CI_REGISTRY_IMAGE" ]; then
-      echo "Pulling from GitLab Container Registry: $CI_REGISTRY_IMAGE:${CI_COMMIT_REF_NAME}"
-      docker pull $CI_REGISTRY_IMAGE:${CI_COMMIT_REF_NAME} || docker pull $CI_REGISTRY_IMAGE:dev
-      docker tag $CI_REGISTRY_IMAGE:${CI_COMMIT_REF_NAME} trakbridge:staging-latest || docker tag $CI_REGISTRY_IMAGE:dev trakbridge:staging-latest
-    else
-      echo "Using Docker Hub image for staging"
-      docker pull $IMAGE_NAME:dev
-      docker tag $IMAGE_NAME:dev trakbridge:staging-latest
-    fi
+    # Pull the built image from GitLab Container Registry
+    echo "Pulling from GitLab Container Registry: $CI_REGISTRY_IMAGE:${CI_COMMIT_REF_NAME}"
+    docker pull $CI_REGISTRY_IMAGE:${CI_COMMIT_REF_NAME} || docker pull $CI_REGISTRY_IMAGE:dev
+    docker tag $CI_REGISTRY_IMAGE:${CI_COMMIT_REF_NAME} trakbridge:staging-latest || docker tag $CI_REGISTRY_IMAGE:dev trakbridge:staging-latest
     
     # Set up staging environment
     chmod +x scripts/deploy.sh
@@ -835,8 +831,14 @@ deploy-production:
     APP_VERSION: "${CI_COMMIT_TAG}"
     DOCKER_TLS_CERTDIR: ""
   
+  before_script: |
+    # Authenticate with Docker Hub for pulling production images
+    if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+      echo "${DOCKERHUB_TOKEN}" | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin
+    fi
+
   script: |
-    - echo "Deploying production release..."
+    echo "Deploying production release..."
     
     # Extract version from tag
     if [[ $CI_COMMIT_TAG =~ ^v.* ]]; then
@@ -846,38 +848,29 @@ deploy-production:
     fi
     echo "Production version: $VERSION"
     
-    # Pull and tag images for production
-    if [ -n "$CI_REGISTRY_IMAGE" ]; then
-      echo "Using GitLab Container Registry for production"
-      docker pull $CI_REGISTRY_IMAGE:$VERSION || docker pull $CI_REGISTRY_IMAGE:latest
-      
-      # Tag for GitLab Container Registry
-      docker tag $CI_REGISTRY_IMAGE:$VERSION $CI_REGISTRY_IMAGE:stable || true
-      docker push $CI_REGISTRY_IMAGE:stable || echo "Failed to push to GitLab registry"
-    fi
+    # Pull the production image from Docker Hub (tests the pushed image)
+    echo "Pulling production image from Docker Hub: $IMAGE_NAME:$VERSION"
+    docker pull $IMAGE_NAME:$VERSION
+    docker tag $IMAGE_NAME:$VERSION trakbridge:production-latest
     
-    # Push to Docker Hub if configured (for production distribution)
-    if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
-      echo "Pushing production release to Docker Hub..."
-      docker tag $IMAGE_NAME:$VERSION emfoursolutions/trakbridge:$VERSION
-      docker tag $IMAGE_NAME:$VERSION emfoursolutions/trakbridge:latest
-      docker tag $IMAGE_NAME:$VERSION emfoursolutions/trakbridge:stable
-      
-      docker push emfoursolutions/trakbridge:$VERSION
-      docker push emfoursolutions/trakbridge:latest
-      docker push emfoursolutions/trakbridge:stable
-    fi
-    
-    # Test production image availability
-    echo "🧪 Testing production image availability..."
-    sleep 30  # Wait for image to propagate
-    
-    # Quick smoke test
+    # Test production image functionality
+    echo "🧪 Testing production image functionality..."
     docker run --rm \
       -e FLASK_ENV=production \
       -e DB_TYPE=sqlite \
       $IMAGE_NAME:$VERSION \
-      python -c "import app; print('Production image loads successfully')"
+      python -c "import app; print('✅ Production image loads successfully')"
+    
+    # Deploy using the pulled Docker Hub image
+    echo "🚀 Deploying production environment..."
+    chmod +x scripts/deploy.sh
+    
+    scripts/deploy.sh \
+      --environment production \
+      --action deploy \
+      --profiles "postgres,nginx" \
+      --timeout 600 \
+      --verbose
     
     echo "Production release completed"
     echo "GitLab Container Registry: $CI_REGISTRY_IMAGE:$VERSION"
@@ -934,19 +927,18 @@ deploy-feature-branch:
     docker images | head -10
     echo "============================="
     
-    # Pull the built feature branch image from GitLab Container Registry
+    # Use the built feature branch image (already available locally)
     BRANCH_TAG="${CI_COMMIT_REF_SLUG}"
     
-    echo "Pulling from GitLab Container Registry: $CI_REGISTRY_IMAGE:$BRANCH_TAG"
-    if docker pull $CI_REGISTRY_IMAGE:$BRANCH_TAG; then
+    echo "Using local image: $CI_REGISTRY_IMAGE:$BRANCH_TAG"
+    if docker image inspect $CI_REGISTRY_IMAGE:$BRANCH_TAG > /dev/null 2>&1; then
       docker tag $CI_REGISTRY_IMAGE:$BRANCH_TAG trakbridge:$BRANCH_TAG-latest
-      echo "Successfully pulled from GitLab Container Registry"
+      echo "Successfully tagged local image"
     else
-      echo "ERROR: Failed to pull image from GitLab Container Registry"
+      echo "ERROR: Local image not found: $CI_REGISTRY_IMAGE:$BRANCH_TAG"
       echo "This usually means the build-feature-branch-shell job failed or didn't run"
-      echo "Expected image: $CI_REGISTRY_IMAGE:$BRANCH_TAG"
-      echo ""
-      echo "Please check that the build-feature-branch-shell job completed successfully"
+      echo "Available images:"
+      docker images | grep "$CI_REGISTRY_IMAGE"
       exit 1
     fi
     
