@@ -5,11 +5,13 @@ A comprehensive web application for bridging tracking devices and services to TA
 ## Features
 
 - **Multi-Source Integration**: Support for Garmin InReach, SPOT Trackers, Traccar, and more
+- **Authentication System**: Multi-provider authentication (Local, LDAP, OIDC) with role-based access control
 - **TAK Server Management**: Configure multiple TAK server connections with certificate support
 - **Real-Time Streaming**: Continuous data forwarding with health monitoring
-- **Web Interface**: Dashboard for stream management and monitoring
+- **Web Interface**: Secure dashboard for stream management and monitoring
+- **Role-Based Access**: Viewer, User, Operator, and Admin roles with appropriate UI controls
 - **Plugin Architecture**: Extensible system for adding new data sources
-- **Enterprise Ready**: Multi-database support, SSL/TLS, backup & recovery
+- **Enterprise Ready**: Multi-database support, SSL/TLS, backup & recovery, audit logging
 
 <img width="1900" height="690" alt="image" src="https://github.com/user-attachments/assets/d09d3e17-de62-4524-a0d6-d1990c827ac7" />
 
@@ -31,6 +33,11 @@ docker-compose --profile postgres --profile nginx up -d
 
 Access the web interface at `https://yourdomain.com`
 
+**First-time login**:
+- Username: `admin`
+- Password: `TrakBridge-Setup-2025!`
+- You'll be forced to change the password on first login
+
 ### Python Development
 
 ```bash
@@ -44,13 +51,17 @@ python app.py
 
 ## Basic Usage
 
-1. **Configure TAK Server**: Add your TAK server details and certificates
-2. **Create Stream**: Select a GPS provider and configure credentials
-3. **Start Streaming**: Monitor real-time data flow to your TAK server
+1. **Login**: Use default admin credentials (change password on first login)
+2. **Create Users**: Set up user accounts with appropriate roles (Admin → User Management)
+3. **Configure TAK Server**: Add your TAK server details and certificates
+4. **Create Stream**: Select a GPS provider and configure credentials
+5. **Start Streaming**: Monitor real-time data flow to your TAK server
 
 ## Documentation
 
-- [Installation Guide](../../wiki/Installation)
+- [Installation Guide](docs/INSTALLATION.md) - Complete first-time setup guide
+- [Upgrade Guide](docs/UPGRADE_GUIDE.md) - Upgrading from v1.0.0-beta.4
+- [Authentication Guide](docs/AUTHENTICATION.md) - Multi-provider auth setup
 - [Configuration Guide](../../wiki/Configuration-Guide)
 - [Plugin Development](../../wiki/Plugin-Development)
 - [API Reference](../../wiki/API-Reference)
