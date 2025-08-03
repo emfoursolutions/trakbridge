@@ -15,7 +15,7 @@ authentication:
     secure_cookies: ${SESSION_SECURE_COOKIES:-true}
     
     # Session cookie domain (optional)
-    cookie_domain: "${SESSION_COOKIE_DOMAIN:-}"
+    cookie_domain: "${SESSION_COOKIE_DOMAIN:-null}"
     
     # Session cookie path
     cookie_path: "${SESSION_COOKIE_PATH:-/}"
@@ -42,10 +42,10 @@ authentication:
         require_special: ${PASSWORD_REQUIRE_SPECIAL:-false}
         
         # Optional: Maximum password age in days
-        max_age_days: ${PASSWORD_MAX_AGE_DAYS:-}
+        max_age_days: ${PASSWORD_MAX_AGE_DAYS:-null}
         
         # Optional: Password history (prevent reuse)
-        history_count: ${PASSWORD_HISTORY_COUNT:-}
+        history_count: ${PASSWORD_HISTORY_COUNT:-null}
       
       # Account lockout policy (future feature)
       # lockout_policy:
@@ -64,7 +64,7 @@ authentication:
       # Security settings
       use_ssl: ${LDAP_USE_SSL:-false}          # Use LDAPS (port 636)
       use_tls: ${LDAP_USE_TLS:-true}           # Use StartTLS
-      ca_cert_file: "${LDAP_CA_CERT_FILE:-}"   # Path to CA certificate file
+      ca_cert_file: "${LDAP_CA_CERT_FILE:-null}"   # Path to CA certificate file
       validate_cert: ${LDAP_VALIDATE_CERT:-true}     # Validate server certificate
       
       # Service account for LDAP binding
