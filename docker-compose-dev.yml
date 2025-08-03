@@ -26,7 +26,7 @@ services:
   # Main application service
   app:
     image: ${CI_REGISTRY_IMAGE:-trakbridge}:${IMAGE_TAG:-latest}
-    container_name: trakbridge
+    container_name: ${COMPOSE_PROJECT_NAME:-trakbridge}
     restart: unless-stopped
 
     # Development environment configuration
@@ -170,7 +170,7 @@ services:
   # PostgreSQL database (optional)
   postgres:
     image: postgres:15-alpine
-    container_name: trakbridge-postgres
+    container_name: ${COMPOSE_PROJECT_NAME:-trakbridge}-postgres
     restart: unless-stopped
     profiles:
       - postgres
@@ -203,7 +203,7 @@ services:
   # MySQL database (optional)
   mysql:
     image: mysql:8.0
-    container_name: trakbridge-mysql
+    container_name: ${COMPOSE_PROJECT_NAME:-trakbridge}-mysql
     restart: unless-stopped
     profiles:
       - mysql
@@ -237,7 +237,7 @@ services:
   # Redis (optional, for caching/sessions)
   redis:
     image: redis:7-alpine
-    container_name: trakbridge-redis
+    container_name: ${COMPOSE_PROJECT_NAME:-trakbridge}-redis
     restart: unless-stopped
     profiles:
       - redis
@@ -261,7 +261,7 @@ services:
   # Nginx reverse proxy (optional)
   nginx:
     image: nginx:alpine
-    container_name: trakbridge-nginx
+    container_name: ${COMPOSE_PROJECT_NAME:-trakbridge}-nginx
     restart: unless-stopped
     profiles:
       - nginx
