@@ -923,8 +923,6 @@ deploy-feature-branch:
     echo "IMAGE_NAME: ${IMAGE_NAME:-'not set'}"
     echo "Branch: $CI_COMMIT_BRANCH"
     echo "Commit SHA: $CI_COMMIT_SHA"
-    echo "Available Docker images:"
-    docker images | head -10
     echo "============================="
     
     # Use the built feature branch image (already available locally)
