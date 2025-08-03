@@ -215,16 +215,16 @@ class BaseConfig:
             logger.error(f"Failed to load authentication config: {e}")
             # Fallback to default authentication config
             self.auth_config = {
-                'session': {
-                    'lifetime_hours': 8,
-                    'secure_cookies': self.environment == 'production'
+                "session": {
+                    "lifetime_hours": 8,
+                    "secure_cookies": self.environment == "production",
                 },
-                'provider_priority': ['local'],
-                'providers': {
-                    'local': {'enabled': True},
-                    'ldap': {'enabled': False},
-                    'oidc': {'enabled': False}
-                }
+                "provider_priority": ["local"],
+                "providers": {
+                    "local": {"enabled": True},
+                    "ldap": {"enabled": False},
+                    "oidc": {"enabled": False},
+                },
             }
             logger.warning("Using fallback authentication configuration")
 

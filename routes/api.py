@@ -164,8 +164,9 @@ def health_check():
     """Basic health check endpoint - always responds even during startup"""
     try:
         from app import get_startup_status
+
         startup_status = get_startup_status()
-        
+
         # Return different status based on startup state
         if startup_status["complete"]:
             status = "healthy"
@@ -176,35 +177,38 @@ def health_check():
         else:
             status = "starting"
             http_code = 200  # Return 200 during startup so health checks pass
-        
+
         response_data = {
             "status": status,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": get_version(),
             "service": "trakbridge",
         }
-        
+
         # Add startup info if not complete
         if not startup_status["complete"]:
             response_data["startup"] = {
                 "complete": startup_status["complete"],
                 "error": startup_status["error"],
-                "progress_count": len(startup_status["progress"])
+                "progress_count": len(startup_status["progress"]),
             }
-        
+
         return jsonify(response_data), http_code
-        
+
     except Exception as e:
         # Fallback if startup status check fails
         logger.warning(f"Startup status check failed: {e}")
-        return jsonify(
-            {
-                "status": "healthy",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "version": get_version(),
-                "service": "trakbridge",
-            }
-        ), 200
+        return (
+            jsonify(
+                {
+                    "status": "healthy",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "version": get_version(),
+                    "service": "trakbridge",
+                }
+            ),
+            200,
+        )
 
 
 @bp.route("/health/detailed")

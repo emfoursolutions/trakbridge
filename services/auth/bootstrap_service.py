@@ -57,8 +57,8 @@ class BootstrapService:
             # Check if database tables exist first
             inspector = db.inspect(db.engine)
             existing_tables = inspector.get_table_names()
-            
-            if 'users' not in existing_tables:
+
+            if "users" not in existing_tables:
                 logger.debug("Users table does not exist yet, skipping bootstrap check")
                 return False
 
@@ -191,7 +191,9 @@ class BootstrapService:
 
             # Write timestamp and details
             with open(bootstrap_file, "w") as f:
-                f.write(f"Bootstrap completed: {datetime.now(timezone.utc).isoformat()}\n")
+                f.write(
+                    f"Bootstrap completed: {datetime.now(timezone.utc).isoformat()}\n"
+                )
                 f.write(f"Initial admin user: {self.default_admin_username}\n")
 
             # Set secure permissions

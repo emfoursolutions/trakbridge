@@ -45,8 +45,10 @@ class TestStreamManager:
             def mock_start_stream(stream_id):
                 # Return a simple value instead of a coroutine
                 return True
-            
-            with patch.object(stream_manager, "start_stream", side_effect=mock_start_stream):
+
+            with patch.object(
+                stream_manager, "start_stream", side_effect=mock_start_stream
+            ):
                 with patch.object(
                     stream_manager, "_run_coroutine_threadsafe", return_value=True
                 ):

@@ -183,7 +183,9 @@ class User(db.Model, TimestampMixin):
         Args:
             duration_minutes: How long to lock the account in minutes
         """
-        self.locked_until = datetime.now(timezone.utc) + timedelta(minutes=duration_minutes)
+        self.locked_until = datetime.now(timezone.utc) + timedelta(
+            minutes=duration_minutes
+        )
         self.status = AccountStatus.LOCKED
 
     def unlock_account(self) -> None:
@@ -443,7 +445,11 @@ class UserSession(db.Model, TimestampMixin):
 
     # Session lifecycle
     expires_at = Column(DateTime(timezone=True), nullable=False)
-    last_activity = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    last_activity = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
     is_active = Column(Boolean, default=True)
 
     # Provider-specific session data
@@ -504,19 +510,15 @@ class UserSession(db.Model, TimestampMixin):
         """Check if session is still valid"""
         # Ensure both datetimes are timezone-aware for comparison
         current_time = datetime.now(timezone.utc)
-        
+
         # Handle case where expires_at might be naive (for backwards compatibility)
         if self.expires_at.tzinfo is None:
             # If expires_at is naive, assume it's UTC and make it timezone-aware
             expires_at = self.expires_at.replace(tzinfo=timezone.utc)
         else:
             expires_at = self.expires_at
-        
-        return (
-            self.is_active
-            and expires_at > current_time
-            and self.user.is_active()
-        )
+
+        return self.is_active and expires_at > current_time and self.user.is_active()
 
     def extend_session(self, hours: int = 24) -> None:
         """
