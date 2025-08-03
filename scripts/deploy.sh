@@ -30,6 +30,7 @@ VERBOSE=false
 APP_PORT=""
 BRANCH_NAME=""
 USE_PREBUILT=false
+SKIP_HEALTH_CHECK=false
 
 # Color codes for output
 RED='\033[0;31m'
@@ -83,6 +84,7 @@ Options:
         --port PORT          Override application port (for feature branches)
         --branch BRANCH      Feature branch name (for feature environment)
         --use-prebuilt       Use pre-built images instead of building locally
+        --skip-health-check  Skip application health checks (rely on Docker health)
     -v, --verbose            Enable verbose logging
     -h, --help              Show this help message
 
@@ -436,7 +438,10 @@ restart_services() {
     sleep 5
     deploy_services "$ENVIRONMENT"
     
-    if wait_for_health "$HEALTH_CHECK_TIMEOUT"; then
+    if [[ "$SKIP_HEALTH_CHECK" == "true" ]]; then
+        log "INFO" "Skipping health checks - relying on Docker container health"
+        log "INFO" "Services restarted successfully"
+    elif wait_for_health "$HEALTH_CHECK_TIMEOUT"; then
         run_post_deployment_tests "$ENVIRONMENT"
         log "INFO" "Services restarted successfully"
     else
@@ -547,6 +552,10 @@ main() {
                 USE_PREBUILT=true
                 shift
                 ;;
+            --skip-health-check)
+                SKIP_HEALTH_CHECK=true
+                shift
+                ;;
             -v|--verbose)
                 VERBOSE=true
                 shift
@@ -581,7 +590,20 @@ main() {
             
             deploy_services "$ENVIRONMENT"
             
-            if wait_for_health "$HEALTH_CHECK_TIMEOUT"; then
+            if [[ "$SKIP_HEALTH_CHECK" == "true" ]]; then
+                log "INFO" "Skipping health checks - relying on Docker container health"
+                log "INFO" "Deployment completed successfully! 🎉"
+                
+                # Show access information
+                local port="${APP_PORT:-5000}"
+                local url="http://localhost:${port}"
+                if [[ "$ENVIRONMENT" == "staging" ]] && [[ "$PROFILES" == *"nginx"* ]]; then
+                    url="http://localhost"
+                fi
+                
+                log "INFO" "Application URL: $url"
+                log "INFO" "Default login: admin / TrakBridge-Setup-2025!"
+            elif wait_for_health "$HEALTH_CHECK_TIMEOUT"; then
                 run_post_deployment_tests "$ENVIRONMENT"
                 log "INFO" "Deployment completed successfully! 🎉"
                 
