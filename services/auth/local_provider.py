@@ -270,7 +270,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
         if self.bcrypt_rounds < 10 or self.bcrypt_rounds > 15:
             issues.append("Bcrypt rounds should be between 10 and 15")
 
-        if self.max_age_days < 0:
+        if self.max_age_days is not None and self.max_age_days < 0:
             issues.append("Password max age days cannot be negative")
 
         if not isinstance(self.allow_registration, bool):

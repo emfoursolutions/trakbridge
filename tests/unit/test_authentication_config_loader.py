@@ -55,24 +55,25 @@ authentication:
       bind_password: "${LDAP_BIND_PASSWORD:-REPLACE_PASSWORD}"
 """
         
-        # Create local config content
+        # Create local config content with environment variable substitution
         self.local_content = """
 authentication:
   session:
-    lifetime_hours: 12
-    secure_cookies: false
+    lifetime_hours: ${SESSION_LIFETIME_HOURS:-12}
+    secure_cookies: ${SESSION_SECURE_COOKIES:-false}
   
   provider_priority:
     - local
   
   providers:
     local:
-      enabled: true
+      enabled: ${LOCAL_AUTH_ENABLED:-true}
       password_policy:
-        min_length: 4
+        min_length: ${PASSWORD_MIN_LENGTH:-4}
     
     ldap:
-      enabled: false
+      enabled: ${LDAP_ENABLED:-false}
+      default_role: "${LDAP_DEFAULT_ROLE:-user}"
 """
 
     def tearDown(self):
@@ -361,6 +362,42 @@ authentication:
         content2 = 'setting: "${MISSING_VAR:-default_value}"'
         result2 = loader._substitute_environment_variables(content2)
         self.assertIn('setting: "default_value"', result2)
+
+    @patch.dict(os.environ, {
+        'SESSION_LIFETIME_HOURS': '24',
+        'LDAP_ENABLED': 'true',
+        'LDAP_DEFAULT_ROLE': 'admin'
+    })
+    def test_local_config_with_environment_substitution(self):
+        """Test that local config now supports environment variable substitution."""
+        self._create_local_file()
+        
+        loader = self._create_loader("development")
+        loader.is_ci = False  # Simulate local development
+        
+        config = loader.load_authentication_config()
+        
+        # Should use environment variables from local config
+        self.assertEqual(config['authentication']['session']['lifetime_hours'], 24)
+        self.assertTrue(config['authentication']['providers']['ldap']['enabled'])
+        self.assertEqual(config['authentication']['providers']['ldap']['default_role'], 'admin')
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_local_config_environment_defaults(self):
+        """Test that local config uses defaults when environment variables not set."""
+        self._create_local_file()
+        
+        loader = self._create_loader("development")
+        loader.is_ci = False  # Simulate local development
+        
+        config = loader.load_authentication_config()
+        
+        # Should use default values from local config
+        self.assertEqual(config['authentication']['session']['lifetime_hours'], 12)
+        self.assertFalse(config['authentication']['session']['secure_cookies'])
+        self.assertTrue(config['authentication']['providers']['local']['enabled'])
+        self.assertFalse(config['authentication']['providers']['ldap']['enabled'])
+        self.assertEqual(config['authentication']['providers']['ldap']['default_role'], 'user')
 
 
 class TestAuthenticationLoaderIntegration(unittest.TestCase):

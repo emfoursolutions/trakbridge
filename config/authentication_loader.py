@@ -83,11 +83,20 @@ class SecureAuthenticationLoader:
             return self._get_default_config()
 
     def _load_local_config(self) -> Dict[str, Any]:
-        """Load local authentication.yaml file (development only)."""
+        """Load local authentication.yaml file with environment variable substitution."""
         with open(self.local_config_path, 'r') as f:
-            config = yaml.safe_load(f) or {}
+            template_content = f.read()
         
-        logger.debug("Loaded authentication config from local file")
+        # Substitute environment variables (same as template loading)
+        substituted_content = self._substitute_environment_variables(template_content)
+        
+        # Convert null strings to proper YAML null values
+        substituted_content = self._convert_null_strings(substituted_content)
+        
+        # Parse the substituted YAML
+        config = yaml.safe_load(substituted_content) or {}
+        
+        logger.debug("Loaded authentication config from local file with environment substitution")
         return self._apply_environment_overrides(config)
 
     def _load_template_config(self) -> Dict[str, Any]:
@@ -97,6 +106,9 @@ class SecureAuthenticationLoader:
         
         # Substitute environment variables
         substituted_content = self._substitute_environment_variables(template_content)
+        
+        # Convert null strings to proper YAML null values
+        substituted_content = self._convert_null_strings(substituted_content)
         
         # Parse the substituted YAML
         config = yaml.safe_load(substituted_content) or {}
@@ -115,31 +127,59 @@ class SecureAuthenticationLoader:
     def _substitute_environment_variables(self, content: str) -> str:
         """
         Substitute environment variables in template content.
-        Supports ${VAR_NAME:-default_value} syntax.
+        Supports ${VAR_NAME:-default_value} syntax with nested braces.
         """
-        # Custom substitution to handle ${VAR:-default} syntax
-        def substitute_match(match):
-            var_expr = match.group(1)  # Everything inside ${}
+        # More sophisticated substitution to handle nested braces in default values
+        def substitute_variables(text):
+            result = []
+            i = 0
+            while i < len(text):
+                if text[i:i+2] == '${':
+                    # Find the matching closing brace
+                    brace_count = 1
+                    start = i + 2
+                    j = start
+                    while j < len(text) and brace_count > 0:
+                        if text[j] == '{':
+                            brace_count += 1
+                        elif text[j] == '}':
+                            brace_count -= 1
+                        j += 1
+                    
+                    if brace_count == 0:
+                        # Extract the variable expression
+                        var_expr = text[start:j-1]
+                        
+                        # Process the variable
+                        if ':-' in var_expr:
+                            var_name, default_value = var_expr.split(':-', 1)
+                            value = os.getenv(var_name.strip())
+                            if value is None:
+                                result.append(default_value.strip())
+                            else:
+                                result.append(value)
+                        else:
+                            # Simple variable substitution
+                            var_name = var_expr.strip()
+                            value = os.getenv(var_name)
+                            if value is None:
+                                logger.warning(f"Environment variable {var_name} not set, using empty string")
+                                result.append("")
+                            else:
+                                result.append(value)
+                        
+                        i = j
+                    else:
+                        # Unmatched braces, treat as literal
+                        result.append(text[i])
+                        i += 1
+                else:
+                    result.append(text[i])
+                    i += 1
             
-            # Check if it has default value syntax
-            if ':-' in var_expr:
-                var_name, default_value = var_expr.split(':-', 1)
-                value = os.getenv(var_name.strip())
-                if value is None:
-                    return default_value.strip()
-                return value
-            else:
-                # Simple variable substitution
-                var_name = var_expr.strip()
-                value = os.getenv(var_name)
-                if value is None:
-                    logger.warning(f"Environment variable {var_name} not set, using empty string")
-                    return ""
-                return value
+            return ''.join(result)
         
-        # Find and replace ${...} patterns
-        pattern = r'\$\{([^}]+)\}'
-        substituted = re.sub(pattern, substitute_match, content)
+        substituted = substitute_variables(content)
         
         # Convert boolean strings to proper boolean values
         substituted = self._convert_boolean_strings(substituted)
@@ -159,6 +199,20 @@ class SecureAuthenticationLoader:
         }
         
         for old, new in boolean_replacements.items():
+            content = content.replace(old, new)
+        
+        return content
+
+    def _convert_null_strings(self, content: str) -> str:
+        """Convert string null values to proper YAML null."""
+        # Convert "null" strings to proper YAML null
+        null_replacements = {
+            ': "null"': ': null',
+            ': "None"': ': null', 
+            ': "NULL"': ': null',
+        }
+        
+        for old, new in null_replacements.items():
             content = content.replace(old, new)
         
         return content
