@@ -11,18 +11,16 @@ Created: 18-Jul-2025
 Last Modified: {{LASTMOD}}
 """
 
-import click
 import json
 import sys
+
+import click
 from flask import current_app
 from flask.cli import with_appcontext
 
 # Import unified version module
-from services.version import (
-    get_version,
-    get_development_version,
-    _get_version_instance,
-)
+from services.version import (_get_version_instance, get_development_version,
+                              get_version)
 
 
 @click.group()

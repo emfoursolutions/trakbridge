@@ -26,18 +26,17 @@ Version: {{VERSION}}
 
 # Standard library imports
 import logging
-import time
 import os
+import time
 from datetime import datetime, timezone
-from typing import Dict, Any
+from typing import Any, Dict
 
+from flask import current_app
 # Third-party imports
 from sqlalchemy import text
-from flask import current_app
 
 # Local application imports
 from database import db
-
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +64,7 @@ class HealthService:
             start_time = time.time()
 
             # Test basic connectivity using SQLAlchemy ORM (safer than raw SQL)
-            from sqlalchemy import select, literal
+            from sqlalchemy import literal, select
 
             db.session.execute(select(literal(1)))
 
@@ -143,7 +142,8 @@ class HealthService:
     def check_query_performance() -> Dict[str, Any]:
         """Monitor slow queries and performance metrics using secure ORM queries"""
         try:
-            from sqlalchemy import select, literal, func
+            from sqlalchemy import func, literal, select
+
             from models.stream import Stream
             from models.tak_server import TakServer
 
@@ -280,9 +280,10 @@ class HealthService:
                     size_bytes = 0
             else:
                 # For PostgreSQL/MySQL, estimate size from table counts (safer approach)
+                from sqlalchemy import func
+
                 from models.stream import Stream
                 from models.tak_server import TakServer
-                from sqlalchemy import func
 
                 stream_count = db.session.query(func.count(Stream.id)).scalar()
                 tak_server_count = db.session.query(func.count(TakServer.id)).scalar()
@@ -317,9 +318,10 @@ class HealthService:
     def check_table_health() -> Dict[str, Any]:
         """Check health of specific application tables using secure ORM queries"""
         try:
+            from sqlalchemy import func
+
             from models.stream import Stream
             from models.tak_server import TakServer
-            from sqlalchemy import func
 
             results = {}
 

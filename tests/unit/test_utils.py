@@ -1,8 +1,9 @@
 """Unit tests for utility functions."""
 
-import pytest
-from unittest.mock import Mock, patch
 import json
+from unittest.mock import Mock, patch
+
+import pytest
 
 
 class TestJSONValidation:
@@ -71,7 +72,8 @@ class TestSecurityUtilities:
             assert bcrypt is not None
         except ImportError:
             # If bcrypt not available, ensure werkzeug security is available
-            from werkzeug.security import generate_password_hash, check_password_hash
+            from werkzeug.security import (check_password_hash,
+                                           generate_password_hash)
 
             test_password = "testpassword123"
             hashed = generate_password_hash(test_password)
@@ -80,8 +82,8 @@ class TestSecurityUtilities:
 
     def test_secret_key_generation(self):
         """Test secret key generation."""
-        import secrets
         import os
+        import secrets
 
         # Test that we can generate secure random keys
         random_key = secrets.token_hex(32)
@@ -145,8 +147,8 @@ class TestDataProcessing:
 
     def test_datetime_handling(self):
         """Test datetime processing."""
-        from datetime import datetime, timezone
         import time
+        from datetime import datetime, timezone
 
         # Test datetime creation and formatting
         now = datetime.now(timezone.utc)

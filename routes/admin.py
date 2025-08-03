@@ -26,30 +26,20 @@ Version: {{VERSION}}
 
 # Standard library imports
 import datetime
+# Module-level logger
+import logging
 import platform
 import time
 
 # Third-party imports
-from flask import (
-    Blueprint,
-    render_template,
-    current_app,
-    request,
-    jsonify,
-    flash,
-    redirect,
-    url_for,
-)
-
-# Local application imports
-from services.key_rotation_service import get_key_rotation_service
-from services.version import get_version
+from flask import (Blueprint, current_app, flash, jsonify, redirect,
+                   render_template, request, url_for)
 
 # Authentication imports
 from services.auth import admin_required
-
-# Module-level logger
-import logging
+# Local application imports
+from services.key_rotation_service import get_key_rotation_service
+from services.version import get_version
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +52,9 @@ start_time = time.time()
 @bp.route("/system_info")
 @admin_required
 def admin_dashboard():
+    from database import db
     from models.stream import Stream
     from models.tak_server import TakServer
-    from database import db
 
     # Make sure start_time is defined somewhere globally
     uptime = datetime.timedelta(seconds=int(time.time() - start_time))

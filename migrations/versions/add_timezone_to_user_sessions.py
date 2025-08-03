@@ -6,10 +6,10 @@ Create Date: 2025-08-03 09:04:29.000000
 
 """
 
-from alembic import op
-import sqlalchemy as sa
 from datetime import datetime, timezone
 
+import sqlalchemy as sa
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "add_timezone_to_user_sessions"

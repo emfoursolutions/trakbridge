@@ -24,7 +24,7 @@ Version: {{VERSION}}
 import logging
 
 # Third-party imports
-from flask import Blueprint, render_template, jsonify
+from flask import Blueprint, jsonify, render_template
 
 # Authentication imports
 from services.auth import require_auth, require_permission

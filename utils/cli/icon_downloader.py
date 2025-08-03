@@ -4,13 +4,14 @@ Military Icon Downloader
 Downloads SVG military symbols from a milsymbol server using SIDC codes from YAML file.
 """
 
-import yaml
-import requests
 import os
 import sys
-from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+
+import requests
+import yaml
 
 
 def load_yaml_config(yaml_file):

@@ -15,9 +15,9 @@ import json
 import logging
 
 # Local application imports
-from database import db, TimestampMixin
+from database import TimestampMixin, db
 from plugins.base_plugin import BaseGPSPlugin
-from utils.json_validator import safe_json_loads, JSONValidationError
+from utils.json_validator import JSONValidationError, safe_json_loads
 
 # Module-level logger
 logger = logging.getLogger(__name__)

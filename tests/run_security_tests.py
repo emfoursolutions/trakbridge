@@ -10,10 +10,10 @@ Usage:
     python tests/run_security_tests.py
 """
 
-import sys
+import logging
 import os
 import subprocess
-import logging
+import sys
 
 # Add the project root to Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))

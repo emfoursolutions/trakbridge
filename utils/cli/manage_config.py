@@ -11,14 +11,14 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 import yaml
 
 # Add the app directory to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from config.base import ConfigLoader, BaseConfig
+from config.base import BaseConfig, ConfigLoader
 
 
 class ConfigManager:

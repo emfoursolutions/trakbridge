@@ -26,28 +26,21 @@ Last Modified: 2025-07-26
 Version: 1.0.0
 """
 
+import uuid
 # Standard library imports
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Optional, Dict, Any, List
-import uuid
+from typing import Any, Dict, List, Optional
 
 # Third-party imports
 import bcrypt
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    Enum as SQLEnum,
-    Integer,
-    String,
-    Text,
-    ForeignKey,
-)
+from sqlalchemy import Boolean, Column, DateTime
+from sqlalchemy import Enum as SQLEnum
+from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 # Local application imports
-from database import db, TimestampMixin
+from database import TimestampMixin, db
 
 
 class AuthProvider(Enum):

@@ -2,6 +2,7 @@
 
 import os
 from unittest.mock import patch
+
 from app import create_app, setup_cleanup_handlers, setup_template_helpers
 
 

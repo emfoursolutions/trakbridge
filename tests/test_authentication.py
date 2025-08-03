@@ -22,32 +22,28 @@ Last Modified: 2025-07-27
 Version: 1.0.0
 """
 
-import pytest
-import tempfile
-import os
 import json
+import os
+import tempfile
 from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock, patch, MagicMock
-from flask import Flask, session
-import bcrypt
-from ldap3 import Server, Connection, ALL
-from jose import jwt
+from unittest.mock import MagicMock, Mock, patch
 
+import bcrypt
+import pytest
+from flask import Flask, session
+from jose import jwt
+from ldap3 import ALL, Connection, Server
+
+from database import db
+from models.user import User, UserRole, UserSession
 # Import authentication components
 from services.auth.auth_manager import AuthenticationManager
-from services.auth.providers.local_provider import LocalAuthProvider
+from services.auth.decorators import (admin_required, get_current_user,
+                                      operator_required, require_auth,
+                                      require_permission, require_role)
 from services.auth.providers.ldap_provider import LDAPAuthProvider
+from services.auth.providers.local_provider import LocalAuthProvider
 from services.auth.providers.oidc_provider import OIDCAuthProvider
-from services.auth.decorators import (
-    require_auth,
-    require_role,
-    require_permission,
-    admin_required,
-    operator_required,
-    get_current_user,
-)
-from models.user import User, UserRole, UserSession
-from database import db
 
 
 @pytest.fixture

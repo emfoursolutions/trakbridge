@@ -12,10 +12,11 @@ To use this plugin:
 3. Mount the directory as /app/external_plugins in Docker
 """
 
-from typing import List, Dict, Any, Optional
-from datetime import datetime, timezone
-import aiohttp
 import logging
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+import aiohttp
 
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
 

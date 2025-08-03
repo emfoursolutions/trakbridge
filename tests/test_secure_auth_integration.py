@@ -78,6 +78,7 @@ class TestSecureAuthenticationIntegration(unittest.TestCase):
         try:
             # Force reload of config module to pick up CI environment
             import importlib
+
             import config
 
             importlib.reload(config)

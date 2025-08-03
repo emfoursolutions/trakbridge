@@ -27,26 +27,23 @@ Last Modified: 2025-07-26
 Version: 1.0.0
 """
 
+import base64
+import json
 # Standard library imports
 import logging
-import time
 import secrets
+import time
 import urllib.parse
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Tuple
-import json
-import base64
+from typing import Any, Dict, List, Optional, Tuple
 
 # Third-party imports
 import requests
 
 try:
     import jwt
-    from jwt.exceptions import (
-        InvalidTokenError,
-        ExpiredSignatureError,
-        InvalidSignatureError,
-    )
+    from jwt.exceptions import (ExpiredSignatureError, InvalidSignatureError,
+                                InvalidTokenError)
 
     JWT_AVAILABLE = True
 except ImportError:
@@ -62,16 +59,12 @@ except ImportError:
     CRYPTOGRAPHY_AVAILABLE = False
 
 # Local application imports
-from models.user import User, AuthProvider, UserRole
-from .base_provider import (
-    BaseAuthenticationProvider,
-    AuthenticationResult,
-    AuthenticationResponse,
-    AuthenticationException,
-    ProviderConnectionException,
-    ProviderConfigurationException,
-)
+from models.user import AuthProvider, User, UserRole
 
+from .base_provider import (AuthenticationException, AuthenticationResponse,
+                            AuthenticationResult, BaseAuthenticationProvider,
+                            ProviderConfigurationException,
+                            ProviderConnectionException)
 
 # Module-level logger
 logger = logging.getLogger(__name__)

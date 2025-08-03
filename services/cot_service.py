@@ -31,12 +31,12 @@ Version: {{VERSION}}
 
 # Standard library imports
 import asyncio
+import logging
+import os
 import ssl
 import tempfile
-import os
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any, Optional, Tuple
-import logging
+from typing import Any, Dict, List, Optional, Tuple
 
 # Third-party imports
 from lxml import etree
@@ -1376,8 +1376,8 @@ class PersistentCOTService:
         """
         try:
             # Import here to avoid circular imports
-            from models.tak_server import TakServer
             from database import db
+            from models.tak_server import TakServer
 
             tak_servers = db.session.query(TakServer).all()
             for tak_server in tak_servers:

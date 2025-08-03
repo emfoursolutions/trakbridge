@@ -14,7 +14,6 @@ License: GNU General Public License v3.0 (GPLv3)
 
 # Standard library imports
 import atexit
-from datetime import datetime as dt
 import fcntl  # Add this import
 import logging
 import os
@@ -22,12 +21,13 @@ import signal
 import tempfile  # Add this import
 import threading
 import time
+from datetime import datetime as dt
 from pathlib import Path  # Add this import
 from typing import Optional
 
 # Third-party imports
 from dotenv import load_dotenv
-from flask import Flask, has_app_context, render_template, jsonify
+from flask import Flask, has_app_context, jsonify, render_template
 from flask_migrate import Migrate
 from sqlalchemy import event, inspect
 from sqlalchemy.pool import Pool
@@ -95,8 +95,9 @@ def initialize_database_safely():
     Initialize database with proper migration handling.
     Handles both first-time setup and existing installations without conflicts.
     """
-    from flask_migrate import current, stamp, upgrade
     import os
+
+    from flask_migrate import current, stamp, upgrade
 
     try:
         # Check if migrations directory exists
@@ -224,11 +225,8 @@ def cleanup_startup_coordination(lock_file=None, lock_file_path=None):
 def log_full_startup_info(app):
     """Log comprehensive startup information for the primary process"""
     try:
-        from services.version import (
-            format_version,
-            get_version_info,
-            get_build_info,
-        )
+        from services.version import (format_version, get_build_info,
+                                      get_version_info)
 
         # Log startup banner
         log_startup_banner(app)
@@ -360,8 +358,8 @@ def create_app(config_name=None):
 
         # Import models AFTER db.init_app to avoid circular imports
         # Import them individually rather than through the __init__.py
-        from models.tak_server import TakServer
         from models.stream import Stream
+        from models.tak_server import TakServer
         from models.user import User, UserSession
 
         # Register models with SQLAlchemy
@@ -415,13 +413,13 @@ def create_app(config_name=None):
     register_version_commands(app)
 
     # Register blueprints
+    from routes.admin import bp as admin_bp
+    from routes.api import bp as api_bp
+    from routes.auth import bp as auth_bp
+    from routes.cot_types import bp as cot_types_bp
     from routes.main import bp as main_bp
     from routes.streams import bp as streams_bp
     from routes.tak_servers import bp as tak_servers_bp
-    from routes.admin import bp as admin_bp
-    from routes.api import bp as api_bp
-    from routes.cot_types import bp as cot_types_bp
-    from routes.auth import bp as auth_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(streams_bp, url_prefix="/streams")
@@ -460,7 +458,7 @@ def setup_version_context_processor(app):
     def inject_version_info():
         """Inject version information into all templates."""
         try:
-            from services.version import get_version_info, get_build_info
+            from services.version import get_build_info, get_version_info
 
             version_info = get_version_info()
             build_info = get_build_info()
@@ -605,6 +603,7 @@ def initialize_admin_user_if_needed():
 def start_active_streams():
     """Start all active streams with enhanced logging and proper error handling."""
     from flask import current_app
+
     from services.version import get_version
 
     stream_manager = getattr(current_app, "stream_manager", None)

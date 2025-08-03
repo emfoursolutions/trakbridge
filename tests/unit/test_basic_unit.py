@@ -1,9 +1,10 @@
 """Basic unit tests for TrakBridge."""
 
 import pytest
+from sqlalchemy import text
+
 from app import create_app
 from database import db
-from sqlalchemy import text
 
 
 class TestBasicFunctionality:

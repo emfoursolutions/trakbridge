@@ -31,14 +31,15 @@ Version: 1.0.0
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Optional, Dict, Any, Tuple, List
 from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
+
+# Local application imports
+from models.user import AuthProvider, User, UserRole, UserSession
 
 # Third-party imports
 # (none for this file)
 
-# Local application imports
-from models.user import User, UserSession, AuthProvider, UserRole
 
 
 # Module-level logger

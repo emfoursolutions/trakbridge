@@ -30,15 +30,15 @@ Version: 1.0.0
 # Standard library imports
 import logging
 from functools import wraps
-from typing import Optional, List, Union, Callable, Any, Dict
+from typing import Any, Callable, Dict, List, Optional, Union
 
 # Third-party imports
-from flask import session, request, redirect, url_for, jsonify, g, current_app
+from flask import current_app, g, jsonify, redirect, request, session, url_for
 
 # Local application imports
 from models.user import User, UserRole
-from .auth_manager import AuthenticationManager
 
+from .auth_manager import AuthenticationManager
 
 # Module-level logger
 logger = logging.getLogger(__name__)

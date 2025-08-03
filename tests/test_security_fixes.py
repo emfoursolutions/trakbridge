@@ -10,14 +10,16 @@ Tests cover:
 3. Nginx H2C request smuggling prevention (configuration tests)
 """
 
-import pytest
-import re
-from unittest.mock import Mock, patch, MagicMock
-from flask import Flask, current_app
-from plugins.plugin_manager import PluginManager
-from config.base import BaseConfig
 import importlib.util
 import os
+import re
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
+from flask import Flask, current_app
+
+from config.base import BaseConfig
+from plugins.plugin_manager import PluginManager
 
 
 class TestHostHeaderInjectionPrevention:

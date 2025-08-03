@@ -10,11 +10,12 @@ Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """
 
+from database import TimestampMixin, db
+
+from .stream import Stream
 # Local application imports
 from .tak_server import TakServer
-from .stream import Stream
-from .user import User, UserSession, AuthProvider, UserRole, AccountStatus
-from database import db, TimestampMixin
+from .user import AccountStatus, AuthProvider, User, UserRole, UserSession
 
 __all__ = [
     "db",

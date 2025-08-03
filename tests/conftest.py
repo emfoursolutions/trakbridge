@@ -15,18 +15,19 @@ Last Modified: 2025-07-27
 Version: 1.0.0
 """
 
-import pytest
-import tempfile
 import os
 import shutil
-from unittest.mock import Mock, patch
-from flask import Flask
+import tempfile
 from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock, patch
+
+import pytest
+from flask import Flask
 
 # Import application components
 from database import db
+from models.user import AuthProvider, User, UserRole, UserSession
 from services.auth.auth_manager import AuthenticationManager
-from models.user import User, UserRole, UserSession, AuthProvider
 
 
 @pytest.fixture(scope="session")

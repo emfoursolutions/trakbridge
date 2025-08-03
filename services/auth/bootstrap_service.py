@@ -28,10 +28,10 @@ Version: 1.0.0
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
-from models.user import User, UserRole, AuthProvider, AccountStatus
 from database import db
+from models.user import AccountStatus, AuthProvider, User, UserRole
 
 logger = logging.getLogger(__name__)
 

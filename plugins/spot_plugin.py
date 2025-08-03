@@ -26,7 +26,7 @@ Version: 1.0.0
 import logging
 import ssl
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 # Third-party imports
 import aiohttp

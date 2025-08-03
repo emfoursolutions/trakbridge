@@ -20,20 +20,12 @@ import inspect
 import json
 import logging
 import os
-import sys
 import pkgutil
-from typing import (
-    Dict,
-    Type,
-    Optional,
-    List,
-    Any,
-    Union,
-    TYPE_CHECKING,
-)
+import sys
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
 
 # Local imports for JSON validation
-from utils.json_validator import safe_json_loads, JSONValidationError
+from utils.json_validator import JSONValidationError, safe_json_loads
 
 # Third-party imports
 # (none for this file)
@@ -108,7 +100,7 @@ class PluginManager:
                                     )
                         else:
                             logger.warning(
-                                f"Invalid allowed_plugin_modules format in {config_file}"
+                                f"Invalid or No Plugins listed in {config_file}"
                             )
                     break  # Use first config file found
                 except Exception as e:
@@ -819,8 +811,8 @@ class PluginManager:
         health_status = {}
 
         # Get existing stream configurations from the database
-        from models.stream import Stream
         from database import db
+        from models.stream import Stream
 
         # Get all streams grouped by plugin type
         streams_by_plugin = {}

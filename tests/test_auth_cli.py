@@ -18,15 +18,16 @@ Last Modified: 2025-07-27
 Version: 1.0.0
 """
 
-import pytest
-import tempfile
 import os
-from unittest.mock import Mock, patch, MagicMock
-from flask.testing import FlaskCliRunner
-from click.testing import CliRunner
+import tempfile
+from unittest.mock import MagicMock, Mock, patch
 
-from models.user import User, UserRole
+import pytest
+from click.testing import CliRunner
+from flask.testing import FlaskCliRunner
+
 from database import db
+from models.user import User, UserRole
 
 
 class TestAuthCLICommands:

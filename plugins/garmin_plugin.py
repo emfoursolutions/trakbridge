@@ -14,12 +14,12 @@ Version: 2.0.0
 import asyncio
 import logging
 import ssl
-import defusedxml.ElementTree as ET
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 import aiohttp
 import certifi
+import defusedxml.ElementTree as ET
 from fastkml import kml
 
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField

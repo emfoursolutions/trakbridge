@@ -1,8 +1,9 @@
 """Unit tests for authentication system components."""
 
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime, timezone, timedelta
 
 
 class TestUserModel:
@@ -30,7 +31,7 @@ class TestUserModel:
 
     def test_user_password_methods(self, app, db_session):
         """Test user password methods."""
-        from models.user import User, UserRole, AuthProvider
+        from models.user import AuthProvider, User, UserRole
 
         with app.app_context():
             user = User(
@@ -66,7 +67,8 @@ class TestAuthenticationServices:
     def test_auth_providers_import(self):
         """Test that auth providers can be imported."""
         try:
-            from services.auth.providers.local_provider import LocalAuthProvider
+            from services.auth.providers.local_provider import \
+                LocalAuthProvider
 
             assert LocalAuthProvider is not None
         except ImportError:
@@ -143,7 +145,8 @@ class TestPasswordSecurity:
             assert bcrypt is not None
         except ImportError:
             # Fallback to werkzeug
-            from werkzeug.security import generate_password_hash, check_password_hash
+            from werkzeug.security import (check_password_hash,
+                                           generate_password_hash)
 
             assert generate_password_hash is not None
             assert check_password_hash is not None

@@ -1,15 +1,13 @@
 """Unit tests for TrakBridge configuration."""
 
-import pytest
 import os
 from unittest.mock import Mock, patch
-from config.environments import (
-    get_config,
-    DevelopmentConfig,
-    ProductionConfig,
-    TestEnvironmentConfig,
-)
+
+import pytest
+
 from config.base import BaseConfig
+from config.environments import (DevelopmentConfig, ProductionConfig,
+                                 TestEnvironmentConfig, get_config)
 
 
 class TestConfigurationSystem:

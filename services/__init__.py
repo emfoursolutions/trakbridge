@@ -15,11 +15,11 @@ Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """
 
+from .database_manager import DatabaseManager
+from .session_manager import SessionManager
 # Local application imports
 from .stream_manager import StreamManager, get_stream_manager
-from .database_manager import DatabaseManager
 from .stream_worker import StreamWorker
-from .session_manager import SessionManager
 
 __all__ = [
     "StreamManager",

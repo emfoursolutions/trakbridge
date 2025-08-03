@@ -1,10 +1,12 @@
 """Unit tests for TrakBridge services."""
 
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from services.stream_manager import StreamManager
+
 from services.encryption_service import EncryptionService
 from services.logging_service import setup_logging
+from services.stream_manager import StreamManager
 from services.version import get_version, get_version_info
 
 

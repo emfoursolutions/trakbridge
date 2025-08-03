@@ -1,12 +1,14 @@
 """Unit tests for TrakBridge models."""
 
-import pytest
 import uuid
 from datetime import datetime, timedelta, timezone
-from models.user import User, UserRole, UserSession, AuthProvider
+
+import pytest
+
+from database import db
 from models.stream import Stream
 from models.tak_server import TakServer
-from database import db
+from models.user import AuthProvider, User, UserRole, UserSession
 
 
 class TestUserModel:

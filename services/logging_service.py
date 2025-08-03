@@ -11,18 +11,14 @@ Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """
 
+import datetime
 # Standard library imports
 import logging
 import os
-import datetime
 
 # Local application imports
-from services.version import (
-    get_version,
-    get_version_info,
-    get_build_info,
-    is_development_build,
-)
+from services.version import (get_build_info, get_version, get_version_info,
+                              is_development_build)
 
 logger = logging.getLogger(__name__)
 

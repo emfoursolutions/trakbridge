@@ -1,9 +1,11 @@
 """Unit tests for TrakBridge plugin system."""
 
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from plugins.plugin_manager import PluginManager
+
 from plugins.base_plugin import BaseGPSPlugin
+from plugins.plugin_manager import PluginManager
 
 
 class TestPluginManager:

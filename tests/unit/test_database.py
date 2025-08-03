@@ -2,10 +2,11 @@
 
 import pytest
 from sqlalchemy import inspect
+
 from database import db
-from models.user import User, UserRole, AuthProvider
 from models.stream import Stream
 from models.tak_server import TakServer
+from models.user import AuthProvider, User, UserRole
 
 
 class TestDatabaseOperations:

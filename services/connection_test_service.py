@@ -27,11 +27,12 @@ Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """
 
+import asyncio
 # Standard library imports
 import logging
-import asyncio
-import aiohttp
 from concurrent.futures import ThreadPoolExecutor
+
+import aiohttp
 
 # Module level logging
 logger = logging.getLogger(__name__)

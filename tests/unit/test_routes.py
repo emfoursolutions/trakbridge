@@ -1,8 +1,9 @@
 """Unit tests for TrakBridge routes."""
 
-import pytest
 import json
 from unittest.mock import Mock, patch
+
+import pytest
 
 
 class TestMainRoutes:

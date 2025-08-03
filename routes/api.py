@@ -25,35 +25,30 @@ Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """
 
+# Third-party imports
+import asyncio
 # Standard library imports
 import logging
 import threading
 import time
 from datetime import datetime, timedelta, timezone
 
-# Third-party imports
-import asyncio
 import psutil
-from flask import Blueprint, jsonify, current_app
+from flask import Blueprint, current_app, jsonify
 
 # Local application imports
 from database import db
-from services.health_service import health_service
-from services.stream_display_service import StreamDisplayService
-from services.stream_config_service import StreamConfigService
-from services.stream_operations_service import StreamOperationsService
-from services.connection_test_service import ConnectionTestService
-from services.stream_status_service import StreamStatusService
-from services.version import get_version, format_version
-from utils.app_helpers import get_plugin_manager
-
 # Authentication imports
-from services.auth import (
-    require_auth,
-    require_permission,
-    api_key_or_auth_required,
-    optional_auth,
-)
+from services.auth import (api_key_or_auth_required, optional_auth,
+                           require_auth, require_permission)
+from services.connection_test_service import ConnectionTestService
+from services.health_service import health_service
+from services.stream_config_service import StreamConfigService
+from services.stream_display_service import StreamDisplayService
+from services.stream_operations_service import StreamOperationsService
+from services.stream_status_service import StreamStatusService
+from services.version import format_version, get_version
+from utils.app_helpers import get_plugin_manager
 
 # Module-level logger
 logger = logging.getLogger(__name__)

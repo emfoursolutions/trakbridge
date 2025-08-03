@@ -25,8 +25,8 @@ Version: {{VERSION}}
 # Standard library imports
 import logging
 import time
-from typing import TYPE_CHECKING, Optional, List
-from datetime import timezone, datetime
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, List, Optional
 
 # Third-party imports
 from sqlalchemy.exc import SQLAlchemyError

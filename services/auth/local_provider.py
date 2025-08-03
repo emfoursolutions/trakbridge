@@ -32,20 +32,16 @@ import logging
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # Third-party imports
 import bcrypt
 
 # Local application imports
-from models.user import User, AuthProvider, UserRole, AccountStatus
-from .base_provider import (
-    BaseAuthenticationProvider,
-    AuthenticationResult,
-    AuthenticationResponse,
-    AuthenticationException,
-)
+from models.user import AccountStatus, AuthProvider, User, UserRole
 
+from .base_provider import (AuthenticationException, AuthenticationResponse,
+                            AuthenticationResult, BaseAuthenticationProvider)
 
 # Module-level logger
 logger = logging.getLogger(__name__)

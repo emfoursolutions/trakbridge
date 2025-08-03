@@ -30,23 +30,20 @@ Version: 1.0.0
 
 # Standard library imports
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Tuple
-from threading import Lock
 import time
+from datetime import datetime, timedelta
+from threading import Lock
+from typing import Any, Dict, List, Optional, Tuple
 
 # Third-party imports
 from flask import current_app, request
 
 # Local application imports
-from models.user import User, UserSession, AuthProvider, UserRole, AccountStatus
-from .base_provider import (
-    BaseAuthenticationProvider,
-    AuthenticationResult,
-    AuthenticationResponse,
-    AuthenticationException,
-)
+from models.user import (AccountStatus, AuthProvider, User, UserRole,
+                         UserSession)
 
+from .base_provider import (AuthenticationException, AuthenticationResponse,
+                            AuthenticationResult, BaseAuthenticationProvider)
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -98,8 +95,8 @@ class AuthenticationManager:
     def _initialize_providers(self) -> None:
         """Initialize authentication providers based on configuration"""
         try:
-            from .local_provider import LocalAuthProvider
             from .ldap_provider import LDAPAuthProvider
+            from .local_provider import LocalAuthProvider
             from .oidc_provider import OIDCAuthProvider
 
             # Handle both old nested and new flat configuration formats

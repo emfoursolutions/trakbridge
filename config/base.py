@@ -21,8 +21,8 @@ from urllib.parse import quote_plus
 import yaml
 
 # Local application imports
-from .secrets import get_secret_manager
 from .authentication_loader import load_authentication_config
+from .secrets import get_secret_manager
 
 logger = logging.getLogger(__name__)
 
@@ -526,8 +526,8 @@ class BaseConfig:
         Returns:
             Configuration dictionary with resolved values
         """
-        import re
         import copy
+        import re
 
         logger = logging.getLogger(__name__)
 
