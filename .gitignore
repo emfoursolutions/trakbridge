@@ -29,8 +29,25 @@ logs/
 # VSCode Files
 .idea/
 
-# Authentication Configuration
+# Authentication Configuration - Never commit real secrets
 config/settings/authentication.yaml
+config/settings/*.local.yaml
+config/settings/*.secret.yaml
+
+# Local development overrides
+config/local/
+*.local.*
+local_*.yaml
+
+# Environment files with secrets
+.env.local
+.env.production
+.env.staging
+
+# Backup files that might contain secrets
+*.bak
+*.backup
+*_backup
 
 # DS_Store files
 .DS_Store*

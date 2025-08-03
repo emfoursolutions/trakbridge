@@ -22,6 +22,7 @@ import yaml
 
 # Local application imports
 from .secrets import get_secret_manager
+from .authentication_loader import load_authentication_config
 
 logger = logging.getLogger(__name__)
 
@@ -205,22 +206,27 @@ class BaseConfig:
         logging_config = self.loader.load_config_file("logging.yaml")
         self.logging_config = self.loader.merge_environment_config(logging_config)
 
-        # Load authentication configuration
-        auth_config_raw = self.loader.load_config_file("authentication.yaml")
-
-        # Handle the authentication config format - it has the main config under 'authentication' key
-        # and environment overrides at the top level
-        base_auth_config = auth_config_raw.get("authentication", {})
-        env_overrides = auth_config_raw.get(self.environment, {}).get(
-            "authentication", {}
-        )
-
-        # Deep merge environment overrides into base config
-        if env_overrides:
-            self.loader._deep_merge(base_auth_config, env_overrides)
-
-        # Resolve environment variable placeholders in authentication config
-        self.auth_config = self._resolve_config_secrets(base_auth_config)
+        # Load authentication configuration using secure loader
+        try:
+            auth_config_raw = load_authentication_config(self.environment)
+            self.auth_config = auth_config_raw.get("authentication", {})
+            logger.info("Loaded authentication configuration using secure loader")
+        except Exception as e:
+            logger.error(f"Failed to load authentication config: {e}")
+            # Fallback to default authentication config
+            self.auth_config = {
+                'session': {
+                    'lifetime_hours': 8,
+                    'secure_cookies': self.environment == 'production'
+                },
+                'provider_priority': ['local'],
+                'providers': {
+                    'local': {'enabled': True},
+                    'ldap': {'enabled': False},
+                    'oidc': {'enabled': False}
+                }
+            }
+            logger.warning("Using fallback authentication configuration")
 
     @property
     def SECRET_KEY(self) -> str:
