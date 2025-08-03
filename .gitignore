@@ -31,7 +31,6 @@ logs/
 .idea/
 
 # Authentication Configuration - Never commit real secrets
-config/settings/authentication.yaml
 config/settings/*.local.yaml
 config/settings/*.secret.yaml
 
