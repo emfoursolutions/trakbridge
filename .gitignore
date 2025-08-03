@@ -19,7 +19,6 @@ build/
 
 # Docker and Docker Compose files
 build.sh
-docker-compose-dev.yml
 
 # build artifacts
 build/
@@ -29,6 +28,9 @@ logs/
 
 # VSCode Files
 .idea/
+
+# Authentication Configuration
+config/settings/authentication.yaml
 
 # DS_Store files
 .DS_Store*

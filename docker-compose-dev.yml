@@ -1,0 +1,271 @@
+# =============================================================================
+# TrakBridge Development Environment Docker Compose Configuration
+# =============================================================================
+#
+# This configuration provides a development environment optimized for:
+# - Rapid development and testing
+# - Live code reloading and debugging
+# - Easy database access and inspection
+# - Development tooling integration
+# - Fast iteration cycles
+#
+# Usage:
+#   docker-compose -f docker-compose-dev.yml --profile postgres up -d
+#   docker-compose -f docker-compose-dev.yml --profile postgres --profile nginx up -d
+#
+# Features:
+#   - Development-optimized settings (debug mode, verbose logging)
+#   - File watching and live reload
+#   - Direct database access for debugging
+#   - Development tools and utilities
+#   - Test data seeding
+#
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # Main application service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-production}
+      args:
+        BUILD_ENV: ${FLASK_ENV:-production}
+    image: trakbridge:${APP_VERSION:-latest}
+    container_name: trakbridge
+    restart: unless-stopped
+
+    # Development environment configuration
+    environment:
+      # Flask environment - Development mode
+      FLASK_ENV: "development"
+      FLASK_APP: "app.py"
+      
+      # Configuration Management
+      TRAKBRIDGE_CONFIG_DIR: "/app/external_config"
+      TRAKBRIDGE_CONFIG_AUTO_INSTALL: "true"
+      TRAKBRIDGE_CONFIG_UPDATE_MODE: "preserve"
+
+      # Database configuration
+      DB_TYPE: "postgresql"
+      DB_HOST: "postgres"
+      DB_PORT: "5432"
+      DB_NAME: "trakbridge_dev"
+      DB_USER: "trakbridge_dev"
+
+      # Development settings
+      DEBUG: "true"
+      LOG_LEVEL: "DEBUG"
+      LOG_DIR: "logs"
+      
+      # Application URL for development
+      TRAKBRIDGE_APPLICATION_URL: "http://localhost:5000"
+
+      # Performance settings
+      MAX_WORKER_THREADS: ${MAX_WORKER_THREADS:-8}
+      MAX_CONCURRENT_STREAMS: ${MAX_CONCURRENT_STREAMS:-200}
+      DEFAULT_POLL_INTERVAL: ${DEFAULT_POLL_INTERVAL:-120}
+      HTTP_TIMEOUT: ${HTTP_TIMEOUT:-30}
+      HTTP_MAX_CONNECTIONS: ${HTTP_MAX_CONNECTIONS:-100}
+      HTTP_MAX_CONNECTIONS_PER_HOST: ${HTTP_MAX_CONNECTIONS_PER_HOST:-10}
+      ASYNC_TIMEOUT: ${ASYNC_TIMEOUT:-60}
+
+      # Feature flags
+      ENABLE_SQL_ECHO: ${ENABLE_SQL_ECHO:-false}
+      SQLALCHEMY_RECORD_QUERIES: ${SQLALCHEMY_RECORD_QUERIES:-false}
+
+    # Secrets (for production)
+    secrets:
+      - db_password
+      - secret_key
+      - tb_master_key
+
+    # Ports
+    ports:
+      - "${APP_PORT:-5000}:5000"
+
+    # Volumes
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./plugins:/app/plugins
+      - ${CONFIG_DIR:-./config}:/app/config:ro
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Dependencies
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+      mysql:
+        condition: service_healthy
+        required: false
+
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPU_LIMIT:-2.0}'
+          memory: ${MEMORY_LIMIT:-2G}
+        reservations:
+          cpus: '${CPU_RESERVATION:-0.5}'
+          memory: ${MEMORY_RESERVATION:-512M}
+
+    # Networks
+    networks:
+      - app-network
+
+  # PostgreSQL database (optional)
+  postgres:
+    image: postgres:15-alpine
+    container_name: trakbridge-postgres
+    restart: unless-stopped
+    profiles:
+      - postgres
+      - db
+
+    environment:
+      POSTGRES_DB: "trakbridge_dev"
+      POSTGRES_USER: "trakbridge_dev"
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+
+    secrets:
+      - db_password
+
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-scripts/postgres:/docker-entrypoint-initdb.d:ro
+
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-trakbridge_db}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - app-network
+
+  # MySQL database (optional)
+  mysql:
+    image: mysql:8.0
+    container_name: trakbridge-mysql
+    restart: unless-stopped
+    profiles:
+      - mysql
+      - db
+
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-trakbridge_db}
+      MYSQL_USER: ${DB_USER:-mysql}
+      MYSQL_PASSWORD_FILE: /run/secrets/db_password
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_password
+
+    secrets:
+      - db_password
+
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/init-scripts/mysql:/docker-entrypoint-initdb.d:ro
+
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - app-network
+
+  # Redis (optional, for caching/sessions)
+  redis:
+    image: redis:7-alpine
+    container_name: trakbridge-redis
+    restart: unless-stopped
+    profiles:
+      - redis
+      - cache
+
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+    volumes:
+      - redis_data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - app-network
+
+  # Nginx reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: trakbridge-nginx
+    restart: unless-stopped
+    profiles:
+      - nginx
+      - proxy
+
+    ports:
+      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_SSL_PORT:-443}:443"
+
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
+
+    depends_on:
+      - app
+
+    networks:
+      - app-network
+
+# Networks
+networks:
+  app-network:
+    driver: bridge
+    name: trakbridge-network
+
+# Volumes
+volumes:
+  postgres_data:
+    driver: local
+    name: trakbridge-postgres-data
+
+  mysql_data:
+    driver: local
+    name: trakbridge-mysql-data
+
+  redis_data:
+    driver: local
+    name: trakbridge-redis-data
+
+# Secrets
+secrets:
+  db_password:
+    file: ${DB_PASSWORD:-./secrets/db_password}
+
+  secret_key:
+    file: ${SECRET_KEY:-./secrets/secret_key}
+
+  tb_master_key:
+    file: ${TB_MASTER_KEY:-./secrets/tb_master_key}
