@@ -17,9 +17,6 @@ build/
 # Development version files
 .setuptools-scm-info.json
 
-# Scripts
-scripts/
-
 # Docker and Docker Compose files
 build.sh
 docker-compose-dev.yml

@@ -477,7 +477,7 @@ def generate_html_report(symbols, results, output_dir, base_url):
 def main():
     """Main function to download all military icons."""
     # Configuration
-    BASE_URL = "http://10.0.30.6:2525"
+    BASE_URL = "http://localhost:2525"
     YAML_FILE = "config/settings/cot.yaml"  # Change this to your YAML file name
     OUTPUT_DIR = "static/cot_icons"
     PARALLEL = True  # Set to False for sequential downloads
