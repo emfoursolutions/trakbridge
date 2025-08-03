@@ -164,7 +164,7 @@ setup_nginx() {
         
         # Download nginx configuration
         if command -v curl &> /dev/null; then
-            log_info "Downloading nginx configuration..."
+            log_info "Downloading nginx configuration...."
             curl -s -o docker/nginx/nginx.conf https://raw.githubusercontent.com/emfoursolutions/trakbridge/refs/heads/main/init/nginx/nginx.conf
             log_info "nginx configuration downloaded to docker/nginx/nginx.conf"
         elif command -v wget &> /dev/null; then
