@@ -913,6 +913,9 @@ deploy-feature-branch:
     DOCKER_TLS_CERTDIR: ""
   
   before_script: |
+    # Authenticate with GitLab Container Registry for pulling
+    echo "${CI_REGISTRY_PASSWORD}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
+    
     # Generate dynamic port based on branch hash (5001-5099 range)
     export DYNAMIC_PORT=$((5001 + (0x$(echo -n "$CI_COMMIT_REF_SLUG" | sha256sum | head -c 2) % 99)))
     echo "Deploying feature branch to dynamic environment..."
