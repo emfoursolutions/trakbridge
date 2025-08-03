@@ -29,6 +29,7 @@ ROLLBACK_ON_FAILURE=true
 VERBOSE=false
 APP_PORT=""
 BRANCH_NAME=""
+USE_PREBUILT=false
 
 # Color codes for output
 RED='\033[0;31m'
@@ -81,6 +82,7 @@ Options:
     -f, --compose-file FILE  Custom docker-compose file
         --port PORT          Override application port (for feature branches)
         --branch BRANCH      Feature branch name (for feature environment)
+        --use-prebuilt       Use pre-built images instead of building locally
     -v, --verbose            Enable verbose logging
     -h, --help              Show this help message
 
@@ -197,9 +199,17 @@ setup_environment() {
 
 create_secrets() {
     local env="$1"
-    local secrets_dir="$PROJECT_ROOT/secrets/$env"
+    local secrets_dir
     
-    log "INFO" "Creating secrets for environment: $env"
+    # Handle feature branch environments
+    if [[ "$env" == "feature" ]]; then
+        # For feature branches, use a shared secrets directory or create minimal secrets
+        secrets_dir="$PROJECT_ROOT/secrets/feature"
+        log "INFO" "Creating secrets for feature environment: $secrets_dir"
+    else
+        secrets_dir="$PROJECT_ROOT/secrets/$env"
+        log "INFO" "Creating secrets for environment: $env"
+    fi
     
     mkdir -p "$secrets_dir"
     
@@ -222,10 +232,25 @@ create_secrets() {
         chmod 600 "$secrets_dir/tb_master_key"
     fi
     
+    # Create optional secrets with defaults if they don't exist
+    if [[ ! -f "$secrets_dir/ldap_bind_password" ]]; then
+        log "INFO" "Creating default LDAP bind password"
+        echo "default-ldap-password" > "$secrets_dir/ldap_bind_password"
+        chmod 600 "$secrets_dir/ldap_bind_password"
+    fi
+    
+    if [[ ! -f "$secrets_dir/oidc_client_secret" ]]; then
+        log "INFO" "Creating default OIDC client secret"
+        echo "default-oidc-secret" > "$secrets_dir/oidc_client_secret"
+        chmod 600 "$secrets_dir/oidc_client_secret"
+    fi
+    
     # Set environment variables for Docker Compose
     export DB_PASSWORD_FILE="$secrets_dir/db_password"
     export SECRET_KEY_FILE="$secrets_dir/secret_key"
     export TB_MASTER_KEY_FILE="$secrets_dir/tb_master_key"
+    export LDAP_BIND_PASSWORD_FILE="$secrets_dir/ldap_bind_password"
+    export OIDC_CLIENT_SECRET_FILE="$secrets_dir/oidc_client_secret"
     
     log "INFO" "Secrets created successfully"
 }
@@ -278,9 +303,23 @@ deploy_services() {
     
     cd "$PROJECT_ROOT"
     
-    # Set environment variables
+    # Set environment variables for docker-compose
     export APP_VERSION="$env-latest"
     export COMPOSE_FILE="$COMPOSE_FILE"
+    
+    # Set image tag for pre-built images
+    if [[ "$USE_PREBUILT" == "true" ]]; then
+        # For feature branches, use the branch tag
+        if [[ "$env" == "feature" && -n "$BRANCH_NAME" ]]; then
+            export IMAGE_TAG="$BRANCH_NAME"
+            log "INFO" "Using pre-built image tag: $IMAGE_TAG"
+        else
+            export IMAGE_TAG="$env"
+            log "INFO" "Using pre-built image tag: $IMAGE_TAG"
+        fi
+    else
+        export IMAGE_TAG="$env-latest"
+    fi
     
     # Build profiles argument
     local profiles_arg=""
@@ -504,6 +543,10 @@ main() {
                 BRANCH_NAME="$2"
                 shift 2
                 ;;
+            --use-prebuilt)
+                USE_PREBUILT=true
+                shift
+                ;;
             -v|--verbose)
                 VERBOSE=true
                 shift
@@ -528,7 +571,14 @@ main() {
             create_secrets "$ENVIRONMENT"
             prepare_directories "$ENVIRONMENT"
             backup_current_deployment "$ENVIRONMENT" || true
-            build_image "$ENVIRONMENT"
+            
+            # Only build if not using pre-built images
+            if [[ "$USE_PREBUILT" != "true" ]]; then
+                build_image "$ENVIRONMENT"
+            else
+                log "INFO" "Skipping image build, using pre-built images"
+            fi
+            
             deploy_services "$ENVIRONMENT"
             
             if wait_for_health "$HEALTH_CHECK_TIMEOUT"; then

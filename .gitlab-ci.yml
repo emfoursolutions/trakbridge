@@ -745,6 +745,7 @@ deploy-development:
       --action deploy \
       --profiles postgres \
       --timeout 300 \
+      --use-prebuilt \
       --verbose
     
     echo "Development deployment completed"
@@ -795,6 +796,7 @@ deploy-staging:
       --action deploy \
       --profiles "postgres,nginx" \
       --timeout 300 \
+      --use-prebuilt \
       --verbose
     
     # Run staging validation tests
@@ -993,6 +995,7 @@ deploy-feature-branch:
       --profiles postgres \
       --timeout 300 \
       --branch "$CI_COMMIT_REF_SLUG" \
+      --use-prebuilt \
       --verbose
     
     # Health check for the dynamic environment
@@ -1068,7 +1071,7 @@ stop-feature-branch:
         --action stop \
         --port $DYNAMIC_PORT \
         --branch "$CI_COMMIT_REF_SLUG" \
-        --cleanup \
+        --use-prebuilt \
         --verbose
     else
       # Fallback cleanup if script not available

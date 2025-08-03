@@ -22,18 +22,10 @@
 #
 # =============================================================================
 
-version: '3.8'
-
 services:
   # Main application service
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: ${BUILD_TARGET:-production}
-      args:
-        BUILD_ENV: ${FLASK_ENV:-production}
-    image: trakbridge:${APP_VERSION:-latest}
+    image: ${CI_REGISTRY_IMAGE:-trakbridge}:${IMAGE_TAG:-latest}
     container_name: trakbridge
     restart: unless-stopped
 
@@ -294,32 +286,32 @@ services:
 networks:
   app-network:
     driver: bridge
-    name: trakbridge-network
+    name: ${COMPOSE_PROJECT_NAME:-trakbridge}-network
 
 # Volumes
 volumes:
   postgres_data:
     driver: local
-    name: trakbridge-postgres-data
+    name: ${COMPOSE_PROJECT_NAME:-trakbridge}-postgres-data
 
   mysql_data:
     driver: local
-    name: trakbridge-mysql-data
+    name: ${COMPOSE_PROJECT_NAME:-trakbridge}-mysql-data
 
   redis_data:
     driver: local
-    name: trakbridge-redis-data
+    name: ${COMPOSE_PROJECT_NAME:-trakbridge}-redis-data
 
 # Secrets
 secrets:
   db_password:
-    file: ${DB_PASSWORD:-./secrets/db_password}
+    file: ${DB_PASSWORD_FILE:-./secrets/db_password}
 
   secret_key:
-    file: ${SECRET_KEY:-./secrets/secret_key}
+    file: ${SECRET_KEY_FILE:-./secrets/secret_key}
 
   tb_master_key:
-    file: ${TB_MASTER_KEY:-./secrets/tb_master_key}
+    file: ${TB_MASTER_KEY_FILE:-./secrets/tb_master_key}
 
   ldap_bind_password:
     file: ${LDAP_BIND_PASSWORD_FILE:-./secrets/ldap_bind_password}
