@@ -895,7 +895,7 @@ deploy-feature-branch:
   
   environment:
     name: review/$CI_COMMIT_REF_SLUG
-    url: http://localhost:5001  # Dynamic port will be calculated at runtime
+    url: http://localhost:5001
     deployment_tier: development
     auto_stop_in: 1 week
     on_stop: stop-feature-branch
@@ -915,6 +915,19 @@ deploy-feature-branch:
     echo "Branch: $CI_COMMIT_BRANCH"
     echo "Environment: review/$CI_COMMIT_REF_SLUG"
     echo "Dynamic Port: $DYNAMIC_PORT"
+    
+    # Update GitLab environment URL with actual dynamic port
+    if [ -n "$CI_JOB_TOKEN" ] && [ -n "$CI_PROJECT_ID" ]; then
+      ENVIRONMENT_URL="http://localhost:$DYNAMIC_PORT"
+      echo "Updating GitLab environment URL to: $ENVIRONMENT_URL"
+      
+      curl -s --request PUT \
+        --header "JOB-TOKEN: $CI_JOB_TOKEN" \
+        --header "Content-Type: application/json" \
+        --data "{\"external_url\": \"$ENVIRONMENT_URL\"}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/environments/$(echo "review/$CI_COMMIT_REF_SLUG" | sed 's/\//%2F/g')" \
+        || echo "Failed to update environment URL (this is non-critical)"
+    fi
   
   script: |
     # Debug: Show current environment and available images

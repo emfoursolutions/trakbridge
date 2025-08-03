@@ -27,6 +27,8 @@ PROFILES=""
 HEALTH_CHECK_TIMEOUT=300
 ROLLBACK_ON_FAILURE=true
 VERBOSE=false
+APP_PORT=""
+BRANCH_NAME=""
 
 # Color codes for output
 RED='\033[0;31m'
@@ -72,11 +74,13 @@ TrakBridge Deployment Script
 Usage: $0 [OPTIONS]
 
 Options:
-    -e, --environment ENV    Target environment (development|staging|production)
+    -e, --environment ENV    Target environment (development|staging|production|feature)
     -a, --action ACTION      Action to perform (deploy|stop|restart|status|rollback)
     -p, --profiles PROFILES  Docker Compose profiles to enable (comma-separated)
     -t, --timeout SECONDS    Health check timeout (default: 300)
     -f, --compose-file FILE  Custom docker-compose file
+        --port PORT          Override application port (for feature branches)
+        --branch BRANCH      Feature branch name (for feature environment)
     -v, --verbose            Enable verbose logging
     -h, --help              Show this help message
 
@@ -84,12 +88,14 @@ Examples:
     $0 --environment development --action deploy
     $0 --environment staging --profiles postgres,nginx --action deploy
     $0 --environment production --action status
+    $0 --environment feature --port 5010 --branch feature-auth --action deploy
     $0 --action rollback
 
 Environments:
     development     - Development environment with debug features
     staging         - Production-like environment for testing
     production      - Production deployment (Docker Hub images only)
+    feature         - Feature branch review environment with dynamic ports
 
 Actions:
     deploy          - Deploy or update the application
@@ -143,6 +149,29 @@ setup_environment() {
         "staging")
             COMPOSE_FILE="docker-compose.staging.yml"
             PROFILES="${PROFILES:-postgres,nginx}"
+            ;;
+        "feature")
+            COMPOSE_FILE="docker-compose-dev.yml"
+            PROFILES="${PROFILES:-postgres}"
+            
+            # Feature branch deployments require branch name and port
+            if [[ -z "$BRANCH_NAME" ]]; then
+                log "ERROR" "Feature environment requires --branch parameter"
+                exit 1
+            fi
+            
+            if [[ -z "$APP_PORT" ]]; then
+                log "ERROR" "Feature environment requires --port parameter"
+                exit 1
+            fi
+            
+            # Set unique compose project name for feature branch
+            export COMPOSE_PROJECT_NAME="trakbridge-$BRANCH_NAME"
+            export APP_PORT="$APP_PORT"
+            
+            log "INFO" "Feature branch: $BRANCH_NAME"
+            log "INFO" "Application port: $APP_PORT"
+            log "INFO" "Compose project: $COMPOSE_PROJECT_NAME"
             ;;
         "production")
             log "ERROR" "Production deployment should use Docker Hub images, not local builds"
@@ -271,7 +300,8 @@ deploy_services() {
 
 wait_for_health() {
     local timeout="$1"
-    local url="http://localhost:5000/api/health"
+    local port="${APP_PORT:-5000}"
+    local url="http://localhost:${port}/api/health"
     
     if [[ "$ENVIRONMENT" == "staging" ]] && [[ "$PROFILES" == *"nginx"* ]]; then
         url="http://localhost/api/health"
@@ -306,7 +336,8 @@ run_post_deployment_tests() {
     
     log "INFO" "Running post-deployment tests for environment: $env"
     
-    local base_url="http://localhost:5000"
+    local port="${APP_PORT:-5000}"
+    local base_url="http://localhost:${port}"
     if [[ "$env" == "staging" ]] && [[ "$PROFILES" == *"nginx"* ]]; then
         base_url="http://localhost"
     fi
@@ -465,6 +496,14 @@ main() {
                 COMPOSE_FILE="$2"
                 shift 2
                 ;;
+            --port)
+                APP_PORT="$2"
+                shift 2
+                ;;
+            --branch)
+                BRANCH_NAME="$2"
+                shift 2
+                ;;
             -v|--verbose)
                 VERBOSE=true
                 shift
@@ -497,7 +536,8 @@ main() {
                 log "INFO" "Deployment completed successfully! 🎉"
                 
                 # Show access information
-                local url="http://localhost:5000"
+                local port="${APP_PORT:-5000}"
+                local url="http://localhost:${port}"
                 if [[ "$ENVIRONMENT" == "staging" ]] && [[ "$PROFILES" == *"nginx"* ]]; then
                     url="http://localhost"
                 fi
