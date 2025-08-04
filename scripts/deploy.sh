@@ -309,9 +309,9 @@ deploy_services() {
     export APP_VERSION="$env-latest"
     export COMPOSE_FILE="$COMPOSE_FILE"
     
-    # Export UID/GID for dynamic user creation
-    export UID=${USER_ID:-$(id -u)}
-    export GID=${GROUP_ID:-$(id -g)}
+    # Export user ID variables for dynamic user creation
+    export DOCKER_USER_ID=${USER_ID:-$(id -u)}
+    export DOCKER_GROUP_ID=${GROUP_ID:-$(id -g)}
     
     # Set image tag for pre-built images
     if [[ "$USE_PREBUILT" == "true" ]]; then

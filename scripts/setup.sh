@@ -88,9 +88,10 @@ fi
 
 # Set UID and GID Environment Variables
 setup_uidgid() {
-    log_step "Setting UID and GID Environment Variables based on current UID and GID"
-    export UID=$(id -u)
-    export GID=$(id -g)
+    log_step "Setting Docker User ID and Group ID Environment Variables based on current user"
+    export DOCKER_USER_ID=$(id -u)
+    export DOCKER_GROUP_ID=$(id -g)
+    log_info "Set DOCKER_USER_ID=$DOCKER_USER_ID and DOCKER_GROUP_ID=$DOCKER_GROUP_ID"
 }
 
 # Setup secrets
@@ -302,13 +303,13 @@ main() {
     if [[ "$ENABLE_NGINX" == true ]] || [[ "$NGINX_SSL" == true ]]; then
         log_info "2. Start the services: docker-compose --profile [postgres | mysql | sqlite] up -d"
         log_info "3. nginx configuration available at: docker/nginx/nginx.conf"
-        log_info "4. If you intend to run the docker container as a different user set the UID and GID Environment Variables to that users UID and GID"
+        log_info "4. If you intend to run the docker container as a different user set the DOCKER_USER_ID and DOCKER_GROUP_ID Environment Variables to that users UID and GID"
         if [[ "$NGINX_SSL" == true ]]; then
             log_info "4. SSL certificates generated for domain: $NGINX_DOMAIN"
         fi
     else
         log_info "2. Start the services: docker-compose --profile [postgres | mysql | sqlite] up -d"
-        log_info "3. If you intend to run the docker container as a different user set the UID and GID Environment Variables to that users UID and GID"
+        log_info "3. If you intend to run the docker container as a different user set the DOCKER_USER_ID and DOCKER_GROUP_ID Environment Variables to that users UID and GID"
     fi
     log_info "$(( [[ "$ENABLE_NGINX" == true ]] || [[ "$NGINX_SSL" == true ]] ) && echo "5" || echo "3"). Check logs: docker-compose logs -f"
 
