@@ -36,7 +36,7 @@ Access the web interface at `https://yourdomain.com`
 **First-time login**:
 - Username: `admin`
 - Password: `TrakBridge-Setup-2025!`
-- You'll be forced to change the password on first login
+- You'll be forced to change the password on first logins
 
 ### Python Development
 
