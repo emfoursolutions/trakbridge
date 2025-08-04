@@ -219,32 +219,32 @@ create_secrets() {
     if [[ ! -f "$secrets_dir/db_password" ]]; then
         log "INFO" "Generating database password"
         openssl rand -base64 32 > "$secrets_dir/db_password"
-        chmod 600 "$secrets_dir/db_password"
+        chmod 755 "$secrets_dir/db_password"
     fi
     
     if [[ ! -f "$secrets_dir/secret_key" ]]; then
         log "INFO" "Generating Flask secret key"
         openssl rand -hex 32 > "$secrets_dir/secret_key"
-        chmod 600 "$secrets_dir/secret_key"
+        chmod 755 "$secrets_dir/secret_key"
     fi
     
     if [[ ! -f "$secrets_dir/tb_master_key" ]]; then
         log "INFO" "Generating TrakBridge master key"
         openssl rand -hex 32 > "$secrets_dir/tb_master_key"
-        chmod 600 "$secrets_dir/tb_master_key"
+        chmod 755 "$secrets_dir/tb_master_key"
     fi
     
     # Create optional secrets with defaults if they don't exist
     if [[ ! -f "$secrets_dir/ldap_bind_password" ]]; then
         log "INFO" "Creating default LDAP bind password"
         echo "default-ldap-password" > "$secrets_dir/ldap_bind_password"
-        chmod 600 "$secrets_dir/ldap_bind_password"
+        chmod 755 "$secrets_dir/ldap_bind_password"
     fi
     
     if [[ ! -f "$secrets_dir/oidc_client_secret" ]]; then
         log "INFO" "Creating default OIDC client secret"
         echo "default-oidc-secret" > "$secrets_dir/oidc_client_secret"
-        chmod 600 "$secrets_dir/oidc_client_secret"
+        chmod 755 "$secrets_dir/oidc_client_secret"
     fi
     
     # Set environment variables for Docker Compose
@@ -296,6 +296,47 @@ build_image() {
         "$PROJECT_ROOT"
     
     log "INFO" "Docker image built successfully"
+}
+
+cleanup_existing_containers() {
+    local env="$1"
+    
+    log "INFO" "Cleaning up existing containers for environment: $env"
+    
+    cd "$PROJECT_ROOT"
+    
+    # Stop and remove containers with volumes to ensure fresh deployment
+    if [[ -f "$COMPOSE_FILE" ]]; then
+        # Build profiles argument for cleanup
+        local profiles_arg=""
+        if [[ -n "$PROFILES" ]]; then
+            IFS=',' read -ra PROFILE_ARRAY <<< "$PROFILES"
+            for profile in "${PROFILE_ARRAY[@]}"; do
+                profiles_arg="$profiles_arg --profile $profile"
+            done
+        fi
+        
+        log "INFO" "Stopping and removing existing containers and volumes..."
+        $COMPOSE_CMD -f "$COMPOSE_FILE" $profiles_arg down --volumes --remove-orphans || {
+            log "WARN" "Some containers may not have been running - continuing with deployment"
+        }
+        
+        # Additional cleanup for feature branch environments
+        if [[ "$env" == "feature" && -n "$BRANCH_NAME" ]]; then
+            log "INFO" "Cleaning up feature branch containers: $COMPOSE_PROJECT_NAME"
+            
+            # Stop any containers with the project name prefix
+            docker ps -q --filter "name=$COMPOSE_PROJECT_NAME" | xargs -r docker stop || true
+            docker ps -aq --filter "name=$COMPOSE_PROJECT_NAME" | xargs -r docker rm || true
+            
+            # Remove project-specific volumes
+            docker volume ls -q --filter "name=$COMPOSE_PROJECT_NAME" | xargs -r docker volume rm || true
+        fi
+        
+        log "INFO" "Container cleanup completed"
+    else
+        log "DEBUG" "No compose file found for cleanup"
+    fi
 }
 
 deploy_services() {
@@ -428,8 +469,18 @@ stop_services() {
     cd "$PROJECT_ROOT"
     
     if [[ -f "$COMPOSE_FILE" ]]; then
-        $COMPOSE_CMD -f "$COMPOSE_FILE" down
-        log "INFO" "Services stopped successfully"
+        # Build profiles argument
+        local profiles_arg=""
+        if [[ -n "$PROFILES" ]]; then
+            IFS=',' read -ra PROFILE_ARRAY <<< "$PROFILES"
+            for profile in "${PROFILE_ARRAY[@]}"; do
+                profiles_arg="$profiles_arg --profile $profile"
+            done
+        fi
+        
+        # Stop and remove containers with volumes for clean shutdown
+        $COMPOSE_CMD -f "$COMPOSE_FILE" $profiles_arg down --volumes --remove-orphans
+        log "INFO" "Services stopped and cleaned up successfully"
     else
         log "WARN" "No services to stop"
     fi
@@ -584,6 +635,9 @@ main() {
             create_secrets "$ENVIRONMENT"
             prepare_directories "$ENVIRONMENT"
             backup_current_deployment "$ENVIRONMENT" || true
+            
+            # Clean up existing containers to ensure fresh deployment
+            cleanup_existing_containers "$ENVIRONMENT"
             
             # Only build if not using pre-built images
             if [[ "$USE_PREBUILT" != "true" ]]; then
