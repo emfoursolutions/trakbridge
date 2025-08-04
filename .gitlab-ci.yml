@@ -1493,6 +1493,10 @@ deploy-feature-branch:
     export FEATURE_BRANCH_NAME="$CI_COMMIT_REF_SLUG"
     export COMPOSE_PROJECT_NAME="trakbridge-$CI_COMMIT_REF_SLUG"
     
+    # Export dynamic user variables for Docker runtime user creation
+    export USER_ID=${USER_ID:-$(id -u)}
+    export GROUP_ID=${GROUP_ID:-$(id -g)}
+    
     $DEPLOY_SCRIPT \
       --environment feature \
       --action deploy \

@@ -35,6 +35,10 @@ services:
       FLASK_ENV: "development"
       FLASK_APP: "app.py"
       
+      # Dynamic user creation for runtime
+      USER_ID: ${UID:-1000}
+      GROUP_ID: ${GID:-1000}
+      
       # Configuration Management
       TRAKBRIDGE_CONFIG_DIR: "/app/external_config"
       TRAKBRIDGE_CONFIG_AUTO_INSTALL: "true"
