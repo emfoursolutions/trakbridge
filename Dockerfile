@@ -146,8 +146,9 @@ else\n\
 fi' > /usr/local/bin/docker-entrypoint.sh && \
     chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Switch to non-root user by default for security
-USER appuser
+# Note: Container starts as root to allow dynamic user creation
+# The entrypoint script will switch to appropriate user based on USER_ID/GROUP_ID
+# or default to appuser (1000:1000) if no dynamic user is requested
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
