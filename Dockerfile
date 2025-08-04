@@ -90,6 +90,16 @@ TARGET_UID=${USER_ID:-$(id -u)}\n\
 TARGET_GID=${GROUP_ID:-$(id -g)}\n\
 CURRENT_UID=$(id -u)\n\
 \n\
+# Debug: Show environment variables and current state\n\
+echo "=== Docker Entrypoint Debug Info ==="\n\
+echo "USER_ID environment variable: ${USER_ID:-not set}"\n\
+echo "GROUP_ID environment variable: ${GROUP_ID:-not set}"\n\
+echo "TARGET_UID (resolved): $TARGET_UID"\n\
+echo "TARGET_GID (resolved): $TARGET_GID"\n\
+echo "CURRENT_UID: $CURRENT_UID"\n\
+echo "Current user: $(whoami)"\n\
+echo "====================================="\n\
+\n\
 # Security check: prevent running as root unless explicitly needed\n\
 if [[ $CURRENT_UID -eq 0 ]]; then\n\
     # We are running as root - handle user switching securely\n\

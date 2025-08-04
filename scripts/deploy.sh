@@ -354,6 +354,13 @@ deploy_services() {
     export DOCKER_USER_ID=${USER_ID:-$(id -u)}
     export DOCKER_GROUP_ID=${GROUP_ID:-$(id -g)}
     
+    # Debug: Show what user IDs we're using
+    log "DEBUG" "USER_ID from environment: ${USER_ID:-not set}"
+    log "DEBUG" "GROUP_ID from environment: ${GROUP_ID:-not set}"
+    log "DEBUG" "DOCKER_USER_ID being exported: $DOCKER_USER_ID"
+    log "DEBUG" "DOCKER_GROUP_ID being exported: $DOCKER_GROUP_ID"
+    log "DEBUG" "Current user running deploy script: $(id -u):$(id -g)"
+    
     # Set image tag for pre-built images
     if [[ "$USE_PREBUILT" == "true" ]]; then
         # For feature branches, use the branch tag
@@ -379,6 +386,12 @@ deploy_services() {
     
     # Deploy services
     log "INFO" "Starting services with profiles: $PROFILES"
+    log "DEBUG" "Docker Compose command: $COMPOSE_CMD -f $COMPOSE_FILE $profiles_arg up -d"
+    log "DEBUG" "Environment variables for compose:"
+    log "DEBUG" "  DOCKER_USER_ID=$DOCKER_USER_ID"
+    log "DEBUG" "  DOCKER_GROUP_ID=$DOCKER_GROUP_ID"
+    log "DEBUG" "  COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-default}"
+    
     $COMPOSE_CMD -f "$COMPOSE_FILE" $profiles_arg up -d
     
     log "INFO" "Services deployed successfully"
