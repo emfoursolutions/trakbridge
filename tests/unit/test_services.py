@@ -7,6 +7,7 @@ import pytest
 from services.encryption_service import EncryptionService
 from services.logging_service import setup_logging
 from services.stream_manager import StreamManager
+from services.tak_servers_service import TakServerService, TakServerConnectionTester
 from services.version import get_version, get_version_info
 
 
@@ -114,3 +115,24 @@ class TestLoggingService:
             # This should not raise an exception
             setup_logging(app)
             assert True  # If we get here, setup_logging worked
+
+
+class TestTakServerService:
+    """Test TAK server service integration."""
+
+    def test_tak_server_service_initialization(self):
+        """Test TakServerService can be initialized."""
+        service = TakServerService()
+        assert service is not None
+
+    def test_tak_server_connection_tester_cot_message(self):
+        """Test COT message creation works correctly."""
+        # This tests the fix for the defusedxml.ElementTree issue
+        cot_xml = TakServerConnectionTester.create_test_cot_message()
+        assert cot_xml is not None
+        assert isinstance(cot_xml, bytes)
+        
+        # Should be valid XML
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(cot_xml)
+        assert root.tag == "event"

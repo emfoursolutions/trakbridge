@@ -33,7 +33,8 @@ import uuid
 from configparser import ConfigParser
 from datetime import datetime, timezone
 
-import defusedxml.ElementTree as ET
+import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as DefusedET
 import pytak
 # Third-party imports
 from cryptography import x509
