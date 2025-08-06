@@ -17,7 +17,7 @@ set -euo pipefail
 # Script configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-LOG_FILE="/tmp/trakbridge-deploy-$(date +%Y%m%d-%H%M%S).log"
+LOG_FILE="/tmp/trakbridge-deploy-$(date '+%Y%m%d-%H%M%S').log"
 
 # Default values
 ENVIRONMENT="development"
@@ -521,7 +521,7 @@ restart_services() {
 backup_current_deployment() {
     local env="$1"
     local backup_dir="$PROJECT_ROOT/backups/$env/deployments"
-    local timestamp=$(date +%Y%m%d-%H%M%S)
+    local timestamp=$(date '+%Y%m%d-%H%M%S')
     
     log "INFO" "Creating deployment backup..."
     
