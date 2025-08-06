@@ -28,6 +28,7 @@ Version: {{VERSION}}
 """
 
 import asyncio
+
 # Standard library imports
 import logging
 from concurrent.futures import ThreadPoolExecutor

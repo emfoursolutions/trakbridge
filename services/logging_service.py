@@ -12,13 +12,18 @@ Version: {{VERSION}}
 """
 
 import datetime
+
 # Standard library imports
 import logging
 import os
 
 # Local application imports
-from services.version import (get_build_info, get_version, get_version_info,
-                              is_development_build)
+from services.version import (
+    get_build_info,
+    get_version,
+    get_version_info,
+    is_development_build,
+)
 
 logger = logging.getLogger(__name__)
 

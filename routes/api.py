@@ -27,6 +27,7 @@ Version: {{VERSION}}
 
 # Third-party imports
 import asyncio
+
 # Standard library imports
 import logging
 import threading
@@ -38,9 +39,14 @@ from flask import Blueprint, current_app, jsonify
 
 # Local application imports
 from database import db
+
 # Authentication imports
-from services.auth import (api_key_or_auth_required, optional_auth,
-                           require_auth, require_permission)
+from services.auth import (
+    api_key_or_auth_required,
+    optional_auth,
+    require_auth,
+    require_permission,
+)
 from services.connection_test_service import ConnectionTestService
 from services.health_service import health_service
 from services.stream_config_service import StreamConfigService

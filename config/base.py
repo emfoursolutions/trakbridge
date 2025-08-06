@@ -46,7 +46,7 @@ class ConfigLoader:
         self._config_cache: Dict[str, Any] = {}
 
         # Log configuration source information
-        logger.info(f"Configuration sources:")
+        logger.info("Configuration sources:")
         logger.info(
             f"  External: {self.external_config_dir} (exists: {self.external_config_dir.exists()})"
         )

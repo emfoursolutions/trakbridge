@@ -6,8 +6,12 @@ from unittest.mock import Mock, patch
 import pytest
 
 from config.base import BaseConfig
-from config.environments import (DevelopmentConfig, ProductionConfig,
-                                 TestEnvironmentConfig, get_config)
+from config.environments import (
+    DevelopmentConfig,
+    ProductionConfig,
+    TestEnvironmentConfig,
+    get_config,
+)
 
 
 class TestConfigurationSystem:

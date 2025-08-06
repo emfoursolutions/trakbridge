@@ -225,8 +225,7 @@ def cleanup_startup_coordination(lock_file=None, lock_file_path=None):
 def log_full_startup_info(app):
     """Log comprehensive startup information for the primary process"""
     try:
-        from services.version import (format_version, get_build_info,
-                                      get_version_info)
+        from services.version import format_version, get_build_info, get_version_info
 
         # Log startup banner
         log_startup_banner(app)

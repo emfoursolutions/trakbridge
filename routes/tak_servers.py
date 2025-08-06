@@ -29,17 +29,18 @@ Version: {{VERSION}}
 """
 
 import asyncio
+
 # Standard library imports
 import base64
 import logging
 
 # Third-party imports
-from flask import (Blueprint, flash, jsonify, redirect, render_template,
-                   request, url_for)
+from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
 
 # Local application imports
 from database import db
 from models.tak_server import TakServer
+
 # Authentication imports
 from services.auth import operator_required, require_auth, require_permission
 from services.tak_servers_service import TakServerService

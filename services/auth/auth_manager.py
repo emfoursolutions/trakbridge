@@ -39,11 +39,14 @@ from typing import Any, Dict, List, Optional, Tuple
 from flask import current_app, request
 
 # Local application imports
-from models.user import (AccountStatus, AuthProvider, User, UserRole,
-                         UserSession)
+from models.user import AccountStatus, AuthProvider, User, UserRole, UserSession
 
-from .base_provider import (AuthenticationException, AuthenticationResponse,
-                            AuthenticationResult, BaseAuthenticationProvider)
+from .base_provider import (
+    AuthenticationException,
+    AuthenticationResponse,
+    AuthenticationResult,
+    BaseAuthenticationProvider,
+)
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -165,15 +168,15 @@ class AuthenticationManager:
                     if provider_type == "local":
                         provider = LocalAuthProvider(provider_config.get("config", {}))
                         self.register_provider(provider)
-                        logger.info(f"Successfully registered LocalAuthProvider")
+                        logger.info("Successfully registered LocalAuthProvider")
                     elif provider_type == "ldap":
                         provider = LDAPAuthProvider(provider_config.get("config", {}))
                         self.register_provider(provider)
-                        logger.info(f"Successfully registered LDAPAuthProvider")
+                        logger.info("Successfully registered LDAPAuthProvider")
                     elif provider_type == "oidc":
                         provider = OIDCAuthProvider(provider_config.get("config", {}))
                         self.register_provider(provider)
-                        logger.info(f"Successfully registered OIDCAuthProvider")
+                        logger.info("Successfully registered OIDCAuthProvider")
                     else:
                         logger.warning(f"Unknown provider type: {provider_type}")
 
@@ -601,9 +604,7 @@ class AuthenticationManager:
             count = (
                 db.session.query(UserSession)
                 .join(User)
-                .filter(
-                    User.auth_provider == provider_type, UserSession.is_active == True
-                )
+                .filter(User.auth_provider == provider_type, UserSession.is_active)
                 .count()
             )
             stats["sessions_by_provider"][provider_type.value] = count

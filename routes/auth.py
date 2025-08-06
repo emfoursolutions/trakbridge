@@ -33,14 +33,31 @@ import logging
 from datetime import datetime
 
 # Third-party imports
-from flask import (Blueprint, current_app, flash, g, jsonify, redirect,
-                   render_template, request, session, url_for)
+from flask import (
+    Blueprint,
+    current_app,
+    flash,
+    g,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 
 # Local application imports
 from models.user import AuthProvider, User, UserRole
-from services.auth import (AuthenticationManager, LDAPAuthProvider,
-                           LocalAuthProvider, OIDCAuthProvider, admin_required,
-                           get_current_user, logout_user, require_auth)
+from services.auth import (
+    AuthenticationManager,
+    LDAPAuthProvider,
+    LocalAuthProvider,
+    OIDCAuthProvider,
+    admin_required,
+    get_current_user,
+    logout_user,
+    require_auth,
+)
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -112,8 +129,7 @@ def _handle_local_login(auth_manager: AuthenticationManager):
 
     if response.success:
         # Check if password change is required
-        from services.auth.bootstrap_service import \
-            check_password_change_required
+        from services.auth.bootstrap_service import check_password_change_required
 
         if check_password_change_required(response.user):
             # Store user info in session for password change

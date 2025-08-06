@@ -32,6 +32,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 
 from flask import current_app
+
 # Third-party imports
 from sqlalchemy import text
 
@@ -184,7 +185,7 @@ class HealthService:
             query_start = time.time()
             active_streams = (
                 db.session.query(func.count(Stream.id))
-                .filter(Stream.is_active == True)
+                .filter(Stream.is_active)
                 .scalar()
             )
             query_time = (time.time() - query_start) * 1000
@@ -346,7 +347,7 @@ class HealthService:
             try:
                 active_count = (
                     db.session.query(func.count(Stream.id))
-                    .filter(Stream.is_active == True)
+                    .filter(Stream.is_active)
                     .scalar()
                 )
                 results["active_streams"] = {"count": active_count, "status": "healthy"}

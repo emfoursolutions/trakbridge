@@ -27,6 +27,7 @@ Version: 1.0.0
 """
 
 import uuid
+
 # Standard library imports
 from datetime import datetime, timedelta, timezone
 from enum import Enum

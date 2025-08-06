@@ -41,7 +41,6 @@ from models.user import AuthProvider, User, UserRole, UserSession
 # (none for this file)
 
 
-
 # Module-level logger
 logger = logging.getLogger(__name__)
 

@@ -131,8 +131,9 @@ class TestTakServerService:
         cot_xml = TakServerConnectionTester.create_test_cot_message()
         assert cot_xml is not None
         assert isinstance(cot_xml, bytes)
-        
+
         # Should be valid XML
         import xml.etree.ElementTree as ET
+
         root = ET.fromstring(cot_xml)
         assert root.tag == "event"

@@ -13,6 +13,7 @@ Version: {{VERSION}}
 from database import TimestampMixin, db
 
 from .stream import Stream
+
 # Local application imports
 from .tak_server import TakServer
 from .user import AccountStatus, AuthProvider, User, UserRole, UserSession

@@ -15,9 +15,11 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-from config.authentication_loader import (SecureAuthenticationLoader,
-                                          get_authentication_loader,
-                                          load_authentication_config)
+from config.authentication_loader import (
+    SecureAuthenticationLoader,
+    get_authentication_loader,
+    load_authentication_config,
+)
 
 
 class TestSecureAuthenticationLoader(unittest.TestCase):

@@ -17,6 +17,7 @@ Version: {{VERSION}}
 
 from .database_manager import DatabaseManager
 from .session_manager import SessionManager
+
 # Local application imports
 from .stream_manager import StreamManager, get_stream_manager
 from .stream_worker import StreamWorker

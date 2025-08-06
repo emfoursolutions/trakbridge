@@ -36,11 +36,17 @@ from ldap3 import ALL, Connection, Server
 
 from database import db
 from models.user import User, UserRole, UserSession
+
 # Import authentication components
 from services.auth.auth_manager import AuthenticationManager
-from services.auth.decorators import (admin_required, get_current_user,
-                                      operator_required, require_auth,
-                                      require_permission, require_role)
+from services.auth.decorators import (
+    admin_required,
+    get_current_user,
+    operator_required,
+    require_auth,
+    require_permission,
+    require_role,
+)
 from services.auth.providers.ldap_provider import LDAPAuthProvider
 from services.auth.providers.local_provider import LocalAuthProvider
 from services.auth.providers.oidc_provider import OIDCAuthProvider
