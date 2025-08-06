@@ -40,8 +40,12 @@ import bcrypt
 # Local application imports
 from models.user import AccountStatus, AuthProvider, User, UserRole
 
-from .base_provider import (AuthenticationException, AuthenticationResponse,
-                            AuthenticationResult, BaseAuthenticationProvider)
+from .base_provider import (
+    AuthenticationException,
+    AuthenticationResponse,
+    AuthenticationResult,
+    BaseAuthenticationProvider,
+)
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -648,7 +652,9 @@ class LocalAuthProvider(BaseAuthenticationProvider):
         Returns:
             True if password has expired
         """
-        if self.max_age_days <= 0:  # 0 means no expiration
+        if (
+            self.max_age_days is None or self.max_age_days <= 0
+        ):  # None or 0 means no expiration
             return False
 
         if not user.password_changed_at:

@@ -27,7 +27,20 @@ Last Modified: 2025-07-26
 Version: 1.0.0
 """
 
+# Local application imports
+from models.user import AuthProvider, User, UserRole
+
+from .base_provider import (
+    AuthenticationException,
+    AuthenticationResponse,
+    AuthenticationResult,
+    BaseAuthenticationProvider,
+    ProviderConfigurationException,
+    ProviderConnectionException,
+)
+
 # Standard library imports
+import importlib.util
 import logging
 import re
 import ssl
@@ -35,23 +48,15 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
 # Third-party imports
-try:
-    import ldap3
-    from ldap3 import ALL, MODIFY_REPLACE, SUBTREE, Connection, Server
-    from ldap3.core.exceptions import LDAPBindError, LDAPException
+LDAP3_AVAILABLE = importlib.util.find_spec("ldap3") is not None
 
-    LDAP3_AVAILABLE = True
-except ImportError:
-    LDAP3_AVAILABLE = False
+if LDAP3_AVAILABLE:
+    import ldap3
+    from ldap3 import ALL, SUBTREE, Connection, Server
+    from ldap3.core.exceptions import LDAPBindError, LDAPException
+else:
     ldap3 = None
 
-# Local application imports
-from models.user import AuthProvider, User, UserRole
-
-from .base_provider import (AuthenticationException, AuthenticationResponse,
-                            AuthenticationResult, BaseAuthenticationProvider,
-                            ProviderConfigurationException,
-                            ProviderConnectionException)
 
 # Module-level logger
 logger = logging.getLogger(__name__)

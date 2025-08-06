@@ -29,6 +29,7 @@ Version: 1.0.0
 
 import base64
 import json
+
 # Standard library imports
 import logging
 import secrets
@@ -42,8 +43,11 @@ import requests
 
 try:
     import jwt
-    from jwt.exceptions import (ExpiredSignatureError, InvalidSignatureError,
-                                InvalidTokenError)
+    from jwt.exceptions import (
+        ExpiredSignatureError,
+        InvalidSignatureError,
+        InvalidTokenError,
+    )
 
     JWT_AVAILABLE = True
 except ImportError:
@@ -61,10 +65,14 @@ except ImportError:
 # Local application imports
 from models.user import AuthProvider, User, UserRole
 
-from .base_provider import (AuthenticationException, AuthenticationResponse,
-                            AuthenticationResult, BaseAuthenticationProvider,
-                            ProviderConfigurationException,
-                            ProviderConnectionException)
+from .base_provider import (
+    AuthenticationException,
+    AuthenticationResponse,
+    AuthenticationResult,
+    BaseAuthenticationProvider,
+    ProviderConfigurationException,
+    ProviderConnectionException,
+)
 
 # Module-level logger
 logger = logging.getLogger(__name__)
