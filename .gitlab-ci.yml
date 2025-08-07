@@ -1145,6 +1145,41 @@ deploy-development:
     docker pull $CI_REGISTRY_IMAGE:dev
     docker tag $CI_REGISTRY_IMAGE:dev trakbridge:dev-latest
     
+    # Export GitLab CI variables for Docker Compose
+    echo "Exporting GitLab CI variables for Docker Compose..."
+    export LDAP_SERVER="${LDAP_SERVER:-ldap://your-ad-server.company.com}"
+    export LDAP_ENABLED="${LDAP_ENABLED:-false}"
+    export LDAP_PORT="${LDAP_PORT:-389}"
+    export LDAP_USE_SSL="${LDAP_USE_SSL:-false}"
+    export LDAP_USE_TLS="${LDAP_USE_TLS:-false}"
+    export LDAP_VALIDATE_CERT="${LDAP_VALIDATE_CERT:-false}"
+    export LDAP_BIND_DN="${LDAP_BIND_DN:-CN=trakbridge,OU=Service Accounts,DC=company,DC=com}"
+    export LDAP_USER_SEARCH_BASE="${LDAP_USER_SEARCH_BASE:-OU=Users,DC=company,DC=com}"
+    export LDAP_USER_SEARCH_FILTER="${LDAP_USER_SEARCH_FILTER:-(sAMAccountName={username})}"
+    export LDAP_GROUP_SEARCH_BASE="${LDAP_GROUP_SEARCH_BASE:-OU=Groups,DC=company,DC=com}"
+    export LDAP_GROUP_SEARCH_FILTER="${LDAP_GROUP_SEARCH_FILTER:-(member={user_dn})}"
+    export LDAP_ADMIN_GROUP="${LDAP_ADMIN_GROUP:-CN=TrakBridge-Admins,OU=Groups,DC=company,DC=com}"
+    export LDAP_OPERATOR_GROUP="${LDAP_OPERATOR_GROUP:-CN=TrakBridge-Operators,OU=Groups,DC=company,DC=com}"
+    export LDAP_USER_GROUP="${LDAP_USER_GROUP:-CN=TrakBridge-Users,OU=Groups,DC=company,DC=com}"
+    export LDAP_DEFAULT_ROLE="${LDAP_DEFAULT_ROLE:-user}"
+    export LDAP_CONNECTION_TIMEOUT="${LDAP_CONNECTION_TIMEOUT:-10}"
+    export LDAP_RESPONSE_TIMEOUT="${LDAP_RESPONSE_TIMEOUT:-30}"
+    
+    # OIDC/SSO Settings
+    export OIDC_ENABLED="${OIDC_ENABLED:-false}"
+    export OIDC_ISSUER="${OIDC_ISSUER:-https://your-identity-provider.com}"
+    export OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-trakbridge-client}"
+    export OIDC_REDIRECT_URI="${OIDC_REDIRECT_URI:-http://localhost:5000/auth/oidc/callback}"
+    export OIDC_VERIFY_SIGNATURE="${OIDC_VERIFY_SIGNATURE:-false}"
+    export OIDC_VERIFY_AUDIENCE="${OIDC_VERIFY_AUDIENCE:-false}"
+    export OIDC_VERIFY_ISSUER="${OIDC_VERIFY_ISSUER:-false}"
+    export OIDC_ADMIN_GROUP="${OIDC_ADMIN_GROUP:-trakbridge-admins}"
+    export OIDC_OPERATOR_GROUP="${OIDC_OPERATOR_GROUP:-trakbridge-operators}"
+    export OIDC_USER_GROUP="${OIDC_USER_GROUP:-trakbridge-users}"
+    export OIDC_DEFAULT_ROLE="${OIDC_DEFAULT_ROLE:-user}"
+    
+    echo "LDAP_SERVER will be set to: $LDAP_SERVER"
+    
     # Set up development environment using deployment script
     chmod +x scripts/deploy.sh
 
@@ -1251,6 +1286,41 @@ deploy-staging:
     echo "Pulling from GitLab Container Registry: $CI_REGISTRY_IMAGE:${CI_COMMIT_REF_NAME}"
     docker pull $CI_REGISTRY_IMAGE:${CI_COMMIT_REF_NAME} || docker pull $CI_REGISTRY_IMAGE:dev
     docker tag $CI_REGISTRY_IMAGE:${CI_COMMIT_REF_NAME} trakbridge:staging-latest || docker tag $CI_REGISTRY_IMAGE:dev trakbridge:staging-latest
+    
+    # Export GitLab CI variables for Docker Compose
+    echo "Exporting GitLab CI variables for Docker Compose..."
+    export LDAP_SERVER="${LDAP_SERVER:-ldap://your-ad-server.company.com}"
+    export LDAP_ENABLED="${LDAP_ENABLED:-false}"
+    export LDAP_PORT="${LDAP_PORT:-389}"
+    export LDAP_USE_SSL="${LDAP_USE_SSL:-false}"
+    export LDAP_USE_TLS="${LDAP_USE_TLS:-false}"
+    export LDAP_VALIDATE_CERT="${LDAP_VALIDATE_CERT:-false}"
+    export LDAP_BIND_DN="${LDAP_BIND_DN:-CN=trakbridge,OU=Service Accounts,DC=company,DC=com}"
+    export LDAP_USER_SEARCH_BASE="${LDAP_USER_SEARCH_BASE:-OU=Users,DC=company,DC=com}"
+    export LDAP_USER_SEARCH_FILTER="${LDAP_USER_SEARCH_FILTER:-(sAMAccountName={username})}"
+    export LDAP_GROUP_SEARCH_BASE="${LDAP_GROUP_SEARCH_BASE:-OU=Groups,DC=company,DC=com}"
+    export LDAP_GROUP_SEARCH_FILTER="${LDAP_GROUP_SEARCH_FILTER:-(member={user_dn})}"
+    export LDAP_ADMIN_GROUP="${LDAP_ADMIN_GROUP:-CN=TrakBridge-Admins,OU=Groups,DC=company,DC=com}"
+    export LDAP_OPERATOR_GROUP="${LDAP_OPERATOR_GROUP:-CN=TrakBridge-Operators,OU=Groups,DC=company,DC=com}"
+    export LDAP_USER_GROUP="${LDAP_USER_GROUP:-CN=TrakBridge-Users,OU=Groups,DC=company,DC=com}"
+    export LDAP_DEFAULT_ROLE="${LDAP_DEFAULT_ROLE:-user}"
+    export LDAP_CONNECTION_TIMEOUT="${LDAP_CONNECTION_TIMEOUT:-10}"
+    export LDAP_RESPONSE_TIMEOUT="${LDAP_RESPONSE_TIMEOUT:-30}"
+    
+    # OIDC/SSO Settings
+    export OIDC_ENABLED="${OIDC_ENABLED:-false}"
+    export OIDC_ISSUER="${OIDC_ISSUER:-https://your-identity-provider.com}"
+    export OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-trakbridge-client}"
+    export OIDC_REDIRECT_URI="${OIDC_REDIRECT_URI:-http://localhost:5000/auth/oidc/callback}"
+    export OIDC_VERIFY_SIGNATURE="${OIDC_VERIFY_SIGNATURE:-false}"
+    export OIDC_VERIFY_AUDIENCE="${OIDC_VERIFY_AUDIENCE:-false}"
+    export OIDC_VERIFY_ISSUER="${OIDC_VERIFY_ISSUER:-false}"
+    export OIDC_ADMIN_GROUP="${OIDC_ADMIN_GROUP:-trakbridge-admins}"
+    export OIDC_OPERATOR_GROUP="${OIDC_OPERATOR_GROUP:-trakbridge-operators}"
+    export OIDC_USER_GROUP="${OIDC_USER_GROUP:-trakbridge-users}"
+    export OIDC_DEFAULT_ROLE="${OIDC_DEFAULT_ROLE:-user}"
+    
+    echo "LDAP_SERVER will be set to: $LDAP_SERVER"
     
     # Set up staging environment
     chmod +x scripts/deploy.sh
@@ -1496,6 +1566,41 @@ deploy-feature-branch:
     # Export dynamic user variables for Docker runtime user creation
     export USER_ID=${USER_ID:-$(id -u)}
     export GROUP_ID=${GROUP_ID:-$(id -g)}
+    
+    # Export GitLab CI variables for Docker Compose
+    echo "Exporting GitLab CI variables for Docker Compose..."
+    export LDAP_SERVER="${LDAP_SERVER:-ldap://your-ad-server.company.com}"
+    export LDAP_ENABLED="${LDAP_ENABLED:-false}"
+    export LDAP_PORT="${LDAP_PORT:-389}"
+    export LDAP_USE_SSL="${LDAP_USE_SSL:-false}"
+    export LDAP_USE_TLS="${LDAP_USE_TLS:-false}"
+    export LDAP_VALIDATE_CERT="${LDAP_VALIDATE_CERT:-false}"
+    export LDAP_BIND_DN="${LDAP_BIND_DN:-CN=trakbridge,OU=Service Accounts,DC=company,DC=com}"
+    export LDAP_USER_SEARCH_BASE="${LDAP_USER_SEARCH_BASE:-OU=Users,DC=company,DC=com}"
+    export LDAP_USER_SEARCH_FILTER="${LDAP_USER_SEARCH_FILTER:-(sAMAccountName={username})}"
+    export LDAP_GROUP_SEARCH_BASE="${LDAP_GROUP_SEARCH_BASE:-OU=Groups,DC=company,DC=com}"
+    export LDAP_GROUP_SEARCH_FILTER="${LDAP_GROUP_SEARCH_FILTER:-(member={user_dn})}"
+    export LDAP_ADMIN_GROUP="${LDAP_ADMIN_GROUP:-CN=TrakBridge-Admins,OU=Groups,DC=company,DC=com}"
+    export LDAP_OPERATOR_GROUP="${LDAP_OPERATOR_GROUP:-CN=TrakBridge-Operators,OU=Groups,DC=company,DC=com}"
+    export LDAP_USER_GROUP="${LDAP_USER_GROUP:-CN=TrakBridge-Users,OU=Groups,DC=company,DC=com}"
+    export LDAP_DEFAULT_ROLE="${LDAP_DEFAULT_ROLE:-user}"
+    export LDAP_CONNECTION_TIMEOUT="${LDAP_CONNECTION_TIMEOUT:-10}"
+    export LDAP_RESPONSE_TIMEOUT="${LDAP_RESPONSE_TIMEOUT:-30}"
+    
+    # OIDC/SSO Settings  
+    export OIDC_ENABLED="${OIDC_ENABLED:-false}"
+    export OIDC_ISSUER="${OIDC_ISSUER:-https://your-identity-provider.com}"
+    export OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-trakbridge-client}"
+    export OIDC_REDIRECT_URI="${OIDC_REDIRECT_URI:-http://localhost:5000/auth/oidc/callback}"
+    export OIDC_VERIFY_SIGNATURE="${OIDC_VERIFY_SIGNATURE:-false}"
+    export OIDC_VERIFY_AUDIENCE="${OIDC_VERIFY_AUDIENCE:-false}"
+    export OIDC_VERIFY_ISSUER="${OIDC_VERIFY_ISSUER:-false}"
+    export OIDC_ADMIN_GROUP="${OIDC_ADMIN_GROUP:-trakbridge-admins}"
+    export OIDC_OPERATOR_GROUP="${OIDC_OPERATOR_GROUP:-trakbridge-operators}"
+    export OIDC_USER_GROUP="${OIDC_USER_GROUP:-trakbridge-users}"
+    export OIDC_DEFAULT_ROLE="${OIDC_DEFAULT_ROLE:-user}"
+    
+    echo "LDAP_SERVER will be set to: $LDAP_SERVER"
     
     $DEPLOY_SCRIPT \
       --environment feature \

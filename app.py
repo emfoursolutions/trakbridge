@@ -248,9 +248,9 @@ def log_full_startup_info(app):
             app.logger.info(f"Git Commit: {build_info['git_commit']}")
 
         app.logger.info(
-            f"Python Version: {version_info.get('python_version', 'unknown')}"
+            f"Python Version: {version_info.get('environment', {}).get('python_version', 'unknown')}"
         )
-        app.logger.info(f"Platform: {version_info.get('platform', 'unknown')}")
+        app.logger.info(f"Platform: {version_info.get('environment', {}).get('platform', 'unknown')}")
         app.logger.info(f"Process ID: {os.getpid()}")
         app.logger.info(f"Working Directory: {os.getcwd()}")
         app.logger.info("=" * 60)
