@@ -1154,6 +1154,7 @@ deploy-development:
     export LDAP_USE_TLS="${LDAP_USE_TLS:-false}"
     export LDAP_VALIDATE_CERT="${LDAP_VALIDATE_CERT:-false}"
     export LDAP_BIND_DN="${LDAP_BIND_DN:-CN=trakbridge,OU=Service Accounts,DC=company,DC=com}"
+    export LDAP_BIND_PASSWORD="${LDAP_BIND_PASSWORD:-default-ldap-password}"
     export LDAP_USER_SEARCH_BASE="${LDAP_USER_SEARCH_BASE:-OU=Users,DC=company,DC=com}"
     export LDAP_USER_SEARCH_FILTER="${LDAP_USER_SEARCH_FILTER:-(sAMAccountName={username})}"
     export LDAP_GROUP_SEARCH_BASE="${LDAP_GROUP_SEARCH_BASE:-OU=Groups,DC=company,DC=com}"
@@ -1169,6 +1170,7 @@ deploy-development:
     export OIDC_ENABLED="${OIDC_ENABLED:-false}"
     export OIDC_ISSUER="${OIDC_ISSUER:-https://your-identity-provider.com}"
     export OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-trakbridge-client}"
+    export OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-default-oidc-secret}"
     export OIDC_REDIRECT_URI="${OIDC_REDIRECT_URI:-http://localhost:5000/auth/oidc/callback}"
     export OIDC_VERIFY_SIGNATURE="${OIDC_VERIFY_SIGNATURE:-false}"
     export OIDC_VERIFY_AUDIENCE="${OIDC_VERIFY_AUDIENCE:-false}"
@@ -1179,6 +1181,7 @@ deploy-development:
     export OIDC_DEFAULT_ROLE="${OIDC_DEFAULT_ROLE:-user}"
     
     echo "LDAP_SERVER will be set to: $LDAP_SERVER"
+    echo "LDAP_BIND_PASSWORD length: ${#LDAP_BIND_PASSWORD}"
     
     # Set up development environment using deployment script
     chmod +x scripts/deploy.sh
@@ -1296,6 +1299,7 @@ deploy-staging:
     export LDAP_USE_TLS="${LDAP_USE_TLS:-false}"
     export LDAP_VALIDATE_CERT="${LDAP_VALIDATE_CERT:-false}"
     export LDAP_BIND_DN="${LDAP_BIND_DN:-CN=trakbridge,OU=Service Accounts,DC=company,DC=com}"
+    export LDAP_BIND_PASSWORD="${LDAP_BIND_PASSWORD:-default-ldap-password}"
     export LDAP_USER_SEARCH_BASE="${LDAP_USER_SEARCH_BASE:-OU=Users,DC=company,DC=com}"
     export LDAP_USER_SEARCH_FILTER="${LDAP_USER_SEARCH_FILTER:-(sAMAccountName={username})}"
     export LDAP_GROUP_SEARCH_BASE="${LDAP_GROUP_SEARCH_BASE:-OU=Groups,DC=company,DC=com}"
@@ -1311,6 +1315,7 @@ deploy-staging:
     export OIDC_ENABLED="${OIDC_ENABLED:-false}"
     export OIDC_ISSUER="${OIDC_ISSUER:-https://your-identity-provider.com}"
     export OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-trakbridge-client}"
+    export OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-default-oidc-secret}"
     export OIDC_REDIRECT_URI="${OIDC_REDIRECT_URI:-http://localhost:5000/auth/oidc/callback}"
     export OIDC_VERIFY_SIGNATURE="${OIDC_VERIFY_SIGNATURE:-false}"
     export OIDC_VERIFY_AUDIENCE="${OIDC_VERIFY_AUDIENCE:-false}"
@@ -1321,6 +1326,7 @@ deploy-staging:
     export OIDC_DEFAULT_ROLE="${OIDC_DEFAULT_ROLE:-user}"
     
     echo "LDAP_SERVER will be set to: $LDAP_SERVER"
+    echo "LDAP_BIND_PASSWORD length: ${#LDAP_BIND_PASSWORD}"
     
     # Set up staging environment
     chmod +x scripts/deploy.sh
@@ -1576,6 +1582,7 @@ deploy-feature-branch:
     export LDAP_USE_TLS="${LDAP_USE_TLS:-false}"
     export LDAP_VALIDATE_CERT="${LDAP_VALIDATE_CERT:-false}"
     export LDAP_BIND_DN="${LDAP_BIND_DN:-CN=trakbridge,OU=Service Accounts,DC=company,DC=com}"
+    export LDAP_BIND_PASSWORD="${LDAP_BIND_PASSWORD:-default-ldap-password}"
     export LDAP_USER_SEARCH_BASE="${LDAP_USER_SEARCH_BASE:-OU=Users,DC=company,DC=com}"
     export LDAP_USER_SEARCH_FILTER="${LDAP_USER_SEARCH_FILTER:-(sAMAccountName={username})}"
     export LDAP_GROUP_SEARCH_BASE="${LDAP_GROUP_SEARCH_BASE:-OU=Groups,DC=company,DC=com}"
@@ -1591,6 +1598,7 @@ deploy-feature-branch:
     export OIDC_ENABLED="${OIDC_ENABLED:-false}"
     export OIDC_ISSUER="${OIDC_ISSUER:-https://your-identity-provider.com}"
     export OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-trakbridge-client}"
+    export OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-default-oidc-secret}"
     export OIDC_REDIRECT_URI="${OIDC_REDIRECT_URI:-http://localhost:5000/auth/oidc/callback}"
     export OIDC_VERIFY_SIGNATURE="${OIDC_VERIFY_SIGNATURE:-false}"
     export OIDC_VERIFY_AUDIENCE="${OIDC_VERIFY_AUDIENCE:-false}"
@@ -1601,6 +1609,7 @@ deploy-feature-branch:
     export OIDC_DEFAULT_ROLE="${OIDC_DEFAULT_ROLE:-user}"
     
     echo "LDAP_SERVER will be set to: $LDAP_SERVER"
+    echo "LDAP_BIND_PASSWORD length: ${#LDAP_BIND_PASSWORD}"
     
     $DEPLOY_SCRIPT \
       --environment feature \

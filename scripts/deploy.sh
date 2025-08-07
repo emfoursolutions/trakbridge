@@ -236,14 +236,14 @@ create_secrets() {
     
     # Create optional secrets with defaults if they don't exist
     if [[ ! -f "$secrets_dir/ldap_bind_password" ]]; then
-        log "INFO" "Creating default LDAP bind password"
-        echo "default-ldap-password" > "$secrets_dir/ldap_bind_password"
+        log "INFO" "Creating LDAP bind password from environment variable"
+        printf '%s' "${LDAP_BIND_PASSWORD:-default-ldap-password}" > "$secrets_dir/ldap_bind_password"
         chmod 755 "$secrets_dir/ldap_bind_password"
     fi
     
     if [[ ! -f "$secrets_dir/oidc_client_secret" ]]; then
-        log "INFO" "Creating default OIDC client secret"
-        echo "default-oidc-secret" > "$secrets_dir/oidc_client_secret"
+        log "INFO" "Creating OIDC client secret from environment variable"
+        printf '%s' "${OIDC_CLIENT_SECRET:-default-oidc-secret}" > "$secrets_dir/oidc_client_secret"
         chmod 755 "$secrets_dir/oidc_client_secret"
     fi
     
