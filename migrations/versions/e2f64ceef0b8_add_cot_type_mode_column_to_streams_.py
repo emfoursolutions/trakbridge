@@ -30,7 +30,7 @@ def upgrade():
 
         # Set default value for existing rows
         op.execute(
-            "UPDATE streams SET cot_type_mode = 'stream' WHERE cot_type_mode IS NULL"
+            sa.text("UPDATE streams SET cot_type_mode = 'stream' WHERE cot_type_mode IS NULL")
         )
 
         # (Optional) Make the column non-nullable
@@ -39,7 +39,7 @@ def upgrade():
     else:
         # Column already exists, just ensure it has the correct default values
         op.execute(
-            "UPDATE streams SET cot_type_mode = 'stream' WHERE cot_type_mode IS NULL"
+            sa.text("UPDATE streams SET cot_type_mode = 'stream' WHERE cot_type_mode IS NULL")
         )
 
 

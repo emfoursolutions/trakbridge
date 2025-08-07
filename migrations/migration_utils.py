@@ -8,6 +8,168 @@ import sqlalchemy as sa
 from alembic import op
 
 
+def get_dialect():
+    """Get the current database dialect name."""
+    conn = op.get_bind()
+    return conn.dialect.name
+
+
+def get_enum_column(enum_class, column_name, nullable=True, default=None):
+    """
+    Get database-appropriate enum column definition.
+    
+    Args:
+        enum_class: Python Enum class
+        column_name: Column name
+        nullable: Whether column is nullable
+        default: Default value
+    
+    Returns:
+        SQLAlchemy Column object appropriate for the database
+    """
+    dialect = get_dialect()
+    
+    if dialect == "postgresql":
+        # PostgreSQL supports native ENUMs
+        enum_values = [member.value for member in enum_class]
+        return sa.Column(
+            column_name,
+            sa.Enum(*enum_values, name=f"{column_name}_enum"),
+            nullable=nullable,
+            default=default
+        )
+    else:
+        # MySQL and SQLite use VARCHAR with CHECK constraints
+        max_length = max(len(member.value) for member in enum_class)
+        return sa.Column(
+            column_name,
+            sa.String(length=max_length),
+            nullable=nullable,
+            default=default.value if hasattr(default, 'value') else default
+        )
+
+
+def get_datetime_column(column_name, nullable=True, default=None, timezone_aware=False):
+    """
+    Get database-appropriate datetime column definition.
+    
+    Args:
+        column_name: Column name
+        nullable: Whether column is nullable
+        default: Default value
+        timezone_aware: Whether to store timezone information
+    
+    Returns:
+        SQLAlchemy Column object appropriate for the database
+    """
+    dialect = get_dialect()
+    
+    if dialect == "postgresql" and timezone_aware:
+        # PostgreSQL supports TIMESTAMP WITH TIME ZONE
+        return sa.Column(
+            column_name,
+            sa.DateTime(timezone=True),
+            nullable=nullable,
+            default=default
+        )
+    elif dialect == "mysql" and timezone_aware:
+        # MySQL TIMESTAMP is timezone-aware by default
+        return sa.Column(
+            column_name,
+            sa.TIMESTAMP,
+            nullable=nullable,
+            default=default
+        )
+    elif timezone_aware:
+        # SQLite - store as TEXT with timezone suffix
+        return sa.Column(
+            column_name,
+            sa.Text,
+            nullable=nullable,
+            default=default
+        )
+    else:
+        # Standard datetime without timezone
+        return sa.Column(
+            column_name,
+            sa.DateTime,
+            nullable=nullable,
+            default=default
+        )
+
+
+def get_boolean_column(column_name, nullable=True, default=None):
+    """
+    Get database-appropriate boolean column definition.
+    
+    Args:
+        column_name: Column name
+        nullable: Whether column is nullable
+        default: Default value (True/False)
+    
+    Returns:
+        SQLAlchemy Column object appropriate for the database
+    """
+    dialect = get_dialect()
+    
+    if dialect == "sqlite":
+        # SQLite uses INTEGER for boolean
+        return sa.Column(
+            column_name,
+            sa.Boolean,
+            nullable=nullable,
+            default=default
+        )
+    else:
+        # PostgreSQL and MySQL support native BOOLEAN
+        return sa.Column(
+            column_name,
+            sa.Boolean,
+            nullable=nullable,
+            default=default
+        )
+
+
+def add_enum_check_constraint(table_name, column_name, enum_class):
+    """
+    Add CHECK constraint for enum values on MySQL/SQLite.
+    
+    Args:
+        table_name: Table name
+        column_name: Column name
+        enum_class: Python Enum class
+    """
+    dialect = get_dialect()
+    
+    if dialect != "postgresql":
+        enum_values = [f"'{member.value}'" for member in enum_class]
+        constraint_name = f"check_{table_name}_{column_name}_values"
+        
+        safe_execute(
+            f"ALTER TABLE {table_name} ADD CONSTRAINT {constraint_name} "
+            f"CHECK ({column_name} IN ({', '.join(enum_values)}))",
+            f"Add CHECK constraint for {column_name} enum values"
+        )
+
+
+def drop_enum_check_constraint(table_name, column_name):
+    """
+    Drop CHECK constraint for enum values on MySQL/SQLite.
+    
+    Args:
+        table_name: Table name
+        column_name: Column name
+    """
+    dialect = get_dialect()
+    
+    if dialect != "postgresql":
+        constraint_name = f"check_{table_name}_{column_name}_values"
+        safe_execute(
+            f"ALTER TABLE {table_name} DROP CONSTRAINT {constraint_name}",
+            f"Drop CHECK constraint for {column_name} enum values"
+        )
+
+
 def table_exists(table_name: str) -> bool:
     """Check if a table exists in the database."""
     conn = op.get_bind()
