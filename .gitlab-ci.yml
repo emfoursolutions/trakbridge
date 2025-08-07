@@ -1182,6 +1182,7 @@ deploy-development:
     
     echo "LDAP_SERVER will be set to: $LDAP_SERVER"
     echo "LDAP_BIND_PASSWORD length: ${#LDAP_BIND_PASSWORD}"
+    echo "LDAP_BIND_PASSWORD first 10 chars: ${LDAP_BIND_PASSWORD:0:10}..."
     
     # Set up development environment using deployment script
     chmod +x scripts/deploy.sh
@@ -1194,6 +1195,13 @@ deploy-development:
       --use-prebuilt \
       --skip-health-check \
       --verbose
+    
+    # Debug: Check environment variables inside the container
+    echo "=== CONTAINER ENVIRONMENT DEBUG ==="
+    docker exec trakbridge env | grep LDAP || echo "No LDAP environment variables found"
+    echo "Container LDAP_BIND_PASSWORD length:"
+    docker exec trakbridge sh -c 'echo ${#LDAP_BIND_PASSWORD}' || echo "LDAP_BIND_PASSWORD not set in container"
+    echo "=== END CONTAINER DEBUG ==="
     
     echo "Development deployment completed"
     echo "Application URL: http://localhost:5000"
@@ -1327,6 +1335,7 @@ deploy-staging:
     
     echo "LDAP_SERVER will be set to: $LDAP_SERVER"
     echo "LDAP_BIND_PASSWORD length: ${#LDAP_BIND_PASSWORD}"
+    echo "LDAP_BIND_PASSWORD first 10 chars: ${LDAP_BIND_PASSWORD:0:10}..."
     
     # Set up staging environment
     chmod +x scripts/deploy.sh
@@ -1610,6 +1619,7 @@ deploy-feature-branch:
     
     echo "LDAP_SERVER will be set to: $LDAP_SERVER"
     echo "LDAP_BIND_PASSWORD length: ${#LDAP_BIND_PASSWORD}"
+    echo "LDAP_BIND_PASSWORD first 10 chars: ${LDAP_BIND_PASSWORD:0:10}..."
     
     $DEPLOY_SCRIPT \
       --environment feature \
@@ -1667,6 +1677,13 @@ deploy-feature-branch:
       echo "=== END CONTAINER LOGS ==="
       exit 1
     fi
+    
+    # Debug: Check environment variables inside the container
+    echo "=== CONTAINER ENVIRONMENT DEBUG ==="
+    docker exec ${COMPOSE_PROJECT_NAME:-trakbridge-$CI_COMMIT_REF_SLUG} env | grep LDAP || echo "No LDAP environment variables found"
+    echo "Container LDAP_BIND_PASSWORD length:"
+    docker exec ${COMPOSE_PROJECT_NAME:-trakbridge-$CI_COMMIT_REF_SLUG} sh -c 'echo ${#LDAP_BIND_PASSWORD}' || echo "LDAP_BIND_PASSWORD not set in container"
+    echo "=== END CONTAINER DEBUG ==="
     
     echo "Feature branch deployment completed"
     echo "Feature Branch URL: http://localhost:$DYNAMIC_PORT"
