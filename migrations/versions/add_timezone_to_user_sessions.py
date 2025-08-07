@@ -39,10 +39,15 @@ def upgrade():
             print("Timezone support already exists in user_sessions table. Skipping migration.")
             return
     
-    # For SQLite, we need to recreate the table with timezone-aware columns
-    # Create new table with timezone-aware columns
+    # Create new table with timezone-aware columns (PostgreSQL/SQLite compatible)
+    conn = op.get_bind()
+    dialect = conn.dialect.name
+    
+    # Use appropriate boolean default for the database
+    boolean_default = "TRUE" if dialect == "postgresql" else "1"
+    
     success = safe_execute(
-        """
+        f"""
         CREATE TABLE user_sessions_new (
             id INTEGER NOT NULL PRIMARY KEY,
             session_id VARCHAR(255) NOT NULL UNIQUE,
@@ -52,7 +57,7 @@ def upgrade():
             provider VARCHAR(50) NOT NULL DEFAULT 'local',
             expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
             last_activity TIMESTAMP WITH TIME ZONE NOT NULL,
-            is_active BOOLEAN DEFAULT 1,
+            is_active BOOLEAN DEFAULT {boolean_default},
             provider_session_data TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL,
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -107,9 +112,15 @@ def downgrade():
         print("WARNING: Table 'user_sessions' does not exist. Cannot downgrade timezone migration.")
         return
     
-    # Create table without timezone support
+    # Create table without timezone support (PostgreSQL/SQLite compatible)
+    conn = op.get_bind()
+    dialect = conn.dialect.name
+    
+    # Use appropriate boolean default for the database
+    boolean_default = "TRUE" if dialect == "postgresql" else "1"
+    
     success = safe_execute(
-        """
+        f"""
         CREATE TABLE user_sessions_old (
             id INTEGER NOT NULL PRIMARY KEY,
             session_id VARCHAR(255) NOT NULL UNIQUE,
@@ -119,7 +130,7 @@ def downgrade():
             provider VARCHAR(50) NOT NULL DEFAULT 'local',
             expires_at DATETIME NOT NULL,
             last_activity DATETIME NOT NULL,
-            is_active BOOLEAN DEFAULT 1,
+            is_active BOOLEAN DEFAULT {boolean_default},
             provider_session_data TEXT,
             created_at DATETIME NOT NULL,
             updated_at DATETIME NOT NULL,

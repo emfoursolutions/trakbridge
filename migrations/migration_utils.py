@@ -153,7 +153,7 @@ def safe_drop_index(index_name: str, table_name: str = None):
 def safe_execute(sql: str, description: str = "SQL operation"):
     """Safely execute SQL with error handling and logging."""
     try:
-        op.execute(sql)
+        op.execute(sa.text(sql))
         print(f"Successfully executed: {description}")
         return True
     except Exception as e:

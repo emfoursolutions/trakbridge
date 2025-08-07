@@ -1221,7 +1221,7 @@ deploy-development:
         },
         "health_checks": [],
         "metrics": {
-          "deployment_duration": "$(( $(date +%s) - ${CI_JOB_STARTED_AT:-0} ))",
+          "deployment_duration": "${SECONDS:-0}",
           "services_count": 0,
           "containers_running": 0
         }
@@ -1369,7 +1369,7 @@ deploy-staging:
         },
         "health_checks": [],
         "metrics": {
-          "deployment_duration": "$(( $(date +%s) - ${CI_JOB_STARTED_AT:-0} ))",
+          "deployment_duration": "${SECONDS:-0}",
           "containers_running": 0
         }
       }
@@ -1679,7 +1679,7 @@ deploy-feature-branch:
       },
       "health_checks": [],
       "metrics": {
-        "deployment_duration": "$(( $(date +%s) - ${CI_JOB_STARTED_AT:-0} ))",
+        "deployment_duration": "${SECONDS:-0}",
         "containers_running": 0
       }
     }
