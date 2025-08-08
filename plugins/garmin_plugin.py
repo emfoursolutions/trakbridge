@@ -51,7 +51,7 @@ class GarminPlugin(BaseGPSPlugin):
             "display_name": "Garmin InReach",
             "description": "Connect to Garmin InReach satellite communicators via KML MapShare feeds",
             "icon": "fas fa-satellite-dish",
-            "category": "satellite",
+            "category": "tracker",
             "help_sections": [
                 {
                     "title": "Setup Instructions",

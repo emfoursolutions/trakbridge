@@ -61,7 +61,7 @@ class SpotPlugin(BaseGPSPlugin):
             "display_name": "SPOT Satellite",
             "description": "Connect to SPOT satellite trackers via their web API",
             "icon": "fas fa-satellite",
-            "category": "satellite",
+            "category": "tracker",
             "help_sections": [
                 {
                     "title": "Setup Instructions",

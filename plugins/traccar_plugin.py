@@ -70,7 +70,7 @@ class TraccarPlugin(BaseGPSPlugin):
             "display_name": "Traccar GPS Platform",
             "description": "Connect to Traccar GPS tracking platform via REST API",
             "icon": "fas fa-map-marked-alt",
-            "category": "platform",
+            "category": "tracker",
             "help_sections": [
                 {
                     "title": "Setup Instructions",
