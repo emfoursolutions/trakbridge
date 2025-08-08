@@ -580,7 +580,7 @@ def initialize_admin_user_if_needed():
             logger.warning("=" * 60)
             logger.warning("INITIAL ADMIN USER CREATED")
             logger.warning(f"Username: {admin_user.username}")
-            logger.warning("Password: TrakBridge-Setup-2025!")
+            logger.warning("⚠️  DEFAULT PASSWORD ASSIGNED - CHANGE ON FIRST LOGIN  ⚠️")
             logger.warning("⚠️  CHANGE PASSWORD ON FIRST LOGIN  ⚠️")
             logger.warning("=" * 60)
 

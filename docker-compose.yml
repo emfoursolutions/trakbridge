@@ -73,7 +73,6 @@ x-environment: &common-environment
   LDAP_USE_TLS: "${LDAP_USE_TLS:-true}"
   LDAP_VALIDATE_CERT: "${LDAP_VALIDATE_CERT:-true}"
   LDAP_BIND_DN: "${LDAP_BIND_DN:-CN=trakbridge,OU=Service Accounts,DC=company,DC=com}"
-  LDAP_BIND_PASSWORD: "${LDAP_BIND_PASSWORD:-default-ldap-password}"
   LDAP_USER_SEARCH_BASE: "${LDAP_USER_SEARCH_BASE:-OU=Users,DC=company,DC=com}"
   LDAP_USER_SEARCH_FILTER: "${LDAP_USER_SEARCH_FILTER:-(sAMAccountName={username})}"
   LDAP_GROUP_SEARCH_BASE: "${LDAP_GROUP_SEARCH_BASE:-OU=Groups,DC=company,DC=com}"
@@ -89,7 +88,6 @@ x-environment: &common-environment
   OIDC_ENABLED: "${OIDC_ENABLED:-false}"
   OIDC_ISSUER: "${OIDC_ISSUER:-https://your-identity-provider.com}"
   OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-trakbridge-client}"
-  OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-default-oidc-secret}"
   OIDC_REDIRECT_URI: "${OIDC_REDIRECT_URI:-https://trakbridge.company.com/auth/oidc/callback}"
   OIDC_VERIFY_SIGNATURE: "${OIDC_VERIFY_SIGNATURE:-true}"
   OIDC_VERIFY_AUDIENCE: "${OIDC_VERIFY_AUDIENCE:-true}"
@@ -120,6 +118,8 @@ x-secrets: &common-secrets
   DB_PASSWORD_FILE: "./secrets/db_password"
   SECRET_KEY_FILE: "./secrets/secret_key"
   TB_MASTER_KEY_FILE: "./secrets/tb_master_key"
+  LDAP_BIND_PASSWORD_FILE: "./secrets/ldap_bind_password"
+  OIDC_CLIENT_SECRET_FILE: "./secrets/oidc_client_secret"
 
 services:
   # =============================================================================
@@ -135,7 +135,7 @@ services:
     restart: unless-stopped
 
     environment:
-      <<: *common-environment
+      <<: [*common-environment, *common-secrets]
       
     secrets:
       - db_password
