@@ -262,19 +262,43 @@ prepare_directories() {
     
     log "INFO" "Preparing directories for environment: $env"
     
-    # Create necessary directories
-    mkdir -p "$PROJECT_ROOT/logs/$env"
-    mkdir -p "$PROJECT_ROOT/data/$env"
-    mkdir -p "$PROJECT_ROOT/config/$env"
+    # Get target UID/GID for Docker container compatibility
+    local target_uid="${USER_ID:-$(id -u)}"
+    local target_gid="${GROUP_ID:-$(id -g)}"
+    
+    log "DEBUG" "USER_ID from environment: $USER_ID"
+    log "DEBUG" "GROUP_ID from environment: $GROUP_ID"
+    log "DEBUG" "DOCKER_USER_ID being exported: $target_uid"
+    log "DEBUG" "DOCKER_GROUP_ID being exported: $target_gid"
+    log "DEBUG" "Current user running deploy script: $(id -u):$(id -g)"
+    log "DEBUG" "Creating directories with ownership $target_uid:$target_gid for Docker compatibility"
+    
+    # Create necessary directories (both root and environment-specific)
+    mkdir -p "$PROJECT_ROOT/logs" "$PROJECT_ROOT/logs/$env"
+    mkdir -p "$PROJECT_ROOT/data" "$PROJECT_ROOT/data/$env"
+    mkdir -p "$PROJECT_ROOT/config" "$PROJECT_ROOT/config/$env"
     mkdir -p "$PROJECT_ROOT/backups/$env"
     
-    # Set permissions
-    chmod 755 "$PROJECT_ROOT/logs/$env"
-    chmod 755 "$PROJECT_ROOT/data/$env"
-    chmod 755 "$PROJECT_ROOT/config/$env"
+    # Set permissions (both root and environment-specific directories)
+    chmod 755 "$PROJECT_ROOT/logs" "$PROJECT_ROOT/logs/$env"
+    chmod 755 "$PROJECT_ROOT/data" "$PROJECT_ROOT/data/$env"
+    chmod 755 "$PROJECT_ROOT/config" "$PROJECT_ROOT/config/$env"
     chmod 755 "$PROJECT_ROOT/backups/$env"
     
-    log "INFO" "Directories prepared successfully"
+    # Set ownership to match Docker container user if different from current
+    local current_uid=$(id -u)
+    if [[ "$current_uid" -eq 0 ]] && [[ "$target_uid" != "0" ]]; then
+        log "INFO" "Setting directory ownership to $target_uid:$target_gid for Docker container compatibility"
+        chown -R "$target_uid:$target_gid" "$PROJECT_ROOT/logs" "$PROJECT_ROOT/data" "$PROJECT_ROOT/config" "$PROJECT_ROOT/backups/$env"
+    elif [[ "$current_uid" != "$target_uid" ]]; then
+        log "WARN" "Current user ($current_uid) differs from target Docker user ($target_uid)"
+        log "WARN" "Directory permissions may need manual adjustment"
+        log "WARN" "Consider running deployment as root or with sudo if permission errors occur"
+    else
+        log "DEBUG" "Directory ownership matches running user, no changes needed"
+    fi
+    
+    log "INFO" "Directories prepared successfully with ownership $target_uid:$target_gid"
 }
 
 build_image() {
@@ -353,6 +377,9 @@ deploy_services() {
     # Export user ID variables for dynamic user creation
     export DOCKER_USER_ID=${USER_ID:-$(id -u)}
     export DOCKER_GROUP_ID=${GROUP_ID:-$(id -g)}
+    # Also export the direct variables for docker-compose compatibility
+    export USER_ID=${USER_ID:-$(id -u)}
+    export GROUP_ID=${GROUP_ID:-$(id -g)}
     
     # Debug: Show what user IDs we're using
     log "DEBUG" "USER_ID from environment: ${USER_ID:-not set}"
