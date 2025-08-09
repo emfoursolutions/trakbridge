@@ -34,8 +34,8 @@ WORKDIR /app
 # Configure git for setuptools-scm - ensure we have a valid git repo
 RUN git config --global --add safe.directory /app || true
 
-# Install the package
-RUN pip install --no-cache-dir .
+# Clean any cached build artifacts and install the package
+RUN rm -rf build/ dist/ *.egg-info/ && pip install --no-cache-dir .
 
 # Production stage
 FROM python:3.12-slim AS production
