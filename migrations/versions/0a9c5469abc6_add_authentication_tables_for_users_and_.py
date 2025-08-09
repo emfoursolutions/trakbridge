@@ -26,10 +26,12 @@ def upgrade():
             "cot_type_mode",
             existing_type=sa.VARCHAR(length=20),
             nullable=True,
-            schema=None
+            schema=None,
         )
     else:
-        print("WARNING: Table 'streams' or column 'cot_type_mode' does not exist. Skipping column alteration.")
+        print(
+            "WARNING: Table 'streams' or column 'cot_type_mode' does not exist. Skipping column alteration."
+        )
 
     # ### end Alembic commands ###
 
@@ -43,9 +45,11 @@ def downgrade():
             "cot_type_mode",
             existing_type=sa.VARCHAR(length=20),
             nullable=False,
-            schema=None
+            schema=None,
         )
     else:
-        print("WARNING: Table 'streams' or column 'cot_type_mode' does not exist. Skipping column alteration.")
+        print(
+            "WARNING: Table 'streams' or column 'cot_type_mode' does not exist. Skipping column alteration."
+        )
 
     # ### end Alembic commands ###

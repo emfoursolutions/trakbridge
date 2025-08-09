@@ -441,19 +441,19 @@ def get_plugin_categories():
     try:
         category_service = get_category_service(get_plugin_manager())
         categories = category_service.get_available_categories()
-        
+
         # Convert CategoryInfo objects to dictionaries
         categories_data = {
             key: {
-                'key': cat.key,
-                'display_name': cat.display_name,
-                'description': cat.description,
-                'icon': cat.icon,
-                'plugin_count': cat.plugin_count
+                "key": cat.key,
+                "display_name": cat.display_name,
+                "description": cat.description,
+                "icon": cat.icon,
+                "plugin_count": cat.plugin_count,
             }
             for key, cat in categories.items()
         }
-        
+
         return jsonify(categories_data)
 
     except Exception as e:
@@ -468,27 +468,27 @@ def get_plugins_by_category(category):
     try:
         category_service = get_category_service(get_plugin_manager())
         plugins = category_service.get_plugins_by_category(category)
-        
+
         # Convert PluginInfo objects to dictionaries
         plugins_data = [
             {
-                'key': plugin.key,
-                'display_name': plugin.display_name,
-                'description': plugin.description,
-                'icon': plugin.icon,
-                'category': plugin.category
+                "key": plugin.key,
+                "display_name": plugin.display_name,
+                "description": plugin.description,
+                "icon": plugin.icon,
+                "category": plugin.category,
             }
             for plugin in plugins
         ]
-        
-        return jsonify({
-            'category': category,
-            'plugins': plugins_data
-        })
+
+        return jsonify({"category": category, "plugins": plugins_data})
 
     except Exception as e:
         logger.error(f"Error getting plugins for category '{category}': {e}")
-        return jsonify({"error": f"Failed to get plugins for category '{category}'"}), 500
+        return (
+            jsonify({"error": f"Failed to get plugins for category '{category}'"}),
+            500,
+        )
 
 
 @bp.route("/plugins/categorized")
@@ -498,21 +498,21 @@ def get_categorized_plugins():
     try:
         category_service = get_category_service(get_plugin_manager())
         categorized = category_service.get_categorized_plugins()
-        
+
         # Convert to serializable format
         categorized_data = {}
         for category, plugins in categorized.items():
             categorized_data[category] = [
                 {
-                    'key': plugin.key,
-                    'display_name': plugin.display_name,
-                    'description': plugin.description,
-                    'icon': plugin.icon,
-                    'category': plugin.category
+                    "key": plugin.key,
+                    "display_name": plugin.display_name,
+                    "description": plugin.description,
+                    "icon": plugin.icon,
+                    "category": plugin.category,
                 }
                 for plugin in plugins
             ]
-        
+
         return jsonify(categorized_data)
 
     except Exception as e:

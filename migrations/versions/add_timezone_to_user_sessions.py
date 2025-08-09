@@ -10,7 +10,12 @@ from datetime import datetime, timezone
 
 import sqlalchemy as sa
 from alembic import op
-from migrations.migration_utils import table_exists, safe_execute, safe_create_index, safe_drop_table
+from migrations.migration_utils import (
+    table_exists,
+    safe_execute,
+    safe_create_index,
+    safe_drop_table,
+)
 
 # revision identifiers, used by Alembic.
 revision = "add_timezone_to_user_sessions"
@@ -21,28 +26,34 @@ depends_on = None
 
 def upgrade():
     """Add timezone support to expires_at and last_activity columns in user_sessions table"""
-    
+
     # Check if user_sessions table exists
     if not table_exists("user_sessions"):
-        print("WARNING: Table 'user_sessions' does not exist. Skipping timezone migration.")
+        print(
+            "WARNING: Table 'user_sessions' does not exist. Skipping timezone migration."
+        )
         return
-    
+
     # Check if the migration has already been applied
     # (Look for timezone support in the table structure)
     conn = op.get_bind()
     inspector = sa.inspect(conn)
     columns = inspector.get_columns("user_sessions")
-    
+
     # Check if we already have timezone-aware columns
     for col in columns:
-        if col['name'] in ['expires_at', 'last_activity'] and 'TIME ZONE' in str(col['type']):
-            print("Timezone support already exists in user_sessions table. Skipping migration.")
+        if col["name"] in ["expires_at", "last_activity"] and "TIME ZONE" in str(
+            col["type"]
+        ):
+            print(
+                "Timezone support already exists in user_sessions table. Skipping migration."
+            )
             return
-    
+
     # Create new table with timezone-aware columns
     conn = op.get_bind()
     dialect = conn.dialect.name
-    
+
     # Database-specific table creation syntax
     if dialect == "postgresql":
         # PostgreSQL supports TIMESTAMP WITH TIME ZONE
@@ -101,9 +112,11 @@ def upgrade():
             FOREIGN KEY(user_id) REFERENCES users (id)
         )
         """
-    
-    success = safe_execute(table_sql, "Create new user_sessions table with timezone support")
-    
+
+    success = safe_execute(
+        table_sql, "Create new user_sessions table with timezone support"
+    )
+
     if not success:
         print("Failed to create new user_sessions table. Aborting migration.")
         return
@@ -161,14 +174,14 @@ def upgrade():
             COALESCE(updated_at || '+00:00', datetime('now', '+00:00')) as updated_at
         FROM user_sessions
         """
-    
+
     safe_execute(data_copy_sql, "Copy data to new user_sessions table")
 
     # Drop old table and rename new one
     safe_drop_table("user_sessions")
     safe_execute(
         "ALTER TABLE user_sessions_new RENAME TO user_sessions",
-        "Rename new table to user_sessions"
+        "Rename new table to user_sessions",
     )
 
     # Recreate indexes
@@ -179,16 +192,18 @@ def upgrade():
 
 def downgrade():
     """Remove timezone support from datetime columns"""
-    
+
     # Check if user_sessions table exists
     if not table_exists("user_sessions"):
-        print("WARNING: Table 'user_sessions' does not exist. Cannot downgrade timezone migration.")
+        print(
+            "WARNING: Table 'user_sessions' does not exist. Cannot downgrade timezone migration."
+        )
         return
-    
+
     # Create table without timezone support
     conn = op.get_bind()
     dialect = conn.dialect.name
-    
+
     # Database-specific table creation syntax
     if dialect == "postgresql":
         # PostgreSQL without timezone support
@@ -247,9 +262,11 @@ def downgrade():
             FOREIGN KEY(user_id) REFERENCES users (id)
         )
         """
-    
-    success = safe_execute(table_sql, "Create user_sessions table without timezone support")
-    
+
+    success = safe_execute(
+        table_sql, "Create user_sessions table without timezone support"
+    )
+
     if not success:
         print("Failed to create downgrade table. Aborting downgrade.")
         return
@@ -307,14 +324,14 @@ def downgrade():
             REPLACE(updated_at, '+00:00', '') as updated_at
         FROM user_sessions
         """
-    
+
     safe_execute(data_copy_sql, "Copy data back without timezone info")
 
     # Drop new table and rename old one back
     safe_drop_table("user_sessions")
     safe_execute(
         "ALTER TABLE user_sessions_old RENAME TO user_sessions",
-        "Rename table back to user_sessions"
+        "Rename table back to user_sessions",
     )
 
     # Recreate indexes
