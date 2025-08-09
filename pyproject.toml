@@ -94,7 +94,7 @@ build-backend = "setuptools.build_meta"
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["services*", "routes*", "models*", "plugins*", "config*", "tests*"]
+include = ["services*", "routes*", "models*", "plugins*", "config*", "utils*", "tests*"]
 
 # Dynamic versioning with setuptools-scm
 [tool.setuptools_scm]
