@@ -194,18 +194,19 @@ SESSION_SECURE_COOKIES=true
 ### Development with LDAP
 
 ```bash
-# Create .env file with development settings
-cat << EOF > .env
-LDAP_ENABLED=true
-LDAP_SERVER=ldap://dev-dc.company.com
-LDAP_BIND_DN="CN=dev-trakbridge,OU=Service Accounts,DC=dev,DC=company,DC=com"
-LDAP_USER_SEARCH_BASE="OU=Users,DC=dev,DC=company,DC=com"
-LDAP_USE_TLS=false
-LDAP_VALIDATE_CERT=false
-EOF
+# Update docker-compose.yml with development settings
+# Edit the x-environment section:
+#   LDAP_ENABLED: "true"
+#   LDAP_SERVER: "ldap://dev-dc.company.com"
+#   LDAP_BIND_DN: "CN=dev-trakbridge,OU=Service Accounts,DC=dev,DC=company,DC=com"
+#   LDAP_USER_SEARCH_BASE: "OU=Users,DC=dev,DC=company,DC=com"
+#   LDAP_USE_TLS: "false"  # Relaxed for development
+#   LDAP_VALIDATE_CERT: "false"  # Relaxed for development
 
 # Create LDAP secret
+mkdir -p secrets
 echo "dev-service-password" > secrets/ldap_bind_password
+chmod 600 secrets/ldap_bind_password
 
 # Start development environment
 docker-compose -f docker-compose-dev.yml --profile postgres up -d

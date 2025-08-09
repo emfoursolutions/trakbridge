@@ -344,31 +344,4 @@ docker service update \
 echo "Secret rotated successfully. Verify service health before removing old secret."
 ```
 
-## Integration with CI/CD
-
-### GitLab CI Example
-
-```yaml
-# .gitlab-ci.yml
-deploy_production:
-  stage: deploy
-  script:
-    - echo "$LDAP_BIND_PASSWORD" | docker secret create ldap_bind_password_${CI_COMMIT_SHA} -
-    - docker stack deploy -c docker-compose.prod.yml trakbridge
-  environment:
-    name: production
-  only:
-    - main
-```
-
-### GitHub Actions Example
-
-```yaml
-# .github/workflows/deploy.yml
-- name: Create Docker secrets
-  run: |
-    echo "${{ secrets.LDAP_BIND_PASSWORD }}" | docker secret create ldap_bind_password -
-    echo "${{ secrets.DB_PASSWORD }}" | docker secret create db_password -
-```
-
 This approach ensures your LDAP credentials remain secure while maintaining operational flexibility for production deployments.

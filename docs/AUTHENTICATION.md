@@ -60,311 +60,118 @@ Permissions are resource-based with actions:
 
 ## Configuration
 
-### Configuration Management
+### Docker Compose Configuration (Recommended)
 
-TrakBridge uses a **multi-source configuration system** that supports both bundled defaults and persistent external configuration:
+For Docker deployments, authentication is configured directly in the docker-compose.yml file using environment variables. This approach keeps all configuration in one location and eliminates the need for external configuration files.
 
-#### Configuration Sources (Priority Order)
-1. **External Configuration** (`./config` or `TRAKBRIDGE_CONFIG_DIR`) - Highest priority
-2. **Bundled Configuration** (`config/settings/`) - Fallback defaults
+#### Authentication Environment Variables
 
-#### Docker Configuration Management
-
-For Docker deployments, TrakBridge automatically installs default configuration files to external volumes:
+Edit the `x-environment` section in your docker-compose.yml file to configure authentication:
 
 ```yaml
 # docker-compose.yml
-services:
-  trakbridge:
-    environment:
-      TRAKBRIDGE_CONFIG_DIR: "/app/external_config"
-      TRAKBRIDGE_CONFIG_AUTO_INSTALL: "true"
-      TRAKBRIDGE_CONFIG_UPDATE_MODE: "preserve"
-    volumes:
-      - ./config:/app/external_config  # Persistent config mount
+x-environment: &common-environment
+  # Session Configuration
+  SESSION_LIFETIME_HOURS: "8"
+  SESSION_CLEANUP_INTERVAL: "60"
+  SESSION_SECURE_COOKIES: "true"
+  
+  # Local Authentication (always enabled as fallback)
+  LOCAL_AUTH_ENABLED: "true"
+  PASSWORD_MIN_LENGTH: "12"
+  PASSWORD_REQUIRE_UPPERCASE: "true"
+  PASSWORD_REQUIRE_LOWERCASE: "true"
+  PASSWORD_REQUIRE_NUMBERS: "true"
+  PASSWORD_REQUIRE_SPECIAL: "true"
+  PASSWORD_MAX_AGE_DAYS: "90"
+  
+  # LDAP Authentication (set LDAP_ENABLED to "true" to enable)
+  LDAP_ENABLED: "false"
+  LDAP_SERVER: "ldap://your-ad-server.company.com"
+  LDAP_PORT: "389"
+  LDAP_USE_SSL: "false"
+  LDAP_USE_TLS: "true"
+  LDAP_VALIDATE_CERT: "true"
+  LDAP_BIND_DN: "CN=trakbridge,OU=Service Accounts,DC=company,DC=com"
+  LDAP_USER_SEARCH_BASE: "OU=Users,DC=company,DC=com"
+  LDAP_USER_SEARCH_FILTER: "(sAMAccountName={username})"
+  LDAP_GROUP_SEARCH_BASE: "OU=Groups,DC=company,DC=com"
+  LDAP_GROUP_SEARCH_FILTER: "(member={user_dn})"
+  LDAP_ADMIN_GROUP: "CN=TrakBridge-Admins,OU=Groups,DC=company,DC=com"
+  LDAP_OPERATOR_GROUP: "CN=TrakBridge-Operators,OU=Groups,DC=company,DC=com"
+  LDAP_USER_GROUP: "CN=TrakBridge-Users,OU=Groups,DC=company,DC=com"
+  LDAP_DEFAULT_ROLE: "user"
+  
+  # OIDC/SSO Authentication (set OIDC_ENABLED to "true" to enable)
+  OIDC_ENABLED: "false"
+  OIDC_ISSUER: "https://your-identity-provider.com"
+  OIDC_CLIENT_ID: "trakbridge-client"
+  OIDC_REDIRECT_URI: "https://trakbridge.company.com/auth/oidc/callback"
+  OIDC_VERIFY_SIGNATURE: "true"
+  OIDC_VERIFY_AUDIENCE: "true"
+  OIDC_VERIFY_ISSUER: "true"
+  OIDC_ADMIN_GROUP: "trakbridge-admins"
+  OIDC_OPERATOR_GROUP: "trakbridge-operators"
+  OIDC_USER_GROUP: "trakbridge-users"
+  OIDC_DEFAULT_ROLE: "user"
 ```
 
-**Update Modes**:
-- `preserve` (default) - Keep existing external configs, install missing ones
-- `overwrite` - Replace external configs with container defaults
-- `merge` - Smart merge (planned future feature)
+#### Docker Secrets for Sensitive Data
 
-#### Configuration CLI Management
-
-Use the configuration management CLI for advanced operations:
+Sensitive credentials are managed through Docker secrets rather than environment variables:
 
 ```bash
-# List all configuration files and their sources
-python scripts/manage_config.py list
+# Create secrets directory
+mkdir -p secrets
 
-# Install default configurations to external directory
-python scripts/manage_config.py install
+# LDAP bind password (if using LDAP)
+echo "your-ldap-service-account-password" > secrets/ldap_bind_password
 
-# Install specific configuration file
-python scripts/manage_config.py install --file authentication.yaml
+# OIDC client secret (if using OIDC)
+echo "your-oidc-client-secret" > secrets/oidc_client_secret
 
-# Install with overwrite mode
-python scripts/manage_config.py install --update-mode overwrite
-
-# Validate configuration for production environment
-python scripts/manage_config.py validate --environment production
-
-# Backup current configuration
-python scripts/manage_config.py backup
-
-# Restore from backup
-python scripts/manage_config.py restore --backup-dir ./config-backup-20250127_143022
+# Set secure permissions
+chmod 600 secrets/*
 ```
 
-### Authentication Configuration (`authentication.yaml`)
+### External Configuration Files (Plugin Development Only)
 
-**Important**: The authentication system uses `config/settings/authentication.yaml` (bundled) or `./config/authentication.yaml` (external) which is automatically loaded on startup. External configs take priority over bundled defaults.
+External configuration files in the `./config` directory are primarily used for external plugin development and advanced customizations. For standard Docker deployments, use the environment variable approach above.
 
-```yaml
-authentication:
-  # Session configuration
-  session:
-    lifetime_hours: 8
-    cleanup_interval_minutes: 60
-    secure_cookies: true
-    
-  # Provider priority (first successful authentication wins)
-  provider_priority:
-    - oidc
-    - ldap
-    - local
-    
-  # Provider configurations
-  providers:
-    local:
-      enabled: true
-      password_policy:
-        min_length: 8
-        require_uppercase: true
-        require_lowercase: true
-        require_numbers: true
-        require_special: false
-        
-    ldap:
-      enabled: false
-      server: "ldap://your-ad-server.company.com"
-      port: 389
-      use_ssl: false
-      use_tls: true
-      bind_dn: "CN=trakbridge,OU=Service Accounts,DC=company,DC=com"
-      bind_password: "service_account_password"
-      user_search_base: "OU=Users,DC=company,DC=com"
-      user_search_filter: "(sAMAccountName={username})"
-      group_search_base: "OU=Groups,DC=company,DC=com"
-      group_search_filter: "(member={user_dn})"
-      attributes:
-        username: "sAMAccountName"
-        email: "mail"
-        first_name: "givenName"
-        last_name: "sn"
-        display_name: "displayName"
-      role_mapping:
-        "CN=TrakBridge-Admins,OU=Groups,DC=company,DC=com": "admin"
-        "CN=TrakBridge-Operators,OU=Groups,DC=company,DC=com": "operator"
-        "CN=TrakBridge-Users,OU=Groups,DC=company,DC=com": "user"
-        
-    oidc:
-      enabled: false
-      issuer: "https://your-identity-provider.com"
-      client_id: "trakbridge-client"
-      client_secret: "your-client-secret"
-      scopes: ["openid", "email", "profile"]
-      redirect_uri: "https://trakbridge.company.com/auth/oidc/callback"
-      role_claim: "groups"
-      role_mapping:
-        "trakbridge-admins": "admin"
-        "trakbridge-operators": "operator"
-        "trakbridge-users": "user"
-```
+### Authentication Provider Priority
 
-### Secure Configuration Management
+TrakBridge attempts authentication in this order:
+1. **OIDC** (if enabled) - Modern enterprise SSO
+2. **LDAP** (if enabled) - Active Directory integration
+3. **Local** (always enabled) - Database fallback
 
-**Important**: TrakBridge now uses a **secure dual-configuration system** to protect sensitive authentication credentials while supporting both local development and CI/CD deployment.
+The first successful authentication method is used. Local authentication always serves as a fallback to ensure system access.
 
-#### Configuration Pattern Overview
+### Security Features
 
-TrakBridge uses different configuration approaches based on the environment:
+#### Docker Secrets Protection
+Sensitive credentials are stored in Docker secrets files rather than environment variables:
+- **LDAP passwords**: Stored in `secrets/ldap_bind_password`
+- **OIDC secrets**: Stored in `secrets/oidc_client_secret`
+- **Encryption keys**: Stored in `secrets/tb_master_key`
 
-- **Local Development**: Uses `authentication.yaml` with real credentials (gitignored)
-- **CI/CD Production**: Uses `authentication.yaml.template` with environment variable substitution
-
-#### Configuration Files
-
-1. **`authentication.yaml.template`** *(Committed to repository)*
-   - Contains `${VARIABLE_NAME:-default_value}` placeholders
-   - Safe to commit - contains no real secrets
-   - Used in CI/CD environments with environment variables
-
-2. **`authentication.yaml`** *(Local development only)*
-   - Contains actual credentials for local development
-   - Automatically gitignored - never committed
-   - Takes priority over template when present
-
-3. **`authentication.yaml.example`** *(Reference documentation)*
-   - Comprehensive example showing all configuration options
-   - Use as reference for understanding structure
-
-#### Local Development Setup
-
-1. **Copy the template for local development**:
-   ```bash
-   cp config/settings/authentication.yaml.template config/settings/authentication.yaml
-   ```
-
-2. **Edit with your local credentials**:
-   ```bash
-   # Replace placeholder values with real development credentials
-   nano config/settings/authentication.yaml
-   ```
-
-3. **Never commit the local file** - it's automatically gitignored.
-
-#### CI/CD Environment Variables
-
-For CI/CD deployment, set these **masked** variables in GitLab Project Settings → CI/CD → Variables:
-
-```bash
-# Core session settings
-SESSION_LIFETIME_HOURS=8
-SESSION_SECURE_COOKIES=true
-SESSION_COOKIE_DOMAIN=yourdomain.com
-
-# LDAP/Active Directory
-LDAP_ENABLED=true
-LDAP_SERVER=ldap://your-ldap-server.com
-LDAP_BIND_DN=cn=service,ou=accounts,dc=company,dc=com
-LDAP_BIND_PASSWORD=your_secure_password  # Mark as Protected + Masked
-LDAP_USER_SEARCH_BASE=ou=users,dc=company,dc=com
-
-# OpenID Connect (OIDC)
-OIDC_ENABLED=true
-OIDC_ISSUER=https://your-identity-provider.com
-OIDC_CLIENT_ID=trakbridge-client
-OIDC_CLIENT_SECRET=your_oidc_secret  # Mark as Protected + Masked
-OIDC_REDIRECT_URI=https://trakbridge.company.com/auth/callback
-
-# Local authentication
-LOCAL_AUTH_ENABLED=true
-PASSWORD_MIN_LENGTH=12
-PASSWORD_REQUIRE_SPECIAL=true
-
-# Database encryption key
-TRAKBRIDGE_ENCRYPTION_KEY="your-32-character-encryption-key"
-
-# Session security
-SECRET_KEY="your-flask-secret-key"
-```
-
-#### Environment Variable Substitution
-
-The template uses `${VARIABLE_NAME:-default_value}` syntax:
-
-```yaml
-# Template format in authentication.yaml.template
-ldap:
-  server: "${LDAP_SERVER:-ldap.company.com}"
-  bind_password: "${LDAP_BIND_PASSWORD:-REPLACE_WITH_PASSWORD}"
-  enabled: ${LDAP_ENABLED:-false}
-```
-
-The secure loader automatically:
-- Substitutes environment variables
-- Converts string booleans (`"true"` → `true`)
-- Provides fallback defaults
-- Validates the final configuration
-- Masks sensitive values in logs
-
-#### Environment-Specific Variables
-
-Use GitLab's **environment scoping** for different deployments:
-
-**Development Environment:**
-- Scope: `development`
-- Relaxed password policies
-- HTTP cookies allowed
-
-**Production Environment:**
-- Scope: `production` 
-- Strong password policies
-- HTTPS-only cookies
-- **Protected variables** (only available on protected branches)
-
-#### Security Features
-
-- ✅ **Never commits secrets** - Real credentials only in local files
-- ✅ **Masked in logs** - Sensitive values replaced with `***MASKED***`
-- ✅ **Environment isolation** - Different secrets per environment  
-- ✅ **Validation** - Configuration validated before use
-- ✅ **Protected variables** - Production secrets only on protected branches
-- ✅ **Fallback safety** - Defaults to secure local-only authentication
-
-#### Troubleshooting Secure Configuration
-
-**"No authentication providers enabled"**
-- Check that at least one provider has `enabled: true`
-- Verify environment variables are set correctly in CI/CD
-
-**"Authentication config validation failed"**
-- Check application logs for specific validation errors
-- Ensure required fields are provided for enabled providers
-
-**"Using fallback authentication configuration"**
-- Configuration loading failed - check file permissions
-- Missing environment variables in CI/CD
-
-**Configuration not loading in CI/CD**
-- Verify GitLab CI/CD variables are set and not expired
-- Check variable masking isn't interfering with values
-- Ensure variables are scoped to the correct environment
+#### Environment Variable Security
+- Configuration values are set directly in docker-compose.yml
+- No external .env files required
+- Sensitive data isolated in secrets files with proper permissions
+- All authentication events logged for audit trails
 
 ## Setup Instructions
 
-### 0. Configuration Setup (Docker Deployments)
-
-For Docker deployments with persistent configuration:
-
-1. **Create local config directory**:
-```bash
-mkdir -p ./config
-```
-
-2. **Start container** to auto-install default configs:
-```bash
-docker-compose up
-# or
-docker run -v $(pwd)/config:/app/external_config trakbridge:latest
-```
-
-3. **Verify config installation**:
-```bash
-ls -la ./config/
-# Should show: app.yaml, authentication.yaml, database.yaml, etc.
-```
-
-4. **Customize configuration** by editing files in `./config/`:
-```bash
-# Edit authentication settings
-nano ./config/authentication.yaml
-
-# Validate your changes
-python scripts/manage_config.py validate --environment production
-```
-
 ### 1. Basic Local Authentication Setup
 
-1. **Enable local authentication** in `authentication.yaml`:
-   - **Docker**: Edit `./config/authentication.yaml`  
-   - **Local**: Edit `config/settings/authentication.yaml`
+1. **Local authentication is enabled by default** in docker-compose.yml:
 ```yaml
-authentication:
-  providers:
-    local:
-      enabled: true
+# Already configured in docker-compose.yml
+LOCAL_AUTH_ENABLED: "true"
+PASSWORD_MIN_LENGTH: "12"
+PASSWORD_REQUIRE_UPPERCASE: "true"
+# ... other password policy settings
 ```
 
 2. **Initial admin user is created automatically**:
@@ -372,63 +179,94 @@ authentication:
    - Password change required on first login
    - Bootstrap service handles this automatically
 
-3. **Configure password policy** as needed in the auth configuration.
+3. **Customize password policy** by editing the environment variables in docker-compose.yml:
+   - `PASSWORD_MIN_LENGTH`: Minimum password length
+   - `PASSWORD_REQUIRE_UPPERCASE`: Require uppercase letters
+   - `PASSWORD_REQUIRE_LOWERCASE`: Require lowercase letters  
+   - `PASSWORD_REQUIRE_NUMBERS`: Require numbers
+   - `PASSWORD_REQUIRE_SPECIAL`: Require special characters
+   - `PASSWORD_MAX_AGE_DAYS`: Password expiration in days
 
 ### 2. LDAP/Active Directory Setup
 
-1. **Configure LDAP connection** in `authentication.yaml`:
-   - **Docker**: Edit `./config/authentication.yaml`
-   - **Local**: Edit `config/settings/authentication.yaml`
+1. **Configure LDAP settings** in docker-compose.yml environment section:
 ```yaml
-authentication:
-  providers:
-    ldap:
-      enabled: true
-      server: "ldap://your-ad-server.company.com"
-      port: 389
-      use_tls: true
-      bind_dn: "CN=trakbridge,OU=Service Accounts,DC=company,DC=com"
-      user_search_base: "OU=Users,DC=company,DC=com"
-      user_search_filter: "(sAMAccountName={username})"
+# Edit these values in docker-compose.yml
+LDAP_ENABLED: "true"
+LDAP_SERVER: "ldap://your-ad-server.company.com"
+LDAP_PORT: "389"
+LDAP_USE_TLS: "true"
+LDAP_VALIDATE_CERT: "true"
+LDAP_BIND_DN: "CN=trakbridge,OU=Service Accounts,DC=company,DC=com"
+LDAP_USER_SEARCH_BASE: "OU=Users,DC=company,DC=com"
+LDAP_USER_SEARCH_FILTER: "(sAMAccountName={username})"
+LDAP_GROUP_SEARCH_BASE: "OU=Groups,DC=company,DC=com"
+LDAP_GROUP_SEARCH_FILTER: "(member={user_dn})"
 ```
 
-2. **Set LDAP password** via environment variable:
+2. **Set LDAP password** using Docker secrets:
 ```bash
-export LDAP_BIND_PASSWORD="service_account_password"
+# Create LDAP password secret
+mkdir -p secrets
+echo "your-ldap-service-account-password" > secrets/ldap_bind_password
+chmod 600 secrets/ldap_bind_password
 ```
 
-3. **Configure group mappings** for automatic role assignment:
+3. **Configure group to role mappings** in docker-compose.yml:
 ```yaml
-role_mapping:
-  "CN=TrakBridge-Admins,OU=Groups,DC=company,DC=com": "admin"
-  "CN=TrakBridge-Operators,OU=Groups,DC=company,DC=com": "operator"
+LDAP_ADMIN_GROUP: "CN=TrakBridge-Admins,OU=Groups,DC=company,DC=com"
+LDAP_OPERATOR_GROUP: "CN=TrakBridge-Operators,OU=Groups,DC=company,DC=com"
+LDAP_USER_GROUP: "CN=TrakBridge-Users,OU=Groups,DC=company,DC=com"
+LDAP_DEFAULT_ROLE: "user"
 ```
 
-4. **Test LDAP connection**: Verify through application logs after attempting login
+4. **Restart application** to apply LDAP configuration:
+```bash
+docker-compose restart
+```
+
+5. **Test LDAP connection**: Verify through application logs or attempt login with LDAP credentials
 
 ### 3. OIDC/SSO Setup
 
 1. **Register TrakBridge** with your identity provider (Azure AD, Okta, etc.)
+   - Set redirect URI to: `https://your-domain.com/auth/oidc/callback`
+   - Note the client ID and client secret
 
-2. **Configure OIDC** in `authentication.yaml`:
-   - **Docker**: Edit `./config/authentication.yaml`
-   - **Local**: Edit `config/settings/authentication.yaml`
+2. **Configure OIDC settings** in docker-compose.yml environment section:
 ```yaml
-authentication:
-  providers:
-    oidc:
-      enabled: true
-      issuer: "https://login.microsoftonline.com/your-tenant-id/v2.0"
-      client_id: "your-application-id"
-      redirect_uri: "https://trakbridge.company.com/auth/oidc/callback"
+# Edit these values in docker-compose.yml
+OIDC_ENABLED: "true"
+OIDC_ISSUER: "https://login.microsoftonline.com/your-tenant-id/v2.0"
+OIDC_CLIENT_ID: "your-application-client-id"
+OIDC_REDIRECT_URI: "https://trakbridge.company.com/auth/oidc/callback"
+OIDC_VERIFY_SIGNATURE: "true"
+OIDC_VERIFY_AUDIENCE: "true"
+OIDC_VERIFY_ISSUER: "true"
 ```
 
-3. **Set client secret** via environment variable:
+3. **Set OIDC client secret** using Docker secrets:
 ```bash
-export OIDC_CLIENT_SECRET="your-oidc-client-secret"
+# Create OIDC client secret
+mkdir -p secrets
+echo "your-oidc-client-secret" > secrets/oidc_client_secret
+chmod 600 secrets/oidc_client_secret
 ```
 
-4. **Configure role claims** based on your identity provider's group claims.
+4. **Configure role mappings** for group-based access:
+```yaml
+OIDC_ADMIN_GROUP: "trakbridge-admins"
+OIDC_OPERATOR_GROUP: "trakbridge-operators"
+OIDC_USER_GROUP: "trakbridge-users"
+OIDC_DEFAULT_ROLE: "user"
+```
+
+5. **Restart application** to apply OIDC configuration:
+```bash
+docker-compose restart
+```
+
+6. **Test OIDC flow** by clicking "Sign in with SSO" on the login page
 
 ## User Management
 
@@ -489,20 +327,19 @@ All authentication events are logged:
 
 ### Common Issues
 
-#### Configuration File Issues
+#### Configuration Issues
 ```bash
-# Check which config files are being used
-python scripts/manage_config.py list
+# Check environment variable configuration in docker-compose.yml
+cat docker-compose.yml | grep -A 50 "x-environment"
 
-# Validate current configuration
-python scripts/manage_config.py validate --environment production
+# Check secrets files exist and have correct permissions
+ls -la secrets/
 
 # Check configuration loading in app logs
-grep -i "configuration.*loaded" logs/app.log
+docker-compose logs | grep -i "authentication.*loaded"
 
-# Backup and reinstall default configs
-python scripts/manage_config.py backup
-python scripts/manage_config.py install --update-mode overwrite
+# Restart container to reload configuration
+docker-compose restart
 ```
 
 #### LDAP Connection Failures

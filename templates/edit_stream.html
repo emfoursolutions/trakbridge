@@ -39,16 +39,21 @@
                     </div>
 
                     <div class="mb-3">
+                        <label for="plugin_category" class="form-label">Provider Category</label>
+                        <select class="form-select" id="plugin_category" name="plugin_category" required onchange="updatePluginsByCategory()">
+                            <option value="">Select Provider Category</option>
+                            <!-- Categories will be loaded dynamically -->
+                        </select>
+                        <div class="form-text">Choose the type of GPS provider</div>
+                    </div>
+
+                    <div class="mb-3">
                         <label for="plugin_type" class="form-label">Stream Provider</label>
                         <select class="form-select" id="plugin_type" name="plugin_type" required onchange="updatePluginConfig()">
-                            <option value="">Select Stream Provider</option>
-                            {% for plugin_name, plugin_meta in plugin_metadata.items() %}
-                            <option value="{{ plugin_name }}" data-category="{{ plugin_meta.category }}"
-                                    {% if plugin_name == stream.plugin_type %}selected{% endif %}>
-                                <i class="{{ plugin_meta.icon }}"></i> {{ plugin_meta.display_name }}
-                            </option>
-                            {% endfor %}
+                            <option value="">Select Provider Category First</option>
+                            <!-- Plugins will be loaded dynamically based on category -->
                         </select>
+                        <div class="form-text">Specific provider within the selected category</div>
                     </div>
 
                     <div class="mb-3">
@@ -186,8 +191,10 @@
 
 {% block scripts %}
 <script>
-// Plugin metadata and current config - will be loaded via secure API calls
+// Plugin metadata, categories, and current config - will be loaded via secure API calls
 let pluginMetadata = {};
+let categoryData = {};
+let categorizedPlugins = {};
 let currentConfig = {};
 
 // Load plugin metadata securely from API
@@ -204,6 +211,114 @@ async function loadPluginMetadata() {
         console.error('Error loading plugin metadata:', error);
         pluginMetadata = {};
     }
+}
+
+// Load category data securely from API
+async function loadCategoryData() {
+    try {
+        const response = await fetch('/api/plugins/categories');
+        if (response.ok) {
+            categoryData = await response.json();
+            populateCategoryDropdown();
+        } else {
+            console.error('Failed to load category data:', response.status);
+            categoryData = {};
+        }
+    } catch (error) {
+        console.error('Error loading category data:', error);
+        categoryData = {};
+    }
+}
+
+// Load categorized plugins data
+async function loadCategorizedPlugins() {
+    try {
+        const response = await fetch('/api/plugins/categorized');
+        if (response.ok) {
+            categorizedPlugins = await response.json();
+        } else {
+            console.error('Failed to load categorized plugins:', response.status);
+            categorizedPlugins = {};
+        }
+    } catch (error) {
+        console.error('Error loading categorized plugins:', error);
+        categorizedPlugins = {};
+    }
+}
+
+// Populate the category dropdown
+function populateCategoryDropdown() {
+    const categorySelect = document.getElementById('plugin_category');
+    
+    // Clear existing options (except the first placeholder)
+    categorySelect.innerHTML = '<option value="">Select Provider Category</option>';
+    
+    // Sort categories by display name
+    const sortedCategories = Object.values(categoryData).sort((a, b) => 
+        a.display_name.localeCompare(b.display_name)
+    );
+    
+    // Add category options
+    sortedCategories.forEach(category => {
+        const option = document.createElement('option');
+        option.value = category.key;
+        option.textContent = `${category.display_name} - ${category.description} (${category.plugin_count} providers)`;
+        option.setAttribute('data-icon', category.icon);
+        categorySelect.appendChild(option);
+    });
+}
+
+// Handle category selection and filter plugins
+function updatePluginsByCategory() {
+    const category = document.getElementById('plugin_category').value;
+    const pluginSelect = document.getElementById('plugin_type');
+    const configSection = document.getElementById('plugin-config-section');
+    const helpContent = document.getElementById('help-content');
+    
+    // Reset plugin configuration when category changes
+    if (configSection) configSection.style.display = 'none';
+    if (helpContent) helpContent.innerHTML = '<p class="text-muted">Select a stream provider to see configuration instructions.</p>';
+    
+    if (!category) {
+        pluginSelect.disabled = true;
+        pluginSelect.innerHTML = '<option value="">Select Provider Category First</option>';
+        return;
+    }
+    
+    // Get plugins for the selected category
+    const categoryPlugins = categorizedPlugins[category] || [];
+    
+    if (categoryPlugins.length === 0) {
+        pluginSelect.disabled = true;
+        pluginSelect.innerHTML = '<option value="">No providers available in this category</option>';
+        return;
+    }
+    
+    // Clear plugin dropdown and populate with filtered plugins
+    pluginSelect.innerHTML = '<option value="">Select Stream Provider</option>';
+    
+    // Sort plugins by display name
+    categoryPlugins.sort((a, b) => a.display_name.localeCompare(b.display_name));
+    
+    // Add plugin options, preserving existing selection if it matches
+    const currentlySelected = pluginSelect.getAttribute('data-current-value');
+    categoryPlugins.forEach(plugin => {
+        const option = document.createElement('option');
+        option.value = plugin.key;
+        option.textContent = plugin.display_name;
+        option.setAttribute('data-category', plugin.category);
+        option.setAttribute('data-icon', plugin.icon);
+        
+        // Preserve existing selection if editing
+        if (plugin.key === currentlySelected) {
+            option.selected = true;
+        }
+        
+        pluginSelect.appendChild(option);
+    });
+    
+    // Enable the plugin dropdown
+    pluginSelect.disabled = false;
 }
 
 // Load current stream configuration securely from API
@@ -487,14 +602,48 @@ function showAlert(message, type = 'info') {
 }
 
 // Initialize page when DOM is loaded
+// Helper function to get display category from plugin category
+function getCategoryMapping(pluginCategory) {
+    const mapping = {
+        'osint': 'OSINT',
+        'satellite': 'Tracker', 
+        'platform': 'Tracker',
+        'tracker': 'Tracker',
+        'ems': 'EMS'
+    };
+    return mapping[pluginCategory?.toLowerCase()] || 'Other';
+}
+
 document.addEventListener('DOMContentLoaded', async function() {
-    // Load plugin metadata and current config first
-    await Promise.all([loadPluginMetadata(), loadCurrentConfig()]);
+    // Store the current plugin type for later restoration
+    const currentPluginType = '{{ stream.plugin_type }}';
+    const pluginSelect = document.getElementById('plugin_type');
+    pluginSelect.setAttribute('data-current-value', currentPluginType);
     
-    // Auto-update plugin config on page load if editing
-    const pluginType = document.getElementById('plugin_type').value;
-    if (pluginType) {
-        updatePluginConfig();
+    // Load all necessary data in parallel
+    await Promise.all([
+        loadPluginMetadata(),
+        loadCurrentConfig(),
+        loadCategoryData(),
+        loadCategorizedPlugins()
+    ]);
+    
+    // If there's a current plugin, set up the category dropdown accordingly
+    if (currentPluginType && pluginMetadata[currentPluginType]) {
+        const pluginMeta = pluginMetadata[currentPluginType];
+        const displayCategory = getCategoryMapping(pluginMeta.category);
+        
+        // Set the category dropdown
+        document.getElementById('plugin_category').value = displayCategory;
+        
+        // Update the plugins dropdown for this category
+        updatePluginsByCategory();
+        
+        // Small delay to ensure plugin dropdown is populated before selecting
+        setTimeout(() => {
+            document.getElementById('plugin_type').value = currentPluginType;
+            updatePluginConfig();
+        }, 100);
     }
 });
 </script>

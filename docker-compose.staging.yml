@@ -29,12 +29,12 @@ version: '3.8'
 # =============================================================================
 x-environment: &staging-environment
   # Application Settings
-  APP_VERSION: "${APP_VERSION:-staging-latest}"
+  APP_VERSION: "staging-latest"  # Update tag as needed for staging releases
   FLASK_ENV: "production"
   FLASK_APP: "app.py"
   APP_PORT: "5000"
-  USER_ID: ${UID:-1000}
-  GROUP_ID: ${GID:-1000}
+  USER_ID: "1000"  # Change if needed for staging environment
+  GROUP_ID: "1000"  # Change if needed for staging environment
   
   # Configuration Management
   TRAKBRIDGE_CONFIG_DIR: "/app/external_config"
@@ -58,7 +58,7 @@ x-environment: &staging-environment
   HTTP_MAX_CONNECTIONS_PER_HOST: "15"
   
   # Security Settings
-  TRAKBRIDGE_APPLICATION_URL: "${STAGING_URL:-https://staging.trakbridge.local}"
+  TRAKBRIDGE_APPLICATION_URL: "https://staging.trakbridge.local"  # Update for your staging domain
   SECURE_COOKIES: "true"
   
   # Monitoring & Observability
@@ -66,56 +66,56 @@ x-environment: &staging-environment
   ENABLE_TRACING: "true"
   ENABLE_PROFILING: "true"
   
-  # Authentication Configuration (Staging)
-  # LDAP Settings
-  LDAP_ENABLED: "${LDAP_ENABLED:-false}"
-  LDAP_SERVER: "${LDAP_SERVER:-ldap://your-ad-server.company.com}"
-  LDAP_PORT: "${LDAP_PORT:-389}"
-  LDAP_USE_SSL: "${LDAP_USE_SSL:-false}"
-  LDAP_USE_TLS: "${LDAP_USE_TLS:-true}"
-  LDAP_VALIDATE_CERT: "${LDAP_VALIDATE_CERT:-true}"
-  LDAP_BIND_DN: "${LDAP_BIND_DN:-CN=trakbridge,OU=Service Accounts,DC=company,DC=com}"
-  LDAP_BIND_PASSWORD: "${LDAP_BIND_PASSWORD:-default-ldap-password}"
-  LDAP_USER_SEARCH_BASE: "${LDAP_USER_SEARCH_BASE:-OU=Users,DC=company,DC=com}"
-  LDAP_USER_SEARCH_FILTER: "${LDAP_USER_SEARCH_FILTER:-(sAMAccountName={username})}"
-  LDAP_GROUP_SEARCH_BASE: "${LDAP_GROUP_SEARCH_BASE:-OU=Groups,DC=company,DC=com}"
-  LDAP_GROUP_SEARCH_FILTER: "${LDAP_GROUP_SEARCH_FILTER:-(member={user_dn})}"
-  LDAP_ADMIN_GROUP: "${LDAP_ADMIN_GROUP:-CN=TrakBridge-Admins,OU=Groups,DC=company,DC=com}"
-  LDAP_OPERATOR_GROUP: "${LDAP_OPERATOR_GROUP:-CN=TrakBridge-Operators,OU=Groups,DC=company,DC=com}"
-  LDAP_USER_GROUP: "${LDAP_USER_GROUP:-CN=TrakBridge-Users,OU=Groups,DC=company,DC=com}"
-  LDAP_DEFAULT_ROLE: "${LDAP_DEFAULT_ROLE:-user}"
-  LDAP_CONNECTION_TIMEOUT: "${LDAP_CONNECTION_TIMEOUT:-10}"
-  LDAP_RESPONSE_TIMEOUT: "${LDAP_RESPONSE_TIMEOUT:-30}"
+  # Authentication Configuration (Staging - Production-like settings)
+  # LDAP Settings (configure for staging LDAP environment)
+  LDAP_ENABLED: "false"  # Set to "true" and configure for staging LDAP testing
+  LDAP_SERVER: "ldap://staging-ad-server.company.com"  # Update for staging LDAP server
+  LDAP_PORT: "389"
+  LDAP_USE_SSL: "false"
+  LDAP_USE_TLS: "true"  # Production-like security
+  LDAP_VALIDATE_CERT: "true"  # Production-like security
+  LDAP_BIND_DN: "CN=trakbridge-staging,OU=Service Accounts,DC=staging,DC=company,DC=com"
+  LDAP_BIND_PASSWORD: "staging-ldap-password"  # Use staging-specific password
+  LDAP_USER_SEARCH_BASE: "OU=Users,DC=staging,DC=company,DC=com"
+  LDAP_USER_SEARCH_FILTER: "(sAMAccountName={username})"
+  LDAP_GROUP_SEARCH_BASE: "OU=Groups,DC=staging,DC=company,DC=com"
+  LDAP_GROUP_SEARCH_FILTER: "(member={user_dn})"
+  LDAP_ADMIN_GROUP: "CN=TrakBridge-Staging-Admins,OU=Groups,DC=staging,DC=company,DC=com"
+  LDAP_OPERATOR_GROUP: "CN=TrakBridge-Staging-Operators,OU=Groups,DC=staging,DC=company,DC=com"
+  LDAP_USER_GROUP: "CN=TrakBridge-Staging-Users,OU=Groups,DC=staging,DC=company,DC=com"
+  LDAP_DEFAULT_ROLE: "user"
+  LDAP_CONNECTION_TIMEOUT: "10"
+  LDAP_RESPONSE_TIMEOUT: "30"
   
-  # OIDC/SSO Settings
-  OIDC_ENABLED: "${OIDC_ENABLED:-false}"
-  OIDC_ISSUER: "${OIDC_ISSUER:-https://your-identity-provider.com}"
-  OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-trakbridge-client}"
-  OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-default-oidc-secret}"
-  OIDC_REDIRECT_URI: "${OIDC_REDIRECT_URI:-https://staging.trakbridge.local/auth/oidc/callback}"
-  OIDC_VERIFY_SIGNATURE: "${OIDC_VERIFY_SIGNATURE:-true}"
-  OIDC_VERIFY_AUDIENCE: "${OIDC_VERIFY_AUDIENCE:-true}"
-  OIDC_VERIFY_ISSUER: "${OIDC_VERIFY_ISSUER:-true}"
-  OIDC_ADMIN_GROUP: "${OIDC_ADMIN_GROUP:-trakbridge-admins}"
-  OIDC_OPERATOR_GROUP: "${OIDC_OPERATOR_GROUP:-trakbridge-operators}"
-  OIDC_USER_GROUP: "${OIDC_USER_GROUP:-trakbridge-users}"
-  OIDC_DEFAULT_ROLE: "${OIDC_DEFAULT_ROLE:-user}"
+  # OIDC/SSO Settings (configure for staging identity provider)
+  OIDC_ENABLED: "false"  # Set to "true" and configure for staging OIDC testing
+  OIDC_ISSUER: "https://staging-identity-provider.com"  # Update for staging provider
+  OIDC_CLIENT_ID: "trakbridge-staging-client"  # Staging client ID
+  OIDC_CLIENT_SECRET: "staging-oidc-client-secret"  # Use staging-specific secret
+  OIDC_REDIRECT_URI: "https://staging.trakbridge.local/auth/oidc/callback"  # Staging callback URL
+  OIDC_VERIFY_SIGNATURE: "true"  # Production-like security
+  OIDC_VERIFY_AUDIENCE: "true"  # Production-like security
+  OIDC_VERIFY_ISSUER: "true"  # Production-like security
+  OIDC_ADMIN_GROUP: "trakbridge-staging-admins"
+  OIDC_OPERATOR_GROUP: "trakbridge-staging-operators"
+  OIDC_USER_GROUP: "trakbridge-staging-users"
+  OIDC_DEFAULT_ROLE: "user"
   
-  # Local Authentication (Staging - Production-like)
-  LOCAL_AUTH_ENABLED: "${LOCAL_AUTH_ENABLED:-true}"
-  PASSWORD_MIN_LENGTH: "${PASSWORD_MIN_LENGTH:-10}"
-  PASSWORD_REQUIRE_UPPERCASE: "${PASSWORD_REQUIRE_UPPERCASE:-true}"
-  PASSWORD_REQUIRE_LOWERCASE: "${PASSWORD_REQUIRE_LOWERCASE:-true}"
-  PASSWORD_REQUIRE_NUMBERS: "${PASSWORD_REQUIRE_NUMBERS:-true}"
-  PASSWORD_REQUIRE_SPECIAL: "${PASSWORD_REQUIRE_SPECIAL:-true}"
-  PASSWORD_MAX_AGE_DAYS: "${PASSWORD_MAX_AGE_DAYS:-90}"
+  # Local Authentication (Staging - Production-like security)
+  LOCAL_AUTH_ENABLED: "true"
+  PASSWORD_MIN_LENGTH: "10"  # Production-like security
+  PASSWORD_REQUIRE_UPPERCASE: "true"
+  PASSWORD_REQUIRE_LOWERCASE: "true"
+  PASSWORD_REQUIRE_NUMBERS: "true"
+  PASSWORD_REQUIRE_SPECIAL: "true"
+  PASSWORD_MAX_AGE_DAYS: "90"
   
   # Session Configuration (Staging)
-  SESSION_LIFETIME_HOURS: "${SESSION_LIFETIME_HOURS:-8}"
-  SESSION_CLEANUP_INTERVAL: "${SESSION_CLEANUP_INTERVAL:-60}"
-  SESSION_SECURE_COOKIES: "${SESSION_SECURE_COOKIES:-true}"
-  SESSION_COOKIE_DOMAIN: "${SESSION_COOKIE_DOMAIN:-staging.trakbridge.local}"
-  SESSION_COOKIE_PATH: "${SESSION_COOKIE_PATH:-/}"
+  SESSION_LIFETIME_HOURS: "8"
+  SESSION_CLEANUP_INTERVAL: "60"
+  SESSION_SECURE_COOKIES: "true"  # Production-like security
+  SESSION_COOKIE_DOMAIN: "staging.trakbridge.local"  # Update for your staging domain
+  SESSION_COOKIE_PATH: "/"
 
 # Database secrets for staging
 x-secrets: &staging-secrets
@@ -134,7 +134,7 @@ services:
       target: production
       args:
         BUILD_ENV: production
-    image: trakbridge:${APP_VERSION:-staging-latest}
+    image: "trakbridge:staging-latest"  # Update tag as needed for staging releases
     container_name: trakbridge-staging
     restart: unless-stopped
     

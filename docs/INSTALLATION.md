@@ -2,22 +2,16 @@
 
 ## Overview
 
-TrakBridge is a comprehensive GPS tracking data bridge that forwards location data from various providers to TAK (Team Awareness Kit) servers. This guide covers first-time installation for both Docker and development environments.
+TrakBridge is a comprehensive data stream bridge that forwards location data from various providers to TAK (Team Awareness Kit) servers. This guide covers first-time installation for both Docker and development environments.
 
 **Key Features:**
 - **Multi-Provider Authentication**: OIDC, LDAP, and local database authentication
 - **Role-Based Access Control**: Viewer, User, Operator, and Admin roles
+- **Plugin Categorization**: Dynamic Categories for organized data source management
 - **Automatic Initial Admin**: Bootstrap service creates initial admin on first startup
-- **Plugin Architecture**: Extensible system for GPS providers
+- **Plugin Architecture**: Extensible system with external plugin support via Docker volumes
+- **Security Hardened**: Field-level encryption, JSON validation, and comprehensive security controls
 - **Enterprise Ready**: SSL/TLS, backup & recovery, multi-database support
-
-## Prerequisites
-
-### System Requirements
-- **CPU**: 2+ cores recommended
-- **RAM**: 2GB minimum, 4GB recommended
-- **Storage**: 10GB minimum, 50GB recommended for logs and data
-- **Network**: Internet access for GPS provider APIs and TAK server connections
 
 ### Software Requirements
 
@@ -27,7 +21,7 @@ TrakBridge is a comprehensive GPS tracking data bridge that forwards location da
 - Port 8080 available (or custom port)
 
 #### Development Installation
-- Python 3.10+
+- Python 3.12+
 - pip package manager
 - Git for source code
 - SQLite (included with Python) or PostgreSQL/MySQL
@@ -47,9 +41,6 @@ mkdir trakbridge && cd trakbridge
 ```bash
 # Basic setup
 wget https://raw.githubusercontent.com/emfoursolutions/trakbridge/main/docker-compose.yml
-
-# Advanced setup with PostgreSQL and Nginx
-wget https://raw.githubusercontent.com/emfoursolutions/trakbridge/main/docker-compose-production.yml
 wget https://raw.githubusercontent.com/emfoursolutions/trakbridge/main/init/setup.sh
 chmod +x setup.sh
 ```
@@ -57,9 +48,10 @@ chmod +x setup.sh
 3. **Basic deployment**:
 ```bash
 # Start with SQLite (development/testing)
+./setup.sh
 docker-compose up -d
 
-# Access at http://localhost:8080
+# Access at http://yourdomain.com:5000
 ```
 
 4. **Production deployment** with PostgreSQL and Nginx:
@@ -75,24 +67,59 @@ docker-compose --profile postgres --profile nginx up -d
 
 ### Docker Configuration
 
-#### Environment Variables
-Create `.env` file for configuration:
+#### Environment Configuration
+All configuration is managed directly in the docker-compose.yml file. Edit the `x-environment` section to customize your deployment:
+
+```yaml
+# Edit these values in docker-compose.yml
+x-environment: &common-environment
+  # Application Settings
+  FLASK_ENV: "production"
+  USER_ID: "1000"  # Change if needed for filesystem permissions
+  GROUP_ID: "1000"  # Change if needed for filesystem permissions
+  
+  # Database Configuration (choose one)
+  DB_TYPE: "postgresql"  # postgresql, mysql, or sqlite
+  DB_HOST: "postgres"
+  DB_NAME: "trakbridge"
+  DB_USER: "trakbridge"
+  
+  # LDAP Authentication (set LDAP_ENABLED to "true" to enable)
+  LDAP_ENABLED: "false"
+  LDAP_SERVER: "ldap://your-ad-server.company.com"  # Update for your LDAP server
+  LDAP_BIND_DN: "CN=trakbridge,OU=Service Accounts,DC=company,DC=com"  # Update for your domain
+  
+  # OIDC/SSO Authentication (set OIDC_ENABLED to "true" to enable)
+  OIDC_ENABLED: "false"
+  OIDC_ISSUER: "https://your-identity-provider.com"  # Update for your OIDC provider
+  OIDC_CLIENT_ID: "trakbridge-client"  # Update with your client ID
+  OIDC_REDIRECT_URI: "https://trakbridge.company.com/auth/oidc/callback"  # Update for your domain
+```
+
+#### Docker Secrets Setup
+Sensitive credentials are managed through Docker secrets. Create the secrets directory and files:
+
 ```bash
-# Application settings
-FLASK_ENV=production
-SECRET_KEY=your-super-secret-key-change-this-in-production
+# Create secrets directory
+mkdir -p secrets
 
-# Database (for PostgreSQL setup)
-POSTGRES_DB=trakbridge
-POSTGRES_USER=trakbridge
-POSTGRES_PASSWORD=secure-database-password
+# Generate database password
+echo "your-secure-database-password" > secrets/db_password
 
-# Encryption key for sensitive data
-TRAKBRIDGE_ENCRYPTION_KEY=your-32-character-encryption-key
+# Generate application secret key (32 characters minimum)
+echo "your-super-secret-key-change-this-in-production" > secrets/secret_key
 
-# Authentication (optional - see authentication setup)
-LDAP_BIND_PASSWORD=your-ldap-password
-OIDC_CLIENT_SECRET=your-oidc-client-secret
+# Generate master encryption key (32 characters exactly)
+openssl rand -base64 32 | cut -c1-32 > secrets/tb_master_key
+
+# LDAP password (if using LDAP authentication)
+echo "your-ldap-bind-password" > secrets/ldap_bind_password
+
+# OIDC client secret (if using OIDC authentication)
+echo "your-oidc-client-secret" > secrets/oidc_client_secret
+
+# Set secure permissions
+chmod 600 secrets/*
 ```
 
 #### Volume Mounts
@@ -103,7 +130,24 @@ volumes:
   - ./data:/app/data                   # Database and application data
   - ./logs:/app/logs                   # Log files
   - ./certs:/app/certs                 # TAK server certificates
+  - ./external_plugins:/app/external_plugins  # External custom plugins (optional)
 ```
+
+#### External Plugin Support
+To use external plugins, add them to your docker-compose.yml:
+```yaml
+volumes:
+  - ./my-plugins:/app/external_plugins:ro  # Mount custom plugins read-only
+```
+
+Configure plugin modules in `config/settings/plugins.yaml`:
+```yaml
+allowed_plugin_modules:
+  - external_plugins.my_custom_tracker
+  - external_plugins.enterprise_gps
+```
+
+See [Docker Plugin Documentation](DOCKER_PLUGINS.md) for complete setup instructions.
 
 ## Option 2: Development Installation
 
@@ -123,7 +167,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 3. **Install dependencies**:
 ```bash
-pip install -r requirements.txt
+pip install .
 
 # For development with testing tools
 pip install -e ".[dev]"
@@ -139,7 +183,7 @@ python -m flask db upgrade
 # Development server
 python app.py
 
-# Access at http://localhost:8080
+# Access at http://localhost:5000
 ```
 
 ### Development Configuration
@@ -169,122 +213,12 @@ TrakBridge automatically creates an initial admin user on first startup:
 
 2. **Access the application**:
    - Docker: http://localhost:8080 or https://yourdomain.com
-   - Development: http://localhost:8080
+   - Development: http://localhost:5000
 
 3. **Login and change password**:
    - Use the default credentials above
    - You'll be **forced to change the password** on first login
    - Set a strong password for your admin account
-
-### Security Setup Checklist
-
-#### ✅ Required Security Steps
-1. **Change default admin password** (forced on first login)
-2. **Set strong SECRET_KEY** in production
-3. **Generate secure TRAKBRIDGE_ENCRYPTION_KEY** (32 characters)
-4. **Configure HTTPS** for production deployments
-5. **Review firewall settings** and exposed ports
-
-#### ✅ Configuration Files Security
-Docker installations automatically create configuration files in `./config/`:
-- `authentication.yaml` - Authentication provider settings
-- `app.yaml` - Application configuration
-- `database.yaml` - Database connection settings
-
-**Important**: These files may contain sensitive configuration. Secure them appropriately:
-```bash
-chmod 600 ./config/*.yaml
-```
-
-### Authentication Configuration
-
-#### Option A: Local Authentication Only (Default)
-No additional configuration required. Users are managed through the web interface.
-
-#### Option B: LDAP/Active Directory Integration
-1. **Edit authentication configuration**:
-```bash
-# Docker installation
-nano ./config/authentication.yaml
-
-# Development installation  
-nano config/settings/authentication.yaml
-```
-
-2. **Configure LDAP settings**:
-```yaml
-authentication:
-  providers:
-    ldap:
-      enabled: true
-      server: "ldap://your-ad-server.company.com"
-      port: 389
-      use_tls: true
-      bind_dn: "CN=trakbridge,OU=Service Accounts,DC=company,DC=com"
-      user_search_base: "OU=Users,DC=company,DC=com"
-      user_search_filter: "(sAMAccountName={username})"
-      role_mapping:
-        "CN=TrakBridge-Admins,OU=Groups,DC=company,DC=com": "admin"
-        "CN=TrakBridge-Operators,OU=Groups,DC=company,DC=com": "operator"
-```
-
-3. **Set LDAP credentials**:
-```bash
-export LDAP_BIND_PASSWORD="your-service-account-password"
-```
-
-#### Option C: OIDC/SSO Integration
-1. **Register application** with your identity provider (Azure AD, Okta, etc.)
-
-2. **Configure OIDC settings**:
-```yaml
-authentication:
-  providers:
-    oidc:
-      enabled: true
-      issuer: "https://login.microsoftonline.com/your-tenant-id/v2.0"
-      client_id: "your-application-id"
-      redirect_uri: "https://trakbridge.company.com/auth/oidc/callback"
-      role_mapping:
-        "trakbridge-admins": "admin"
-        "trakbridge-operators": "operator"
-```
-
-3. **Set OIDC credentials**:
-```bash
-export OIDC_CLIENT_SECRET="your-oidc-client-secret"
-```
-
-## Database Configuration
-
-### SQLite (Default)
-No additional configuration needed. Database file stored in:
-- Docker: `./data/trakbridge.db`
-- Development: `instance/trakbridge.db`
-
-### PostgreSQL (Production)
-1. **Docker setup** automatically configures PostgreSQL
-2. **Manual PostgreSQL setup**:
-```yaml
-# config/settings/database.yaml
-database:
-  url: "postgresql://username:password@localhost:5432/trakbridge"
-  pool_size: 10
-  pool_recycle: 3600
-```
-
-### Database Migrations
-The application automatically runs database migrations on startup. For manual management:
-```bash
-# Check migration status
-python -m flask db current
-
-# Apply pending migrations
-python -m flask db upgrade
-
-# Create new migration (development)
-python -m flask db migrate -m "Description of changes"
-```
 
 ## Post-Installation Tasks
 
@@ -298,11 +232,12 @@ python -m flask db migrate -m "Description of changes"
    - **Operator**: Can manage streams and TAK servers
    - **Admin**: Full system administration
 
-### 2. Configure GPS Providers
+### 2. Configure Data Sources
 1. **Navigate to Streams** → Create Stream
-2. **Select GPS provider**: Garmin InReach, SPOT, Traccar, etc.
-3. **Configure credentials** and polling settings
-4. **Test connection** before saving
+2. **Select category**: OSINT, Tracker, or EMS from the dropdown
+3. **Choose provider**: Select from categorized options (Deepstate, Garmin InReach, SPOT, Traccar, etc.)
+4. **Configure credentials** and settings specific to the selected provider
+5. **Test connection** before saving to verify functionality
 
 ### 3. Configure TAK Servers
 1. **Navigate to TAK Servers** → New Server
@@ -372,7 +307,7 @@ docker-compose run --user $(id -u):$(id -g) trakbridge
 docker-compose logs postgres
 ```
 
-2. **Verify credentials** in `.env` file
+2. **Verify credentials** in docker-compose.yml and secrets files
 
 3. **Test connection manually**:
 ```bash
@@ -400,7 +335,7 @@ tail -f logs/app.log | grep -i auth
 
 ### Getting Help
 
-1. **Check application logs**: `docker-compose logs` or `logs/app.log`
+1. **Check application logs**: `docker-compose logs` or `logs/trakbridge-version.log`
 2. **Health check endpoint**: `curl http://localhost:8080/api/health`
 3. **Configuration validation**: Use CLI tools in `scripts/`
 4. **GitHub Issues**: Report bugs and get support
