@@ -35,9 +35,9 @@ services:
       FLASK_ENV: "development"
       FLASK_APP: "app.py"
       
-      # Dynamic user creation for runtime
-      USER_ID: "1000"  # Change if needed for development environment
-      GROUP_ID: "1000"  # Change if needed for development environment
+      # Dynamic user creation for runtime - use environment variables from CI
+      USER_ID: "${USER_ID:-1000}"  # Uses CI environment variable or defaults to 1000
+      GROUP_ID: "${GROUP_ID:-1000}"  # Uses CI environment variable or defaults to 1000
       
       # Configuration Management
       TRAKBRIDGE_CONFIG_DIR: "/app/external_config"

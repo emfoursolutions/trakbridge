@@ -80,6 +80,8 @@ RUN groupadd -g 1000 appuser && \
 
 # Set ownership for directories that appuser needs access to
 RUN chown -R appuser:appuser /app/logs /app/data /app/tmp /app/entrypoint.sh
+# Ensure appuser can read application code directories for Python imports
+RUN chown -R appuser:appuser /app/utils /app/plugins /app/services /app/models /app/routes /app/config
 
 # Create enhanced security-focused user switching script
 RUN echo '#!/bin/bash\n\
@@ -126,6 +128,8 @@ if [[ $CURRENT_UID -eq 0 ]]; then\n\
         \n\
         # Fix ownership of app directories for dynamic user\n\
         chown -R $TARGET_UID:$TARGET_GID /app/logs /app/data /app/tmp\n\
+        # Fix ownership of all application code directories for Python imports\n\
+        chown -R $TARGET_UID:$TARGET_GID /app/utils /app/plugins /app/services /app/models /app/routes /app/config\n\
         \n\
         # Fix ownership and permissions of secrets if they exist\n\
         if [ -d "/app/secrets" ]; then\n\

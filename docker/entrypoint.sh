@@ -148,10 +148,33 @@ ensure_permissions() {
         fi
     }
 
-    # Check each directory
+    # Function to check read access for application code directories
+    check_read_access() {
+        local dir="$1"
+        local dir_name="$2"
+
+        if [[ -r "$dir" ]]; then
+            log_debug "$dir_name directory is readable"
+        else
+            log_error "$dir_name directory is not readable"
+            log_error "Python modules cannot be imported from $dir"
+            log_error "Check Docker build and USER_ID/GROUP_ID settings"
+            return 1
+        fi
+    }
+
+    # Check write access directories
     check_and_fix_dir "/app/logs" "Logs"
     check_and_fix_dir "/app/data" "Data"
     check_and_fix_dir "/app/tmp" "Tmp"
+    
+    # Check read access to application code directories
+    check_read_access "/app/utils" "Utils"
+    check_read_access "/app/plugins" "Plugins"  
+    check_read_access "/app/services" "Services"
+    check_read_access "/app/models" "Models"
+    check_read_access "/app/routes" "Routes"
+    check_read_access "/app/config" "Config"
 }
 
 # Function to wait for database
