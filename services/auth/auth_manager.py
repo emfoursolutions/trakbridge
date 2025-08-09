@@ -31,7 +31,7 @@ Version: 1.0.0
 # Standard library imports
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -663,7 +663,7 @@ class AuthenticationManager:
             return {
                 "status": "unhealthy",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     def _get_client_ip(self) -> str:
@@ -762,7 +762,7 @@ class AuthenticationManager:
             "username": username,
             "provider": provider_type.value if provider_type else None,
             "success": success,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "ip_address": self._get_client_ip(),
         }
 

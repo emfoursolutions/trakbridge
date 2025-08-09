@@ -44,7 +44,7 @@ import importlib.util
 import logging
 import re
 import ssl
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
 # Third-party imports
@@ -401,7 +401,7 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
                 "ssl_enabled": self.use_ssl,
                 "tls_enabled": self.use_tls,
                 "base_dn": self.user_base_dn,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except LDAPException as e:
@@ -425,7 +425,7 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
                 "bind_dn": self.bind_dn,
                 "ssl_enabled": self.use_ssl,
                 "tls_enabled": self.use_tls,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -434,7 +434,7 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
                 "provider": "ldap",
                 "server": f"{self.host}:{self.port}",
                 "error": f"Connection error: {str(e)}",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     def _get_connection(self, user_dn: str = None, password: str = None) -> Connection:
@@ -737,7 +737,7 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
                 "ssl_enabled": self.use_ssl,
                 "auto_create_users": self.auto_create_users,
                 "group_mappings_count": len(self.group_mappings),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:

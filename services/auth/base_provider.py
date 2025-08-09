@@ -30,7 +30,7 @@ Version: 1.0.0
 # Standard library imports
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -74,7 +74,7 @@ class AuthenticationException(Exception):
         super().__init__(message)
         self.result = result
         self.details = details or {}
-        self.timestamp = datetime.utcnow()
+        self.timestamp = datetime.now(timezone.utc)
 
 
 class ProviderConfigurationException(AuthenticationException):
@@ -109,7 +109,7 @@ class AuthenticationResponse:
         self.message = message or result.value.replace("_", " ").title()
         self.details = details or {}
         self.session_data = session_data or {}
-        self.timestamp = datetime.utcnow()
+        self.timestamp = datetime.now(timezone.utc)
         self.success = result == AuthenticationResult.SUCCESS
 
     def to_dict(self) -> Dict[str, Any]:
@@ -397,7 +397,7 @@ class BaseAuthenticationProvider(ABC):
                 .join(User)
                 .filter(
                     User.auth_provider == self.provider_type,
-                    UserSession.expires_at < datetime.utcnow(),
+                    UserSession.expires_at < datetime.now(timezone.utc),
                 )
                 .all()
             )

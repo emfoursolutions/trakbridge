@@ -219,7 +219,7 @@ class ProductionConfig(BaseConfig):
         return issues
 
 
-class TestEnvironmentConfig(BaseConfig):
+class TestingEnvironmentConfig(BaseConfig):
     """Testing environment configuration."""
 
     def __init__(self):
@@ -390,7 +390,7 @@ def get_config(environment: str = None) -> BaseConfig:
     config_map = {
         "development": DevelopmentConfig,
         "production": ProductionConfig,
-        "testing": TestEnvironmentConfig,
+        "testing": TestingEnvironmentConfig,
         "staging": StagingConfig,
     }
 
@@ -406,7 +406,7 @@ def get_config(environment: str = None) -> BaseConfig:
 config = {
     "development": DevelopmentConfig,
     "production": ProductionConfig,
-    "testing": TestEnvironmentConfig,
+    "testing": TestingEnvironmentConfig,
     "staging": StagingConfig,
     "default": DevelopmentConfig,
 }

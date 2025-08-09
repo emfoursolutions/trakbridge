@@ -324,8 +324,14 @@ class TestCategoryServiceErrorHandling:
         service = PluginCategoryService(mock_manager)
         stats = service.get_category_statistics()
 
-        # Should return empty dict on error
-        assert stats == {}
+        # Should return structured empty response on error
+        expected = {
+            'categories': {},
+            'category_distribution': {},
+            'total_categories': 0,
+            'total_plugins': 0
+        }
+        assert stats == expected
 
 
 # Integration-style tests with more realistic data

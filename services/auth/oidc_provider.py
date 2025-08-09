@@ -35,7 +35,7 @@ import logging
 import secrets
 import time
 import urllib.parse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 # Third-party imports
@@ -451,7 +451,7 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
                     [k for k in discovery.keys() if k.endswith("_endpoint")]
                 ),
                 "jwks_keys_count": len(jwks.get("keys", [])),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -461,7 +461,7 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
                 "oidc_provider": self.active_provider,
                 "discovery_url": self.discovery_url,
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     def _load_discovery_document(self) -> None:
@@ -836,7 +836,7 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
                 "discovery_url": self.discovery_url,
                 "auto_create_users": self.auto_create_users,
                 "role_mappings_count": len(self.role_mappings),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:

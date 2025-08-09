@@ -91,8 +91,9 @@ class TestTakServerService:
     @patch("services.tak_servers_service.pkcs12.load_key_and_certificates")
     def test_validate_certificate_data_no_certificate(self, mock_pkcs12_load):
         """Test certificate validation with no certificate in P12."""
-        # Mock no certificate found
-        mock_pkcs12_load.return_value = (Mock(), None, [])
+        # Mock no certificate found - use MagicMock to avoid async issues
+        mock_private_key = MagicMock()
+        mock_pkcs12_load.return_value = (mock_private_key, None, [])
 
         cert_data = b"fake_certificate_data"
         password = "test_password"

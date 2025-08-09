@@ -30,7 +30,7 @@ Version: 1.0.0
 
 # Standard library imports
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Third-party imports
 from flask import (
@@ -811,7 +811,7 @@ def force_password_change():
 
         # Change password
         user.set_password(new_password)
-        user.password_changed_at = datetime.utcnow()
+        user.password_changed_at = datetime.now(timezone.utc)
 
         from database import db
 

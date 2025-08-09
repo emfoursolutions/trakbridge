@@ -9,7 +9,7 @@ from config.base import BaseConfig
 from config.environments import (
     DevelopmentConfig,
     ProductionConfig,
-    TestEnvironmentConfig,
+    TestingEnvironmentConfig,
     get_config,
 )
 
@@ -35,7 +35,7 @@ class TestConfigurationSystem:
         """Test getting testing configuration."""
         config = get_config("testing")
         assert config is not None
-        assert isinstance(config, TestEnvironmentConfig)
+        assert isinstance(config, TestingEnvironmentConfig)
         assert config.TESTING is True
 
     def test_base_config_properties(self):
@@ -93,7 +93,7 @@ class TestTestEnvironmentConfig:
 
     def test_testing_config_properties(self):
         """Test testing configuration properties."""
-        config = TestEnvironmentConfig()
+        config = TestingEnvironmentConfig()
 
         assert config.TESTING is True
         assert config.DEBUG is False  # Testing config disables debug for cleaner output
