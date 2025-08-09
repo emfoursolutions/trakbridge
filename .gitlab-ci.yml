@@ -1892,6 +1892,12 @@ container_scanning:
   timeout: 15m
   variables:
     CS_DOCKERFILE_PATH: "Dockerfile"
+  before_script: |
+    # Clean up any root-owned directories that may interfere with scanning
+    echo "Cleaning up GitLab build directory permissions..."
+    sudo find . -type d -name "data" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -type d -name "logs" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo chown -R gitlab-runner:gitlab-runner data logs 2>/dev/null || true
   script: |
     echo "Running Trivy container scanning on $CS_IMAGE"
     if [ -n "$CS_IMAGE" ]; then

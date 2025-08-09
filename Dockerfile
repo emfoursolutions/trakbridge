@@ -59,14 +59,16 @@ COPY --from=builder /opt/venv /opt/venv
 
 # Create app directories with broad permissions initially
 WORKDIR /app
-RUN mkdir -p /app/logs /app/data /app/tmp && \
-    chmod 755 /app && \
-    chmod 777 /app/logs /app/data /app/tmp
 
-# Copy application files (without --chown to allow flexibility)
+# Copy application files first (without --chown to allow flexibility)
 COPY hypercorn.toml /app/
 COPY docker/entrypoint.sh /app/
 COPY . /app/
+
+# Ensure proper permissions for runtime directories (after copy to avoid overwriting)
+RUN mkdir -p /app/logs /app/data /app/tmp && \
+    chmod 755 /app && \
+    chmod 777 /app/logs /app/data /app/tmp
 
 # Copy the generated _version.py from builder
 COPY --from=builder /app/_version.py /app/

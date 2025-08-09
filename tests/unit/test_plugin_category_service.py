@@ -326,10 +326,10 @@ class TestCategoryServiceErrorHandling:
 
         # Should return structured empty response on error
         expected = {
-            'categories': {},
-            'category_distribution': {},
-            'total_categories': 0,
-            'total_plugins': 0
+            "categories": {},
+            "category_distribution": {},
+            "total_categories": 0,
+            "total_plugins": 0,
         }
         assert stats == expected
 
