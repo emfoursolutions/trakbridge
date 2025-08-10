@@ -206,7 +206,7 @@ create_secrets() {
     # Handle feature branch environments
     if [[ "$env" == "feature" ]]; then
         # For feature branches, use a shared secrets directory or create minimal secrets
-        secrets_dir="$PROJECT_ROOT/secrets/feature"
+        secrets_dir="$PROJECT_ROOT/secrets"
         log "INFO" "Creating secrets for feature environment: $secrets_dir"
     else
         secrets_dir="$PROJECT_ROOT/secrets/$env"
