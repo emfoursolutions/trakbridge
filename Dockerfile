@@ -71,11 +71,32 @@ COPY docker/entrypoint.sh /app/
 # Copy all application source code and ensure it overwrites any installed package
 COPY . /app/
 
+# Debug: List what files were copied
+RUN echo "=== DEBUG: Files in /app after COPY ===" && \
+    find /app -type f -name "*.py" | head -20 && \
+    echo "=== DEBUG: Utils directory contents ===" && \
+    ls -la /app/utils/ || echo "utils directory not found" && \
+    echo "=== DEBUG: Checking specific files ===" && \
+    ls -la /app/utils/json_validator.py || echo "json_validator.py not found" && \
+    ls -la /app/utils/security_helpers.py || echo "security_helpers.py not found"
+
 # Copy the generated _version.py from builder
 COPY --from=builder /app/_version.py /app/
 
-# Install the application in editable mode to ensure proper Python package resolution
-RUN pip install --no-cache-dir -e .
+# Debug: Check files before install
+RUN echo "=== DEBUG: Files before pip install ===" && \
+    python -c "import os; print('Current dir:', os.getcwd())" && \
+    python -c "import os; print('Utils exists:', os.path.exists('/app/utils'))" && \
+    python -c "import os; print('json_validator exists:', os.path.exists('/app/utils/json_validator.py'))"
+
+# Install the application to ensure proper Python package resolution
+RUN pip install --no-cache-dir --force-reinstall .
+
+# Debug: Check Python path and package after install
+RUN echo "=== DEBUG: Python setup after install ===" && \
+    python -c "import sys; print('Python path:'); [print(p) for p in sys.path]" && \
+    python -c "import pkg_resources; print('Installed packages:'); [print(d) for d in pkg_resources.working_set if 'trakbridge' in str(d)]" && \
+    python -c "import os; print('Site-packages trakbridge:'); [print(f) for f in os.listdir('/opt/venv/lib/python3.12/site-packages/') if 'trakbridge' in f]" || echo "No trakbridge in site-packages"
 
 # Ensure proper permissions for runtime directories (after copy to avoid overwriting)
 RUN mkdir -p /app/logs /app/data /app/tmp && \
