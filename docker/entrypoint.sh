@@ -87,8 +87,8 @@ handle_user_switching() {
             # Only chown directories that are writable (not read-only mounted)
             log_debug "Fixing ownership for writable directories..."
             
-            # Always fix these writable directories (including external_plugins for volume mounts)
-            chown -R $TARGET_UID:$TARGET_GID /app/logs /app/data /app/tmp /app/external_plugins
+            # Always fix these writable directories (including external directories for volume mounts)
+            chown -R $TARGET_UID:$TARGET_GID /app/logs /app/data /app/tmp /app/external_plugins /app/external_config
             
             # Check each application code directory for writability before chown
             local app_dirs=("/app/utils" "/app/plugins" "/app/services" "/app/models" "/app/routes" "/app/config")
@@ -219,7 +219,7 @@ ensure_permissions() {
     log_info "Ensuring application directories exist and are accessible..."
 
     # Create directories if they don't exist
-    mkdir -p /app/logs /app/data /app/tmp /app/external_plugins
+    mkdir -p /app/logs /app/data /app/tmp /app/external_plugins /app/external_config
 
     # Simple validation that critical directories are accessible
     local dirs_to_check=(
@@ -227,6 +227,7 @@ ensure_permissions() {
         "/app/data:Data:write" 
         "/app/tmp:Tmp:write"
         "/app/external_plugins:ExternalPlugins:write"
+        "/app/external_config:ExternalConfig:write"
         "/app/utils:Utils:read"
         "/app/plugins:Plugins:read"
         "/app/services:Services:read"
