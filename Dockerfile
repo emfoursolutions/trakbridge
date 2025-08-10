@@ -71,13 +71,16 @@ COPY docker/entrypoint.sh /app/
 # Copy all application source code and ensure it overwrites any installed package
 COPY . /app/
 
+# Copy the generated _version.py from builder
+COPY --from=builder /app/_version.py /app/
+
+# Install the application in editable mode to ensure proper Python package resolution
+RUN pip install --no-cache-dir -e .
+
 # Ensure proper permissions for runtime directories (after copy to avoid overwriting)
 RUN mkdir -p /app/logs /app/data /app/tmp && \
     chmod 755 /app && \
     chmod 777 /app/logs /app/data /app/tmp
-
-# Copy the generated _version.py from builder
-COPY --from=builder /app/_version.py /app/
 
 # Make entrypoint executable
 RUN chmod +x /app/entrypoint.sh
