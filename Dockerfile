@@ -71,37 +71,17 @@ COPY docker/entrypoint.sh /app/
 # Copy all application source code and ensure it overwrites any installed package
 COPY . /app/
 
-# Debug: List what files were copied
-RUN echo "=== DEBUG: Files in /app after COPY ===" && \
-    find /app -type f -name "*.py" | head -20 && \
-    echo "=== DEBUG: Utils directory contents ===" && \
-    ls -la /app/utils/ || echo "utils directory not found" && \
-    echo "=== DEBUG: Checking specific files ===" && \
-    ls -la /app/utils/json_validator.py || echo "json_validator.py not found" && \
-    ls -la /app/utils/security_helpers.py || echo "security_helpers.py not found"
-
 # Copy the generated _version.py from builder
 COPY --from=builder /app/_version.py /app/
-
-# Debug: Check files before install
-RUN echo "=== DEBUG: Files before pip install ===" && \
-    python -c "import os; print('Current dir:', os.getcwd())" && \
-    python -c "import os; print('Utils exists:', os.path.exists('/app/utils'))" && \
-    python -c "import os; print('json_validator exists:', os.path.exists('/app/utils/json_validator.py'))"
 
 # Install the application to ensure proper Python package resolution
 RUN pip install --no-cache-dir --force-reinstall .
 
-# Debug: Check Python path and package after install
-RUN echo "=== DEBUG: Python setup after install ===" && \
-    python -c "import sys; print('Python path:'); [print(p) for p in sys.path]" && \
-    python -c "import pkg_resources; print('Installed packages:'); [print(d) for d in pkg_resources.working_set if 'trakbridge' in str(d)]" && \
-    python -c "import os; print('Site-packages trakbridge:'); [print(f) for f in os.listdir('/opt/venv/lib/python3.12/site-packages/') if 'trakbridge' in f]" || echo "No trakbridge in site-packages"
-
 # Ensure proper permissions for runtime directories (after copy to avoid overwriting)
-RUN mkdir -p /app/logs /app/data /app/tmp && \
+RUN mkdir -p /app/logs /app/data /app/tmp /app/external_plugins && \
     chmod 755 /app && \
-    chmod 777 /app/logs /app/data /app/tmp
+    chmod 777 /app/logs /app/data /app/tmp && \
+    chmod 755 /app/external_plugins
 
 # Make entrypoint executable
 RUN chmod +x /app/entrypoint.sh
@@ -115,9 +95,9 @@ RUN chown -R appuser:appuser /app/logs /app/data /app/tmp /app/entrypoint.sh
 
 # Ensure all users can read application files and appuser group has access
 # Set group ownership and readable permissions for Python modules
-RUN chown -R root:appuser /app/utils /app/plugins /app/services /app/models /app/routes /app/config && \
-    chmod -R 644 /app/utils /app/plugins /app/services /app/models /app/routes /app/config && \
-    find /app/utils /app/plugins /app/services /app/models /app/routes /app/config -type d -exec chmod 755 {} \;
+RUN chown -R root:appuser /app/utils /app/plugins /app/services /app/models /app/routes /app/config /app/external_config /app/external_plugins && \
+    chmod -R 644 /app/utils /app/plugins /app/services /app/models /app/routes /app/config /app/external_config /app/external_plugins && \
+    find /app/utils /app/plugins /app/services /app/models /app/routes /app/config /app/external_config /app/external_plugins -type d -exec chmod 755 {} \;
 
 # Make core application files group-readable for dynamic users
 RUN chown root:appuser /app/app.py /app/database.py /app/_version.py /app/pyproject.toml && \
