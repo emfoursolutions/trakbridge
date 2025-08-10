@@ -25,8 +25,8 @@
 services:
   # Main application service
   app:
-    image: "trakbridge:latest"  # Change tag as needed for development
-    container_name: "trakbridge-dev"
+    image: ${CI_REGISTRY_IMAGE:-trakbridge}:${IMAGE_TAG:-latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-trakbridge}
     restart: unless-stopped
 
     # Development environment configuration
@@ -35,9 +35,9 @@ services:
       FLASK_ENV: "development"
       FLASK_APP: "app.py"
       
-      # Dynamic user creation for runtime - use environment variables from CI
-      USER_ID: "${USER_ID:-1000}"  # Uses CI environment variable or defaults to 1000
-      GROUP_ID: "${GROUP_ID:-1000}"  # Uses CI environment variable or defaults to 1000
+      # Dynamic user creation for runtime
+      USER_ID: ${DOCKER_USER_ID:-1000}
+      GROUP_ID: ${DOCKER_GROUP_ID:-1000}
       
       # Configuration Management
       TRAKBRIDGE_CONFIG_DIR: "/app/external_config"
@@ -59,69 +59,69 @@ services:
       # Application URL for development
       TRAKBRIDGE_APPLICATION_URL: "http://localhost:5000"
 
-      # Performance settings (development values)
-      MAX_WORKER_THREADS: "8"
-      MAX_CONCURRENT_STREAMS: "200"
-      DEFAULT_POLL_INTERVAL: "120"
-      HTTP_TIMEOUT: "30"
-      HTTP_MAX_CONNECTIONS: "100"
-      HTTP_MAX_CONNECTIONS_PER_HOST: "10"
-      ASYNC_TIMEOUT: "60"
+      # Performance settings
+      MAX_WORKER_THREADS: ${MAX_WORKER_THREADS:-8}
+      MAX_CONCURRENT_STREAMS: ${MAX_CONCURRENT_STREAMS:-200}
+      DEFAULT_POLL_INTERVAL: ${DEFAULT_POLL_INTERVAL:-120}
+      HTTP_TIMEOUT: ${HTTP_TIMEOUT:-30}
+      HTTP_MAX_CONNECTIONS: ${HTTP_MAX_CONNECTIONS:-100}
+      HTTP_MAX_CONNECTIONS_PER_HOST: ${HTTP_MAX_CONNECTIONS_PER_HOST:-10}
+      ASYNC_TIMEOUT: ${ASYNC_TIMEOUT:-60}
 
-      # Feature flags (development - can enable for debugging)
-      ENABLE_SQL_ECHO: "false"  # Set to "true" for SQL debugging
-      SQLALCHEMY_RECORD_QUERIES: "false"  # Set to "true" for query profiling
+      # Feature flags
+      ENABLE_SQL_ECHO: ${ENABLE_SQL_ECHO:-false}
+      SQLALCHEMY_RECORD_QUERIES: ${SQLALCHEMY_RECORD_QUERIES:-false}
       
       # Authentication Configuration (Development)
-      # LDAP Settings (disabled by default for development)
-      LDAP_ENABLED: "false"  # Set to "true" and configure for LDAP testing
-      LDAP_SERVER: "ldap://dev-ad-server.company.com"  # Update for dev LDAP server
-      LDAP_PORT: "389"
-      LDAP_USE_SSL: "false"
-      LDAP_USE_TLS: "false"  # Relaxed for development
-      LDAP_VALIDATE_CERT: "false"  # Relaxed for development
-      LDAP_BIND_DN: "CN=trakbridge-dev,OU=Service Accounts,DC=dev,DC=company,DC=com"
-      LDAP_BIND_PASSWORD: "dev-ldap-password"  # Use non-sensitive dev password
-      LDAP_USER_SEARCH_BASE: "OU=Users,DC=dev,DC=company,DC=com"
-      LDAP_USER_SEARCH_FILTER: "(sAMAccountName={username})"
-      LDAP_GROUP_SEARCH_BASE: "OU=Groups,DC=dev,DC=company,DC=com"
-      LDAP_GROUP_SEARCH_FILTER: "(member={user_dn})"
-      LDAP_ADMIN_GROUP: "CN=TrakBridge-Dev-Admins,OU=Groups,DC=dev,DC=company,DC=com"
-      LDAP_OPERATOR_GROUP: "CN=TrakBridge-Dev-Operators,OU=Groups,DC=dev,DC=company,DC=com"
-      LDAP_USER_GROUP: "CN=TrakBridge-Dev-Users,OU=Groups,DC=dev,DC=company,DC=com"
-      LDAP_DEFAULT_ROLE: "user"
-      LDAP_CONNECTION_TIMEOUT: "10"
-      LDAP_RESPONSE_TIMEOUT: "30"
+      # LDAP Settings
+      LDAP_ENABLED: "${LDAP_ENABLED:-false}"
+      LDAP_SERVER: "${LDAP_SERVER:-ldap://your-ad-server.company.com}"
+      LDAP_PORT: "${LDAP_PORT:-389}"
+      LDAP_USE_SSL: "${LDAP_USE_SSL:-false}"
+      LDAP_USE_TLS: "${LDAP_USE_TLS:-false}"
+      LDAP_VALIDATE_CERT: "${LDAP_VALIDATE_CERT:-false}"
+      LDAP_BIND_DN: "${LDAP_BIND_DN:-CN=trakbridge,OU=Service Accounts,DC=company,DC=com}"
+      LDAP_BIND_PASSWORD: "${LDAP_BIND_PASSWORD:-default-ldap-password}"
+      LDAP_USER_SEARCH_BASE: "${LDAP_USER_SEARCH_BASE:-OU=Users,DC=company,DC=com}"
+      LDAP_USER_SEARCH_FILTER: "${LDAP_USER_SEARCH_FILTER:-(sAMAccountName={username})}"
+      LDAP_GROUP_SEARCH_BASE: "${LDAP_GROUP_SEARCH_BASE:-OU=Groups,DC=company,DC=com}"
+      LDAP_GROUP_SEARCH_FILTER: "${LDAP_GROUP_SEARCH_FILTER:-(member={user_dn})}"
+      LDAP_ADMIN_GROUP: "${LDAP_ADMIN_GROUP:-CN=TrakBridge-Admins,OU=Groups,DC=company,DC=com}"
+      LDAP_OPERATOR_GROUP: "${LDAP_OPERATOR_GROUP:-CN=TrakBridge-Operators,OU=Groups,DC=company,DC=com}"
+      LDAP_USER_GROUP: "${LDAP_USER_GROUP:-CN=TrakBridge-Users,OU=Groups,DC=company,DC=com}"
+      LDAP_DEFAULT_ROLE: "${LDAP_DEFAULT_ROLE:-user}"
+      LDAP_CONNECTION_TIMEOUT: "${LDAP_CONNECTION_TIMEOUT:-10}"
+      LDAP_RESPONSE_TIMEOUT: "${LDAP_RESPONSE_TIMEOUT:-30}"
       
-      # OIDC/SSO Settings (disabled by default for development)
-      OIDC_ENABLED: "false"  # Set to "true" and configure for OIDC testing
-      OIDC_ISSUER: "https://dev-identity-provider.com"  # Update for dev provider
-      OIDC_CLIENT_ID: "trakbridge-dev-client"  # Development client ID
-      OIDC_CLIENT_SECRET: "dev-oidc-client-secret"  # Use non-sensitive dev secret
-      OIDC_REDIRECT_URI: "http://localhost:5000/auth/oidc/callback"  # Dev callback URL
-      OIDC_VERIFY_SIGNATURE: "false"  # Relaxed for development
-      OIDC_VERIFY_AUDIENCE: "false"  # Relaxed for development
-      OIDC_VERIFY_ISSUER: "false"  # Relaxed for development
-      OIDC_ADMIN_GROUP: "trakbridge-dev-admins"
-      OIDC_OPERATOR_GROUP: "trakbridge-dev-operators"
-      OIDC_USER_GROUP: "trakbridge-dev-users"
-      OIDC_DEFAULT_ROLE: "user"
+      # OIDC/SSO Settings
+      OIDC_ENABLED: "${OIDC_ENABLED:-false}"
+      OIDC_ISSUER: "${OIDC_ISSUER:-https://your-identity-provider.com}"
+      OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-trakbridge-client}"
+      OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-default-oidc-secret}"
+      OIDC_REDIRECT_URI: "${OIDC_REDIRECT_URI:-http://localhost:5000/auth/oidc/callback}"
+      OIDC_VERIFY_SIGNATURE: "${OIDC_VERIFY_SIGNATURE:-false}"
+      OIDC_VERIFY_AUDIENCE: "${OIDC_VERIFY_AUDIENCE:-false}"
+      OIDC_VERIFY_ISSUER: "${OIDC_VERIFY_ISSUER:-false}"
+      OIDC_ADMIN_GROUP: "${OIDC_ADMIN_GROUP:-trakbridge-admins}"
+      OIDC_OPERATOR_GROUP: "${OIDC_OPERATOR_GROUP:-trakbridge-operators}"
+      OIDC_USER_GROUP: "${OIDC_USER_GROUP:-trakbridge-users}"
+      OIDC_DEFAULT_ROLE: "${OIDC_DEFAULT_ROLE:-user}"
       
-      # Local Authentication (Development - Relaxed for easier testing)
-      LOCAL_AUTH_ENABLED: "true"
-      PASSWORD_MIN_LENGTH: "4"  # Relaxed for development
-      PASSWORD_REQUIRE_UPPERCASE: "false"  # Relaxed for development
-      PASSWORD_REQUIRE_LOWERCASE: "false"  # Relaxed for development
-      PASSWORD_REQUIRE_NUMBERS: "false"  # Relaxed for development
-      PASSWORD_REQUIRE_SPECIAL: "false"  # Relaxed for development
-      PASSWORD_MAX_AGE_DAYS: ""  # No expiry in development
+      # Local Authentication (Development - Relaxed)
+      LOCAL_AUTH_ENABLED: "${LOCAL_AUTH_ENABLED:-true}"
+      PASSWORD_MIN_LENGTH: "${PASSWORD_MIN_LENGTH:-4}"
+      PASSWORD_REQUIRE_UPPERCASE: "${PASSWORD_REQUIRE_UPPERCASE:-false}"
+      PASSWORD_REQUIRE_LOWERCASE: "${PASSWORD_REQUIRE_LOWERCASE:-false}"
+      PASSWORD_REQUIRE_NUMBERS: "${PASSWORD_REQUIRE_NUMBERS:-false}"
+      PASSWORD_REQUIRE_SPECIAL: "${PASSWORD_REQUIRE_SPECIAL:-false}"
+      PASSWORD_MAX_AGE_DAYS: "${PASSWORD_MAX_AGE_DAYS:-}"
       
       # Session Configuration (Development)
-      SESSION_LIFETIME_HOURS: "8"
-      SESSION_CLEANUP_INTERVAL: "5"  # More frequent cleanup for development
-      SESSION_SECURE_COOKIES: "false"  # Relaxed for HTTP development
-      SESSION_COOKIE_DOMAIN: ""  # Auto-detection
-      SESSION_COOKIE_PATH: "/"
+      SESSION_LIFETIME_HOURS: "${SESSION_LIFETIME_HOURS:-8}"
+      SESSION_CLEANUP_INTERVAL: "${SESSION_CLEANUP_INTERVAL:-5}"
+      SESSION_SECURE_COOKIES: "${SESSION_SECURE_COOKIES:-false}"
+      SESSION_COOKIE_DOMAIN: "${SESSION_COOKIE_DOMAIN:-}"
+      SESSION_COOKIE_PATH: "${SESSION_COOKIE_PATH:-/}"
 
     # Secrets (for production)
     secrets:
