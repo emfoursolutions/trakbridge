@@ -123,13 +123,15 @@ services:
       SESSION_COOKIE_DOMAIN: "${SESSION_COOKIE_DOMAIN:-}"
       SESSION_COOKIE_PATH: "${SESSION_COOKIE_PATH:-/}"
 
-    # Secrets (for production)
-    secrets:
-      - db_password
-      - secret_key
-      - tb_master_key
-      - ldap_bind_password
-      - oidc_client_secret
+      # Secret file paths (if secrets are in /app/secrets instead of /run/secrets)
+      DB_PASSWORD_FILE: "/app/secrets/db_password"
+      SECRET_KEY_FILE: "/app/secrets/secret_key" 
+      TB_MASTER_KEY_FILE: "/app/secrets/tb_master_key"
+      LDAP_BIND_PASSWORD_FILE: "/app/secrets/ldap_bind_password"
+      OIDC_CLIENT_SECRET_FILE: "/app/secrets/oidc_client_secret"
+
+    # Note: Secrets are mounted via volume mount ./secrets:/app/secrets
+    # No Docker Compose secrets needed since we use direct file access
 
     # Ports
     ports:
@@ -139,8 +141,9 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data
-      - ./plugins:/app/plugins
-      - ${CONFIG_DIR:-./config}:/app/config:ro
+      - ./plugins:/app/external-plugins
+      - ./config:/app/external-config
+      - ./secrets:/app/secrets
 
     # Health check
     healthcheck:
@@ -308,19 +311,14 @@ volumes:
     driver: local
     name: ${COMPOSE_PROJECT_NAME:-trakbridge}-redis-data
 
-# Secrets
 secrets:
   db_password:
-    file: ${DB_PASSWORD_FILE:-./secrets/db_password}
-
+    file: ./secrets/db_password
   secret_key:
-    file: ${SECRET_KEY_FILE:-./secrets/secret_key}
-
+    file: ./secrets/secret_key
   tb_master_key:
-    file: ${TB_MASTER_KEY_FILE:-./secrets/tb_master_key}
-
+    file: ./secrets/tb_master_key
   ldap_bind_password:
-    file: ${LDAP_BIND_PASSWORD_FILE:-./secrets/ldap_bind_password}
-
+    file: ./secrets/ldap_bind_password
   oidc_client_secret:
-    file: ${OIDC_CLIENT_SECRET_FILE:-./secrets/oidc_client_secret}
+    file: ./secrets/oidc_client_secret

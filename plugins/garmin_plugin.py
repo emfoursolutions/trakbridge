@@ -269,7 +269,8 @@ class GarminPlugin(BaseGPSPlugin):
             response.status, f"HTTP {response.status}: {error_text}"
         )
         logger.error(message)
-        return {"error": message}  # Return dict with error info
+        # Return error format expected by COT service
+        return {"_error": str(response.status), "_error_message": message}
 
     @staticmethod
     def _is_device_inactive(placemark: Dict[str, Any]) -> bool:
