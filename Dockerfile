@@ -46,6 +46,7 @@ FROM python:3.12-slim AS production
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/app" \
     FLASK_ENV=production
 
 # Install runtime dependencies including gosu for user switching
@@ -63,9 +64,11 @@ COPY --from=builder /opt/venv /opt/venv
 # Create app directories with broad permissions initially
 WORKDIR /app
 
-# Copy application files first (without --chown to allow flexibility)
+# Copy essential config files first
 COPY hypercorn.toml /app/
 COPY docker/entrypoint.sh /app/
+
+# Copy all application source code and ensure it overwrites any installed package
 COPY . /app/
 
 # Ensure proper permissions for runtime directories (after copy to avoid overwriting)
