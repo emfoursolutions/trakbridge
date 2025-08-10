@@ -72,15 +72,64 @@ handle_user_switching() {
                 groupadd -g $TARGET_GID appuser-dynamic
             fi
             
-            # Create user if it doesn't exist
+            # Create user if it doesn't exist  
             if ! getent passwd $TARGET_UID > /dev/null 2>&1; then
                 useradd -r -u $TARGET_UID -g $TARGET_GID -d /app -s /bin/bash appuser-dynamic
+                # Add dynamic user to appuser group for inherited permissions
+                usermod -a -G appuser appuser-dynamic 2>/dev/null || log_debug "Could not add dynamic user to appuser group"
+            else
+                # If user exists, ensure it's added to appuser group
+                local existing_user=$(getent passwd $TARGET_UID | cut -d: -f1)
+                usermod -a -G appuser "$existing_user" 2>/dev/null || log_debug "Could not add existing user to appuser group"
             fi
             
             # Fix ownership of app directories for dynamic user
+            # Only chown directories that are writable (not read-only mounted)
+            log_debug "Fixing ownership for writable directories..."
+            
+            # Always fix these writable directories
             chown -R $TARGET_UID:$TARGET_GID /app/logs /app/data /app/tmp
-            # Fix ownership of all application code directories for Python imports
-            chown -R $TARGET_UID:$TARGET_GID /app/utils /app/plugins /app/services /app/models /app/routes /app/config
+            
+            # Check each application code directory for writability before chown
+            local app_dirs=("/app/utils" "/app/plugins" "/app/services" "/app/models" "/app/routes" "/app/config")
+            for dir in "${app_dirs[@]}"; do
+                if [[ -d "$dir" ]]; then
+                    if [[ -w "$dir" ]]; then
+                        log_debug "Changing ownership of writable directory: $dir"
+                        if chown -R $TARGET_UID:$TARGET_GID "$dir" 2>/dev/null; then
+                            log_debug "Successfully changed ownership of $dir"
+                        else
+                            log_debug "Failed to chown $dir, trying fallback permission strategy"
+                            # Fallback: ensure group-readable permissions
+                            chmod -R g+r "$dir" 2>/dev/null || log_debug "Could not set group read permissions on $dir"
+                            find "$dir" -type d -exec chmod g+rx {} \; 2>/dev/null || log_debug "Could not set directory execute permissions"
+                        fi
+                    else
+                        log_debug "Skipping read-only directory: $dir"
+                        # For read-only directories, verify they're readable by group
+                        if [[ ! -r "$dir" ]]; then
+                            log_warn "Read-only directory $dir is not readable by current user"
+                            # Try to make readable via group permissions if possible
+                            chmod g+r "$dir" 2>/dev/null || log_debug "Could not improve read permissions on $dir"
+                        fi
+                    fi
+                else
+                    log_debug "Directory not found: $dir"
+                fi
+            done
+            
+            # Ensure core application files are readable by the dynamic user via group membership
+            log_debug "Ensuring core application files are accessible to dynamic user"
+            local core_files=("/app/app.py" "/app/database.py" "/app/_version.py" "/app/pyproject.toml")
+            for file in "${core_files[@]}"; do
+                if [[ -f "$file" ]]; then
+                    # Verify file is group-readable
+                    if [[ ! -r "$file" ]]; then
+                        log_debug "Making $file group-readable"
+                        chmod g+r "$file" 2>/dev/null || log_debug "Could not make $file group-readable"
+                    fi
+                fi
+            done
             
             # Fix ownership and permissions of secrets if they exist
             if [ -d "/app/secrets" ]; then
@@ -329,35 +378,87 @@ validate_config() {
     # Set PYTHONPATH to include current directory
     export PYTHONPATH="/app:${PYTHONPATH:-}"
 
-    # Test import with more detailed error reporting
-    log_info "Testing Flask application import..."
+    # Test import with more detailed error reporting and permission validation
+    log_info "Testing Flask application import and Python module accessibility..."
     if python -c "
 import sys
+import os
 sys.path.insert(0, '/app')
+
+# Test critical Python modules first
+critical_modules = ['utils', 'services', 'models', 'routes', 'plugins', 'config']
+failed_modules = []
+
+for module_name in critical_modules:
+    module_path = f'/app/{module_name}'
+    if os.path.exists(module_path):
+        if not os.access(module_path, os.R_OK):
+            failed_modules.append(f'{module_name} (not readable)')
+        elif not os.access(module_path, os.X_OK):
+            failed_modules.append(f'{module_name} (not executable)')
+    else:
+        failed_modules.append(f'{module_name} (not found)')
+
+if failed_modules:
+    print(f'Module access issues: {failed_modules}')
+    # Don't exit here, continue with app import test
+
 try:
     # Test that we can import the module without initializing
     import importlib.util
     spec = importlib.util.spec_from_file_location('app', '/app/app.py')
+    if spec is None:
+        raise ImportError('Could not create module spec for app.py')
     app_module = importlib.util.module_from_spec(spec)
     print('Application module can be loaded')
+    
+    # Test key module imports that typically fail with permission issues
+    try:
+        import utils.json_validator
+        print('utils.json_validator import successful')
+    except ImportError as e:
+        print(f'utils.json_validator import failed: {e}')
+        
 except Exception as e:
     print(f'Import error: {e}')
+    # Show current user context
+    import pwd
+    import grp
+    uid = os.getuid()
+    gid = os.getgid() 
+    groups = os.getgroups()
+    print(f'Current UID: {uid}, GID: {gid}, Groups: {groups}')
+    try:
+        print(f'User: {pwd.getpwuid(uid).pw_name}')
+    except:
+        print('Could not resolve username')
     sys.exit(1)
 " 2>&1; then
-        log_info "Flask application import successful"
+        log_info "Flask application and module import successful"
     else
-        log_error "Failed to import Flask application"
-        log_error "Attempting to diagnose the issue..."
+        log_error "Failed to import Flask application or modules"
+        log_error "Attempting to diagnose permission issues..."
 
-        # Additional debugging
+        # Additional debugging with user context
         python -c "
 import sys
+import os
+print('=== Python Environment ===')
 print('Python version:', sys.version)
 print('Python path:', sys.path)
-import os
-print('Environment variables:')
+print('=== User Context ===')
+print(f'UID: {os.getuid()}, GID: {os.getgid()}, Groups: {os.getgroups()}')
+print('=== Environment Variables ===')
 for key in ['FLASK_APP', 'FLASK_ENV', 'PYTHONPATH']:
     print(f'  {key}: {os.environ.get(key, \"Not set\")}')
+print('=== File Permissions ===')
+import stat
+for path in ['/app/app.py', '/app/utils', '/app/utils/json_validator.py']:
+    if os.path.exists(path):
+        st = os.stat(path)
+        print(f'{path}: mode={oct(st.st_mode)}, owner={st.st_uid}:{st.st_gid}, readable={os.access(path, os.R_OK)}')
+    else:
+        print(f'{path}: does not exist')
 "
         return 1
     fi

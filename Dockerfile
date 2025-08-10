@@ -110,10 +110,18 @@ RUN chmod +x /app/entrypoint.sh
 RUN groupadd -g 1000 appuser && \
     useradd -r -u 1000 -g appuser -d /app -s /bin/bash appuser
 
-# Set ownership for directories that appuser needs access to
+# Set ownership and permissions for directories that appuser needs access to
 RUN chown -R appuser:appuser /app/logs /app/data /app/tmp /app/entrypoint.sh
-# Ensure appuser can read application code directories for Python imports
-RUN chown -R appuser:appuser /app/utils /app/plugins /app/services /app/models /app/routes /app/config
+
+# Ensure all users can read application files and appuser group has access
+# Set group ownership and readable permissions for Python modules
+RUN chown -R root:appuser /app/utils /app/plugins /app/services /app/models /app/routes /app/config && \
+    chmod -R 644 /app/utils /app/plugins /app/services /app/models /app/routes /app/config && \
+    find /app/utils /app/plugins /app/services /app/models /app/routes /app/config -type d -exec chmod 755 {} \;
+
+# Make core application files group-readable for dynamic users
+RUN chown root:appuser /app/app.py /app/database.py /app/_version.py /app/pyproject.toml && \
+    chmod 644 /app/app.py /app/database.py /app/_version.py /app/pyproject.toml
 
 # Note: Container starts as root to allow dynamic user creation
 # The /app/entrypoint.sh script will handle user switching based on USER_ID/GROUP_ID
