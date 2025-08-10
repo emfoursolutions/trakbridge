@@ -142,28 +142,21 @@ class KeyRotationService:
             return {"success": False, "error": str(e), "backup_path": None}
 
     def _create_backup_directory(self) -> Path:
-        """Create backup directory with fallback options for permission issues"""
-        backup_locations = [
-            Path("backups"),                          # Primary: current directory
-            Path.home() / ".trakbridge" / "backups",  # Fallback: user home
-            Path("/tmp") / "trakbridge_backups",      # Last resort: temp directory
-        ]
+        """Create backup directory using Docker mounted volume"""
+        backup_dir = Path("/app/backups")
         
-        for backup_dir in backup_locations:
-            try:
-                backup_dir.mkdir(parents=True, exist_ok=True)
-                # Test write permissions
-                test_file = backup_dir / ".write_test"
-                test_file.write_text("test")
-                test_file.unlink()  # Clean up test file
-                logger.info(f"Using backup directory: {backup_dir}")
-                return backup_dir
-            except (OSError, PermissionError) as e:
-                logger.warning(f"Cannot use backup directory {backup_dir}: {e}")
-                continue
-        
-        # If all directories fail, raise the last error
-        raise PermissionError("Cannot create backup directory in any of the attempted locations")
+        try:
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            # Test write permissions
+            test_file = backup_dir / ".write_test"
+            test_file.write_text("test")
+            test_file.unlink()  # Clean up test file
+            logger.info(f"Using backup directory: {backup_dir}")
+            return backup_dir
+        except (OSError, PermissionError) as e:
+            logger.error(f"Cannot access mounted backup directory {backup_dir}: {e}")
+            logger.error("Ensure the backup volume is properly mounted in docker-compose.yml")
+            raise PermissionError(f"Cannot create backup directory: {e}")
 
     @staticmethod
     def _backup_sqlite(

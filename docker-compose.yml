@@ -152,6 +152,7 @@ services:
       - ./secrets:/app/secrets
       - ./config:/app/external-config
       - ./plugins:/app/external-plugins
+      - ./backups:/app/backups
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
