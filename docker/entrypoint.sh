@@ -37,6 +37,69 @@ export FLASK_APP=${FLASK_APP:-app.py}
 export DB_TYPE=${DB_TYPE:-sqlite}
 export LOG_LEVEL=${LOG_LEVEL:-INFO}
 
+# Function to handle user switching and security
+handle_user_switching() {
+    log_info "Handling user switching and security..."
+    
+    # Get target UID/GID from environment or current user
+    local TARGET_UID=${USER_ID:-$(id -u)}
+    local TARGET_GID=${GROUP_ID:-$(id -g)}
+    local CURRENT_UID=$(id -u)
+    
+    log_debug "USER_ID environment variable: ${USER_ID:-not set}"
+    log_debug "GROUP_ID environment variable: ${GROUP_ID:-not set}"
+    log_debug "TARGET_UID (resolved): $TARGET_UID"
+    log_debug "TARGET_GID (resolved): $TARGET_GID"
+    log_debug "CURRENT_UID: $CURRENT_UID"
+    log_debug "Current user: $(whoami)"
+    
+    # Security check: prevent running as root unless explicitly needed
+    if [[ $CURRENT_UID -eq 0 ]]; then
+        # We are running as root - handle user switching securely
+        if [[ $TARGET_UID -eq 0 ]] && [[ "${ALLOW_ROOT:-false}" != "true" ]]; then
+            log_error "Running as root is not allowed for security reasons."
+            log_error "Set ALLOW_ROOT=true environment variable to override this protection."
+            log_error "For production deployments, consider using USER_ID and GROUP_ID instead."
+            exit 1
+        fi
+        
+        # Create or modify user if dynamic UID/GID is requested
+        if [[ $TARGET_UID -ne 1000 ]] || [[ $TARGET_GID -ne 1000 ]]; then
+            log_info "Creating dynamic user with UID:$TARGET_UID GID:$TARGET_GID for host compatibility"
+            
+            # Create group if it doesn't exist
+            if ! getent group $TARGET_GID > /dev/null 2>&1; then
+                groupadd -g $TARGET_GID appuser-dynamic
+            fi
+            
+            # Create user if it doesn't exist
+            if ! getent passwd $TARGET_UID > /dev/null 2>&1; then
+                useradd -r -u $TARGET_UID -g $TARGET_GID -d /app -s /bin/bash appuser-dynamic
+            fi
+            
+            # Fix ownership of app directories for dynamic user
+            chown -R $TARGET_UID:$TARGET_GID /app/logs /app/data /app/tmp
+            # Fix ownership of all application code directories for Python imports
+            chown -R $TARGET_UID:$TARGET_GID /app/utils /app/plugins /app/services /app/models /app/routes /app/config
+            
+            # Fix ownership and permissions of secrets if they exist
+            if [ -d "/app/secrets" ]; then
+                chown -R $TARGET_UID:$TARGET_GID /app/secrets
+                chmod -R 640 /app/secrets/* 2>/dev/null || true
+            fi
+        else
+            log_info "Using default appuser (1000:1000)"
+        fi
+        
+        # Switch to target user using gosu and continue execution
+        log_info "Switching to user $TARGET_UID:$TARGET_GID and continuing startup"
+        exec gosu $TARGET_UID:$TARGET_GID "$0" "$@"
+    else
+        # Already running as non-root user, proceed normally
+        log_info "Running as non-root user $(id -u):$(id -g)"
+    fi
+}
+
 # Ensure we're in the correct directory
 cd /app
 
@@ -104,77 +167,52 @@ handle_secrets() {
 
 # Function to ensure directory permissions
 ensure_permissions() {
-    log_info "Ensuring proper permissions for application directories..."
+    log_info "Ensuring application directories exist and are accessible..."
 
     # Create directories if they don't exist
     mkdir -p /app/logs /app/data /app/tmp
 
-    # Get current user info
-    local current_uid=$(id -u)
-    local current_gid=$(id -g)
+    # Simple validation that critical directories are accessible
+    local dirs_to_check=(
+        "/app/logs:Logs:write"
+        "/app/data:Data:write" 
+        "/app/tmp:Tmp:write"
+        "/app/utils:Utils:read"
+        "/app/plugins:Plugins:read"
+        "/app/services:Services:read"
+        "/app/models:Models:read"
+        "/app/routes:Routes:read"
+        "/app/config:Config:read"
+    )
 
-    log_debug "Checking permissions as UID:$current_uid GID:$current_gid"
-
-    # Function to check and fix directory permissions
-    check_and_fix_dir() {
-        local dir="$1"
-        local dir_name="$2"
-
-        if [[ -w "$dir" ]]; then
-            log_debug "$dir_name directory is writable"
-        else
-            log_warn "$dir_name directory is not writable"
-            
-            # In the new security model, permissions should be handled by docker-entrypoint.sh
-            # We can only fix what we have permission to fix
-            if chmod 755 "$dir" 2>/dev/null; then
-                log_info "Fixed $dir_name directory permissions"
-            else
-                log_warn "Cannot fix $dir_name directory permissions"
-                log_warn "This should have been handled by the Docker entrypoint script"
-                log_warn "If using dynamic UID/GID, ensure USER_ID and GROUP_ID are set correctly"
-            fi
+    for dir_info in "${dirs_to_check[@]}"; do
+        IFS=':' read -r dir_path dir_name access_type <<< "$dir_info"
+        
+        if [[ ! -d "$dir_path" ]]; then
+            log_warn "$dir_name directory not found: $dir_path"
+            continue
         fi
 
-        # Ensure we can create files in the directory
-        local test_file="$dir/.write_test_$(date +%s)"
-        if touch "$test_file" 2>/dev/null; then
-            rm -f "$test_file" 2>/dev/null
-            log_debug "$dir_name directory write test passed"
-        else
-            log_error "$dir_name directory write test failed"
-            log_error "Application may not function correctly without write access to $dir"
-            log_error "Check Docker volume mount permissions and USER_ID/GROUP_ID settings"
-        fi
-    }
-
-    # Function to check read access for application code directories
-    check_read_access() {
-        local dir="$1"
-        local dir_name="$2"
-
-        if [[ -r "$dir" ]]; then
-            log_debug "$dir_name directory is readable"
-        else
-            log_error "$dir_name directory is not readable"
-            log_error "Python modules cannot be imported from $dir"
-            log_error "Check Docker build and USER_ID/GROUP_ID settings"
-            return 1
-        fi
-    }
-
-    # Check write access directories
-    check_and_fix_dir "/app/logs" "Logs"
-    check_and_fix_dir "/app/data" "Data"
-    check_and_fix_dir "/app/tmp" "Tmp"
-    
-    # Check read access to application code directories
-    check_read_access "/app/utils" "Utils"
-    check_read_access "/app/plugins" "Plugins"  
-    check_read_access "/app/services" "Services"
-    check_read_access "/app/models" "Models"
-    check_read_access "/app/routes" "Routes"
-    check_read_access "/app/config" "Config"
+        case "$access_type" in
+            "write")
+                if [[ -w "$dir_path" ]]; then
+                    log_debug "$dir_name directory is writable"
+                else
+                    log_error "$dir_name directory is not writable: $dir_path"
+                    log_error "Check Docker volume mount permissions and USER_ID/GROUP_ID settings"
+                fi
+                ;;
+            "read")
+                if [[ -r "$dir_path" ]]; then
+                    log_debug "$dir_name directory is readable"
+                else
+                    log_error "$dir_name directory is not readable: $dir_path"
+                    log_error "Python modules cannot be imported from $dir_path"
+                    return 1
+                fi
+                ;;
+        esac
+    done
 }
 
 # Function to wait for database
@@ -598,10 +636,13 @@ check_hypercorn() {
 main() {
     log_info "=== TrakBridge Startup ==="
 
+    # Handle user switching first (this may cause re-exec)
+    handle_user_switching
+
     # Ensure we're in the correct directory
     cd /app
 
-    # Ensure proper permissions
+    # Ensure proper permissions (simplified since user switching handles ownership)
     ensure_permissions
 
     # Handle secrets permissions
