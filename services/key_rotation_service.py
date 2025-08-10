@@ -119,9 +119,8 @@ class KeyRotationService:
             db_info = self.get_database_info(app_context)
             db_type = db_info["type"]
 
-            # Create backup directory
-            backup_dir = Path("backups")
-            backup_dir.mkdir(exist_ok=True)
+            # Create backup directory with fallback options
+            backup_dir = self._create_backup_directory()
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -141,6 +140,30 @@ class KeyRotationService:
         except Exception as e:
             logger.error(f"Error creating database backup: {e}")
             return {"success": False, "error": str(e), "backup_path": None}
+
+    def _create_backup_directory(self) -> Path:
+        """Create backup directory with fallback options for permission issues"""
+        backup_locations = [
+            Path("backups"),                          # Primary: current directory
+            Path.home() / ".trakbridge" / "backups",  # Fallback: user home
+            Path("/tmp") / "trakbridge_backups",      # Last resort: temp directory
+        ]
+        
+        for backup_dir in backup_locations:
+            try:
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                # Test write permissions
+                test_file = backup_dir / ".write_test"
+                test_file.write_text("test")
+                test_file.unlink()  # Clean up test file
+                logger.info(f"Using backup directory: {backup_dir}")
+                return backup_dir
+            except (OSError, PermissionError) as e:
+                logger.warning(f"Cannot use backup directory {backup_dir}: {e}")
+                continue
+        
+        # If all directories fail, raise the last error
+        raise PermissionError("Cannot create backup directory in any of the attempted locations")
 
     @staticmethod
     def _backup_sqlite(
@@ -595,9 +618,8 @@ class KeyRotationService:
         try:
             db_type = db_info["type"]
 
-            # Create backup directory
-            backup_dir = Path("backups")
-            backup_dir.mkdir(exist_ok=True)
+            # Create backup directory with fallback options
+            backup_dir = self._create_backup_directory()
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
