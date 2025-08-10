@@ -1108,6 +1108,17 @@ build-feature-branch-shell:
     docker push "$CI_REGISTRY_IMAGE:$BRANCH_TAG"
     echo "Feature branch container build and push completed for $BRANCH_TAG"
     echo "Pushed to: $CI_REGISTRY_IMAGE:$BRANCH_TAG"
+  after_script: |
+    # Clean up any root-owned directories created by Docker build
+    echo "Cleaning up Docker build directory permissions..."
+    sudo find . -type d -name "data" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -type d -name "logs" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -type d -name "build" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -type d -name "dist" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -type d -name "__pycache__" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -name "*.egg-info" -type d -exec chmod 755 {} \; 2>/dev/null || true
+    sudo chown -R gitlab-runner:gitlab-runner . 2>/dev/null || true
+    echo "Permission cleanup completed"
   rules:
     - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_COMMIT_TAG == null
       when: on_success
