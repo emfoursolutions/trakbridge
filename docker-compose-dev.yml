@@ -130,8 +130,13 @@ services:
       LDAP_BIND_PASSWORD_FILE: "/app/secrets/ldap_bind_password"
       OIDC_CLIENT_SECRET_FILE: "/app/secrets/oidc_client_secret"
 
-    # Note: Secrets are mounted via volume mount ./secrets:/app/secrets
-    # No Docker Compose secrets needed since we use direct file access
+    # Secrets - use Docker Compose secrets for consistency with production
+    secrets:
+      - db_password
+      - secret_key
+      - tb_master_key
+      - ldap_bind_password
+      - oidc_client_secret
 
     # Ports
     ports:
