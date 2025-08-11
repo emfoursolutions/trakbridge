@@ -189,11 +189,45 @@ class KeyRotationService:
             if not validate_backup_directory(backup_dir):
                 raise ValueError("Invalid backup directory")
 
-            # Extract and validate database name from URI
+            # Extract and validate database connection details from URI
             uri = db_info["uri"]
-            db_name = uri.split("/")[-1].split("?")[0]
+            
+            # Parse MySQL URI: mysql://user:pass@host:port/dbname
+            if "://" not in uri:
+                raise ValueError("Invalid database URI format")
+            
+            # Extract database name
+            db_name = uri.split("/")[-1].split("?")[0]  # Handle query parameters
             if not db_name or not db_name.replace("_", "").replace("-", "").isalnum():
                 raise ValueError("Invalid database name")
+            
+            # Extract host and port
+            host = "localhost"  # Default
+            port = "3306"       # Default MySQL port
+            
+            try:
+                # Split URI to get host:port part
+                uri_parts = uri.split("://")[1]  # Remove mysql://
+                if "@" in uri_parts:
+                    # Format: user:pass@host:port/dbname
+                    host_port_db = uri_parts.split("@")[1]  # Get host:port/dbname
+                else:
+                    # Format: host:port/dbname (no credentials)
+                    host_port_db = uri_parts
+                
+                host_port = host_port_db.split("/")[0]  # Get host:port part
+                
+                if ":" in host_port:
+                    host, port = host_port.split(":", 1)
+                else:
+                    host = host_port
+                    
+            except (IndexError, ValueError) as e:
+                logger.warning(f"Could not parse host/port from URI, using defaults: {e}")
+                
+            # Validate host and port
+            if not host or not port:
+                raise ValueError("Invalid host or port in database URI")
 
             # Create secure backup path
             filename = f"trakbridge_mysql_{timestamp}.sql"
@@ -202,12 +236,14 @@ class KeyRotationService:
             # Initialize secure subprocess runner
             runner = SecureSubprocessRunner(["mysqldump"])
 
-            # Build base command
+            # Build base command with host and port parameters
             cmd = [
                 "mysqldump",
                 "--single-transaction",
                 "--routines",
                 "--triggers",
+                "-h", host,
+                "-P", port,
                 db_name,
             ]
 
@@ -275,23 +311,59 @@ class KeyRotationService:
             if not validate_backup_directory(backup_dir):
                 raise ValueError("Invalid backup directory")
 
-            # Extract and validate database name from URI
+            # Extract and validate database connection details from URI
             uri = db_info["uri"]
-            db_name = uri.split("/")[-1]
+            
+            # Parse PostgreSQL URI: postgresql://user:pass@host:port/dbname
+            if "://" not in uri:
+                raise ValueError("Invalid database URI format")
+            
+            # Extract database name
+            db_name = uri.split("/")[-1].split("?")[0]  # Handle query parameters
             if not db_name or not db_name.replace("_", "").replace("-", "").isalnum():
                 raise ValueError("Invalid database name")
+            
+            # Extract host and port
+            host = "localhost"  # Default
+            port = "5432"       # Default PostgreSQL port
+            
+            try:
+                # Split URI to get host:port part
+                uri_parts = uri.split("://")[1]  # Remove postgresql://
+                if "@" in uri_parts:
+                    # Format: user:pass@host:port/dbname
+                    host_port_db = uri_parts.split("@")[1]  # Get host:port/dbname
+                else:
+                    # Format: host:port/dbname (no credentials)
+                    host_port_db = uri_parts
+                
+                host_port = host_port_db.split("/")[0]  # Get host:port part
+                
+                if ":" in host_port:
+                    host, port = host_port.split(":", 1)
+                else:
+                    host = host_port
+                    
+            except (IndexError, ValueError) as e:
+                logger.warning(f"Could not parse host/port from URI, using defaults: {e}")
+                
+            # Validate host and port
+            if not host or not port:
+                raise ValueError("Invalid host or port in database URI")
 
             # Create secure backup path
             filename = f"trakbridge_postgresql_{timestamp}.sql"
             backup_path = create_secure_backup_path(backup_dir, filename)
 
-            # Use pg_dump
+            # Use pg_dump with host and port parameters
             cmd = [
                 "pg_dump",
                 "--clean",
                 "--if-exists",
                 "--no-owner",
                 "--no-privileges",
+                "-h", host,
+                "-p", port,
                 db_name,
             ]
 
