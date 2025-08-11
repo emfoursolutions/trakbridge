@@ -248,6 +248,19 @@ def validate_backup_directory(backup_dir: Union[str, Path]) -> bool:
             logger.warning(f"Backup directory must be absolute path: {backup_dir}")
             return False
 
+        # Allow Docker mounted backup directory
+        if str(dir_path) == "/app/backups" or str(dir_path).startswith("/app/backups/"):
+            logger.info(f"Using Docker mounted backup directory: {backup_dir}")
+            return True
+
+        # Allow /tmp subdirectories for temporary backups
+        try:
+            dir_path.relative_to(Path("/tmp"))
+            logger.warning(f"Backup directory in system path: {backup_dir}")
+            return True
+        except ValueError:
+            pass
+
         # Prevent backing up to system directories
         system_dirs = [
             Path("/"),
