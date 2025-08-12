@@ -170,8 +170,8 @@ class BaseGPSPlugin(ABC):
         Returns:
             Configuration with sensitive fields encrypted
         """
-        from services.encryption_service import EncryptionService
         from plugins.plugin_manager import get_plugin_manager
+        from services.encryption_service import EncryptionService
 
         plugin_manager = get_plugin_manager()
         metadata = plugin_manager.get_plugin_metadata(plugin_type)
@@ -205,8 +205,8 @@ class BaseGPSPlugin(ABC):
         Returns:
             Configuration with sensitive fields decrypted
         """
-        from services.encryption_service import EncryptionService
         from plugins.plugin_manager import get_plugin_manager
+        from services.encryption_service import EncryptionService
 
         plugin_manager = get_plugin_manager()
         metadata = plugin_manager.get_plugin_metadata(plugin_type)
@@ -264,7 +264,7 @@ class BaseGPSPlugin(ABC):
 
         try:
             # Import here to avoid circular imports
-            from services.cot_service import cot_service, EnhancedCOTService
+            from services.cot_service import EnhancedCOTService, cot_service
 
             # Ensure persistent worker is running for this TAK server
             if hasattr(stream, "tak_server_id") and stream.tak_server_id:

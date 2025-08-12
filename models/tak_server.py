@@ -11,7 +11,7 @@ Version: {{VERSION}}
 """
 
 # Local application imports
-from database import db, TimestampMixin
+from database import TimestampMixin, db
 from services.encryption_service import get_encryption_service
 
 

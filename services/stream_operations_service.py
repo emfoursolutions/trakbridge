@@ -45,10 +45,7 @@ from typing import Any, Dict, Optional
 
 # Local application imports
 from models.stream import Stream
-from services.exceptions import (
-    StreamConfigurationError,
-    DatabaseError,
-)
+from services.exceptions import DatabaseError, StreamConfigurationError
 
 logger = logging.getLogger(__name__)
 

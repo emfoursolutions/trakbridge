@@ -31,10 +31,10 @@ Version: {{VERSION}}
 
 # Standard library imports
 import logging
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-from dataclasses import dataclass
 from collections import Counter
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 # Third-party imports
 import yaml

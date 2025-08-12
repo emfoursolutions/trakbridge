@@ -25,6 +25,8 @@ Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """
 
+import logging
+
 # Standard library imports
 import os
 import shutil
@@ -32,14 +34,21 @@ import subprocess
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional
-import logging
+from typing import Any, Dict, List, Optional
 
 # Third-party imports
 from flask import current_app
 
 # Local application imports
-from services.encryption_service import get_encryption_service, EncryptionService
+from services.encryption_service import EncryptionService, get_encryption_service
+from utils.security_helpers import (
+    SecureSubprocessRunner,
+    create_secure_backup_path,
+    secure_file_permissions,
+    validate_backup_directory,
+    validate_database_params,
+    validate_safe_path,
+)
 
 # Module level logging
 logger = logging.getLogger(__name__)
@@ -110,9 +119,8 @@ class KeyRotationService:
             db_info = self.get_database_info(app_context)
             db_type = db_info["type"]
 
-            # Create backup directory
-            backup_dir = Path("backups")
-            backup_dir.mkdir(exist_ok=True)
+            # Create backup directory with fallback options
+            backup_dir = self._create_backup_directory()
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -132,6 +140,23 @@ class KeyRotationService:
         except Exception as e:
             logger.error(f"Error creating database backup: {e}")
             return {"success": False, "error": str(e), "backup_path": None}
+
+    def _create_backup_directory(self) -> Path:
+        """Create backup directory using Docker mounted volume"""
+        backup_dir = Path("/app/backups")
+        
+        try:
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            # Test write permissions
+            test_file = backup_dir / ".write_test"
+            test_file.write_text("test")
+            test_file.unlink()  # Clean up test file
+            logger.info(f"Using backup directory: {backup_dir}")
+            return backup_dir
+        except (OSError, PermissionError) as e:
+            logger.error(f"Cannot access mounted backup directory {backup_dir}: {e}")
+            logger.error("Ensure the backup volume is properly mounted in docker-compose.yml")
+            raise PermissionError(f"Cannot create backup directory: {e}")
 
     @staticmethod
     def _backup_sqlite(
@@ -158,37 +183,122 @@ class KeyRotationService:
     def _backup_mysql(
         db_info: Dict[str, Any], backup_dir: Path, timestamp: str
     ) -> Dict[str, Any]:
-        """Backup MySQL database"""
+        """Backup MySQL database with security validation"""
         try:
-            # Extract database name from URI
+            # Validate backup directory
+            if not validate_backup_directory(backup_dir):
+                raise ValueError("Invalid backup directory")
+
+            # Extract and validate database connection details from URI
             uri = db_info["uri"]
-            # Parse mysql://user:pass@host:port/dbname
-            db_name = uri.split("/")[-1].split("?")[0]
+            
+            # Parse MySQL URI: mysql://user:pass@host:port/dbname
+            if "://" not in uri:
+                raise ValueError("Invalid database URI format")
+            
+            # Extract database name
+            db_name = uri.split("/")[-1].split("?")[0]  # Handle query parameters
+            if not db_name or not db_name.replace("_", "").replace("-", "").isalnum():
+                raise ValueError("Invalid database name")
+            
+            # Extract host and port
+            host = "localhost"  # Default
+            port = "3306"       # Default MySQL port
+            
+            try:
+                # Split URI to get host:port part
+                uri_parts = uri.split("://")[1]  # Remove mysql://
+                if "@" in uri_parts:
+                    # Format: user:pass@host:port/dbname
+                    host_port_db = uri_parts.split("@")[1]  # Get host:port/dbname
+                else:
+                    # Format: host:port/dbname (no credentials)
+                    host_port_db = uri_parts
+                
+                host_port = host_port_db.split("/")[0]  # Get host:port part
+                
+                if ":" in host_port:
+                    host, port = host_port.split(":", 1)
+                else:
+                    host = host_port
+                    
+            except (IndexError, ValueError) as e:
+                logger.warning(f"Could not parse host/port from URI, using defaults: {e}")
+                
+            # Validate host and port
+            if not host or not port:
+                raise ValueError("Invalid host or port in database URI")
 
-            backup_path = backup_dir / f"trakbridge_mysql_{timestamp}.sql"
+            # Create secure backup path
+            filename = f"trakbridge_mysql_{timestamp}.sql"
+            backup_path = create_secure_backup_path(backup_dir, filename)
 
-            # Use mysqldump
+            # Initialize secure subprocess runner
+            runner = SecureSubprocessRunner(["mysqldump"])
+
+            # Build base command with host and port parameters
             cmd = [
                 "mysqldump",
                 "--single-transaction",
                 "--routines",
                 "--triggers",
+                "-h", host,
+                "-P", port,
                 db_name,
             ]
 
-            # Add credentials if in URI
+            # Handle credentials using secret manager (same source as main app)
+            env = os.environ.copy()
+            
+            # Get username from URI or environment
+            username = "root"  # Default
             if "@" in uri:
-                # Extract user:pass@host:port
-                auth_host = uri.split("://")[1].split("/")[0]
-                if ":" in auth_host.split("@")[0]:
-                    user_pass = auth_host.split("@")[0]
-                    user, password = user_pass.split(":", 1)
-                    cmd.extend(["-u", user, f"-p{password}"])
+                try:
+                    auth_host = uri.split("://")[1].split("/")[0]
+                    if ":" in auth_host.split("@")[0]:
+                        user_pass = auth_host.split("@")[0]
+                        username = user_pass.split(":", 1)[0]
+                except (ValueError, IndexError):
+                    pass
+            
+            # Get password from secret manager (same as main app)
+            from config.secrets import get_secret_manager
+            secret_manager = get_secret_manager()
+            password = secret_manager.get_secret("DB_PASSWORD")
+            
+            if username and password:
+                # Validate username
+                db_params = validate_database_params({"username": username})
+                # Use environment variable for password (safer than command line)
+                env["MYSQL_PWD"] = password.strip()
+                cmd.extend(["-u", db_params["username"]])
+            else:
+                logger.warning("Could not retrieve database credentials from secret manager")
+
+            # Validate command before execution
+            if not runner.validate_command(cmd):
+                raise ValueError("Command failed security validation")
 
             with open(backup_path, "w") as f:
-                result = subprocess.run(
-                    cmd, stdout=f, stderr=subprocess.PIPE, text=True
-                )
+                try:
+                    result = subprocess.run(
+                        cmd,
+                        stdout=f,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        env=env,
+                        shell=False,
+                        timeout=300,  # 5 minutes timeout
+                    )
+                except subprocess.TimeoutExpired:
+                    return {
+                        "success": False,
+                        "error": "MySQL backup timed out after 5 minutes",
+                        "backup_path": None,
+                    }
+
+            # Set secure file permissions on backup file
+            secure_file_permissions(backup_path, 0o600)
 
             if result.returncode == 0:
                 return {
@@ -211,44 +321,121 @@ class KeyRotationService:
     def _backup_postgresql(
         db_info: Dict[str, Any], backup_dir: Path, timestamp: str
     ) -> Dict[str, Any]:
-        """Backup PostgreSQL database"""
+        """Backup PostgreSQL database with security validation"""
         try:
-            # Extract database name from URI
+            # Validate backup directory
+            if not validate_backup_directory(backup_dir):
+                raise ValueError("Invalid backup directory")
+
+            # Extract and validate database connection details from URI
             uri = db_info["uri"]
-            db_name = uri.split("/")[-1]
+            
+            # Parse PostgreSQL URI: postgresql://user:pass@host:port/dbname
+            if "://" not in uri:
+                raise ValueError("Invalid database URI format")
+            
+            # Extract database name
+            db_name = uri.split("/")[-1].split("?")[0]  # Handle query parameters
+            if not db_name or not db_name.replace("_", "").replace("-", "").isalnum():
+                raise ValueError("Invalid database name")
+            
+            # Extract host and port
+            host = "localhost"  # Default
+            port = "5432"       # Default PostgreSQL port
+            
+            try:
+                # Split URI to get host:port part
+                uri_parts = uri.split("://")[1]  # Remove postgresql://
+                if "@" in uri_parts:
+                    # Format: user:pass@host:port/dbname
+                    host_port_db = uri_parts.split("@")[1]  # Get host:port/dbname
+                else:
+                    # Format: host:port/dbname (no credentials)
+                    host_port_db = uri_parts
+                
+                host_port = host_port_db.split("/")[0]  # Get host:port part
+                
+                if ":" in host_port:
+                    host, port = host_port.split(":", 1)
+                else:
+                    host = host_port
+                    
+            except (IndexError, ValueError) as e:
+                logger.warning(f"Could not parse host/port from URI, using defaults: {e}")
+                
+            # Validate host and port
+            if not host or not port:
+                raise ValueError("Invalid host or port in database URI")
 
-            backup_path = backup_dir / f"trakbridge_postgresql_{timestamp}.sql"
+            # Create secure backup path
+            filename = f"trakbridge_postgresql_{timestamp}.sql"
+            backup_path = create_secure_backup_path(backup_dir, filename)
 
-            # Use pg_dump
+            # Use pg_dump with host and port parameters
             cmd = [
                 "pg_dump",
                 "--clean",
                 "--if-exists",
                 "--no-owner",
                 "--no-privileges",
+                "-h", host,
+                "-p", port,
                 db_name,
             ]
 
-            # Add credentials if in URI
+            # Handle credentials using secret manager (same source as main app)
+            env = os.environ.copy()
+            
+            # Get username from URI or environment
+            username = "postgres"  # Default
             if "@" in uri:
-                # Extract user:pass@host:port
-                auth_host = uri.split("://")[1].split("/")[0]
-                if ":" in auth_host.split("@")[0]:
-                    user_pass = auth_host.split("@")[0]
-                    user, password = user_pass.split(":", 1)
-                    cmd.extend(["-U", user])
-                    # Set password environment variable
-                    env = os.environ.copy()
-                    env["PGPASSWORD"] = password
-                else:
-                    env = os.environ.copy()
+                try:
+                    auth_host = uri.split("://")[1].split("/")[0]
+                    if ":" in auth_host.split("@")[0]:
+                        user_pass = auth_host.split("@")[0]
+                        username = user_pass.split(":", 1)[0]
+                except (ValueError, IndexError):
+                    pass
+            
+            # Get password from secret manager (same as main app)
+            from config.secrets import get_secret_manager
+            secret_manager = get_secret_manager()
+            password = secret_manager.get_secret("DB_PASSWORD")
+            
+            if username and password:
+                # Validate username
+                db_params = validate_database_params({"username": username})
+                cmd.extend(["-U", db_params["username"]])
+                # Set password environment variable (strip any whitespace/newlines)
+                env["PGPASSWORD"] = password.strip()
             else:
-                env = os.environ.copy()
+                logger.warning("Could not retrieve database credentials from secret manager")
+
+            # Initialize secure subprocess runner and validate command
+            runner = SecureSubprocessRunner(["pg_dump"])
+            if not runner.validate_command(cmd):
+                raise ValueError("Command failed security validation")
 
             with open(backup_path, "w") as f:
-                result = subprocess.run(
-                    cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env
-                )
+                try:
+                    result = subprocess.run(
+                        cmd,
+                        stdout=f,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        env=env,
+                        shell=False,
+                        timeout=300,  # 5 minutes timeout
+                    )
+                except subprocess.TimeoutExpired:
+                    return {
+                        "success": False,
+                        "error": "PostgreSQL backup timed out after 5 minutes",
+                        "backup_path": None,
+                    }
+
+            # Set secure file permissions on backup file
+            secure_file_permissions(backup_path, 0o600)
 
             if result.returncode == 0:
                 return {
@@ -328,9 +515,20 @@ class KeyRotationService:
                         # Create directory if it doesn't exist
                         os.makedirs(os.path.dirname(key_file_path), exist_ok=True)
 
+                        # Validate path security before writing
+                        allowed_dirs = [
+                            os.path.dirname(key_file_path),
+                            os.path.join(current_app.root_path, "secrets"),
+                        ]
+                        if not validate_safe_path(key_file_path, allowed_dirs):
+                            return {"success": False, "error": "Invalid key file path"}
+
                         # Write new key to file
                         with open(key_file_path, "w") as f:
                             f.write(new_key)
+
+                        # Set secure file permissions
+                        secure_file_permissions(key_file_path, 0o600)
 
                         return {
                             "success": True,
@@ -345,8 +543,16 @@ class KeyRotationService:
                     key_file_path = os.path.join(app_root, "secrets", "tb_master_key")
                     os.makedirs(os.path.dirname(key_file_path), exist_ok=True)
 
+                    # Validate path security before writing
+                    allowed_dirs = [os.path.join(current_app.root_path, "secrets")]
+                    if not validate_safe_path(key_file_path, allowed_dirs):
+                        return {"success": False, "error": "Invalid key file path"}
+
                     with open(key_file_path, "w") as f:
                         f.write(new_key)
+
+                    # Set secure file permissions
+                    secure_file_permissions(key_file_path, 0o600)
 
                     return {
                         "success": True,
@@ -509,9 +715,8 @@ class KeyRotationService:
         try:
             db_type = db_info["type"]
 
-            # Create backup directory
-            backup_dir = Path("backups")
-            backup_dir.mkdir(exist_ok=True)
+            # Create backup directory with fallback options
+            backup_dir = self._create_backup_directory()
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -552,9 +757,20 @@ class KeyRotationService:
                     # Create directory if it doesn't exist
                     os.makedirs(os.path.dirname(key_file_path), exist_ok=True)
 
+                    # Validate path security before writing
+                    allowed_dirs = [
+                        os.path.dirname(key_file_path),
+                        os.path.join(app_root, "secrets"),
+                    ]
+                    if not validate_safe_path(key_file_path, allowed_dirs):
+                        return {"success": False, "error": "Invalid key file path"}
+
                     # Write new key to file
                     with open(key_file_path, "w") as f:
                         f.write(new_key)
+
+                    # Set secure file permissions
+                    secure_file_permissions(key_file_path, 0o600)
 
                     return {
                         "success": True,
@@ -568,8 +784,16 @@ class KeyRotationService:
                 key_file_path = os.path.join(app_root, "secrets", "tb_master_key")
                 os.makedirs(os.path.dirname(key_file_path), exist_ok=True)
 
+                # Validate path security before writing
+                allowed_dirs = [os.path.join(app_root, "secrets")]
+                if not validate_safe_path(key_file_path, allowed_dirs):
+                    return {"success": False, "error": "Invalid key file path"}
+
                 with open(key_file_path, "w") as f:
                     f.write(new_key)
+
+                # Set secure file permissions
+                secure_file_permissions(key_file_path, 0o600)
 
                 return {
                     "success": True,
@@ -580,6 +804,8 @@ class KeyRotationService:
 
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def restart_application(self) -> Dict[str, Any]:
         """Attempt to restart the application"""
         try:
             # This is a complex operation that depends on deployment method
@@ -595,33 +821,41 @@ class KeyRotationService:
 
             # Check if we're running with systemd
             try:
-                result = subprocess.run(
-                    ["systemctl", "is-active", "trakbridge"],
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode == 0:
-                    return {
-                        "success": True,
-                        "method": "systemd",
-                        "instruction": "Run: sudo systemctl restart trakbridge",
-                    }
+                runner = SecureSubprocessRunner(["systemctl"])
+                cmd = ["systemctl", "is-active", "trakbridge"]
+                if runner.validate_command(cmd):
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        shell=False,
+                    )
+                    if result.returncode == 0:
+                        return {
+                            "success": True,
+                            "method": "systemd",
+                            "instruction": "Run: sudo systemctl restart trakbridge",
+                        }
             except FileNotFoundError:
                 pass
 
             # Check if we're running with supervisor
             try:
-                result = subprocess.run(
-                    ["supervisorctl", "status", "trakbridge"],
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode == 0:
-                    return {
-                        "success": True,
-                        "method": "supervisor",
-                        "instruction": "Run: supervisorctl restart trakbridge",
-                    }
+                runner = SecureSubprocessRunner(["supervisorctl"])
+                cmd = ["supervisorctl", "status", "trakbridge"]
+                if runner.validate_command(cmd):
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        shell=False,
+                    )
+                    if result.returncode == 0:
+                        return {
+                            "success": True,
+                            "method": "supervisor",
+                            "instruction": "Run: supervisorctl restart trakbridge",
+                        }
             except FileNotFoundError:
                 pass
 

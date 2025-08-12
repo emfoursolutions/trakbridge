@@ -1,17 +1,102 @@
-📦 v1.0.0-beta.3
-This release introduces several key improvements and new features as we move toward a more flexible and maintainable plugin-based CoT processing system.
+## [v1.0.0-rc.1] - 2025-08-09
 
-✨ Added
-CoT Type Configuration
-You can now set the CoT Type dynamically, either per feed or for the entire stream, allowing greater control over how data is interpreted and routed.
+### Added
+- **Complete Authentication System**
+  - Multi-provider authentication support (Local database, LDAP/Active Directory, OIDC/SSO)
+  - Role-based access control with four roles: Viewer, User, Operator, Admin
+  - Automatic initial admin user creation via bootstrap service
+  - Session management with configurable lifetime and automatic cleanup
+  - Web-based user management interface with role assignment
+  - Comprehensive password policies and security enforcement
+  - Audit logging for all authentication events
 
-Deepstate Map Plugin
-A new plugin has been added to ingest and process Deepstate map data for CoT output.
+- **Plugin Categorization System**
+  - Three main plugin categories: OSINT, Tracker, EMS
+  - Category-based UI organization for improved user experience
+  - RESTful API endpoints for plugin category discovery (`/api/plugins/categories`, `/api/plugins/by-category/{category}`)
+  - Dynamic category mapping system for existing and new plugins
+  - Enhanced plugin selection with organized category dropdown
+  - Deepstate plugin properly categorized as OSINT (no longer "Coming Soon")
 
-🔧 Changed
-Garmin Plugin Refactor
-The Garmin plugin has been refactored to remove redundant functions and methods. Timestamp handling and KML parsing have been centralized, improving consistency and simplifying maintenance.
+- **Docker Compose Configuration Refactoring**
+  - Eliminated .env file dependencies for simplified deployment
+  - Direct environment variable configuration in docker-compose.yml
+  - Docker secrets integration for sensitive data (passwords, encryption keys)
+  - Multi-environment support (development, staging, production)
+  - Centralized configuration management approach
 
-🛠 Improved
-cot_service Logging
-Logging within cot_service has been rationalized to reduce unnecessary output and improve debugging clarity.
+- **Comprehensive Documentation Overhaul**
+  - User-focused documentation for Docker deployments
+  - Complete authentication setup guides for all providers
+  - Plugin development guides with categorization examples
+  - Updated installation, upgrade, and administrator guides
+  - Docker-first configuration examples throughout
+
+### Changed
+- **BREAKING**: Authentication is now required for all access (major change from v1.0.0-beta.4)
+- **BREAKING**: Configuration moved from .env files to docker-compose.yml environment variables
+- Plugin selection UI now organized by categories (OSINT, Tracker, EMS)
+- Documentation approach shifted from development-focused to user deployment-focused
+- Default credentials: admin / TrakBridge-Setup-2025! (forced password change on first login)
+
+### Fixed
+- Deepstate plugin status corrected from "Coming Soon" to fully implemented OSINT category
+- Configuration management simplified for production deployments
+- Docker secrets properly integrated for sensitive credential management
+
+### Migration Notes
+- Automatic database migration creates authentication tables on upgrade
+- Existing stream and TAK server configurations preserved during upgrade  
+- Initial admin user setup required on first deployment
+- Clear upgrade path provided with detailed backup and recovery procedures
+- Docker compose profiles updated for better service orchestration
+
+### Security Improvements
+- All authentication providers support secure connections (TLS/SSL)
+- Field-level encryption for sensitive configuration data
+- Session security with secure cookies and proper cleanup
+- Docker secrets prevent credential exposure in environment variables
+- Comprehensive audit logging for security monitoring
+
+## [v1.0.0-beta.4] - 2025-07-25
+### Added
+- Support for loading external plugins
+- Module name verification for plugin safety
+- Protections against unsafe dynamic imports
+- Path traversal prevention for plugin resolution
+- JSON validation:
+  - Size limits (64KB plugins, 256KB DB, 1MB default)
+  - Max depth: 32 levels
+  - Max 1,000 keys per object and 10,000 array elements
+  - Schema-based type validation per plugin
+
+### Changed
+- Docker container now runs as a non-root user
+- Dockerfile and entrypoint.sh security hardened
+- Prevented reapplication of already-run database migrations
+
+### Fixed
+- Removed XSS vectors from API endpoints
+- Improved data validation across APIs
+
+### Removed
+- Remote asset loading:
+  - All external CSS/JS/fonts now local:
+    - bootstrap, all.min, google-fonts, jQuery, and fonts
+  
+## [v1.0.0-beta.3] - 2025-07-25
+
+### Added
+- **CoT Type Configuration**  
+  Dynamically configure CoT Type per feed or for the entire stream, enabling greater flexibility in data interpretation and routing.
+  
+- **Deepstate Map Plugin**  
+  Added support for ingesting and processing Deepstate map data into CoT format.
+
+### Changed
+- **Garmin Plugin Refactor**  
+  Removed redundant functions and centralized timestamp handling and KML parsing for improved maintainability and consistency.
+
+### Improved
+- **cot_service Logging**  
+  Reduced log noise and enhanced debugging clarity with more targeted log output.

@@ -30,15 +30,17 @@ import socket
 import ssl
 import tempfile
 import uuid
-import defusedxml.ElementTree as ET
 from configparser import ConfigParser
 from datetime import datetime, timezone
+
+import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as DefusedET
+import pytak
 
 # Third-party imports
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.serialization import pkcs12
-import pytak
 
 # Module level logging
 logger = logging.getLogger(__name__)

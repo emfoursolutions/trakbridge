@@ -14,7 +14,6 @@ License: GNU General Public License v3.0 (GPLv3)
 
 # Standard library imports
 import atexit
-from datetime import datetime as dt
 import fcntl  # Add this import
 import logging
 import os
@@ -22,12 +21,13 @@ import signal
 import tempfile  # Add this import
 import threading
 import time
+from datetime import datetime as dt
 from pathlib import Path  # Add this import
 from typing import Optional
 
 # Third-party imports
 from dotenv import load_dotenv
-from flask import Flask, has_app_context, render_template, jsonify
+from flask import Flask, has_app_context, jsonify, render_template
 from flask_migrate import Migrate
 from sqlalchemy import event, inspect
 from sqlalchemy.pool import Pool
@@ -95,14 +95,17 @@ def initialize_database_safely():
     Initialize database with proper migration handling.
     Handles both first-time setup and existing installations without conflicts.
     """
-    from flask_migrate import current, stamp, upgrade
     import os
+
+    from flask_migrate import current, stamp, upgrade
 
     try:
         # Check if migrations directory exists
-        migrations_dir = os.path.join(os.getcwd(), 'migrations')
+        migrations_dir = os.path.join(os.getcwd(), "migrations")
         if not os.path.exists(migrations_dir):
-            logger.info("No migrations directory found - creating database tables directly")
+            logger.info(
+                "No migrations directory found - creating database tables directly"
+            )
             db.create_all()
             return
 
@@ -142,18 +145,23 @@ def initialize_database_safely():
                 existing_tables = inspector.get_table_names()
 
                 if not existing_tables:
-                    logger.info("No tables found and migrations unavailable - creating tables directly")
+                    logger.info(
+                        "No tables found and migrations unavailable - creating tables directly"
+                    )
                     db.create_all()
                 else:
                     logger.info("Tables exist, skipping database initialization")
 
             except Exception as fallback_error:
-                logger.error(f"Could not inspect database or create tables: {fallback_error}")
+                logger.error(
+                    f"Could not inspect database or create tables: {fallback_error}"
+                )
                 raise
 
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
         raise
+
 
 def is_primary_process() -> bool:
     """
@@ -217,11 +225,7 @@ def cleanup_startup_coordination(lock_file=None, lock_file_path=None):
 def log_full_startup_info(app):
     """Log comprehensive startup information for the primary process"""
     try:
-        from services.version import (
-            format_version,
-            get_version_info,
-            get_build_info,
-        )
+        from services.version import format_version, get_build_info, get_version_info
 
         # Log startup banner
         log_startup_banner(app)
@@ -244,9 +248,11 @@ def log_full_startup_info(app):
             app.logger.info(f"Git Commit: {build_info['git_commit']}")
 
         app.logger.info(
-            f"Python Version: {version_info.get('python_version', 'unknown')}"
+            f"Python Version: {version_info.get('environment', {}).get('python_version', 'unknown')}"
         )
-        app.logger.info(f"Platform: {version_info.get('platform', 'unknown')}")
+        app.logger.info(
+            f"Platform: {version_info.get('environment', {}).get('platform', 'unknown')}"
+        )
         app.logger.info(f"Process ID: {os.getpid()}")
         app.logger.info(f"Working Directory: {os.getcwd()}")
         app.logger.info("=" * 60)
@@ -332,7 +338,9 @@ def create_app(config_name=None):
 
     # Determine environment and get configuration
     flask_env = config_name or os.environ.get("FLASK_ENV", "development")
-    app.config['SKIP_DB_INIT'] = os.environ.get('SKIP_DB_INIT', 'false').lower() == 'true'
+    app.config["SKIP_DB_INIT"] = (
+        os.environ.get("SKIP_DB_INIT", "false").lower() == "true"
+    )
 
     # Get configuration instance using the new system
     config_instance = get_config(flask_env)
@@ -351,8 +359,9 @@ def create_app(config_name=None):
 
         # Import models AFTER db.init_app to avoid circular imports
         # Import them individually rather than through the __init__.py
-        from models.tak_server import TakServer
         from models.stream import Stream
+        from models.tak_server import TakServer
+        from models.user import User, UserSession
 
         # Register models with SQLAlchemy
         db.Model.metadata.create_all(bind=db.engine)
@@ -374,6 +383,18 @@ def create_app(config_name=None):
 
         app.encryption_service = EncryptionService()
 
+        # Initialize authentication system
+        from services.auth import AuthenticationManager
+        from services.auth.decorators import create_auth_context_processor
+
+        # Get authentication configuration
+        auth_config = config_instance.get_auth_config()
+        app.auth_manager = AuthenticationManager(auth_config)
+
+        # Add authentication context processor for templates
+        auth_context_processor = create_auth_context_processor()
+        app.context_processor(auth_context_processor)
+
         # Store global reference for cleanup
         _stream_manager_ref = app.stream_manager
 
@@ -393,12 +414,13 @@ def create_app(config_name=None):
     register_version_commands(app)
 
     # Register blueprints
+    from routes.admin import bp as admin_bp
+    from routes.api import bp as api_bp
+    from routes.auth import bp as auth_bp
+    from routes.cot_types import bp as cot_types_bp
     from routes.main import bp as main_bp
     from routes.streams import bp as streams_bp
     from routes.tak_servers import bp as tak_servers_bp
-    from routes.admin import bp as admin_bp
-    from routes.api import bp as api_bp
-    from routes.cot_types import bp as cot_types_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(streams_bp, url_prefix="/streams")
@@ -406,6 +428,7 @@ def create_app(config_name=None):
     app.register_blueprint(admin_bp, url_prefix="/admin")
     app.register_blueprint(cot_types_bp, url_prefix="/admin")
     app.register_blueprint(api_bp, url_prefix="/api")
+    app.register_blueprint(auth_bp, url_prefix="/auth")
 
     # Add context processors and error handlers
     setup_template_helpers(app)
@@ -436,7 +459,7 @@ def setup_version_context_processor(app):
     def inject_version_info():
         """Inject version information into all templates."""
         try:
-            from services.version import get_version_info, get_build_info
+            from services.version import get_build_info, get_version_info
 
             version_info = get_version_info()
             build_info = get_build_info()
@@ -544,9 +567,44 @@ def configure_flask_app(app, config_instance):
 #               raise ValueError(f"Configuration validation failed: {issues}")
 
 
+def initialize_admin_user_if_needed():
+    """Initialize admin user using bootstrap service"""
+    try:
+        from services.auth.bootstrap_service import initialize_admin_user
+
+        logger.info("Checking if initial admin user creation is needed...")
+        add_startup_progress("Checking if initial admin user creation is needed...")
+
+        # Attempt to create initial admin user
+        admin_user = initialize_admin_user()
+
+        if admin_user:
+            logger.warning("=" * 60)
+            logger.warning("INITIAL ADMIN USER CREATED")
+            logger.warning(f"Username: {admin_user.username}")
+            logger.warning("⚠️  DEFAULT PASSWORD ASSIGNED - CHANGE ON FIRST LOGIN  ⚠️")
+            logger.warning("⚠️  CHANGE PASSWORD ON FIRST LOGIN  ⚠️")
+            logger.warning("=" * 60)
+
+            add_startup_progress(
+                f"✓ Initial admin user '{admin_user.username}' created"
+            )
+            add_startup_progress("⚠️  Default password must be changed on first login")
+        else:
+            logger.info(
+                "Initial admin user creation not needed - admin users already exist"
+            )
+            add_startup_progress("✓ Admin users already exist, bootstrap not needed")
+
+    except Exception as e:
+        logger.error(f"Error during admin user bootstrap: {e}")
+        add_startup_progress(f"Error during admin user bootstrap: {e}")
+
+
 def start_active_streams():
     """Start all active streams with enhanced logging and proper error handling."""
     from flask import current_app
+
     from services.version import get_version
 
     stream_manager = getattr(current_app, "stream_manager", None)
@@ -601,7 +659,11 @@ def start_active_streams():
                     )
 
         except Exception as db_e:
-            logger.error(f"Failed to fetch active streams from database: {db_e}")
+            try:
+                logger.error(f"Failed to fetch active streams from database: {db_e}")
+            except (ValueError, OSError):
+                # Handle cases where logging files are closed during shutdown
+                pass
             add_startup_progress(
                 f"Error: Failed to fetch active streams from database: {db_e}"
             )
@@ -888,6 +950,10 @@ def setup_startup_routes(app):
         if request.endpoint in ["startup_page", "startup_status", "static"]:
             return None
 
+        # Allow authentication routes
+        if request.path.startswith("/auth/"):
+            return None
+
         # Allow API health checks
         if request.path.startswith("/api/health"):
             return None
@@ -959,6 +1025,10 @@ def delayed_startup():
                     f"Warning: Could not verify all system components: {e}"
                 )
 
+            # Initialize admin user if needed
+            add_startup_progress("Checking admin user bootstrap...")
+            initialize_admin_user_if_needed()
+
             # Start active streams
             add_startup_progress("Starting active streams...")
             start_active_streams()
@@ -966,12 +1036,16 @@ def delayed_startup():
             # Calculate startup time
             startup_time = (dt.now() - startup_start_time).total_seconds()
 
-            # Log startup completion
-            logger.info("=" * 60)
-            logger.info("TrakBridge Application Startup Complete!")
-            logger.info(f"Total Startup Time: {startup_time:.2f} seconds")
-            logger.info(f"Ready at: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            logger.info("=" * 60)
+            # Log startup completion with safe logging
+            try:
+                logger.info("=" * 60)
+                logger.info("TrakBridge Application Startup Complete!")
+                logger.info(f"Total Startup Time: {startup_time:.2f} seconds")
+                logger.info(f"Ready at: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                logger.info("=" * 60)
+            except (ValueError, OSError):
+                # Handle cases where logging files are closed during shutdown
+                pass
 
             add_startup_progress(
                 f"Startup complete! Ready in {startup_time:.2f} seconds"
@@ -979,7 +1053,11 @@ def delayed_startup():
             set_startup_complete(True)
 
     except Exception as e:
-        logger.error(f"Error during startup: {e}", exc_info=True)
+        try:
+            logger.error(f"Error during startup: {e}", exc_info=True)
+        except (ValueError, OSError):
+            # Handle cases where logging files are closed during shutdown
+            pass
         add_startup_progress(f"Startup failed: {str(e)}")
         set_startup_complete(False, str(e))
 

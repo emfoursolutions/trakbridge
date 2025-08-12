@@ -109,9 +109,13 @@
                     <div class="text-center py-4">
                         <i class="fas fa-stream text-muted mb-3" style="font-size: 3rem; opacity: 0.3;"></i>
                         <p class="text-muted mb-3">No streams configured yet.</p>
+                        {% if current_user.can_access('streams', 'write') %}
                         <a href="{{ url_for('streams.create_stream') }}" class="btn btn-primary">
                             <i class="fas fa-plus"></i> Create First Stream
                         </a>
+                        {% else %}
+                        <p class="text-muted"><i class="fas fa-lock"></i> Contact an administrator to create streams</p>
+                        {% endif %}
                     </div>
                 {% endif %}
             </div>
@@ -166,9 +170,13 @@
                     <div class="text-center py-4">
                         <i class="fas fa-server text-muted mb-3" style="font-size: 3rem; opacity: 0.3;"></i>
                         <p class="text-muted mb-3">No TAK servers configured yet.</p>
+                        {% if current_user.can_access('tak_servers', 'write') %}
                         <a href="{{ url_for('tak_servers.create_tak_server') }}" class="btn btn-primary">
                             <i class="fas fa-plus"></i> Add TAK Server
                         </a>
+                        {% else %}
+                        <p class="text-muted"><i class="fas fa-lock"></i> Contact an administrator to create TAK servers</p>
+                        {% endif %}
                     </div>
                 {% endif %}
             </div>

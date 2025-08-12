@@ -21,41 +21,128 @@ from urllib.parse import quote_plus
 import yaml
 
 # Local application imports
+from .authentication_loader import load_authentication_config
 from .secrets import get_secret_manager
 
 logger = logging.getLogger(__name__)
 
 
 class ConfigLoader:
-    """Loads configuration from YAML files and combines with secrets."""
+    """Loads configuration from YAML files with multi-source support and combines with secrets."""
 
     def __init__(self, environment: str = "development"):
         self.environment = environment
-        self.config_dir = Path(__file__).parent / "settings"
+
+        # Multi-source configuration directories
+        self.external_config_dir = Path(
+            os.environ.get("TRAKBRIDGE_CONFIG_DIR", "/app/external_config")
+        )
+        self.bundled_config_dir = Path(__file__).parent / "settings"
+
+        # Legacy compatibility
+        self.config_dir = self.bundled_config_dir
+
         self.secret_manager = get_secret_manager(environment)
         self._config_cache: Dict[str, Any] = {}
 
+        # Log configuration source information
+        logger.info("Configuration sources:")
+        logger.info(
+            f"  External: {self.external_config_dir} (exists: {self.external_config_dir.exists()})"
+        )
+        logger.info(
+            f"  Bundled:  {self.bundled_config_dir} (exists: {self.bundled_config_dir.exists()})"
+        )
+
     def load_config_file(self, filename: str) -> Dict[str, Any]:
-        """Load a YAML configuration file."""
-        if filename in self._config_cache:
-            return self._config_cache[filename]
+        """
+        Load a YAML configuration file with multi-source support.
 
-        config_path = self.config_dir / filename
-        if not config_path.exists():
-            logger.warning(f"Configuration file not found: {config_path}")
-            return {}
+        Priority order:
+        1. External config directory (mounted volume)
+        2. Bundled config directory (container defaults)
+        """
+        cache_key = f"{filename}:{self.environment}"
+        if cache_key in self._config_cache:
+            return self._config_cache[cache_key]
 
-        try:
-            with open(config_path, "r") as f:
-                config = yaml.safe_load(f) or {}
+        config = {}
+        config_sources = []
 
-            self._config_cache[filename] = config
-            logger.debug(f"Loaded configuration from {filename}")
-            return config
+        # Try external config first (highest priority)
+        external_path = self.external_config_dir / filename
+        if external_path.exists():
+            try:
+                with open(external_path, "r") as f:
+                    external_config = yaml.safe_load(f) or {}
+                config.update(external_config)
+                config_sources.append(f"external:{external_path}")
+                logger.debug(f"Loaded external config from {external_path}")
+            except Exception as e:
+                logger.error(f"Failed to load external config {external_path}: {e}")
 
-        except Exception as e:
-            logger.error(f"Failed to load configuration file {filename}: {e}")
-            return {}
+        # Try bundled config as fallback
+        bundled_path = self.bundled_config_dir / filename
+        if bundled_path.exists():
+            try:
+                with open(bundled_path, "r") as f:
+                    bundled_config = yaml.safe_load(f) or {}
+
+                # If we have external config, merge bundled as defaults
+                if config:
+                    # Deep merge: bundled provides defaults, external overrides
+                    merged_config = self._deep_merge_configs(bundled_config, config)
+                    config = merged_config
+                    config_sources.append(f"bundled:{bundled_path} (merged)")
+                else:
+                    # No external config, use bundled as primary
+                    config = bundled_config
+                    config_sources.append(f"bundled:{bundled_path}")
+
+                logger.debug(f"Loaded bundled config from {bundled_path}")
+            except Exception as e:
+                logger.error(f"Failed to load bundled config {bundled_path}: {e}")
+
+        # Log the effective configuration source
+        if config_sources:
+            logger.info(
+                f"Configuration '{filename}' loaded from: {', '.join(config_sources)}"
+            )
+        else:
+            logger.warning(f"Configuration file '{filename}' not found in any source")
+
+        # Cache the merged result
+        self._config_cache[cache_key] = config
+        return config
+
+    def _deep_merge_configs(
+        self, base_config: Dict[str, Any], override_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Deep merge two configuration dictionaries.
+
+        Args:
+            base_config: Base configuration (provides defaults)
+            override_config: Override configuration (takes precedence)
+
+        Returns:
+            Merged configuration dictionary
+        """
+        result = base_config.copy()
+
+        for key, value in override_config.items():
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(value, dict)
+            ):
+                # Recursively merge nested dictionaries
+                result[key] = self._deep_merge_configs(result[key], value)
+            else:
+                # Override the value
+                result[key] = value
+
+        return result
 
     @staticmethod
     def get_config_value(
@@ -119,6 +206,28 @@ class BaseConfig:
         logging_config = self.loader.load_config_file("logging.yaml")
         self.logging_config = self.loader.merge_environment_config(logging_config)
 
+        # Load authentication configuration using secure loader
+        try:
+            auth_config_raw = load_authentication_config(self.environment)
+            self.auth_config = auth_config_raw.get("authentication", {})
+            logger.info("Loaded authentication configuration using secure loader")
+        except Exception as e:
+            logger.error(f"Failed to load authentication config: {e}")
+            # Fallback to default authentication config
+            self.auth_config = {
+                "session": {
+                    "lifetime_hours": 8,
+                    "secure_cookies": self.environment == "production",
+                },
+                "provider_priority": ["local"],
+                "providers": {
+                    "local": {"enabled": True},
+                    "ldap": {"enabled": False},
+                    "oidc": {"enabled": False},
+                },
+            }
+            logger.warning("Using fallback authentication configuration")
+
     @property
     def SECRET_KEY(self) -> str:
         """Get secret key from secure sources."""
@@ -131,9 +240,13 @@ class BaseConfig:
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         """Build database URI from configuration and secrets."""
-        db_type = self.secret_manager.get_secret(
-            "DB_TYPE", self.db_config.get("type", "sqlite")
-        )
+        # Check for explicit DATABASE_URL first (common in CI/production)
+        database_url = self.secret_manager.get_secret("DATABASE_URL")
+        if database_url:
+            return database_url
+
+        # Fall back to building URI from components
+        db_type = self._get_database_type()
 
         if db_type == "sqlite":
             return self._build_sqlite_uri()
@@ -205,12 +318,42 @@ class BaseConfig:
         password_encoded = quote_plus(password) if password else ""
         return f"postgresql://{user}:{password_encoded}@{host}:{port}/{name}"
 
+    def _get_database_type(self) -> str:
+        """
+        Determine database type from configuration or DATABASE_URL.
+
+        Priority order:
+        1. Explicit DB_TYPE environment variable
+        2. Database type from DATABASE_URL scheme
+        3. Configuration file default
+        4. Fallback to sqlite
+        """
+        # Check explicit DB_TYPE first
+        explicit_type = self.secret_manager.get_secret("DB_TYPE")
+        if explicit_type:
+            return explicit_type
+
+        # Try to detect from DATABASE_URL scheme
+        database_url = self.secret_manager.get_secret("DATABASE_URL")
+        if database_url:
+            if database_url.startswith("postgresql://") or database_url.startswith(
+                "postgres://"
+            ):
+                return "postgresql"
+            elif database_url.startswith("mysql://") or database_url.startswith(
+                "mysql+"
+            ):
+                return "mysql"
+            elif database_url.startswith("sqlite://"):
+                return "sqlite"
+
+        # Fall back to config file or default
+        return self.db_config.get("type", "sqlite")
+
     @property
     def SQLALCHEMY_ENGINE_OPTIONS(self) -> Dict[str, Any]:
         """Get database engine options."""
-        db_type = self.secret_manager.get_secret(
-            "DB_TYPE", self.db_config.get("type", "sqlite")
-        )
+        db_type = self._get_database_type()
         return self.db_config.get("engine_options", {}).get(db_type, {})
 
     @property
@@ -312,6 +455,14 @@ class BaseConfig:
         )
 
     @property
+    def APPLICATION_URL(self) -> str:
+        """Get application URL from secure sources."""
+        return self.secret_manager.get_secret(
+            "TRAKBRIDGE_APPLICATION_URL",
+            self.app_config.get("application_url", "https://localhost"),
+        )
+
+    @property
     def TESTING(self) -> bool:
         """Get testing mode setting."""
         return self.environment == "testing"
@@ -362,6 +513,70 @@ class BaseConfig:
                 return None
         return value
 
+    def _resolve_config_secrets(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Recursively resolve environment variable placeholders in configuration.
+
+        Replaces ${VARIABLE_NAME} patterns with actual environment variable values
+        using the SecretManager.
+
+        Args:
+            config: Configuration dictionary potentially containing placeholders
+
+        Returns:
+            Configuration dictionary with resolved values
+        """
+        import copy
+        import re
+
+        logger = logging.getLogger(__name__)
+
+        # Deep copy to avoid modifying original config
+        resolved_config = copy.deepcopy(config)
+
+        def resolve_value(value):
+            """Resolve placeholders in a single value."""
+            if not isinstance(value, str):
+                return value
+
+            # Pattern to match ${VARIABLE_NAME} placeholders
+            pattern = r"\$\{([^}]+)\}"
+            matches = re.findall(pattern, value)
+
+            if not matches:
+                return value
+
+            resolved_value = value
+            for var_name in matches:
+                # Get the secret value using SecretManager
+                secret_value = self.secret_manager.get_secret(var_name.strip())
+
+                if secret_value is not None:
+                    # Replace the placeholder with the actual value
+                    placeholder = f"${{{var_name}}}"
+                    resolved_value = resolved_value.replace(placeholder, secret_value)
+                    logger.debug(
+                        f"Resolved authentication config placeholder: {placeholder}"
+                    )
+                else:
+                    # Log warning if environment variable is not found
+                    logger.warning(
+                        f"Environment variable '{var_name}' not found for authentication config placeholder: ${{{var_name}}}"
+                    )
+
+            return resolved_value
+
+        def resolve_recursive(obj):
+            """Recursively resolve placeholders in nested structures."""
+            if isinstance(obj, dict):
+                return {key: resolve_recursive(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [resolve_recursive(item) for item in obj]
+            else:
+                return resolve_value(obj)
+
+        return resolve_recursive(resolved_config)
+
     def reload_config(self):
         """Public method to reload all configuration files."""
         self._load_configurations()
@@ -397,14 +612,31 @@ class BaseConfig:
 
         return issues
 
+    def get_auth_config(self) -> Dict[str, Any]:
+        """Get authentication configuration."""
+        return self.auth_config
+
+    def get_auth_setting(self, setting_path: str, default: Any = None) -> Any:
+        """
+        Get authentication setting using dot notation.
+
+        Args:
+            setting_path: Dot-separated path to setting (e.g., 'security.max_login_attempts')
+            default: Default value if setting not found
+
+        Returns:
+            Setting value or default
+        """
+        return (
+            self._get_nested_value(self.auth_config, setting_path.split(".")) or default
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary (for debugging/inspection)."""
         return {
             "environment": self.environment,
             "database": {
-                "type": self.secret_manager.get_secret(
-                    "DB_TYPE", self.db_config.get("type", "sqlite")
-                ),
+                "type": self._get_database_type(),
                 "track_modifications": self.SQLALCHEMY_TRACK_MODIFICATIONS,
                 "record_queries": self.SQLALCHEMY_RECORD_QUERIES,
             },
@@ -421,5 +653,20 @@ class BaseConfig:
             "logging": {
                 "level": self.LOG_LEVEL,
                 "directory": self.LOG_DIR,
+            },
+            "authentication": {
+                "providers_enabled": len(
+                    [
+                        p
+                        for p in self.auth_config.get("providers", [])
+                        if p.get("enabled", False)
+                    ]
+                ),
+                "max_login_attempts": self.get_auth_setting(
+                    "security.max_login_attempts", 5
+                ),
+                "session_timeout": self.get_auth_setting(
+                    "security.session_timeout_hours", 24
+                ),
             },
         }

@@ -26,7 +26,7 @@ Version: 1.0.0
 import logging
 import ssl
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 # Third-party imports
 import aiohttp
@@ -61,7 +61,7 @@ class SpotPlugin(BaseGPSPlugin):
             "display_name": "SPOT Satellite",
             "description": "Connect to SPOT satellite trackers via their web API",
             "icon": "fas fa-satellite",
-            "category": "satellite",
+            "category": "tracker",
             "help_sections": [
                 {
                     "title": "Setup Instructions",

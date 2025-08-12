@@ -55,6 +55,15 @@ environments:
         connect_args:
           check_same_thread: false
           timeout: 10
+      postgresql:
+        pool_pre_ping: true
+        pool_recycle: 1800
+        pool_size: 5
+        max_overflow: 10
+        pool_timeout: 30
+        connect_args:
+          connect_timeout: 10
+          application_name: TrakBridge-Development
 
   production:
     engine_options:
@@ -68,6 +77,8 @@ environments:
         pool_timeout: 60
 
   testing:
+    # Testing environment adapts to DATABASE_URL if provided (for CI/CD)
+    # Otherwise falls back to in-memory SQLite
     type: sqlite
     database_uri: "sqlite:///:memory:"
     engine_options:
@@ -75,6 +86,15 @@ environments:
         pool_pre_ping: false
         connect_args:
           check_same_thread: false
+      postgresql:
+        pool_pre_ping: true
+        pool_recycle: 1800
+        pool_size: 5
+        max_overflow: 10
+        pool_timeout: 30
+        connect_args:
+          connect_timeout: 10
+          application_name: TrakBridge-Testing
 
 # Default database credentials (will be overridden by secrets)
 defaults:

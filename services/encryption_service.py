@@ -24,23 +24,25 @@ Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """
 
+import base64
+import binascii
+import hashlib
+import logging
+
 # Standard library imports
 import os
-import base64
-import hashlib
 import secrets
-import logging
-import binascii
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
+from cryptography.exceptions import InvalidKey
 
 # Third-party imports
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.exceptions import InvalidKey
 
 # Local application imports
-from services.exceptions import EncryptionError, EncryptionDataError
+from services.exceptions import EncryptionDataError, EncryptionError
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -246,11 +248,12 @@ class EncryptionService:
         Rotate encryption keys for database records
         """
         try:
-            from models.tak_server import TakServer
-            from models.stream import Stream
-            from database import db
-            from plugins.plugin_manager import get_plugin_manager
             import json
+
+            from database import db
+            from models.stream import Stream
+            from models.tak_server import TakServer
+            from plugins.plugin_manager import get_plugin_manager
 
             rotated_count = 0
             errors = []

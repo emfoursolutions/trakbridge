@@ -13,7 +13,6 @@ This directory is specifically designed for external plugins and won't conflict 
 ## Docker Compose Example
 
 ```yaml
-version: '3.8'
 services:
   trakbridge:
     image: trakbridge:latest

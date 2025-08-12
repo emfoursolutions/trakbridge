@@ -1,0 +1,252 @@
+[
+  {
+    "httpRequest": {
+      "method": "GET",
+      "path": "/.well-known/openid_configuration"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "issuer": "http://mock-oidc:1080",
+        "authorization_endpoint": "http://mock-oidc:1080/auth",
+        "token_endpoint": "http://mock-oidc:1080/token",
+        "userinfo_endpoint": "http://mock-oidc:1080/userinfo",
+        "jwks_uri": "http://mock-oidc:1080/jwks",
+        "response_types_supported": ["code", "id_token", "token id_token"],
+        "subject_types_supported": ["public"],
+        "id_token_signing_alg_values_supported": ["RS256"],
+        "scopes_supported": ["openid", "email", "profile", "groups"],
+        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
+        "claims_supported": ["sub", "email", "name", "given_name", "family_name", "preferred_username", "groups"]
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "GET",
+      "path": "/jwks"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "keys": [
+          {
+            "kty": "RSA",
+            "use": "sig",
+            "kid": "test-key-id",
+            "n": "test-modulus",
+            "e": "AQAB",
+            "alg": "RS256"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "GET",
+      "path": "/auth",
+      "queryStringParameters": {
+        "response_type": ["code"],
+        "client_id": ["test-client"]
+      }
+    },
+    "httpResponse": {
+      "statusCode": 302,
+      "headers": {
+        "Location": ["http://localhost:8000/auth/oidc/callback?code=test_auth_code&state={state}"]
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "POST",
+      "path": "/token",
+      "headers": {
+        "Content-Type": ["application/x-www-form-urlencoded"]
+      },
+      "body": {
+        "type": "PARAMETERS",
+        "parameters": {
+          "grant_type": ["authorization_code"],
+          "code": ["test_auth_code"],
+          "client_id": ["test-client"],
+          "client_secret": ["test-secret"]
+        }
+      }
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "access_token": "test_access_token",
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "id_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3Qta2V5LWlkIn0.eyJzdWIiOiJ0ZXN0dXNlciIsImVtYWlsIjoidGVzdHVzZXJAdGVzdC5jb20iLCJuYW1lIjoiVGVzdCBVc2VyIiwiZ2l2ZW5fbmFtZSI6IlRlc3QiLCJmYW1pbHlfbmFtZSI6IlVzZXIiLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJ0ZXN0dXNlciIsImdyb3VwcyI6WyJ0cmFrYnJpZGdlLXVzZXJzIl0sImlzcyI6Imh0dHA6Ly9tb2NrLW9pZGM6MTA4MCIsImF1ZCI6InRlc3QtY2xpZW50IiwiaWF0IjoxNjQwOTk1MjAwLCJleHAiOjE2NDA5OTg4MDB9.test_signature",
+        "refresh_token": "test_refresh_token"
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "POST",
+      "path": "/token",
+      "headers": {
+        "Content-Type": ["application/x-www-form-urlencoded"]
+      },
+      "body": {
+        "type": "PARAMETERS",
+        "parameters": {
+          "grant_type": ["authorization_code"],
+          "code": ["admin_auth_code"],
+          "client_id": ["test-client"],
+          "client_secret": ["test-secret"]
+        }
+      }
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "access_token": "admin_access_token",
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "id_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3Qta2V5LWlkIn0.eyJzdWIiOiJhZG1pbnVzZXIiLCJlbWFpbCI6ImFkbWluQHRlc3QuY29tIiwibmFtZSI6IkFkbWluIFVzZXIiLCJnaXZlbl9uYW1lIjoiQWRtaW4iLCJmYW1pbHlfbmFtZSI6IlVzZXIiLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJhZG1pbnVzZXIiLCJncm91cHMiOlsidHJha2JyaWRnZS1hZG1pbnMiLCJ0cmFrYnJpZGdlLW9wZXJhdG9ycyIsInRyYWticmlkZ2UtdXNlcnMiXSwiaXNzIjoiaHR0cDovL21vY2stb2lkYzoxMDgwIiwiYXVkIjoidGVzdC1jbGllbnQiLCJpYXQiOjE2NDA5OTUyMDAsImV4cCI6MTY0MDk5ODgwMH0.admin_signature",
+        "refresh_token": "admin_refresh_token"
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "POST",
+      "path": "/token",
+      "headers": {
+        "Content-Type": ["application/x-www-form-urlencoded"]
+      },
+      "body": {
+        "type": "PARAMETERS",
+        "parameters": {
+          "grant_type": ["authorization_code"],
+          "code": ["operator_auth_code"],
+          "client_id": ["test-client"],
+          "client_secret": ["test-secret"]
+        }
+      }
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "access_token": "operator_access_token",
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "id_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3Qta2V5LWlkIn0.eyJzdWIiOiJvcGVyYXRvcnVzZXIiLCJlbWFpbCI6Im9wZXJhdG9yQHRlc3QuY29tIiwibmFtZSI6Ik9wZXJhdG9yIFVzZXIiLCJnaXZlbl9uYW1lIjoiT3BlcmF0b3IiLCJmYW1pbHlfbmFtZSI6IlVzZXIiLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJvcGVyYXRvcnVzZXIiLCJncm91cHMiOlsidHJha2JyaWRnZS1vcGVyYXRvcnMiLCJ0cmFrYnJpZGdlLXVzZXJzIl0sImlzcyI6Imh0dHA6Ly9tb2NrLW9pZGM6MTA4MCIsImF1ZCI6InRlc3QtY2xpZW50IiwiaWF0IjoxNjQwOTk1MjAwLCJleHAiOjE2NDA5OTg4MDB9.operator_signature",
+        "refresh_token": "operator_refresh_token"
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "GET",
+      "path": "/userinfo",
+      "headers": {
+        "Authorization": ["Bearer test_access_token"]
+      }
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "sub": "testuser",
+        "email": "testuser@test.com",
+        "email_verified": true,
+        "name": "Test User",
+        "given_name": "Test",
+        "family_name": "User",
+        "preferred_username": "testuser",
+        "groups": ["trakbridge-users"]
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "GET",
+      "path": "/userinfo",
+      "headers": {
+        "Authorization": ["Bearer admin_access_token"]
+      }
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "sub": "adminuser",
+        "email": "admin@test.com",
+        "email_verified": true,
+        "name": "Admin User",
+        "given_name": "Admin",
+        "family_name": "User",
+        "preferred_username": "adminuser",
+        "groups": ["trakbridge-admins", "trakbridge-operators", "trakbridge-users"]
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "GET",
+      "path": "/userinfo",
+      "headers": {
+        "Authorization": ["Bearer operator_access_token"]
+      }
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "sub": "operatoruser",
+        "email": "operator@test.com",
+        "email_verified": true,
+        "name": "Operator User",
+        "given_name": "Operator",
+        "family_name": "User",
+        "preferred_username": "operatoruser",
+        "groups": ["trakbridge-operators", "trakbridge-users"]
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "GET",
+      "path": "/health"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "status": "healthy",
+        "service": "mock-oidc-provider",
+        "timestamp": "2025-07-27T10:00:00Z"
+      }
+    }
+  }
+]

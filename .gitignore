@@ -3,6 +3,7 @@ venv/
 __pycache__/
 *.pyc
 app.db*
+*.db*
 .env*
 config.py
 
@@ -17,15 +18,8 @@ build/
 # Development version files
 .setuptools-scm-info.json
 
-# Tests for now
-tests/
-
-# Scripts
-scripts/
-
 # Docker and Docker Compose files
 build.sh
-docker-compose-dev.yml
 
 # build artifacts
 build/
@@ -36,5 +30,31 @@ logs/
 # VSCode Files
 .idea/
 
+# Authentication Configuration - Never commit real secrets
+config/settings/*.local.yaml
+config/settings/*.secret.yaml
+
+# Local development overrides
+config/local/
+*.local.*
+local_*.yaml
+
+# Environment files with secrets
+.env.local
+.env.production
+.env.staging
+
+# Backup files that might contain secrets
+*.bak
+*.backup
+*_backup
+
 # DS_Store files
 .DS_Store*
+
+# Dev related documents
+dev/
+
+# Database init scripts - track base files but ignore local customizations
+docker/init-scripts/*.local.sql
+docker/init-scripts/*/*.local.sql

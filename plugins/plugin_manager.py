@@ -20,20 +20,12 @@ import inspect
 import json
 import logging
 import os
-import sys
 import pkgutil
-from typing import (
-    Dict,
-    Type,
-    Optional,
-    List,
-    Any,
-    Union,
-    TYPE_CHECKING,
-)
+import sys
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
 
 # Local imports for JSON validation
-from utils.json_validator import safe_json_loads, JSONValidationError
+from utils.json_validator import JSONValidationError, safe_json_loads
 
 # Third-party imports
 # (none for this file)
@@ -51,12 +43,12 @@ class PluginManager:
 
     # Default built-in plugin modules (always allowed)
     BUILTIN_PLUGIN_MODULES = {
-        'plugins.garmin_plugin',
-        'plugins.spot_plugin', 
-        'plugins.traccar_plugin',
-        'plugins.deepstate_plugin',
-        'plugins',  # Allow the plugins package itself
-        'external_plugins',  # Allow external plugins namespace
+        "plugins.garmin_plugin",
+        "plugins.spot_plugin",
+        "plugins.traccar_plugin",
+        "plugins.deepstate_plugin",
+        "plugins",  # Allow the plugins package itself
+        "external_plugins",  # Allow external plugins namespace
     }
 
     def __init__(self):
@@ -70,39 +62,51 @@ class PluginManager:
         This allows administrators to add new plugins without code changes.
         """
         config_locations = [
-            'external_config/plugins.yaml',  # Docker volume mount config takes priority
-            'config/settings/plugins.yaml',  # Default config
-            '/etc/trakbridge/plugins.yaml',
-            os.path.expanduser('~/.trakbridge/plugins.yaml'),
-            'plugins.yaml'
+            "external_config/plugins.yaml",  # Docker volume mount config takes priority
+            "config/settings/plugins.yaml",  # Default config
+            "/etc/trakbridge/plugins.yaml",
+            os.path.expanduser("~/.trakbridge/plugins.yaml"),
+            "plugins.yaml",
         ]
-        
+
         for config_file in config_locations:
             if os.path.exists(config_file):
                 try:
                     try:
                         import yaml
                     except ImportError:
-                        logger.warning("PyYAML not available, skipping plugin config file loading")
+                        logger.warning(
+                            "PyYAML not available, skipping plugin config file loading"
+                        )
                         return
-                        
-                    with open(config_file, 'r') as f:
+
+                    with open(config_file, "r") as f:
                         config = yaml.safe_load(f)
-                    
-                    if config and 'allowed_plugin_modules' in config:
-                        additional_modules = config['allowed_plugin_modules']
+
+                    if config and "allowed_plugin_modules" in config:
+                        additional_modules = config["allowed_plugin_modules"]
                         if isinstance(additional_modules, list):
                             for module in additional_modules:
-                                if isinstance(module, str) and self._is_safe_module_name(module):
+                                if isinstance(
+                                    module, str
+                                ) and self._is_safe_module_name(module):
                                     self._allowed_modules.add(module)
-                                    logger.info(f"Added allowed plugin module from config: {module}")
+                                    logger.info(
+                                        f"Added allowed plugin module from config: {module}"
+                                    )
                                 else:
-                                    logger.warning(f"Ignoring unsafe plugin module name: {module}")
+                                    logger.warning(
+                                        f"Ignoring unsafe plugin module name: {module}"
+                                    )
                         else:
-                            logger.warning(f"No additional plugins configured in {config_file}")
+                            logger.warning(
+                                f"Invalid or No Plugins listed in {config_file}"
+                            )
                     break  # Use first config file found
                 except Exception as e:
-                    logger.warning(f"Failed to load plugin config from {config_file}: {e}")
+                    logger.warning(
+                        f"Failed to load plugin config from {config_file}: {e}"
+                    )
 
     def _is_safe_module_name(self, module_name: str) -> bool:
         """
@@ -111,29 +115,37 @@ class PluginManager:
         """
         if not isinstance(module_name, str):
             return False
-            
+
         # Must start with 'plugins.', 'external_plugins.', or be 'plugins'/'external_plugins'
-        allowed_prefixes = ['plugins', 'plugins.', 'external_plugins', 'external_plugins.']
-        if not any(module_name == prefix.rstrip('.') or module_name.startswith(prefix) for prefix in allowed_prefixes):
+        allowed_prefixes = [
+            "plugins",
+            "plugins.",
+            "external_plugins",
+            "external_plugins.",
+        ]
+        if not any(
+            module_name == prefix.rstrip(".") or module_name.startswith(prefix)
+            for prefix in allowed_prefixes
+        ):
             return False
-            
+
         # No path traversal or dangerous characters
-        if any(char in module_name for char in ['..', '/', '\\', ';', '|', '&', '`']):
+        if any(char in module_name for char in ["..", "/", "\\", ";", "|", "&", "`"]):
             return False
-            
+
         # Only alphanumeric, dots, and underscores
-        if not all(c.isalnum() or c in '._' for c in module_name):
+        if not all(c.isalnum() or c in "._" for c in module_name):
             return False
-            
+
         return True
 
     def add_allowed_plugin_module(self, module_name: str) -> bool:
         """
         Dynamically add an allowed plugin module (for admin use).
-        
+
         Args:
             module_name: The module name to allow
-            
+
         Returns:
             bool: True if added successfully, False if rejected
         """
@@ -148,7 +160,7 @@ class PluginManager:
     def get_allowed_plugin_modules(self) -> List[str]:
         """
         Get the current list of allowed plugin modules.
-        
+
         Returns:
             List of allowed module names
         """
@@ -171,7 +183,7 @@ class PluginManager:
         Uses file-based loading instead of package imports to avoid namespace conflicts.
         """
         from plugins.base_plugin import BaseGPSPlugin
-        
+
         try:
             # Get all Python files in the external directory
             for filename in os.listdir(plugins_path):
@@ -181,13 +193,15 @@ class PluginManager:
                     and filename != "base_plugin.py"
                 ):
                     module_name = filename[:-3]  # Remove .py extension
-                    
+
                     # Create a module name for external plugins
                     external_module_name = f"external_plugins.{module_name}"
-                    
+
                     # Check if this external module is allowed
                     if not self._validate_module_name(external_module_name):
-                        logger.warning(f"External plugin {module_name} not in allowed list, skipping")
+                        logger.warning(
+                            f"External plugin {module_name} not in allowed list, skipping"
+                        )
                         continue
 
                     try:
@@ -195,13 +209,15 @@ class PluginManager:
                         spec = importlib.util.spec_from_file_location(
                             external_module_name, os.path.join(plugins_path, filename)
                         )
-                        
+
                         if spec is None or spec.loader is None:
-                            logger.error(f"Failed to create spec for external plugin: {filename}")
+                            logger.error(
+                                f"Failed to create spec for external plugin: {filename}"
+                            )
                             continue
-                            
+
                         module = importlib.util.module_from_spec(spec)
-                        
+
                         # Add to sys.modules to avoid import issues
                         sys.modules[external_module_name] = module
                         spec.loader.exec_module(module)
@@ -212,26 +228,32 @@ class PluginManager:
                                 issubclass(obj, BaseGPSPlugin)
                                 and obj is not BaseGPSPlugin
                             ):
-                                logger.info(f"Loading external plugin: {name} from {filename}")
+                                logger.info(
+                                    f"Loading external plugin: {name} from {filename}"
+                                )
                                 self.register_plugin(obj)
 
                     except Exception as e:
-                        logger.error(f"Failed to load external plugin file {filename}: {e}")
+                        logger.error(
+                            f"Failed to load external plugin file {filename}: {e}"
+                        )
 
         except Exception as e:
-            logger.error(f"Failed to scan external plugins directory {plugins_path}: {e}")
+            logger.error(
+                f"Failed to scan external plugins directory {plugins_path}: {e}"
+            )
 
     def load_external_plugins(self):
         """
         Load plugins from external directories (Docker volume mounts, etc.)
         """
         external_plugin_paths = [
-            '/app/external_plugins',
-            '/opt/trakbridge/plugins', 
-            os.path.expanduser('~/.trakbridge/plugins'),
-            './external_plugins'
+            "/app/external_plugins",
+            "/opt/trakbridge/plugins",
+            os.path.expanduser("~/.trakbridge/plugins"),
+            "./external_plugins",
         ]
-        
+
         for path in external_plugin_paths:
             if os.path.exists(path) and os.path.isdir(path):
                 logger.info(f"Loading external plugins from: {path}")
@@ -241,22 +263,63 @@ class PluginManager:
         """
         Validate that a module name is in the allowed whitelist to prevent
         arbitrary code execution via dynamic imports.
-        
+
+        Enhanced with additional security checks to prevent path traversal
+        and malicious module names.
+
         Args:
             module_name: The module name to validate
-            
+
         Returns:
             bool: True if the module is allowed, False otherwise
         """
+        import re
+
+        # Basic input validation
+        if not module_name or not isinstance(module_name, str):
+            logger.error(f"Invalid module name type or empty: {type(module_name)}")
+            return False
+
+        # Security: Check for path traversal attempts
+        if ".." in module_name or "/" in module_name or "\\" in module_name:
+            logger.error(
+                f"Path traversal attempt detected in module name: {module_name}"
+            )
+            return False
+
+        # Security: Check for invalid characters that could be used for injection
+        if not re.match(
+            r"^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)*$", module_name
+        ):
+            logger.error(f"Invalid characters in module name: {module_name}")
+            return False
+
+        # Security: Prevent loading of system/dangerous modules
+        dangerous_prefixes = [
+            "os",
+            "sys",
+            "subprocess",
+            "importlib",
+            "__builtins__",
+            "eval",
+            "exec",
+        ]
+        for prefix in dangerous_prefixes:
+            if module_name.startswith(prefix + ".") or module_name == prefix:
+                logger.error(
+                    f"Attempted to load dangerous system module: {module_name}"
+                )
+                return False
+
         # Check if the module name is in our allowed modules set
         if module_name in self._allowed_modules:
             return True
-            
+
         # Check if it's a submodule of an allowed module
         for allowed_module in self._allowed_modules:
-            if module_name.startswith(allowed_module + '.'):
+            if module_name.startswith(allowed_module + "."):
                 return True
-                
+
         logger.warning(f"Attempted to load unauthorized plugin module: {module_name}")
         return False
 
@@ -313,9 +376,9 @@ class PluginManager:
             # Try to parse as JSON with security validation
             try:
                 return safe_json_loads(
-                    config, 
+                    config,
                     max_size=64 * 1024,  # 64KB limit for plugin configs
-                    context="plugin_config_string"
+                    context="plugin_config_string",
                 )
             except JSONValidationError as e:
                 logger.warning(
@@ -532,10 +595,12 @@ class PluginManager:
 
         try:
             # Validate directory name for security (prevent path traversal)
-            if '..' in directory or ('/' in directory and not directory.startswith('/app/external_plugins')):
+            if ".." in directory or (
+                "/" in directory and not directory.startswith("/app/external_plugins")
+            ):
                 logger.error(f"Invalid directory path detected: {directory}")
                 return
-                
+
             # Get absolute path of the plugins directory
             plugins_path = os.path.abspath(directory)
 
@@ -548,15 +613,30 @@ class PluginManager:
                 sys.path.insert(0, plugins_path)
 
             # Handle external plugins directory differently
-            if directory.startswith('/app/external_plugins') or directory == 'external_plugins':
+            if (
+                directory.startswith("/app/external_plugins")
+                or directory == "external_plugins"
+            ):
                 self._load_external_plugins_directory(plugins_path)
                 return
 
             # Import the plugins package - validate first for security
             if not self._validate_module_name(directory):
-                logger.error(f"Unauthorized attempt to load plugin directory: {directory}")
+                logger.error(
+                    f"Unauthorized attempt to load plugin directory: {directory}"
+                )
                 return
-            plugins_package = importlib.import_module(directory)
+
+            try:
+                plugins_package = importlib.import_module(directory)
+            except ImportError as e:
+                logger.error(f"Failed to import plugin directory '{directory}': {e}")
+                return
+            except Exception as e:
+                logger.error(
+                    f"Unexpected error importing plugin directory '{directory}': {e}"
+                )
+                return
 
             # Iterate through all modules in the plugins package
             for importer, modname, ispkg in pkgutil.iter_modules(
@@ -569,10 +649,22 @@ class PluginManager:
                 try:
                     # Validate module name before importing for security
                     if not self._validate_module_name(modname):
-                        logger.error(f"Unauthorized attempt to load plugin module: {modname}")
+                        logger.error(
+                            f"Unauthorized attempt to load plugin module: {modname}"
+                        )
                         continue
-                    # Import the module
-                    module = importlib.import_module(modname)
+
+                    # Import the module with enhanced error handling
+                    try:
+                        module = importlib.import_module(modname)
+                    except ImportError as e:
+                        logger.error(f"Failed to import plugin module '{modname}': {e}")
+                        continue
+                    except Exception as e:
+                        logger.error(
+                            f"Unexpected error importing plugin module '{modname}': {e}"
+                        )
+                        continue
 
                     # Look for classes that inherit from BaseGPSPlugin
                     for name, obj in inspect.getmembers(module, inspect.isclass):
@@ -719,8 +811,8 @@ class PluginManager:
         health_status = {}
 
         # Get existing stream configurations from the database
-        from models.stream import Stream
         from database import db
+        from models.stream import Stream
 
         # Get all streams grouped by plugin type
         streams_by_plugin = {}

@@ -18,9 +18,11 @@
             <button type="button" class="btn btn-outline-secondary btn-sm me-2" onclick="refreshStreams()">
                 <i class="fas fa-sync-alt"></i> Refresh
             </button>
+            {% if current_user.can_access('streams', 'write') %}
             <a href="{{ url_for('streams.create_stream') }}" class="btn btn-primary btn-sm">
                 <i class="fas fa-plus"></i> New Stream
             </a>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -121,6 +123,7 @@
                         </td>
                         <td>
                             <div class="btn-group btn-group-sm" role="group">
+                                {% if current_user.can_access('streams', 'write') %}
                                 {% if stream.is_active %}
                                     <button class="btn btn-outline-danger"
                                             onclick="controlStream({{ stream.id }}, 'stop')"
@@ -134,11 +137,13 @@
                                         <i class="fas fa-play"></i>
                                     </button>
                                 {% endif %}
+                                {% endif %}
                                 <a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}"
                                    class="btn btn-outline-primary"
                                    title="View Details">
                                     <i class="fas fa-eye"></i>
                                 </a>
+                                {% if current_user.can_access('streams', 'write') %}
                                 <button class="btn btn-outline-secondary"
                                         onclick="testStream({{ stream.id }})"
                                         title="Test Connection">
@@ -149,6 +154,7 @@
                                         title="Delete Stream">
                                     <i class="fas fa-trash"></i>
                                 </button>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
@@ -201,9 +207,13 @@
             <i class="fas fa-stream text-muted mb-3" style="font-size: 3rem; opacity: 0.3;"></i>
             <h4>No Streams Yet</h4>
             <p class="text-muted mb-4">Create your first stream to get started with location tracking.</p>
+            {% if current_user.can_access('streams', 'write') %}
             <a href="{{ url_for('streams.create_stream') }}" class="btn btn-primary">
                 <i class="fas fa-plus"></i> Create Stream
             </a>
+            {% else %}
+            <p class="text-muted"><i class="fas fa-lock"></i> Contact an administrator to create streams</p>
+            {% endif %}
         </div>
     </div>
 </div>

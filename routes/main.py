@@ -30,6 +30,9 @@ import logging
 # Third-party imports
 from flask import Blueprint, render_template
 
+# Authentication imports
+from services.auth import require_auth
+
 # Module-level logger
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,7 @@ bp = Blueprint("main", __name__)
 
 
 @bp.route("/")
+@require_auth
 def index():
     """Main dashboard page"""
     from flask import current_app

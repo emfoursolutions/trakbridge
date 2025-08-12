@@ -37,6 +37,118 @@ export FLASK_APP=${FLASK_APP:-app.py}
 export DB_TYPE=${DB_TYPE:-sqlite}
 export LOG_LEVEL=${LOG_LEVEL:-INFO}
 
+# Function to handle user switching and security
+handle_user_switching() {
+    log_info "Handling user switching and security..."
+    
+    # Get target UID/GID from environment or current user
+    local TARGET_UID=${USER_ID:-$(id -u)}
+    local TARGET_GID=${GROUP_ID:-$(id -g)}
+    local CURRENT_UID=$(id -u)
+    
+    log_debug "USER_ID environment variable: ${USER_ID:-not set}"
+    log_debug "GROUP_ID environment variable: ${GROUP_ID:-not set}"
+    log_debug "TARGET_UID (resolved): $TARGET_UID"
+    log_debug "TARGET_GID (resolved): $TARGET_GID"
+    log_debug "CURRENT_UID: $CURRENT_UID"
+    log_debug "Current user: $(whoami)"
+    
+    # Security check: prevent running as root unless explicitly needed
+    if [[ $CURRENT_UID -eq 0 ]]; then
+        # We are running as root - handle user switching securely
+        if [[ $TARGET_UID -eq 0 ]] && [[ "${ALLOW_ROOT:-false}" != "true" ]]; then
+            log_error "Running as root is not allowed for security reasons."
+            log_error "Set ALLOW_ROOT=true environment variable to override this protection."
+            log_error "For production deployments, consider using USER_ID and GROUP_ID instead."
+            exit 1
+        fi
+        
+        # Create or modify user if dynamic UID/GID is requested
+        if [[ $TARGET_UID -ne 1000 ]] || [[ $TARGET_GID -ne 1000 ]]; then
+            log_info "Creating dynamic user with UID:$TARGET_UID GID:$TARGET_GID for host compatibility"
+            
+            # Create group if it doesn't exist
+            if ! getent group $TARGET_GID > /dev/null 2>&1; then
+                groupadd -g $TARGET_GID appuser-dynamic
+            fi
+            
+            # Create user if it doesn't exist  
+            if ! getent passwd $TARGET_UID > /dev/null 2>&1; then
+                useradd -r -u $TARGET_UID -g $TARGET_GID -d /app -s /bin/bash appuser-dynamic
+                # Add dynamic user to appuser group for inherited permissions
+                usermod -a -G appuser appuser-dynamic 2>/dev/null || log_debug "Could not add dynamic user to appuser group"
+            else
+                # If user exists, ensure it's added to appuser group
+                local existing_user=$(getent passwd $TARGET_UID | cut -d: -f1)
+                usermod -a -G appuser "$existing_user" 2>/dev/null || log_debug "Could not add existing user to appuser group"
+            fi
+            
+            # Fix ownership of app directories for dynamic user
+            # Only chown directories that are writable (not read-only mounted)
+            log_debug "Fixing ownership for writable directories..."
+            
+            # Always fix these writable directories (including external directories for volume mounts)
+            chown -R $TARGET_UID:$TARGET_GID /app/logs /app/data /app/tmp /app/external_plugins /app/external_config
+            
+            # Check each application code directory for writability before chown
+            local app_dirs=("/app/utils" "/app/plugins" "/app/services" "/app/models" "/app/routes" "/app/config")
+            for dir in "${app_dirs[@]}"; do
+                if [[ -d "$dir" ]]; then
+                    if [[ -w "$dir" ]]; then
+                        log_debug "Changing ownership of writable directory: $dir"
+                        if chown -R $TARGET_UID:$TARGET_GID "$dir" 2>/dev/null; then
+                            log_debug "Successfully changed ownership of $dir"
+                        else
+                            log_debug "Failed to chown $dir, trying fallback permission strategy"
+                            # Fallback: ensure group-readable permissions
+                            chmod -R g+r "$dir" 2>/dev/null || log_debug "Could not set group read permissions on $dir"
+                            find "$dir" -type d -exec chmod g+rx {} \; 2>/dev/null || log_debug "Could not set directory execute permissions"
+                        fi
+                    else
+                        log_debug "Skipping read-only directory: $dir"
+                        # For read-only directories, verify they're readable by group
+                        if [[ ! -r "$dir" ]]; then
+                            log_warn "Read-only directory $dir is not readable by current user"
+                            # Try to make readable via group permissions if possible
+                            chmod g+r "$dir" 2>/dev/null || log_debug "Could not improve read permissions on $dir"
+                        fi
+                    fi
+                else
+                    log_debug "Directory not found: $dir"
+                fi
+            done
+            
+            # Ensure core application files are readable by the dynamic user via group membership
+            log_debug "Ensuring core application files are accessible to dynamic user"
+            local core_files=("/app/app.py" "/app/database.py" "/app/_version.py" "/app/pyproject.toml")
+            for file in "${core_files[@]}"; do
+                if [[ -f "$file" ]]; then
+                    # Verify file is group-readable
+                    if [[ ! -r "$file" ]]; then
+                        log_debug "Making $file group-readable"
+                        chmod g+r "$file" 2>/dev/null || log_debug "Could not make $file group-readable"
+                    fi
+                fi
+            done
+            
+            # Fix ownership and permissions of secrets if they exist
+            if [ -d "/app/secrets" ]; then
+                chown -R $TARGET_UID:$TARGET_GID /app/secrets
+                chmod -R 640 /app/secrets/* 2>/dev/null || true
+            fi
+        else
+            log_info "Using default appuser (1000:1000)"
+        fi
+        
+        # Switch to target user using gosu and continue execution
+        log_info "Switching to user $TARGET_UID:$TARGET_GID and continuing startup"
+        exec gosu $TARGET_UID:$TARGET_GID "$0" "$@"
+    else
+        # Already running as non-root user, proceed normally
+        log_info "Running as non-root user $(id -u):$(id -g)"
+    fi
+}
+
 # Ensure we're in the correct directory
 cd /app
 
@@ -104,54 +216,54 @@ handle_secrets() {
 
 # Function to ensure directory permissions
 ensure_permissions() {
-    log_info "Ensuring proper permissions for application directories..."
+    log_info "Ensuring application directories exist and are accessible..."
 
     # Create directories if they don't exist
-    mkdir -p /app/logs /app/data /app/tmp
+    mkdir -p /app/logs /app/data /app/tmp /app/external_plugins /app/external_config
 
-    # Get current user info
-    local current_uid=$(id -u)
-    local current_gid=$(id -g)
+    # Simple validation that critical directories are accessible
+    local dirs_to_check=(
+        "/app/logs:Logs:write"
+        "/app/data:Data:write" 
+        "/app/tmp:Tmp:write"
+        "/app/external_plugins:ExternalPlugins:write"
+        "/app/external_config:ExternalConfig:write"
+        "/app/utils:Utils:read"
+        "/app/plugins:Plugins:read"
+        "/app/services:Services:read"
+        "/app/models:Models:read"
+        "/app/routes:Routes:read"
+        "/app/config:Config:read"
+    )
 
-    log_debug "Checking permissions as UID:$current_uid GID:$current_gid"
-
-    # Function to check and fix directory permissions
-    check_and_fix_dir() {
-        local dir="$1"
-        local dir_name="$2"
-
-        if [[ -w "$dir" ]]; then
-            log_debug "$dir_name directory is writable"
-        else
-            log_warn "$dir_name directory is not writable"
-            
-            # In the new security model, permissions should be handled by docker-entrypoint.sh
-            # We can only fix what we have permission to fix
-            if chmod 755 "$dir" 2>/dev/null; then
-                log_info "Fixed $dir_name directory permissions"
-            else
-                log_warn "Cannot fix $dir_name directory permissions"
-                log_warn "This should have been handled by the Docker entrypoint script"
-                log_warn "If using dynamic UID/GID, ensure USER_ID and GROUP_ID are set correctly"
-            fi
+    for dir_info in "${dirs_to_check[@]}"; do
+        IFS=':' read -r dir_path dir_name access_type <<< "$dir_info"
+        
+        if [[ ! -d "$dir_path" ]]; then
+            log_warn "$dir_name directory not found: $dir_path"
+            continue
         fi
 
-        # Ensure we can create files in the directory
-        local test_file="$dir/.write_test_$(date +%s)"
-        if touch "$test_file" 2>/dev/null; then
-            rm -f "$test_file" 2>/dev/null
-            log_debug "$dir_name directory write test passed"
-        else
-            log_error "$dir_name directory write test failed"
-            log_error "Application may not function correctly without write access to $dir"
-            log_error "Check Docker volume mount permissions and USER_ID/GROUP_ID settings"
-        fi
-    }
-
-    # Check each directory
-    check_and_fix_dir "/app/logs" "Logs"
-    check_and_fix_dir "/app/data" "Data"
-    check_and_fix_dir "/app/tmp" "Tmp"
+        case "$access_type" in
+            "write")
+                if [[ -w "$dir_path" ]]; then
+                    log_debug "$dir_name directory is writable"
+                else
+                    log_error "$dir_name directory is not writable: $dir_path"
+                    log_error "Check Docker volume mount permissions and USER_ID/GROUP_ID settings"
+                fi
+                ;;
+            "read")
+                if [[ -r "$dir_path" ]]; then
+                    log_debug "$dir_name directory is readable"
+                else
+                    log_error "$dir_name directory is not readable: $dir_path"
+                    log_error "Python modules cannot be imported from $dir_path"
+                    return 1
+                fi
+                ;;
+        esac
+    done
 }
 
 # Function to wait for database
@@ -268,35 +380,87 @@ validate_config() {
     # Set PYTHONPATH to include current directory
     export PYTHONPATH="/app:${PYTHONPATH:-}"
 
-    # Test import with more detailed error reporting
-    log_info "Testing Flask application import..."
+    # Test import with more detailed error reporting and permission validation
+    log_info "Testing Flask application import and Python module accessibility..."
     if python -c "
 import sys
+import os
 sys.path.insert(0, '/app')
+
+# Test critical Python modules first
+critical_modules = ['utils', 'services', 'models', 'routes', 'plugins', 'config']
+failed_modules = []
+
+for module_name in critical_modules:
+    module_path = f'/app/{module_name}'
+    if os.path.exists(module_path):
+        if not os.access(module_path, os.R_OK):
+            failed_modules.append(f'{module_name} (not readable)')
+        elif not os.access(module_path, os.X_OK):
+            failed_modules.append(f'{module_name} (not executable)')
+    else:
+        failed_modules.append(f'{module_name} (not found)')
+
+if failed_modules:
+    print(f'Module access issues: {failed_modules}')
+    # Don't exit here, continue with app import test
+
 try:
     # Test that we can import the module without initializing
     import importlib.util
     spec = importlib.util.spec_from_file_location('app', '/app/app.py')
+    if spec is None:
+        raise ImportError('Could not create module spec for app.py')
     app_module = importlib.util.module_from_spec(spec)
     print('Application module can be loaded')
+    
+    # Test key module imports that typically fail with permission issues
+    try:
+        import utils.json_validator
+        print('utils.json_validator import successful')
+    except ImportError as e:
+        print(f'utils.json_validator import failed: {e}')
+        
 except Exception as e:
     print(f'Import error: {e}')
+    # Show current user context
+    import pwd
+    import grp
+    uid = os.getuid()
+    gid = os.getgid() 
+    groups = os.getgroups()
+    print(f'Current UID: {uid}, GID: {gid}, Groups: {groups}')
+    try:
+        print(f'User: {pwd.getpwuid(uid).pw_name}')
+    except:
+        print('Could not resolve username')
     sys.exit(1)
 " 2>&1; then
-        log_info "Flask application import successful"
+        log_info "Flask application and module import successful"
     else
-        log_error "Failed to import Flask application"
-        log_error "Attempting to diagnose the issue..."
+        log_error "Failed to import Flask application or modules"
+        log_error "Attempting to diagnose permission issues..."
 
-        # Additional debugging
+        # Additional debugging with user context
         python -c "
 import sys
+import os
+print('=== Python Environment ===')
 print('Python version:', sys.version)
 print('Python path:', sys.path)
-import os
-print('Environment variables:')
+print('=== User Context ===')
+print(f'UID: {os.getuid()}, GID: {os.getgid()}, Groups: {os.getgroups()}')
+print('=== Environment Variables ===')
 for key in ['FLASK_APP', 'FLASK_ENV', 'PYTHONPATH']:
     print(f'  {key}: {os.environ.get(key, \"Not set\")}')
+print('=== File Permissions ===')
+import stat
+for path in ['/app/app.py', '/app/utils', '/app/utils/json_validator.py']:
+    if os.path.exists(path):
+        st = os.stat(path)
+        print(f'{path}: mode={oct(st.st_mode)}, owner={st.st_uid}:{st.st_gid}, readable={os.access(path, os.R_OK)}')
+    else:
+        print(f'{path}: does not exist')
 "
         return 1
     fi
@@ -351,6 +515,104 @@ setup_logging() {
 
     # Set appropriate permissions if possible
     chmod 644 /app/logs/*.log 2>/dev/null || log_debug "Could not set log file permissions"
+}
+
+# Function to install default configuration files to external mount
+install_config_files() {
+    local external_config_dir="${TRAKBRIDGE_CONFIG_DIR:-/app/external_config}"
+    local bundled_config_dir="/app/config/settings"
+    local auto_install="${TRAKBRIDGE_CONFIG_AUTO_INSTALL:-true}"
+    local update_mode="${TRAKBRIDGE_CONFIG_UPDATE_MODE:-preserve}"
+    
+    log_info "Checking configuration installation..."
+    log_debug "External config dir: $external_config_dir"
+    log_debug "Bundled config dir: $bundled_config_dir"
+    log_debug "Auto install: $auto_install"
+    log_debug "Update mode: $update_mode"
+    
+    # Skip if auto-install is disabled
+    if [[ "$auto_install" != "true" ]]; then
+        log_info "Configuration auto-install disabled"
+        return 0
+    fi
+    
+    # Skip if external config directory doesn't exist (no volume mount)
+    if [[ ! -d "$external_config_dir" ]]; then
+        log_debug "External config directory not found - no volume mounted"
+        return 0
+    fi
+    
+    # Skip if bundled config doesn't exist
+    if [[ ! -d "$bundled_config_dir" ]]; then
+        log_warn "Bundled configuration directory not found: $bundled_config_dir"
+        return 0
+    fi
+    
+    # Ensure external config directory is writable
+    if [[ ! -w "$external_config_dir" ]]; then
+        log_error "External config directory is not writable: $external_config_dir"
+        return 1
+    fi
+    
+    local files_installed=0
+    local files_updated=0
+    local files_skipped=0
+    
+    # Process each configuration file
+    for config_file in "$bundled_config_dir"/*.yaml; do
+        if [[ ! -f "$config_file" ]]; then
+            continue
+        fi
+        
+        local filename=$(basename "$config_file")
+        local external_file="$external_config_dir/$filename"
+        
+        if [[ -f "$external_file" ]]; then
+            # File exists in external config
+            case "$update_mode" in
+                "preserve")
+                    log_debug "Preserving existing config: $filename"
+                    files_skipped=$((files_skipped + 1))
+                    ;;
+                "overwrite")
+                    log_info "Overwriting config file: $filename"
+                    cp "$config_file" "$external_file"
+                    files_updated=$((files_updated + 1))
+                    ;;
+                "merge")
+                    # For now, preserve existing (merge could be implemented later)
+                    log_debug "Preserving existing config (merge mode): $filename"
+                    files_skipped=$((files_skipped + 1))
+                    ;;
+                *)
+                    log_warn "Unknown update mode: $update_mode, preserving existing file"
+                    files_skipped=$((files_skipped + 1))
+                    ;;
+            esac
+        else
+            # File doesn't exist, install it
+            log_info "Installing config file: $filename"
+            cp "$config_file" "$external_file"
+            files_installed=$((files_installed + 1))
+        fi
+    done
+    
+    # Set appropriate permissions on installed files
+    if [[ $files_installed -gt 0 ]] || [[ $files_updated -gt 0 ]]; then
+        chmod 644 "$external_config_dir"/*.yaml 2>/dev/null || log_debug "Could not set config file permissions"
+    fi
+    
+    # Log summary
+    if [[ $files_installed -gt 0 ]] || [[ $files_updated -gt 0 ]] || [[ $files_skipped -gt 0 ]]; then
+        log_info "Configuration installation complete:"
+        log_info "  Installed: $files_installed files"
+        log_info "  Updated: $files_updated files"
+        log_info "  Preserved: $files_skipped files"
+    else
+        log_debug "No configuration files processed"
+    fi
+    
+    return 0
 }
 
 # Function to handle shutdown signals
@@ -494,10 +756,13 @@ check_hypercorn() {
 main() {
     log_info "=== TrakBridge Startup ==="
 
+    # Handle user switching first (this may cause re-exec)
+    handle_user_switching
+
     # Ensure we're in the correct directory
     cd /app
 
-    # Ensure proper permissions
+    # Ensure proper permissions (simplified since user switching handles ownership)
     ensure_permissions
 
     # Handle secrets permissions
@@ -509,8 +774,11 @@ main() {
     # Setup logging
     setup_logging
 
-    # Setup External Plugins
-    setup_plugins
+    # Install configuration files to external mount if needed
+    if ! install_config_files; then
+        log_error "Configuration installation failed"
+        exit 1
+    fi
 
     # Validate configuration
     if ! validate_config; then

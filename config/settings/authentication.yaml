@@ -1,0 +1,197 @@
+# TrakBridge Authentication Configuration Template
+# This file uses environment variable substitution for secure CI/CD deployment
+# For local development, copy this to authentication.yaml and add real values
+
+authentication:
+  # Session management configuration
+  session:
+    # Session lifetime in hours
+    lifetime_hours: ${SESSION_LIFETIME_HOURS:-8}
+    
+    # How often to cleanup expired sessions (minutes)
+    cleanup_interval_minutes: ${SESSION_CLEANUP_INTERVAL:-60}
+    
+    # Use secure cookies (HTTPS required in production)
+    secure_cookies: ${SESSION_SECURE_COOKIES:-true}
+    
+    # Session cookie domain (optional)
+    cookie_domain: "${SESSION_COOKIE_DOMAIN:-null}"
+    
+    # Session cookie path
+    cookie_path: "${SESSION_COOKIE_PATH:-/}"
+  
+  # Authentication provider priority order
+  # First successful authentication wins
+  provider_priority:
+    - oidc    # Try OIDC/SSO first
+    - ldap    # Fall back to LDAP/AD
+    - local   # Finally try local database
+  
+  # Individual provider configurations
+  providers:
+    # Local database authentication
+    local:
+      enabled: ${LOCAL_AUTH_ENABLED:-true}
+      
+      # Password policy enforcement
+      password_policy:
+        min_length: ${PASSWORD_MIN_LENGTH:-8}
+        require_uppercase: ${PASSWORD_REQUIRE_UPPERCASE:-true}
+        require_lowercase: ${PASSWORD_REQUIRE_LOWERCASE:-true}
+        require_numbers: ${PASSWORD_REQUIRE_NUMBERS:-true}
+        require_special: ${PASSWORD_REQUIRE_SPECIAL:-false}
+        
+        # Optional: Maximum password age in days
+        max_age_days: ${PASSWORD_MAX_AGE_DAYS:-null}
+        
+        # Optional: Password history (prevent reuse)
+        history_count: ${PASSWORD_HISTORY_COUNT:-null}
+      
+      # Account lockout policy (future feature)
+      # lockout_policy:
+      #   enabled: true
+      #   max_attempts: 5
+      #   lockout_duration_minutes: 30
+    
+    # LDAP/Active Directory authentication
+    ldap:
+      enabled: ${LDAP_ENABLED:-false}
+      
+      # LDAP server configuration
+      server: "${LDAP_SERVER:-ldap://your-ad-server.company.com}"
+      port: ${LDAP_PORT:-389}
+      
+      # Security settings
+      use_ssl: ${LDAP_USE_SSL:-false}          # Use LDAPS (port 636)
+      use_tls: ${LDAP_USE_TLS:-true}           # Use StartTLS
+      ca_cert_file: "${LDAP_CA_CERT_FILE:-null}"   # Path to CA certificate file
+      validate_cert: ${LDAP_VALIDATE_CERT:-true}     # Validate server certificate
+      
+      # Service account for LDAP binding
+      bind_dn: "${LDAP_BIND_DN:-CN=trakbridge,OU=Service Accounts,DC=company,DC=com}"
+      bind_password: "${LDAP_BIND_PASSWORD:-REPLACE_WITH_YOUR_LDAP_PASSWORD}"
+      
+      # User search configuration
+      user_search_base: "${LDAP_USER_SEARCH_BASE:-OU=Users,DC=company,DC=com}"
+      user_search_filter: "${LDAP_USER_SEARCH_FILTER:-(sAMAccountName={username})}"
+      user_search_scope: "${LDAP_USER_SEARCH_SCOPE:-SUBTREE}"
+      
+      # Group search configuration for role mapping
+      group_search_base: "${LDAP_GROUP_SEARCH_BASE:-OU=Groups,DC=company,DC=com}"
+      group_search_filter: "${LDAP_GROUP_SEARCH_FILTER:-(member={user_dn})}"
+      group_search_scope: "${LDAP_GROUP_SEARCH_SCOPE:-SUBTREE}"
+      
+      # LDAP attribute mapping
+      attributes:
+        username: "${LDAP_ATTR_USERNAME:-sAMAccountName}"
+        email: "${LDAP_ATTR_EMAIL:-mail}"
+        first_name: "${LDAP_ATTR_FIRST_NAME:-givenName}"
+        last_name: "${LDAP_ATTR_LAST_NAME:-sn}"
+        display_name: "${LDAP_ATTR_DISPLAY_NAME:-displayName}"
+        phone: "${LDAP_ATTR_PHONE:-telephoneNumber}"
+        department: "${LDAP_ATTR_DEPARTMENT:-department}"
+        title: "${LDAP_ATTR_TITLE:-title}"
+      
+      # Group DN to TrakBridge role mapping
+      role_mapping:
+        "${LDAP_ADMIN_GROUP:-CN=TrakBridge-Admins,OU=Groups,DC=company,DC=com}": "admin"
+        "${LDAP_OPERATOR_GROUP:-CN=TrakBridge-Operators,OU=Groups,DC=company,DC=com}": "operator"
+        "${LDAP_USER_GROUP:-CN=TrakBridge-Users,OU=Groups,DC=company,DC=com}": "user"
+      
+      # Default role for users not in mapped groups
+      default_role: "${LDAP_DEFAULT_ROLE:-user}"
+      
+      # Connection settings
+      connection_timeout: ${LDAP_CONNECTION_TIMEOUT:-10}
+      response_timeout: ${LDAP_RESPONSE_TIMEOUT:-30}
+    
+    # OpenID Connect (OIDC) authentication
+    oidc:
+      enabled: ${OIDC_ENABLED:-false}
+      
+      # OIDC provider configuration
+      issuer: "${OIDC_ISSUER:-https://your-identity-provider.com}"
+      client_id: "${OIDC_CLIENT_ID:-trakbridge-client}"
+      client_secret: "${OIDC_CLIENT_SECRET:-REPLACE_WITH_YOUR_OIDC_SECRET}"
+      
+      # OAuth 2.0 scopes to request
+      scopes:
+        - "openid"
+        - "email"
+        - "profile"
+        - "groups"  # For role mapping
+      
+      # Redirect URI (must match registered application)
+      redirect_uri: "${OIDC_REDIRECT_URI:-https://trakbridge.company.com/auth/oidc/callback}"
+      
+      # JWT validation settings
+      jwt_validation:
+        verify_signature: ${OIDC_VERIFY_SIGNATURE:-true}
+        verify_audience: ${OIDC_VERIFY_AUDIENCE:-true}
+        verify_issuer: ${OIDC_VERIFY_ISSUER:-true}
+        verify_expiration: ${OIDC_VERIFY_EXPIRATION:-true}
+        clock_skew_seconds: ${OIDC_CLOCK_SKEW:-30}
+      
+      # Claim mapping configuration
+      claims:
+        username: "${OIDC_CLAIM_USERNAME:-preferred_username}"
+        email: "${OIDC_CLAIM_EMAIL:-email}"
+        first_name: "${OIDC_CLAIM_FIRST_NAME:-given_name}"
+        last_name: "${OIDC_CLAIM_LAST_NAME:-family_name}"
+        display_name: "${OIDC_CLAIM_DISPLAY_NAME:-name}"
+        groups: "${OIDC_CLAIM_GROUPS:-groups}"
+      
+      # Group/role mapping from OIDC claims to TrakBridge roles
+      role_claim: "${OIDC_ROLE_CLAIM:-groups}"
+      role_mapping:
+        "${OIDC_ADMIN_GROUP:-trakbridge-admins}": "admin"
+        "${OIDC_OPERATOR_GROUP:-trakbridge-operators}": "operator"
+        "${OIDC_USER_GROUP:-trakbridge-users}": "user"
+      
+      # Default role for users not in mapped groups
+      default_role: "${OIDC_DEFAULT_ROLE:-user}"
+      
+      # OIDC discovery and caching
+      discovery_cache_timeout: ${OIDC_DISCOVERY_CACHE_TIMEOUT:-3600}  # Cache discovery document for 1 hour
+      jwks_cache_timeout: ${OIDC_JWKS_CACHE_TIMEOUT:-3600}       # Cache JWKS for 1 hour
+
+# Environment-specific overrides
+# These settings can be overridden based on FLASK_ENV
+
+development:
+  authentication:
+    session:
+      secure_cookies: false  # Allow HTTP in development
+      cleanup_interval_minutes: 5  # More frequent cleanup
+    providers:
+      local:
+        password_policy:
+          min_length: 4  # Relaxed for testing
+          require_uppercase: false
+          require_lowercase: false
+          require_numbers: false
+
+testing:
+  authentication:
+    session:
+      lifetime_hours: 1  # Shorter sessions for testing
+      secure_cookies: false
+    providers:
+      local:
+        enabled: true
+      ldap:
+        enabled: false  # Disable LDAP in tests by default
+      oidc:
+        enabled: false  # Disable OIDC in tests by default
+
+production:
+  authentication:
+    session:
+      secure_cookies: true  # Force HTTPS in production
+      cleanup_interval_minutes: 60
+    providers:
+      local:
+        password_policy:
+          min_length: 12  # Stronger passwords in production
+          require_special: true
+          max_age_days: 90

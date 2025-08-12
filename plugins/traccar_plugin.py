@@ -31,13 +31,14 @@ Version: 1.0.0
 
 # Standard library imports
 import asyncio
-import logging
 import json
+import logging
 import ssl
 from datetime import datetime, timezone
 
 # Third-party imports
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
 import aiohttp
 import certifi
 
@@ -69,7 +70,7 @@ class TraccarPlugin(BaseGPSPlugin):
             "display_name": "Traccar GPS Platform",
             "description": "Connect to Traccar GPS tracking platform via REST API",
             "icon": "fas fa-map-marked-alt",
-            "category": "platform",
+            "category": "tracker",
             "help_sections": [
                 {
                     "title": "Setup Instructions",

@@ -1,0 +1,442 @@
+{% extends "base.html" %}
+
+{% block title %}User Management{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>User Management</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('admin.admin_dashboard') }}">Administration</a></li>
+                    <li class="breadcrumb-item active">Users</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="btn-toolbar">
+            <a href="{{ url_for('auth.admin_create_user') }}" class="btn btn-primary btn-sm me-2">
+                <i class="fas fa-user-plus"></i> Create User
+            </a>
+            <button type="button" class="btn btn-outline-secondary btn-sm me-2" onclick="refreshUsers()">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+{% if stats %}
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card metric-card">
+            <div class="card-body">
+                <div class="metric-value">{{ users|length }}</div>
+                <div class="metric-label">Total Users</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card metric-card">
+            <div class="card-body">
+                <div class="metric-value">
+                    {{ users | selectattr("status.value", "equalto", "active") | list | length }}
+                </div>
+                <div class="metric-label">Active Users</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card metric-card">
+            <div class="card-body">
+                <div class="metric-value">
+                    {{ stats.get('total_sessions', 0) }}
+                </div>
+                <div class="metric-label">Active Sessions</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card metric-card">
+            <div class="card-body">
+                <div class="metric-value">
+                    {{ users | selectattr("role.value", "equalto", "admin") | list | length }}
+                </div>
+                <div class="metric-label">Administrators</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Filters and Search -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-4">
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="fas fa-search"></i>
+                            </span>
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="user-search" 
+                                   placeholder="Search users..."
+                                   onkeyup="filterUsers()">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-control" id="role-filter" onchange="filterUsers()">
+                            <option value="">All Roles</option>
+                            <option value="admin">Administrator</option>
+                            <option value="operator">Operator</option>
+                            <option value="user">User</option>
+                            <option value="viewer">Viewer</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-control" id="provider-filter" onchange="filterUsers()">
+                            <option value="">All Providers</option>
+                            <option value="local">Local</option>
+                            <option value="ldap">Directory (LDAP)</option>
+                            <option value="oidc">SSO (OIDC)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <select class="form-control" id="status-filter" onchange="filterUsers()">
+                            <option value="">All Status</option>
+                            <option value="active">Active</option>
+                            <option value="disabled">Disabled</option>
+                            <option value="locked">Locked</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Users Table -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-users"></i> System Users
+                    </h5>
+                    <span class="version-badge" id="user-count">
+                        {{ users|length }} users
+                    </span>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if users %}
+                <div class="table-responsive">
+                    <table class="table mb-0" id="users-table">
+                        <thead>
+                            <tr>
+                                <th width="20%">User</th>
+                                <th width="15%">Role</th>
+                                <th width="15%">Provider</th>
+                                <th width="15%">Status</th>
+                                <th width="15%">Last Login</th>
+                                <th width="10%">Sessions</th>
+                                <th width="10%">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                            <tr class="user-row" 
+                                data-username="{{ user.username|lower }}"
+                                data-email="{{ (user.email or '')|lower }}"
+                                data-role="{{ user.role.value }}"
+                                data-provider="{{ user.auth_provider.value }}"
+                                data-status="{{ user.status.value }}">
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="user-avatar me-3">
+                                            <i class="fas fa-user-circle text-muted" style="font-size: 2rem;"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-bold">{{ user.username }}</div>
+                                            {% if user.full_name %}
+                                            <div class="text-muted small">{{ user.full_name }}</div>
+                                            {% endif %}
+                                            {% if user.email %}
+                                            <div class="text-muted small">
+                                                <i class="fas fa-envelope"></i> {{ user.email }}
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="version-badge 
+                                        {% if user.role.value == 'admin' %}release
+                                        {% elif user.role.value == 'operator' %}dev
+                                        {% else %}{% endif %}">
+                                        {{ user.role.value.title() }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="version-badge">
+                                        {% if user.auth_provider.value == 'local' %}
+                                            <i class="fas fa-database"></i> Local
+                                        {% elif user.auth_provider.value == 'ldap' %}
+                                            <i class="fas fa-building"></i> LDAP
+                                        {% elif user.auth_provider.value == 'oidc' %}
+                                            <i class="fas fa-shield-alt"></i> SSO
+                                        {% endif %}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="status-indicator 
+                                        {% if user.status.value == 'active' %}status-active
+                                        {% else %}status-inactive{% endif %}">
+                                        <span class="status-dot"></span>
+                                        {{ user.status.value.title() }}
+                                    </span>
+                                    {% if user.status.value == 'locked' and user.failed_login_attempts > 0 %}
+                                        <div class="text-muted small">
+                                            {{ user.failed_login_attempts }} failed attempts
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if user.last_login %}
+                                        <span class="text-mono small">
+                                            {{ user.last_login.strftime('%Y-%m-%d') }}
+                                        </span>
+                                        <div class="text-muted small">
+                                            {{ user.last_login.strftime('%H:%M:%S') }}
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted">Never</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% set active_sessions = user.sessions | selectattr("is_active") | list %}
+                                    {% if active_sessions %}
+                                        <span class="version-badge">{{ active_sessions|length }}</span>
+                                    {% else %}
+                                        <span class="text-muted">0</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('auth.admin_user_detail', user_id=user.id) }}" 
+                                           class="btn btn-outline-primary btn-sm"
+                                           title="View Details">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        
+                                        <a href="{{ url_for('auth.admin_edit_user', user_id=user.id) }}" 
+                                           class="btn btn-outline-info btn-sm"
+                                           title="Edit User">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        
+                                        {% if user.id != current_user.id %}
+                                            {% if user.status.value == 'active' %}
+                                            <button type="button" 
+                                                    class="btn btn-outline-warning btn-sm"
+                                                    onclick="toggleUserStatus({{ user.id }}, 'disable')"
+                                                    title="Disable User">
+                                                <i class="fas fa-user-slash"></i>
+                                            </button>
+                                            {% else %}
+                                            <button type="button" 
+                                                    class="btn btn-outline-success btn-sm"
+                                                    onclick="toggleUserStatus({{ user.id }}, 'enable')"
+                                                    title="Enable User">
+                                                <i class="fas fa-user-check"></i>
+                                            </button>
+                                            {% endif %}
+                                        {% else %}
+                                        <button type="button" 
+                                                class="btn btn-outline-secondary btn-sm"
+                                                disabled
+                                                title="Cannot modify your own account">
+                                            <i class="fas fa-ban"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-users text-muted mb-3" style="font-size: 3rem; opacity: 0.3;"></i>
+                    <p class="text-muted mb-3">No users found in the system.</p>
+                    <small class="text-muted">This shouldn't happen - at least one admin user should exist.</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- User Statistics by Provider -->
+{% if stats %}
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-chart-pie"></i> Users by Authentication Provider
+                </h6>
+            </div>
+            <div class="card-body">
+                {% for provider, count in stats.get('users_by_provider', {}).items() %}
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span>
+                        {% if provider == 'local' %}
+                            <i class="fas fa-database"></i> Local Database
+                        {% elif provider == 'ldap' %}
+                            <i class="fas fa-building"></i> Directory (LDAP)
+                        {% elif provider == 'oidc' %}
+                            <i class="fas fa-shield-alt"></i> Single Sign-On
+                        {% endif %}
+                    </span>
+                    <span class="version-badge">{{ count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-user-tag"></i> Users by Role
+                </h6>
+            </div>
+            <div class="card-body">
+                {% for role, count in stats.get('users_by_role', {}).items() %}
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span>
+                        <i class="fas fa-user-tag"></i> {{ role.title() }}
+                    </span>
+                    <span class="version-badge 
+                        {% if role == 'admin' %}release
+                        {% elif role == 'operator' %}dev
+                        {% else %}{% endif %}">{{ count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function filterUsers() {
+        const searchTerm = document.getElementById('user-search').value.toLowerCase();
+        const roleFilter = document.getElementById('role-filter').value;
+        const providerFilter = document.getElementById('provider-filter').value;
+        const statusFilter = document.getElementById('status-filter').value;
+        
+        const rows = document.querySelectorAll('.user-row');
+        let visibleCount = 0;
+        
+        rows.forEach(row => {
+            const username = row.dataset.username;
+            const email = row.dataset.email;
+            const role = row.dataset.role;
+            const provider = row.dataset.provider;
+            const status = row.dataset.status;
+            
+            const matchesSearch = searchTerm === '' || 
+                                username.includes(searchTerm) || 
+                                email.includes(searchTerm);
+            
+            const matchesRole = roleFilter === '' || role === roleFilter;
+            const matchesProvider = providerFilter === '' || provider === providerFilter;
+            const matchesStatus = statusFilter === '' || status === statusFilter;
+            
+            const shouldShow = matchesSearch && matchesRole && matchesProvider && matchesStatus;
+            
+            row.style.display = shouldShow ? '' : 'none';
+            if (shouldShow) visibleCount++;
+        });
+        
+        // Update count
+        document.getElementById('user-count').textContent = visibleCount + ' users';
+    }
+
+    function toggleUserStatus(userId, action) {
+        const confirmMessage = action === 'disable' 
+            ? 'Are you sure you want to disable this user? They will be logged out of all sessions.'
+            : 'Are you sure you want to enable this user?';
+        
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+        
+        const url = `/auth/admin/users/${userId}/${action}`;
+        
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                // Reload page to show updated status
+                window.location.reload();
+            } else {
+                alert('Failed to ' + action + ' user. Please try again.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred. Please try again.');
+        });
+    }
+
+    function refreshUsers() {
+        const refreshBtn = document.querySelector('[onclick="refreshUsers()"]');
+        const icon = refreshBtn.querySelector('i');
+        
+        // Show loading state
+        icon.classList.remove('fa-sync-alt');
+        icon.classList.add('fa-spinner', 'fa-spin');
+        refreshBtn.disabled = true;
+        
+        // Reload page
+        window.location.reload();
+    }
+
+    // Auto-refresh every 30 seconds
+    setInterval(() => {
+        // Only refresh if no filters are active
+        const hasActiveFilters = document.getElementById('user-search').value !== '' ||
+                                document.getElementById('role-filter').value !== '' ||
+                                document.getElementById('provider-filter').value !== '' ||
+                                document.getElementById('status-filter').value !== '';
+        
+        if (!hasActiveFilters) {
+            refreshUsers();
+        }
+    }, 30000);
+
+    // Initialize search on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        // Set focus to search box
+        document.getElementById('user-search').focus();
+    });
+</script>
+{% endblock %}

@@ -1,7 +1,8 @@
 # Third-party imports
 
+from typing import TYPE_CHECKING, Optional
+
 from flask import current_app
-from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from plugins.plugin_manager import PluginManager

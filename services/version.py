@@ -12,13 +12,13 @@ Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """
 
+import logging
 import os
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
-import logging
+from typing import Any, Dict, Optional, Tuple
 
 # Configure logging
 logger = logging.getLogger(__name__)

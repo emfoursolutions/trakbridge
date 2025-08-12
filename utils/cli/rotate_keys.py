@@ -5,21 +5,22 @@ Key Rotation Script for TrakBridge
 This script rotates the encryption key and re-encrypts all sensitive data in the database.
 """
 
+import base64
 import os
-import sys
+import secrets
 import shutil
 import subprocess
-import click
-import secrets
-import base64
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
+
+import click
 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from services.encryption_service import get_encryption_service, EncryptionService
+from services.encryption_service import EncryptionService, get_encryption_service
 
 
 def get_database_info():

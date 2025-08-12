@@ -13,6 +13,7 @@ dependencies = [
     "alembic",
     "arrow",
     "attrs",
+    "bcrypt>=4.0.0",
     "blinker",
     "certifi",
     "cffi",
@@ -21,7 +22,10 @@ dependencies = [
     "defusedxml",
     "fastkml",
     "Flask",
+    "Flask-Limiter>=3.5.0",
+    "Flask-Login>=0.6.0",
     "Flask-Migrate",
+    "Flask-OIDC>=1.4.0",
     "Flask-SQLAlchemy",
     "frozenlist",
     "gunicorn",
@@ -30,6 +34,7 @@ dependencies = [
     "idna",
     "itsdangerous",
     "Jinja2",
+    "ldap3>=2.9.0",
     "lxml",
     "Mako",
     "MarkupSafe",
@@ -39,6 +44,7 @@ dependencies = [
     "psycopg2-binary",
     "pycparser",
     "pygeoif",
+    "PyJWT>=2.8.0",
     "PyMySQL",
     "pytak",
     "python-dateutil",
@@ -88,7 +94,7 @@ build-backend = "setuptools.build_meta"
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["services*", "routes*", "models*", "plugins*", "config*", "tests*"]
+include = ["services*", "routes*", "models*", "plugins*", "config*", "utils*", "tests*"]
 
 # Dynamic versioning with setuptools-scm
 [tool.setuptools_scm]
@@ -119,3 +125,10 @@ local_scheme = "node-and-date"
 
 # Don't normalize version (keep original format)
 normalize = false
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning:pyasn1.*",
+    "ignore::DeprecationWarning:aiohttp.*",
+    "ignore:enable_cleanup_closed ignored:DeprecationWarning:aiohttp.*"
+]

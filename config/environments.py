@@ -219,7 +219,7 @@ class ProductionConfig(BaseConfig):
         return issues
 
 
-class TestingConfig(BaseConfig):
+class TestingEnvironmentConfig(BaseConfig):
     """Testing environment configuration."""
 
     def __init__(self):
@@ -237,13 +237,50 @@ class TestingConfig(BaseConfig):
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
-        """Use in-memory database for testing."""
+        """Use database appropriate for testing - SQLite for unit tests, PostgreSQL for integration tests."""
+        # Check if DATABASE_URL is explicitly set (for integration tests)
+        database_url = self.secret_manager.get_secret("DATABASE_URL")
+        if database_url:
+            return database_url
+
+        # Default to SQLite in-memory for unit tests
         return "sqlite:///:memory:"
 
     @property
     def SQLALCHEMY_ENGINE_OPTIONS(self) -> Dict[str, Any]:
-        """Simplified engine options for testing."""
-        return {"pool_pre_ping": False, "connect_args": {"check_same_thread": False}}
+        """Engine options appropriate for the testing database type."""
+        db_type = self._get_database_type()
+
+        if db_type == "sqlite":
+            # SQLite options for unit tests
+            return {
+                "pool_pre_ping": False,
+                "connect_args": {"check_same_thread": False},
+            }
+        elif db_type == "postgresql":
+            # PostgreSQL options for integration tests
+            return {
+                "pool_pre_ping": True,
+                "pool_recycle": 300,
+                "pool_size": 5,
+                "max_overflow": 10,
+                "connect_args": {"connect_timeout": 10},
+            }
+        elif db_type == "mysql":
+            # MySQL options for integration tests
+            return {
+                "pool_pre_ping": True,
+                "pool_recycle": 300,
+                "pool_size": 5,
+                "max_overflow": 10,
+                "connect_args": {"connect_timeout": 10},
+            }
+        else:
+            # Default to SQLite options
+            return {
+                "pool_pre_ping": False,
+                "connect_args": {"check_same_thread": False},
+            }
 
     @property
     def MAX_WORKER_THREADS(self) -> int:
@@ -353,7 +390,7 @@ def get_config(environment: str = None) -> BaseConfig:
     config_map = {
         "development": DevelopmentConfig,
         "production": ProductionConfig,
-        "testing": TestingConfig,
+        "testing": TestingEnvironmentConfig,
         "staging": StagingConfig,
     }
 
@@ -369,7 +406,7 @@ def get_config(environment: str = None) -> BaseConfig:
 config = {
     "development": DevelopmentConfig,
     "production": ProductionConfig,
-    "testing": TestingConfig,
+    "testing": TestingEnvironmentConfig,
     "staging": StagingConfig,
     "default": DevelopmentConfig,
 }

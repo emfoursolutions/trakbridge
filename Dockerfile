@@ -34,8 +34,11 @@ WORKDIR /app
 # Configure git for setuptools-scm - ensure we have a valid git repo
 RUN git config --global --add safe.directory /app || true
 
-# Install the package
-RUN pip install --no-cache-dir .
+# Clean any cached build artifacts and install the package
+RUN rm -rf build/ dist/ *.egg-info/ __pycache__ */__pycache__ \
+    && find . -name "*.pyc" -delete \
+    && pip cache purge \
+    && pip install --no-cache-dir --force-reinstall .
 
 # Production stage
 FROM python:3.12-slim AS production
@@ -43,6 +46,7 @@ FROM python:3.12-slim AS production
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/app" \
     FLASK_ENV=production
 
 # Install runtime dependencies including gosu for user switching
@@ -59,17 +63,25 @@ COPY --from=builder /opt/venv /opt/venv
 
 # Create app directories with broad permissions initially
 WORKDIR /app
-RUN mkdir -p /app/logs /app/data /app/tmp && \
-    chmod 755 /app && \
-    chmod 777 /app/logs /app/data /app/tmp
 
-# Copy application files (without --chown to allow flexibility)
+# Copy essential config files first
 COPY hypercorn.toml /app/
 COPY docker/entrypoint.sh /app/
+
+# Copy all application source code and ensure it overwrites any installed package
 COPY . /app/
 
 # Copy the generated _version.py from builder
 COPY --from=builder /app/_version.py /app/
+
+# Install the application to ensure proper Python package resolution
+RUN pip install --no-cache-dir --force-reinstall .
+
+# Ensure proper permissions for runtime directories (after copy to avoid overwriting)
+RUN mkdir -p /app/logs /app/data /app/tmp /app/external_plugins && \
+    chmod 755 /app && \
+    chmod 777 /app/logs /app/data /app/tmp && \
+    chmod 755 /app/external_plugins
 
 # Make entrypoint executable
 RUN chmod +x /app/entrypoint.sh
@@ -78,74 +90,30 @@ RUN chmod +x /app/entrypoint.sh
 RUN groupadd -g 1000 appuser && \
     useradd -r -u 1000 -g appuser -d /app -s /bin/bash appuser
 
-# Set ownership for directories that appuser needs access to
-RUN chown -R appuser:appuser /app/logs /app/data /app/tmp /app/entrypoint.sh
+# Set ownership and permissions for directories that appuser needs access to
+RUN chown -R appuser:appuser /app/logs /app/data /app/tmp /app/external_config /app/entrypoint.sh
 
-# Create enhanced security-focused user switching script
-RUN echo '#!/bin/bash\n\
-set -e\n\
-\n\
-# Get target UID/GID from environment or current user\n\
-TARGET_UID=${USER_ID:-$(id -u)}\n\
-TARGET_GID=${GROUP_ID:-$(id -g)}\n\
-CURRENT_UID=$(id -u)\n\
-\n\
-# Security check: prevent running as root unless explicitly needed\n\
-if [[ $CURRENT_UID -eq 0 ]]; then\n\
-    # We are running as root - handle user switching securely\n\
-    if [[ $TARGET_UID -eq 0 ]] && [[ "${ALLOW_ROOT:-false}" != "true" ]]; then\n\
-        echo "ERROR: Running as root is not allowed for security reasons."\n\
-        echo "Set ALLOW_ROOT=true environment variable to override this protection."\n\
-        echo "For production deployments, consider using USER_ID and GROUP_ID instead."\n\
-        exit 1\n\
-    fi\n\
-    \n\
-    # Create or modify user if dynamic UID/GID is requested\n\
-    if [[ $TARGET_UID -ne 1000 ]] || [[ $TARGET_GID -ne 1000 ]]; then\n\
-        echo "Creating dynamic user with UID:$TARGET_UID GID:$TARGET_GID for host compatibility"\n\
-        \n\
-        # Create group if it doesn'\''t exist\n\
-        if ! getent group $TARGET_GID > /dev/null 2>&1; then\n\
-            groupadd -g $TARGET_GID appuser-dynamic\n\
-        fi\n\
-        \n\
-        # Create user if it doesn'\''t exist\n\
-        if ! getent passwd $TARGET_UID > /dev/null 2>&1; then\n\
-            useradd -r -u $TARGET_UID -g $TARGET_GID -d /app -s /bin/bash appuser-dynamic\n\
-        fi\n\
-        \n\
-        # Fix ownership of app directories for dynamic user\n\
-        chown -R $TARGET_UID:$TARGET_GID /app/logs /app/data /app/tmp\n\
-        \n\
-        # Fix ownership and permissions of secrets if they exist\n\
-        if [ -d "/app/secrets" ]; then\n\
-            chown -R $TARGET_UID:$TARGET_GID /app/secrets\n\
-            chmod -R 640 /app/secrets/* 2>/dev/null || true\n\
-        fi\n\
-    else\n\
-        echo "Using default appuser (1000:1000)"\n\
-    fi\n\
-    \n\
-    # Switch to target user using gosu\n\
-    echo "Switching to user $TARGET_UID:$TARGET_GID"\n\
-    exec gosu $TARGET_UID:$TARGET_GID "$@"\n\
-else\n\
-    # Already running as non-root user, proceed normally\n\
-    echo "Running as non-root user $(id -u):$(id -g)"\n\
-    exec "$@"\n\
-fi' > /usr/local/bin/docker-entrypoint.sh && \
-    chmod +x /usr/local/bin/docker-entrypoint.sh
+# Ensure all users can read application files and appuser group has access
+# Set group ownership and readable permissions for Python modules (exclude writable external_config)
+RUN chown -R root:appuser /app/utils /app/plugins /app/services /app/models /app/routes /app/config /app/external_plugins && \
+    chmod -R 644 /app/utils /app/plugins /app/services /app/models /app/routes /app/config /app/external_plugins && \
+    find /app/utils /app/plugins /app/services /app/models /app/routes /app/config /app/external_plugins -type d -exec chmod 755 {} \;
 
-# Switch to non-root user by default for security
-USER appuser
+# Make core application files group-readable for dynamic users
+RUN chown root:appuser /app/app.py /app/database.py /app/_version.py /app/pyproject.toml && \
+    chmod 644 /app/app.py /app/database.py /app/_version.py /app/pyproject.toml
+
+# Note: Container starts as root to allow dynamic user creation
+# The /app/entrypoint.sh script will handle user switching based on USER_ID/GROUP_ID
+# and default to appuser (1000:1000) if no dynamic user is requested
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT:-5000}/api/health || exit 1
 
 EXPOSE 5000
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["/app/entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD []
 
 # Development stage
 FROM production AS development

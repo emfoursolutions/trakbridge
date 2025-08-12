@@ -25,26 +25,36 @@ Last Modified: {{LASTMOD}}
 Version: {{VERSION}}
 """
 
+# Third-party imports
+import asyncio
+
 # Standard library imports
 import logging
 import threading
 import time
 from datetime import datetime, timedelta, timezone
 
-# Third-party imports
-import asyncio
 import psutil
-from flask import Blueprint, jsonify, current_app
+from flask import Blueprint, current_app, jsonify
 
 # Local application imports
 from database import db
-from services.health_service import health_service
-from services.stream_display_service import StreamDisplayService
-from services.stream_config_service import StreamConfigService
-from services.stream_operations_service import StreamOperationsService
+
+# Authentication imports
+from services.auth import (
+    api_key_or_auth_required,
+    optional_auth,
+    require_auth,
+    require_permission,
+)
 from services.connection_test_service import ConnectionTestService
+from services.health_service import health_service
+from services.plugin_category_service import get_category_service
+from services.stream_config_service import StreamConfigService
+from services.stream_display_service import StreamDisplayService
+from services.stream_operations_service import StreamOperationsService
 from services.stream_status_service import StreamStatusService
-from services.version import get_version, format_version
+from services.version import format_version, get_version
 from utils.app_helpers import get_plugin_manager
 
 # Module-level logger
@@ -124,6 +134,7 @@ def get_cached_health_check(check_name, check_function, *args, **kwargs):
 
 
 @bp.route("/status")
+@optional_auth
 def api_status():
     """API endpoint for system status"""
     # Import models inside the route to avoid circular imports
@@ -152,18 +163,58 @@ def api_status():
 
 @bp.route("/health")
 def health_check():
-    """Basic health check endpoint"""
-    return jsonify(
-        {
-            "status": "healthy",
+    """Basic health check endpoint - always responds even during startup"""
+    try:
+        from app import get_startup_status
+
+        startup_status = get_startup_status()
+
+        # Return different status based on startup state
+        if startup_status["complete"]:
+            status = "healthy"
+            http_code = 200
+        elif startup_status["error"]:
+            status = "unhealthy"
+            http_code = 503
+        else:
+            status = "starting"
+            http_code = 200  # Return 200 during startup so health checks pass
+
+        response_data = {
+            "status": status,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": get_version(),
             "service": "trakbridge",
         }
-    )
+
+        # Add startup info if not complete
+        if not startup_status["complete"]:
+            response_data["startup"] = {
+                "complete": startup_status["complete"],
+                "error": startup_status["error"],
+                "progress_count": len(startup_status["progress"]),
+            }
+
+        return jsonify(response_data), http_code
+
+    except Exception as e:
+        # Fallback if startup status check fails
+        logger.warning(f"Startup status check failed: {e}")
+        return (
+            jsonify(
+                {
+                    "status": "healthy",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "version": get_version(),
+                    "service": "trakbridge",
+                }
+            ),
+            200,
+        )
 
 
 @bp.route("/health/detailed")
+@optional_auth
 def detailed_health_check():
     """Detailed health check with all components"""
     start_time = time.time()
@@ -261,6 +312,7 @@ def liveness_check():
 
 
 @bp.route("/health/database")
+@optional_auth
 def database_health():
     """Database-specific health check"""
     result = get_cached_health_check("database", health_service.run_all_database_checks)
@@ -288,6 +340,7 @@ def check_encryption_health():
 
 
 @bp.route("/health/plugins", methods=["GET"])
+@require_permission("api", "read")
 def plugin_health():
     """Plugin health check with safe attribute access"""
     plugin_manager = getattr(current_app, "plugin_manager", None)
@@ -312,6 +365,7 @@ def plugin_health():
 
 
 @bp.route("/streams/stats")
+@api_key_or_auth_required
 def api_stats():
     """Get statistics for all streams"""
 
@@ -329,6 +383,7 @@ def api_stats():
 
 
 @bp.route("/streams/status")
+@api_key_or_auth_required
 def streams_status():
     """Get detailed status of all streams"""
 
@@ -346,6 +401,7 @@ def streams_status():
 
 
 @bp.route("/streams/plugins/<plugin_name>/config")
+@require_permission("api", "read")
 def get_plugin_config(plugin_name):
     """Get plugin configuration metadata"""
     try:
@@ -361,6 +417,7 @@ def get_plugin_config(plugin_name):
 
 
 @bp.route("/plugins/metadata")
+@require_permission("api", "read")
 def get_all_plugin_metadata():
     """Get metadata for all available plugins"""
     try:
@@ -371,13 +428,114 @@ def get_all_plugin_metadata():
             for k, v in metadata.items()
         }
         return jsonify(serialized_metadata)
-        
+
     except Exception as e:
         logger.error(f"Error getting all plugin metadata: {e}")
         return jsonify({"error": "Failed to get plugin metadata"}), 500
 
 
+@bp.route("/plugins/categories")
+@require_permission("api", "read")
+def get_plugin_categories():
+    """Get all available plugin categories"""
+    try:
+        category_service = get_category_service(get_plugin_manager())
+        categories = category_service.get_available_categories()
+
+        # Convert CategoryInfo objects to dictionaries
+        categories_data = {
+            key: {
+                "key": cat.key,
+                "display_name": cat.display_name,
+                "description": cat.description,
+                "icon": cat.icon,
+                "plugin_count": cat.plugin_count,
+            }
+            for key, cat in categories.items()
+        }
+
+        return jsonify(categories_data)
+
+    except Exception as e:
+        logger.error(f"Error getting plugin categories: {e}")
+        return jsonify({"error": "Failed to get plugin categories"}), 500
+
+
+@bp.route("/plugins/by-category/<category>")
+@require_permission("api", "read")
+def get_plugins_by_category(category):
+    """Get all plugins in a specific category"""
+    try:
+        category_service = get_category_service(get_plugin_manager())
+        plugins = category_service.get_plugins_by_category(category)
+
+        # Convert PluginInfo objects to dictionaries
+        plugins_data = [
+            {
+                "key": plugin.key,
+                "display_name": plugin.display_name,
+                "description": plugin.description,
+                "icon": plugin.icon,
+                "category": plugin.category,
+            }
+            for plugin in plugins
+        ]
+
+        return jsonify({"category": category, "plugins": plugins_data})
+
+    except Exception as e:
+        logger.error(f"Error getting plugins for category '{category}': {e}")
+        return (
+            jsonify({"error": f"Failed to get plugins for category '{category}'"}),
+            500,
+        )
+
+
+@bp.route("/plugins/categorized")
+@require_permission("api", "read")
+def get_categorized_plugins():
+    """Get all plugins grouped by category"""
+    try:
+        category_service = get_category_service(get_plugin_manager())
+        categorized = category_service.get_categorized_plugins()
+
+        # Convert to serializable format
+        categorized_data = {}
+        for category, plugins in categorized.items():
+            categorized_data[category] = [
+                {
+                    "key": plugin.key,
+                    "display_name": plugin.display_name,
+                    "description": plugin.description,
+                    "icon": plugin.icon,
+                    "category": plugin.category,
+                }
+                for plugin in plugins
+            ]
+
+        return jsonify(categorized_data)
+
+    except Exception as e:
+        logger.error(f"Error getting categorized plugins: {e}")
+        return jsonify({"error": "Failed to get categorized plugins"}), 500
+
+
+@bp.route("/plugins/category-statistics")
+@require_permission("api", "read")
+def get_category_statistics():
+    """Get statistics about plugin categories"""
+    try:
+        category_service = get_category_service(get_plugin_manager())
+        stats = category_service.get_category_statistics()
+        return jsonify(stats)
+
+    except Exception as e:
+        logger.error(f"Error getting category statistics: {e}")
+        return jsonify({"error": "Failed to get category statistics"}), 500
+
+
 @bp.route("/streams/<int:stream_id>/export-config")
+@require_permission("streams", "read")
 def export_stream_config(stream_id):
     """Export stream configuration (sensitive fields masked)"""
     try:
@@ -392,21 +550,24 @@ def export_stream_config(stream_id):
 
 
 @bp.route("/streams/<int:stream_id>/config")
+@require_permission("streams", "read")
 def get_stream_config(stream_id):
     """Get stream configuration (sensitive fields masked) for editing"""
     try:
         from models.stream import Stream
+
         stream = Stream.query.get_or_404(stream_id)
         # Get plugin config with sensitive fields masked for security
         config = stream.to_dict(include_sensitive=False)
-        return jsonify(config.get('plugin_config', {}))
-        
+        return jsonify(config.get("plugin_config", {}))
+
     except Exception as e:
         logger.error(f"Error getting stream config {stream_id}: {e}")
         return jsonify({"error": "Failed to get stream configuration"}), 500
 
 
 @bp.route("/streams/security-status")
+@require_permission("admin", "read")
 def security_status():
     """Get security status of all streams"""
     try:
