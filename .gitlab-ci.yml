@@ -1207,6 +1207,9 @@ deploy-development:
     export USER_ID=${USER_ID:-$(id -u)}
     export GROUP_ID=${GROUP_ID:-$(id -g)}
     
+    # Set image tag to match what was built (dev instead of development)
+    export IMAGE_TAG="dev"
+    
     # Set up development environment using deployment script
     chmod +x scripts/deploy.sh
 
