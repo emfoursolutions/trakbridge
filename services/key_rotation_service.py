@@ -247,25 +247,33 @@ class KeyRotationService:
                 db_name,
             ]
 
-            # Handle credentials securely if in URI
+            # Handle credentials using secret manager (same source as main app)
             env = os.environ.copy()
+            
+            # Get username from URI or environment
+            username = "root"  # Default
             if "@" in uri:
                 try:
-                    # Extract and validate credentials
                     auth_host = uri.split("://")[1].split("/")[0]
                     if ":" in auth_host.split("@")[0]:
                         user_pass = auth_host.split("@")[0]
-                        user, password = user_pass.split(":", 1)
-
-                        # Validate credentials
-                        db_params = validate_database_params({"username": user})
-
-                        # Use environment variable for password (safer than command line)
-                        env["MYSQL_PWD"] = password
-                        cmd.extend(["-u", db_params["username"]])
-                except (ValueError, IndexError) as e:
-                    logger.warning(f"Failed to parse database credentials: {e}")
-                    raise ValueError("Invalid database URI format")
+                        username = user_pass.split(":", 1)[0]
+                except (ValueError, IndexError):
+                    pass
+            
+            # Get password from secret manager (same as main app)
+            from config.secrets import get_secret_manager
+            secret_manager = get_secret_manager()
+            password = secret_manager.get_secret("DB_PASSWORD")
+            
+            if username and password:
+                # Validate username
+                db_params = validate_database_params({"username": username})
+                # Use environment variable for password (safer than command line)
+                env["MYSQL_PWD"] = password.strip()
+                cmd.extend(["-u", db_params["username"]])
+            else:
+                logger.warning("Could not retrieve database credentials from secret manager")
 
             # Validate command before execution
             if not runner.validate_command(cmd):
@@ -375,25 +383,33 @@ class KeyRotationService:
                 db_name,
             ]
 
-            # Handle credentials securely if in URI
+            # Handle credentials using secret manager (same source as main app)
             env = os.environ.copy()
+            
+            # Get username from URI or environment
+            username = "postgres"  # Default
             if "@" in uri:
                 try:
-                    # Extract and validate credentials
                     auth_host = uri.split("://")[1].split("/")[0]
                     if ":" in auth_host.split("@")[0]:
                         user_pass = auth_host.split("@")[0]
-                        user, password = user_pass.split(":", 1)
-
-                        # Validate credentials
-                        db_params = validate_database_params({"username": user})
-
-                        cmd.extend(["-U", db_params["username"]])
-                        # Set password environment variable
-                        env["PGPASSWORD"] = password
-                except (ValueError, IndexError) as e:
-                    logger.warning(f"Failed to parse database credentials: {e}")
-                    raise ValueError("Invalid database URI format")
+                        username = user_pass.split(":", 1)[0]
+                except (ValueError, IndexError):
+                    pass
+            
+            # Get password from secret manager (same as main app)
+            from config.secrets import get_secret_manager
+            secret_manager = get_secret_manager()
+            password = secret_manager.get_secret("DB_PASSWORD")
+            
+            if username and password:
+                # Validate username
+                db_params = validate_database_params({"username": username})
+                cmd.extend(["-U", db_params["username"]])
+                # Set password environment variable (strip any whitespace/newlines)
+                env["PGPASSWORD"] = password.strip()
+            else:
+                logger.warning("Could not retrieve database credentials from secret manager")
 
             # Initialize secure subprocess runner and validate command
             runner = SecureSubprocessRunner(["pg_dump"])
