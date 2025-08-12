@@ -42,10 +42,12 @@ class BootstrapService:
     Service for bootstrapping initial admin user on first startup
     """
 
-    def __init__(self):
+    def __init__(self, bootstrap_file_path=None):
         self.bootstrap_flag_key = "INITIAL_ADMIN_CREATED"
         self.default_admin_username = "admin"
         self.default_admin_password = "TrakBridge-Setup-2025!"
+        # Allow configurable bootstrap file path for testing
+        self.bootstrap_file_path = bootstrap_file_path or "/app/data/.bootstrap_completed"
 
     def should_create_initial_admin(self) -> bool:
         """
@@ -235,10 +237,13 @@ class BootstrapService:
                 # Fall back to file-based check
 
             # Check file-based marker (fallback approach)
-            bootstrap_file = "/app/data/.bootstrap_completed"
-            if os.path.exists(bootstrap_file):
-                logger.debug("Bootstrap completed: marker file found")
-                return True
+            try:
+                if os.path.exists(self.bootstrap_file_path):
+                    logger.debug("Bootstrap completed: marker file found")
+                    return True
+            except (OSError, IOError) as file_error:
+                logger.debug(f"File-based bootstrap check failed: {file_error}")
+                # Don't fail completely, just skip file-based check
 
             return False
 
@@ -251,24 +256,29 @@ class BootstrapService:
         Create bootstrap completion file marker
         """
         try:
-            bootstrap_file = "/app/data/.bootstrap_completed"
-            
             # Only create if it doesn't exist
-            if not os.path.exists(bootstrap_file):
+            if not os.path.exists(self.bootstrap_file_path):
                 # Ensure directory exists
-                os.makedirs(os.path.dirname(bootstrap_file), exist_ok=True)
+                try:
+                    os.makedirs(os.path.dirname(self.bootstrap_file_path), exist_ok=True)
+                except (OSError, IOError) as dir_error:
+                    logger.debug(f"Failed to create bootstrap directory: {dir_error}")
+                    return  # Exit early if we can't create directory
 
                 # Write timestamp and details
-                with open(bootstrap_file, "w") as f:
-                    f.write(
-                        f"Bootstrap completed: {datetime.now(timezone.utc).isoformat()}\n"
-                    )
-                    f.write(f"Initial admin user: {self.default_admin_username}\n")
-                    f.write("Bootstrap marker created from database state\n")
+                try:
+                    with open(self.bootstrap_file_path, "w") as f:
+                        f.write(
+                            f"Bootstrap completed: {datetime.now(timezone.utc).isoformat()}\n"
+                        )
+                        f.write(f"Initial admin user: {self.default_admin_username}\n")
+                        f.write("Bootstrap marker created from database state\n")
 
-                # Set secure permissions
-                os.chmod(bootstrap_file, 0o600)
-                logger.debug("Bootstrap completion marker file created")
+                    # Set secure permissions
+                    os.chmod(self.bootstrap_file_path, 0o600)
+                    logger.debug("Bootstrap completion marker file created")
+                except (OSError, IOError) as file_error:
+                    logger.debug(f"Failed to write bootstrap marker file: {file_error}")
                 
         except Exception as e:
             logger.debug(f"Failed to create bootstrap marker file: {e}")
@@ -278,27 +288,33 @@ class BootstrapService:
         Mark bootstrap as completed to prevent future automatic admin creation
         """
         try:
-            # Create bootstrap completion marker file
-            bootstrap_file = "/app/data/.bootstrap_completed"
-
             # Ensure directory exists
-            os.makedirs(os.path.dirname(bootstrap_file), exist_ok=True)
+            try:
+                os.makedirs(os.path.dirname(self.bootstrap_file_path), exist_ok=True)
+            except (OSError, IOError) as dir_error:
+                logger.debug(f"Failed to create bootstrap directory: {dir_error}")
+                # Don't fail the entire bootstrap process for file operations
+                return
 
             # Write timestamp and details
-            with open(bootstrap_file, "w") as f:
-                f.write(
-                    f"Bootstrap completed: {datetime.now(timezone.utc).isoformat()}\n"
-                )
-                f.write(f"Initial admin user: {self.default_admin_username}\n")
-                f.write("Bootstrap completed successfully\n")
+            try:
+                with open(self.bootstrap_file_path, "w") as f:
+                    f.write(
+                        f"Bootstrap completed: {datetime.now(timezone.utc).isoformat()}\n"
+                    )
+                    f.write(f"Initial admin user: {self.default_admin_username}\n")
+                    f.write("Bootstrap completed successfully\n")
 
-            # Set secure permissions
-            os.chmod(bootstrap_file, 0o600)
-
-            logger.info("Bootstrap completion marker created")
+                # Set secure permissions
+                os.chmod(self.bootstrap_file_path, 0o600)
+                logger.info("Bootstrap completion marker created")
+            except (OSError, IOError) as file_error:
+                logger.debug(f"Failed to write bootstrap marker file: {file_error}")
+                # Don't fail the entire bootstrap process for file operations
 
         except Exception as e:
-            logger.error(f"Failed to mark bootstrap as completed: {e}")
+            logger.debug(f"Failed to mark bootstrap as completed: {e}")
+            # Don't fail the entire bootstrap process for file operations
             
         # Note: Database-based tracking is implicit - the presence of admin users
         # in the database serves as the primary indicator of bootstrap completion
@@ -311,8 +327,12 @@ class BootstrapService:
             Dictionary with bootstrap status information
         """
         try:
-            bootstrap_file = "/app/data/.bootstrap_completed"
-            file_exists = os.path.exists(bootstrap_file)
+            file_exists = False
+            try:
+                file_exists = os.path.exists(self.bootstrap_file_path)
+            except (OSError, IOError):
+                # File system access failed, continue with database checks
+                pass
             
             admin_count = 0
             default_admin_exists = False
@@ -338,7 +358,7 @@ class BootstrapService:
                 "should_create_admin": self.should_create_initial_admin(),
                 "default_username": self.default_admin_username,
                 "marker_file_exists": file_exists,
-                "marker_file_path": bootstrap_file,
+                "marker_file_path": self.bootstrap_file_path,
                 "tables_exist": tables_exist,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }

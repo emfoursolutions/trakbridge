@@ -16,6 +16,7 @@ Version: 1.0.0
 """
 
 import os
+import tempfile
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 
@@ -44,7 +45,10 @@ class TestBootstrapServiceCore:
     @pytest.fixture
     def bootstrap_service(self):
         """Create a bootstrap service instance for testing."""
-        return BootstrapService()
+        # Create temporary directory for bootstrap file
+        temp_dir = tempfile.mkdtemp()
+        bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
+        return BootstrapService(bootstrap_file_path=bootstrap_file_path)
 
     def test_bootstrap_service_creation(self, bootstrap_service):
         """Test creating a bootstrap service instance."""
@@ -85,21 +89,23 @@ class TestBootstrapServiceCore:
     def test_create_initial_admin_success(self, app, clean_database, db_session, bootstrap_service):
         """Test successful initial admin creation."""
         with app.app_context():
-            # Mock file operations to avoid filesystem dependencies
-            with patch.object(bootstrap_service, '_mark_bootstrap_completed'):
-                admin_user = bootstrap_service.create_initial_admin()
-                
-                assert admin_user is not None
-                assert admin_user.username == bootstrap_service.default_admin_username
-                assert admin_user.role == UserRole.ADMIN
-                assert admin_user.status == AccountStatus.ACTIVE
-                assert admin_user.auth_provider == AuthProvider.LOCAL
-                assert admin_user.password_changed_at is None  # Force password change
-                
-                # Verify user was saved to database
-                db_user = User.query.filter_by(username=bootstrap_service.default_admin_username).first()
-                assert db_user is not None
-                assert db_user.id == admin_user.id
+            # Ensure clean state
+            assert User.query.filter_by(role=UserRole.ADMIN).count() == 0
+            assert bootstrap_service.should_create_initial_admin() is True
+            
+            admin_user = bootstrap_service.create_initial_admin()
+            
+            assert admin_user is not None
+            assert admin_user.username == bootstrap_service.default_admin_username
+            assert admin_user.role == UserRole.ADMIN
+            assert admin_user.status == AccountStatus.ACTIVE
+            assert admin_user.auth_provider == AuthProvider.LOCAL
+            assert admin_user.password_changed_at is None  # Force password change
+            
+            # Verify user was saved to database
+            db_user = User.query.filter_by(username=bootstrap_service.default_admin_username).first()
+            assert db_user is not None
+            assert db_user.id == admin_user.id
 
     def test_create_initial_admin_when_exists(self, app, clean_database, db_session, bootstrap_service):
         """Test create_initial_admin when admin already exists."""
@@ -130,7 +136,8 @@ class TestBootstrapServiceCore:
     def test_database_based_bootstrap_detection(self, app, clean_database, db_session, bootstrap_service):
         """Test database-based bootstrap completion detection."""
         with app.app_context():
-            # Initially no bootstrap completion detected
+            # Initially no bootstrap completion detected - ensure clean state first
+            assert User.query.filter_by(role=UserRole.ADMIN).count() == 0
             assert bootstrap_service._is_bootstrap_completed() is False
 
             # Create admin user (simulating existing installation)
@@ -154,6 +161,9 @@ class TestBootstrapServiceCore:
     def test_bootstrap_info_collection(self, app, clean_database, db_session, bootstrap_service):
         """Test comprehensive bootstrap info collection."""
         with app.app_context():
+            # Ensure clean state first
+            assert User.query.filter_by(role=UserRole.ADMIN).count() == 0
+            
             # Test with no admin users
             info = bootstrap_service.get_bootstrap_info()
             
@@ -227,17 +237,19 @@ class TestBootstrapServiceRaceConditions:
     def test_duplicate_prevention_workflow(self, app, clean_database, db_session):
         """Test complete workflow preventing duplicates."""
         with app.app_context():
-            bootstrap_service = get_bootstrap_service()
+            # Create a test-specific bootstrap service with temp file path
+            temp_dir = tempfile.mkdtemp()
+            bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
+            bootstrap_service = BootstrapService(bootstrap_file_path=bootstrap_file_path)
             
             # Step 1: Initial state - no admin users
             assert User.query.filter_by(role=UserRole.ADMIN).count() == 0
             assert bootstrap_service.should_create_initial_admin() is True
             
             # Step 2: Create initial admin
-            with patch.object(bootstrap_service, '_mark_bootstrap_completed'):
-                admin_user = bootstrap_service.create_initial_admin()
-                assert admin_user is not None
-                assert admin_user.username == "admin"
+            admin_user = bootstrap_service.create_initial_admin()
+            assert admin_user is not None
+            assert admin_user.username == "admin"
             
             # Step 3: Verify state after creation
             assert User.query.filter_by(role=UserRole.ADMIN).count() == 1
@@ -255,7 +267,10 @@ class TestBootstrapServiceRaceConditions:
     def test_existing_admin_detection(self, app, clean_database, db_session):
         """Test bootstrap behavior with existing admin users."""
         with app.app_context():
-            bootstrap_service = get_bootstrap_service()
+            # Create a test-specific bootstrap service with temp file path
+            temp_dir = tempfile.mkdtemp()
+            bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
+            bootstrap_service = BootstrapService(bootstrap_file_path=bootstrap_file_path)
             
             # Create admin user with different username
             existing_admin = User.create_local_user(
@@ -284,28 +299,29 @@ class TestBootstrapServiceRaceConditions:
     def test_multiple_bootstrap_attempts(self, app, clean_database, db_session):
         """Test multiple bootstrap attempts handle gracefully."""
         with app.app_context():
-            bootstrap_service = get_bootstrap_service()
+            # Create a test-specific bootstrap service with temp file path
+            temp_dir = tempfile.mkdtemp()
+            bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
+            bootstrap_service = BootstrapService(bootstrap_file_path=bootstrap_file_path)
             
-            # Mock file operations
-            with patch.object(bootstrap_service, '_mark_bootstrap_completed'):
-                # Attempt multiple creations
-                results = []
-                
-                for i in range(3):
-                    try:
-                        admin_user = bootstrap_service.create_initial_admin()
-                        results.append(admin_user)
-                    except Exception as e:
-                        results.append(None)
-                
-                # Verify that at most one admin was created
-                admin_count = User.query.filter_by(role=UserRole.ADMIN).count()
-                assert admin_count <= 1
-                
-                # Verify final state is consistent
-                if admin_count == 1:
-                    final_admin = User.query.filter_by(role=UserRole.ADMIN).first()
-                    assert final_admin.username == bootstrap_service.default_admin_username
+            # Attempt multiple creations
+            results = []
+            
+            for i in range(3):
+                try:
+                    admin_user = bootstrap_service.create_initial_admin()
+                    results.append(admin_user)
+                except Exception as e:
+                    results.append(None)
+            
+            # Verify that at most one admin was created
+            admin_count = User.query.filter_by(role=UserRole.ADMIN).count()
+            assert admin_count <= 1
+            
+            # Verify final state is consistent
+            if admin_count == 1:
+                final_admin = User.query.filter_by(role=UserRole.ADMIN).first()
+                assert final_admin.username == bootstrap_service.default_admin_username
 
 
 class TestBootstrapServiceErrorHandling:
@@ -324,7 +340,10 @@ class TestBootstrapServiceErrorHandling:
     @pytest.fixture
     def bootstrap_service(self):
         """Create a bootstrap service instance for testing."""
-        return BootstrapService()
+        # Create temporary directory for bootstrap file
+        temp_dir = tempfile.mkdtemp()
+        bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
+        return BootstrapService(bootstrap_file_path=bootstrap_file_path)
 
     def test_database_error_handling(self, app, bootstrap_service):
         """Test handling of database errors."""
