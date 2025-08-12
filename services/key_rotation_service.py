@@ -804,6 +804,8 @@ class KeyRotationService:
 
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def restart_application(self) -> Dict[str, Any]:
         """Attempt to restart the application"""
         try:
             # This is a complex operation that depends on deployment method
