@@ -1154,8 +1154,9 @@ deploy-development:
     # Use the built development image (already available locally from build-image-shell)
     echo "Using local development image: $CI_REGISTRY_IMAGE:dev"
     if docker image inspect $CI_REGISTRY_IMAGE:dev > /dev/null 2>&1; then
-      docker tag $CI_REGISTRY_IMAGE:dev trakbridge:dev-latest
-      echo "Successfully tagged local development image"
+      # Tag it with the name the deploy script expects for --environment development
+      docker tag $CI_REGISTRY_IMAGE:dev $CI_REGISTRY_IMAGE:development
+      echo "Successfully tagged local development image as $CI_REGISTRY_IMAGE:development"
     else
       echo "ERROR: Local development image not found: $CI_REGISTRY_IMAGE:dev"
       echo "This usually means the build-image-shell job failed or didn't run"
@@ -1207,9 +1208,8 @@ deploy-development:
     export USER_ID=${USER_ID:-$(id -u)}
     export GROUP_ID=${GROUP_ID:-$(id -g)}
     
-    # Set image tag and registry to use local tagged image
-    export IMAGE_TAG="dev-latest"
-    export CI_REGISTRY_IMAGE="trakbridge"
+    # Don't override CI_REGISTRY_IMAGE - let it use the GitLab registry name
+    # The deploy script will set IMAGE_TAG="development" for --environment development
     
     # Set up development environment using deployment script
     chmod +x scripts/deploy.sh
