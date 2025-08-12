@@ -1151,10 +1151,18 @@ deploy-development:
   script: |
     echo "Deploying to development environment..."
     
-    # Pull the built image from GitLab Container Registry
-    echo "Pulling from GitLab Container Registry: $CI_REGISTRY_IMAGE:dev"
-    docker pull $CI_REGISTRY_IMAGE:dev
-    docker tag $CI_REGISTRY_IMAGE:dev trakbridge:dev-latest
+    # Use the built development image (already available locally from build-image-shell)
+    echo "Using local development image: $CI_REGISTRY_IMAGE:development"
+    if docker image inspect $CI_REGISTRY_IMAGE:development > /dev/null 2>&1; then
+      docker tag $CI_REGISTRY_IMAGE:development trakbridge:dev-latest
+      echo "Successfully tagged local development image"
+    else
+      echo "ERROR: Local development image not found: $CI_REGISTRY_IMAGE:development"
+      echo "This usually means the build-image-shell job failed or didn't run"
+      echo "Available images:"
+      docker images | grep "$CI_REGISTRY_IMAGE" || echo "No images found with registry prefix"
+      exit 1
+    fi
     
     # Export GitLab CI variables for Docker Compose
     echo "Exporting GitLab CI variables for Docker Compose..."
