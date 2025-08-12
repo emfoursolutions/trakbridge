@@ -272,14 +272,22 @@ class KeyRotationService:
                 raise ValueError("Command failed security validation")
 
             with open(backup_path, "w") as f:
-                result = subprocess.run(
-                    cmd,
-                    stdout=f,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    env=env,
-                    shell=False,
-                )
+                try:
+                    result = subprocess.run(
+                        cmd,
+                        stdout=f,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        env=env,
+                        shell=False,
+                        timeout=300,  # 5 minutes timeout
+                    )
+                except subprocess.TimeoutExpired:
+                    return {
+                        "success": False,
+                        "error": "MySQL backup timed out after 5 minutes",
+                        "backup_path": None,
+                    }
 
             # Set secure file permissions on backup file
             secure_file_permissions(backup_path, 0o600)
@@ -393,14 +401,22 @@ class KeyRotationService:
                 raise ValueError("Command failed security validation")
 
             with open(backup_path, "w") as f:
-                result = subprocess.run(
-                    cmd,
-                    stdout=f,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    env=env,
-                    shell=False,
-                )
+                try:
+                    result = subprocess.run(
+                        cmd,
+                        stdout=f,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        env=env,
+                        shell=False,
+                        timeout=300,  # 5 minutes timeout
+                    )
+                except subprocess.TimeoutExpired:
+                    return {
+                        "success": False,
+                        "error": "PostgreSQL backup timed out after 5 minutes",
+                        "backup_path": None,
+                    }
 
             # Set secure file permissions on backup file
             secure_file_permissions(backup_path, 0o600)
