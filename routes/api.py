@@ -579,6 +579,31 @@ def security_status():
         return jsonify({"error": "Failed to get security status"}), 500
 
 
+@bp.route("/bootstrap/status")
+@require_permission("admin", "read")
+def bootstrap_status():
+    """Get bootstrap service status and diagnostic information"""
+    try:
+        from services.auth.bootstrap_service import get_bootstrap_service
+        
+        bootstrap_service = get_bootstrap_service()
+        bootstrap_info = bootstrap_service.get_bootstrap_info()
+        
+        return jsonify({
+            "status": "success",
+            "bootstrap": bootstrap_info,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting bootstrap status: {e}")
+        return jsonify({
+            "status": "error", 
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }), 500
+
+
 @bp.route("/version")
 def version():
     return {"version": format_version()}

@@ -32,6 +32,7 @@ from typing import Any, Dict, Optional
 
 from database import db
 from models.user import AccountStatus, AuthProvider, User, UserRole
+from sqlalchemy.exc import IntegrityError
 
 logger = logging.getLogger(__name__)
 
@@ -62,21 +63,32 @@ class BootstrapService:
                 logger.debug("Users table does not exist yet, skipping bootstrap check")
                 return False
 
-            # Check if bootstrap has already been performed
-            if self._is_bootstrap_completed():
-                logger.debug(
-                    "Bootstrap already completed, skipping initial admin creation"
-                )
-                return False
-
-            # Check if any admin users exist
+            # Check if any admin users exist (most reliable check)
             admin_count = User.query.filter_by(role=UserRole.ADMIN).count()
             if admin_count > 0:
                 logger.debug(
-                    f"Found {admin_count} existing admin users, skipping bootstrap"
+                    f"Found {admin_count} existing admin users, marking bootstrap complete"
                 )
                 # Mark bootstrap as completed even if we didn't create the user
                 self._mark_bootstrap_completed()
+                return False
+
+            # Check if the specific admin username already exists
+            existing_admin = User.query.filter_by(
+                username=self.default_admin_username
+            ).first()
+            if existing_admin:
+                logger.debug(
+                    f"User '{self.default_admin_username}' already exists, marking bootstrap complete"
+                )
+                self._mark_bootstrap_completed()
+                return False
+
+            # Check if bootstrap has already been performed via marker file
+            if self._is_bootstrap_completed():
+                logger.debug(
+                    "Bootstrap already completed via marker file, skipping initial admin creation"
+                )
                 return False
 
             logger.info(
@@ -105,15 +117,16 @@ class BootstrapService:
         try:
             logger.info("Creating initial admin user for first-time setup")
 
-            # Ensure username doesn't already exist
+            # Double-check: Ensure username doesn't already exist (race condition protection)
             existing_user = User.query.filter_by(
                 username=self.default_admin_username
             ).first()
             if existing_user:
-                logger.warning(
-                    f"User '{self.default_admin_username}' already exists, cannot create initial admin"
+                logger.info(
+                    f"User '{self.default_admin_username}' already exists (race condition), marking bootstrap complete"
                 )
-                return None
+                self._mark_bootstrap_completed()
+                return existing_user
 
             # Create the initial admin user
             admin_user = User.create_local_user(
@@ -128,9 +141,28 @@ class BootstrapService:
             admin_user.password_changed_at = None  # Force password change
             admin_user.status = AccountStatus.ACTIVE
 
-            # Add to database
+            # Add to database with proper error handling for race conditions
             db.session.add(admin_user)
-            db.session.commit()
+            
+            try:
+                db.session.commit()
+                logger.info("Admin user created successfully in database")
+            except IntegrityError as ie:
+                # Handle race condition where user was created between our checks
+                db.session.rollback()
+                logger.info(f"Admin user creation race condition detected: {ie}")
+                
+                # Try to get the existing user
+                existing_user = User.query.filter_by(
+                    username=self.default_admin_username
+                ).first()
+                if existing_user:
+                    logger.info("Found existing admin user after race condition, using that")
+                    self._mark_bootstrap_completed()
+                    return existing_user
+                else:
+                    logger.error("Race condition but no existing user found - this shouldn't happen")
+                    return None
 
             # Mark bootstrap as completed
             self._mark_bootstrap_completed()
@@ -151,6 +183,14 @@ class BootstrapService:
         except Exception as e:
             db.session.rollback()
             logger.error(f"Failed to create initial admin user: {e}")
+            # Even if creation failed, if admin user exists, mark bootstrap complete
+            existing_user = User.query.filter_by(
+                username=self.default_admin_username
+            ).first()
+            if existing_user:
+                logger.info("Admin user exists despite creation failure, marking bootstrap complete")
+                self._mark_bootstrap_completed()
+                return existing_user
             return None
 
     def _is_bootstrap_completed(self) -> bool:
@@ -165,11 +205,39 @@ class BootstrapService:
             if os.environ.get(self.bootstrap_flag_key) == "true":
                 return True
 
-            # Check database for bootstrap flag (production approach)
-            # We'll store this as a special user record or system setting
-            # For now, use a simple file-based approach that's deployment-friendly
+            # Check database for bootstrap completion (most reliable)
+            try:
+                # Check if tables exist first
+                inspector = db.inspect(db.engine)
+                existing_tables = inspector.get_table_names()
+                
+                if "users" in existing_tables:
+                    # Method 1: Check if any admin users exist
+                    admin_count = User.query.filter_by(role=UserRole.ADMIN).count()
+                    if admin_count > 0:
+                        logger.debug("Bootstrap completed: admin users found in database")
+                        # Also create file marker for faster future checks
+                        self._create_file_marker()
+                        return True
+                    
+                    # Method 2: Check if specific admin username exists
+                    existing_admin = User.query.filter_by(
+                        username=self.default_admin_username
+                    ).first()
+                    if existing_admin:
+                        logger.debug("Bootstrap completed: default admin user found in database")
+                        # Also create file marker for faster future checks
+                        self._create_file_marker()
+                        return True
+                        
+            except Exception as db_error:
+                logger.debug(f"Database check for bootstrap status failed: {db_error}")
+                # Fall back to file-based check
+
+            # Check file-based marker (fallback approach)
             bootstrap_file = "/app/data/.bootstrap_completed"
             if os.path.exists(bootstrap_file):
+                logger.debug("Bootstrap completed: marker file found")
                 return True
 
             return False
@@ -178,12 +246,39 @@ class BootstrapService:
             logger.error(f"Error checking bootstrap completion: {e}")
             return False
 
+    def _create_file_marker(self) -> None:
+        """
+        Create bootstrap completion file marker
+        """
+        try:
+            bootstrap_file = "/app/data/.bootstrap_completed"
+            
+            # Only create if it doesn't exist
+            if not os.path.exists(bootstrap_file):
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(bootstrap_file), exist_ok=True)
+
+                # Write timestamp and details
+                with open(bootstrap_file, "w") as f:
+                    f.write(
+                        f"Bootstrap completed: {datetime.now(timezone.utc).isoformat()}\n"
+                    )
+                    f.write(f"Initial admin user: {self.default_admin_username}\n")
+                    f.write("Bootstrap marker created from database state\n")
+
+                # Set secure permissions
+                os.chmod(bootstrap_file, 0o600)
+                logger.debug("Bootstrap completion marker file created")
+                
+        except Exception as e:
+            logger.debug(f"Failed to create bootstrap marker file: {e}")
+
     def _mark_bootstrap_completed(self) -> None:
         """
         Mark bootstrap as completed to prevent future automatic admin creation
         """
         try:
-            # Create bootstrap completion marker
+            # Create bootstrap completion marker file
             bootstrap_file = "/app/data/.bootstrap_completed"
 
             # Ensure directory exists
@@ -195,6 +290,7 @@ class BootstrapService:
                     f"Bootstrap completed: {datetime.now(timezone.utc).isoformat()}\n"
                 )
                 f.write(f"Initial admin user: {self.default_admin_username}\n")
+                f.write("Bootstrap completed successfully\n")
 
             # Set secure permissions
             os.chmod(bootstrap_file, 0o600)
@@ -203,6 +299,9 @@ class BootstrapService:
 
         except Exception as e:
             logger.error(f"Failed to mark bootstrap as completed: {e}")
+            
+        # Note: Database-based tracking is implicit - the presence of admin users
+        # in the database serves as the primary indicator of bootstrap completion
 
     def get_bootstrap_info(self) -> Dict[str, Any]:
         """
@@ -212,11 +311,35 @@ class BootstrapService:
             Dictionary with bootstrap status information
         """
         try:
+            bootstrap_file = "/app/data/.bootstrap_completed"
+            file_exists = os.path.exists(bootstrap_file)
+            
+            admin_count = 0
+            default_admin_exists = False
+            tables_exist = False
+            
+            try:
+                inspector = db.inspect(db.engine)
+                existing_tables = inspector.get_table_names()
+                tables_exist = "users" in existing_tables
+                
+                if tables_exist:
+                    admin_count = User.query.filter_by(role=UserRole.ADMIN).count()
+                    default_admin_exists = User.query.filter_by(
+                        username=self.default_admin_username
+                    ).first() is not None
+            except Exception as db_error:
+                logger.debug(f"Database check in bootstrap info failed: {db_error}")
+            
             return {
                 "bootstrap_completed": self._is_bootstrap_completed(),
-                "admin_count": User.query.filter_by(role=UserRole.ADMIN).count(),
+                "admin_count": admin_count,
+                "default_admin_exists": default_admin_exists,
                 "should_create_admin": self.should_create_initial_admin(),
                 "default_username": self.default_admin_username,
+                "marker_file_exists": file_exists,
+                "marker_file_path": bootstrap_file,
+                "tables_exist": tables_exist,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         except Exception as e:
@@ -224,7 +347,10 @@ class BootstrapService:
             return {
                 "bootstrap_completed": False,
                 "admin_count": 0,
+                "default_admin_exists": False,
                 "should_create_admin": False,
+                "marker_file_exists": False,
+                "tables_exist": False,
                 "error": str(e),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
