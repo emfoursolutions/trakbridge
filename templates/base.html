@@ -622,11 +622,6 @@
                         <i class="fas fa-chevron-right settings-chevron"></i>
                     </div>
                     <div class="settings-submenu" id="settingsSubmenu">
-                        <a class="nav-link {% if request.endpoint == 'admin.cot_types' %}active{% endif %}"
-                           href="/admin/cot_types" onclick="closeSidebarOnMobile()">
-                            <i class="fas fa-tags"></i>
-                            <span>CoT Types</span>
-                        </a>
                         {% if is_admin %}
                         <a class="nav-link {% if request.endpoint == 'auth.admin_users' %}active{% endif %}"
                            href="{{ url_for('auth.admin_users') }}" onclick="closeSidebarOnMobile()">
@@ -634,11 +629,6 @@
                             <span>User Management</span>
                         </a>
                         {% endif %}
-                        <a class="nav-link {% if request.endpoint == 'admin.admin_dashboard' %}active{% endif %}"
-                           href="{{ url_for('admin.admin_dashboard') }}" onclick="closeSidebarOnMobile()">
-                            <i class="fas fa-info-circle"></i>
-                            <span>System Info</span>
-                        </a>
                         {% if is_admin %}
                         <a class="nav-link {% if request.endpoint == 'admin.key_rotation_page' %}active{% endif %}"
                            href="{{ url_for('admin.key_rotation_page') }}" onclick="closeSidebarOnMobile()">
@@ -646,6 +636,16 @@
                             <span>Key Rotation</span>
                         </a>
                         {% endif %}
+                        <a class="nav-link {% if request.endpoint == 'admin.admin_dashboard' %}active{% endif %}"
+                           href="{{ url_for('admin.admin_dashboard') }}" onclick="closeSidebarOnMobile()">
+                            <i class="fas fa-info-circle"></i>
+                            <span>System Info</span>
+                        </a>
+                        <a class="nav-link {% if request.endpoint == 'admin.cot_types' %}active{% endif %}"
+                           href="/admin/cot_types" onclick="closeSidebarOnMobile()">
+                            <i class="fas fa-tags"></i>
+                            <span>CoT Types</span>
+                        </a>
                         <a class="nav-link {% if request.endpoint == 'admin.admin_about' %}active{% endif %}"
                            href="{{ url_for('admin.admin_about') }}" onclick="closeSidebarOnMobile()">
                             <i class="fas fa-info"></i>
