@@ -43,6 +43,9 @@ RUN rm -rf build/ dist/ *.egg-info/ __pycache__ */__pycache__ \
 # Production stage
 FROM python:3.12-slim AS production
 
+ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0
+ENV SETUPTOOLS_SCM_PRETEND_VERSION=${SETUPTOOLS_SCM_PRETEND_VERSION}
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
