@@ -79,7 +79,7 @@ log_info "Setting up TrakBridge for environment: $ENVIRONMENT"
 
 # Create directory structure
 log_step "Creating directory structure..."
-mkdir -p secrets logs data config/settings docker/init-scripts
+mkdir -p secrets plugins logs data config docker/init-scripts
 
 # Create nginx directory if enabled
 if [[ "$ENABLE_NGINX" == true ]] || [[ "$NGINX_SSL" == true ]]; then
