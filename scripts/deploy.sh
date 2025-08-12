@@ -203,11 +203,11 @@ create_secrets() {
     local env="$1"
     local secrets_dir
     
-    # Handle feature branch environments
-    if [[ "$env" == "feature" ]]; then
-        # For feature branches, use a shared secrets directory or create minimal secrets
+    # Handle feature branch and development environments
+    if [[ "$env" == "feature" || "$env" == "development" ]]; then
+        # For feature branches and development, use shared secrets directory
         secrets_dir="$PROJECT_ROOT/secrets"
-        log "INFO" "Creating secrets for feature environment: $secrets_dir"
+        log "INFO" "Creating secrets for $env environment: $secrets_dir"
     else
         secrets_dir="$PROJECT_ROOT/secrets/$env"
         log "INFO" "Creating secrets for environment: $env"
