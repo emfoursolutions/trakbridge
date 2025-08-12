@@ -1195,6 +1195,10 @@ deploy-development:
     echo "LDAP_BIND_PASSWORD length: ${#LDAP_BIND_PASSWORD}"
     echo "LDAP_BIND_PASSWORD first 10 chars: ${LDAP_BIND_PASSWORD:0:10}..."
     
+    # Export dynamic user variables for Docker runtime user creation
+    export USER_ID=${USER_ID:-$(id -u)}
+    export GROUP_ID=${GROUP_ID:-$(id -g)}
+    
     # Set up development environment using deployment script
     chmod +x scripts/deploy.sh
 
@@ -1418,76 +1422,6 @@ deploy-staging:
     expire_in: 1 week
     when: always
 
-# Production release
-deploy-production:
-  stage: deploy
-  tags:
-    - trakbridge-cd
-  timeout: 30m
-  
-  environment:
-    name: production
-    deployment_tier: production
-  
-  variables:
-    DEPLOY_ENV: "production"
-    APP_VERSION: "${CI_COMMIT_TAG}"
-    DOCKER_TLS_CERTDIR: ""
-  
-  before_script: |
-    # Authenticate with Docker Hub for pulling production images
-    if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
-      echo "${DOCKERHUB_TOKEN}" | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin
-    fi
-
-  script: |
-    echo "Deploying production release..."
-    
-    # Extract version from tag
-    if [[ $CI_COMMIT_TAG =~ ^v.* ]]; then
-      VERSION=${CI_COMMIT_TAG}
-    else
-      VERSION="latest"
-    fi
-    echo "Production version: $VERSION"
-    
-    # Pull the production image from Docker Hub (tests the pushed image)
-    echo "Pulling production image from Docker Hub: $IMAGE_NAME:$VERSION"
-    docker pull $IMAGE_NAME:$VERSION
-    docker tag $IMAGE_NAME:$VERSION trakbridge:production-latest
-    
-    # Test production image functionality
-    echo "🧪 Testing production image functionality..."
-    docker run --rm \
-      -e FLASK_ENV=production \
-      -e DB_TYPE=sqlite \
-      $IMAGE_NAME:$VERSION \
-      python -c "import app; print('Production image loads successfully')"
-    
-    # Deploy using the pulled Docker Hub image
-    echo "Deploying production environment..."
-    chmod +x scripts/deploy.sh
-    
-    scripts/deploy.sh \
-      --environment production \
-      --action deploy \
-      --profiles "postgres,nginx" \
-      --timeout 600 \
-      --verbose
-    
-    echo "Production release completed"
-    echo "GitLab Container Registry: $CI_REGISTRY_IMAGE:$VERSION"
-    echo "Docker Hub: emfoursolutions/trakbridge:$VERSION"
-  
-  rules:
-    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/
-    - if: $CI_PIPELINE_SOURCE == "web" && $DEPLOY_ENVIRONMENT == "production"
-  
-  # Manual approval required for production
-  when: manual
-  
-  dependencies:
-    - build-tagged-image-shell
 
 # Feature branch dynamic environment deployment
 deploy-feature-branch:
