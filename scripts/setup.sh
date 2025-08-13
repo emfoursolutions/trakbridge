@@ -132,14 +132,14 @@ setup_docker_scripts() {
 -- This script runs when the PostgreSQL container starts for the first time
 
 -- Create additional databases if needed
--- CREATE DATABASE trakbridge_db;
+-- CREATE DATABASE trakbridge;
 
 -- Create extensions if needed
 -- CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- CREATE EXTENSION IF NOT EXISTS "hstore";
 
 -- Set up proper permissions
-GRANT ALL PRIVILEGES ON DATABASE trakbridge_db TO postgres;
+GRANT ALL PRIVILEGES ON DATABASE trakbridge TO postgres;
 EOF
 
     # MySQL init script
@@ -148,10 +148,10 @@ EOF
 -- This script runs when the MySQL container starts for the first time
 
 -- Create additional databases if needed
--- CREATE DATABASE trakbridge_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- CREATE DATABASE trakbridge CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- Grant permissions
-GRANT ALL PRIVILEGES ON trakbridge_db.* TO 'mysql'@'%';
+GRANT ALL PRIVILEGES ON trakbridge.* TO 'mysql'@'%';
 FLUSH PRIVILEGES;
 EOF
 

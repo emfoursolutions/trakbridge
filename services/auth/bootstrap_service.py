@@ -27,9 +27,14 @@ Version: 1.0.0
 
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+from alembic import command
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+from alembic.migration import MigrationContext
 from database import db
 from models.user import AccountStatus, AuthProvider, User, UserRole
 from sqlalchemy.exc import IntegrityError
@@ -49,6 +54,64 @@ class BootstrapService:
         # Allow configurable bootstrap file path for testing
         self.bootstrap_file_path = bootstrap_file_path or "/app/data/.bootstrap_completed"
 
+    def _are_migrations_complete(self) -> bool:
+        """
+        Check if all database migrations have completed
+        
+        Returns:
+            True if migrations are complete, False otherwise
+        """
+        try:
+            # Get current database revision
+            with db.engine.connect() as conn:
+                migration_ctx = MigrationContext.configure(conn)
+                current_rev = migration_ctx.get_current_revision()
+                
+                if current_rev is None:
+                    logger.debug("No migration revision found - migrations may not be initialized")
+                    return False
+                
+                # Get the latest revision from migration scripts
+                alembic_cfg = Config()
+                alembic_cfg.set_main_option("script_location", "migrations")
+                script_dir = ScriptDirectory.from_config(alembic_cfg)
+                latest_rev = script_dir.get_current_head()
+                
+                if current_rev == latest_rev:
+                    logger.debug("Database migrations are up to date")
+                    return True
+                else:
+                    logger.debug(f"Database revision {current_rev} is behind latest {latest_rev}")
+                    return False
+                    
+        except Exception as e:
+            logger.debug(f"Could not check migration status: {e}")
+            logger.debug("This could be due to migrations still running or Alembic not being initialized yet")
+            # If we can't check migration status, assume they're not complete
+            return False
+
+    def _wait_for_migrations(self, max_wait_seconds: int = 60) -> bool:
+        """
+        Wait for database migrations to complete
+        
+        Args:
+            max_wait_seconds: Maximum time to wait for migrations
+            
+        Returns:
+            True if migrations completed, False if timeout
+        """
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait_seconds:
+            if self._are_migrations_complete():
+                return True
+                
+            logger.debug("Waiting for database migrations to complete...")
+            time.sleep(2)
+            
+        logger.warning(f"Timed out waiting for migrations after {max_wait_seconds} seconds")
+        return False
+
     def should_create_initial_admin(self) -> bool:
         """
         Check if initial admin user should be created
@@ -57,6 +120,18 @@ class BootstrapService:
             True if initial admin should be created, False otherwise
         """
         try:
+            # First, wait for database migrations to complete
+            logger.info("Waiting for database migrations to complete before bootstrap check...")
+            if not self._wait_for_migrations(max_wait_seconds=120):
+                logger.error(
+                    "Database migrations did not complete within 120 seconds. "
+                    "This may indicate migration issues or slow database startup. "
+                    "Bootstrap will be skipped to prevent race conditions."
+                )
+                return False
+                
+            logger.info("Database migrations completed successfully, proceeding with bootstrap check")
+            
             # Check if database tables exist first
             inspector = db.inspect(db.engine)
             existing_tables = inspector.get_table_names()

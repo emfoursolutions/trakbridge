@@ -134,7 +134,8 @@ def _handle_local_login(auth_manager: AuthenticationManager):
         if check_password_change_required(response.user):
             # Store user info in session for password change
             session["password_change_user_id"] = response.user.id
-            flash("You must change your password before continuing", "warning")
+            logger.info(f"User {response.user.username} requires password change, redirecting to force_password_change")
+            flash("Initial setup required: Please set a new password for your admin account", "info")
             return redirect(url_for("auth.force_password_change"))
 
         # Create session
@@ -777,14 +778,18 @@ def force_password_change():
     """
     user_id = session.get("password_change_user_id")
     if not user_id:
+        logger.warning("force_password_change accessed without password_change_user_id in session")
         flash("No password change required", "info")
         return redirect(url_for("auth.login"))
 
     user = User.query.get(user_id)
     if not user:
         session.pop("password_change_user_id", None)
+        logger.error(f"force_password_change: User with ID {user_id} not found in database")
         flash("User not found", "error")
         return redirect(url_for("auth.login"))
+
+    logger.info(f"force_password_change: Loading password change form for user {user.username}")
 
     if request.method == "GET":
         return render_template("auth/force_password_change.html", user=user)
