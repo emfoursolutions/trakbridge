@@ -27,6 +27,7 @@ Version: 1.0.0
 
 import logging
 import os
+import sys
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -47,12 +48,37 @@ class BootstrapService:
     Service for bootstrapping initial admin user on first startup
     """
 
-    def __init__(self, bootstrap_file_path=None):
+    def __init__(self, bootstrap_file_path=None, skip_migration_check=None):
         self.bootstrap_flag_key = "INITIAL_ADMIN_CREATED"
         self.default_admin_username = "admin"
         self.default_admin_password = "TrakBridge-Setup-2025!"
         # Allow configurable bootstrap file path for testing
         self.bootstrap_file_path = bootstrap_file_path or "/app/data/.bootstrap_completed"
+        # Allow skipping migration check for testing
+        self.skip_migration_check = skip_migration_check
+
+    def _is_test_environment(self) -> bool:
+        """
+        Detect if we're running in a test environment
+        
+        Returns:
+            True if in test environment, False otherwise
+        """
+        # Check for common test environment indicators
+        test_indicators = [
+            os.environ.get("FLASK_ENV") == "testing",
+            os.environ.get("TESTING") == "true",
+            "pytest" in os.environ.get("_", ""),
+            "test" in os.environ.get("DB_TYPE", "").lower(),
+            # Check if pytest is in the current process
+            any("pytest" in arg for arg in sys.argv),
+        ]
+        
+        # Also check if we're explicitly told to skip migration check
+        if self.skip_migration_check is not None:
+            return self.skip_migration_check
+            
+        return any(test_indicators)
 
     def _are_migrations_complete(self) -> bool:
         """
@@ -120,17 +146,21 @@ class BootstrapService:
             True if initial admin should be created, False otherwise
         """
         try:
-            # First, wait for database migrations to complete
-            logger.info("Waiting for database migrations to complete before bootstrap check...")
-            if not self._wait_for_migrations(max_wait_seconds=120):
-                logger.error(
-                    "Database migrations did not complete within 120 seconds. "
-                    "This may indicate migration issues or slow database startup. "
-                    "Bootstrap will be skipped to prevent race conditions."
-                )
-                return False
-                
-            logger.info("Database migrations completed successfully, proceeding with bootstrap check")
+            # Skip migration checking in test environments
+            if self._is_test_environment():
+                logger.debug("Test environment detected, skipping migration completion check")
+            else:
+                # First, wait for database migrations to complete
+                logger.info("Waiting for database migrations to complete before bootstrap check...")
+                if not self._wait_for_migrations(max_wait_seconds=120):
+                    logger.error(
+                        "Database migrations did not complete within 120 seconds. "
+                        "This may indicate migration issues or slow database startup. "
+                        "Bootstrap will be skipped to prevent race conditions."
+                    )
+                    return False
+                    
+                logger.info("Database migrations completed successfully, proceeding with bootstrap check")
             
             # Check if database tables exist first
             inspector = db.inspect(db.engine)

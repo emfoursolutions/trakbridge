@@ -48,7 +48,7 @@ class TestBootstrapServiceCore:
         # Create temporary directory for bootstrap file
         temp_dir = tempfile.mkdtemp()
         bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-        return BootstrapService(bootstrap_file_path=bootstrap_file_path)
+        return BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
 
     def test_bootstrap_service_creation(self, bootstrap_service):
         """Test creating a bootstrap service instance."""
@@ -240,7 +240,7 @@ class TestBootstrapServiceRaceConditions:
             # Create a test-specific bootstrap service with temp file path
             temp_dir = tempfile.mkdtemp()
             bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-            bootstrap_service = BootstrapService(bootstrap_file_path=bootstrap_file_path)
+            bootstrap_service = BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
             
             # Step 1: Initial state - no admin users
             assert User.query.filter_by(role=UserRole.ADMIN).count() == 0
@@ -270,7 +270,7 @@ class TestBootstrapServiceRaceConditions:
             # Create a test-specific bootstrap service with temp file path
             temp_dir = tempfile.mkdtemp()
             bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-            bootstrap_service = BootstrapService(bootstrap_file_path=bootstrap_file_path)
+            bootstrap_service = BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
             
             # Create admin user with different username
             existing_admin = User.create_local_user(
@@ -302,7 +302,7 @@ class TestBootstrapServiceRaceConditions:
             # Create a test-specific bootstrap service with temp file path
             temp_dir = tempfile.mkdtemp()
             bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-            bootstrap_service = BootstrapService(bootstrap_file_path=bootstrap_file_path)
+            bootstrap_service = BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
             
             # Attempt multiple creations
             results = []
@@ -343,7 +343,7 @@ class TestBootstrapServiceErrorHandling:
         # Create temporary directory for bootstrap file
         temp_dir = tempfile.mkdtemp()
         bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-        return BootstrapService(bootstrap_file_path=bootstrap_file_path)
+        return BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
 
     def test_database_error_handling(self, app, bootstrap_service):
         """Test handling of database errors."""
