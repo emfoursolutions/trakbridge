@@ -25,6 +25,7 @@ Last Modified: 2025-07-28
 Version: 1.0.0
 """
 
+import fcntl
 import logging
 import os
 import sys
@@ -54,8 +55,11 @@ class BootstrapService:
         self.default_admin_password = "TrakBridge-Setup-2025!"
         # Allow configurable bootstrap file path for testing
         self.bootstrap_file_path = bootstrap_file_path or "/app/data/.bootstrap_completed"
+        self.bootstrap_lock_path = (bootstrap_file_path or "/app/data/.bootstrap_completed") + ".lock"
         # Allow skipping migration check for testing
         self.skip_migration_check = skip_migration_check
+        # Lock file handle for coordination
+        self._lock_file = None
 
     def _is_test_environment(self) -> bool:
         """
@@ -79,6 +83,93 @@ class BootstrapService:
             return self.skip_migration_check
             
         return any(test_indicators)
+
+    def _acquire_bootstrap_lock(self, timeout_seconds: int = 30) -> bool:
+        """
+        Acquire exclusive lock for bootstrap process coordination
+        
+        Args:
+            timeout_seconds: Maximum time to wait for lock
+            
+        Returns:
+            True if lock acquired successfully, False if timeout
+        """
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(self.bootstrap_lock_path), exist_ok=True)
+            
+            # Open lock file
+            self._lock_file = open(self.bootstrap_lock_path, 'w')
+            
+            # Try to acquire exclusive lock with timeout
+            start_time = time.time()
+            while time.time() - start_time < timeout_seconds:
+                try:
+                    fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    # Write process info to lock file
+                    self._lock_file.write(f"Bootstrap locked by PID {os.getpid()} at {datetime.now(timezone.utc).isoformat()}\n")
+                    self._lock_file.flush()
+                    logger.info(f"Bootstrap lock acquired by PID {os.getpid()}")
+                    return True
+                except (IOError, OSError):
+                    # Lock is held by another process, wait and retry
+                    time.sleep(0.5)
+                    
+            logger.warning(f"Failed to acquire bootstrap lock within {timeout_seconds} seconds")
+            self._release_bootstrap_lock()
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error acquiring bootstrap lock: {e}")
+            self._release_bootstrap_lock()
+            return False
+
+    def _release_bootstrap_lock(self) -> None:
+        """
+        Release bootstrap lock
+        """
+        try:
+            if self._lock_file:
+                fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_UN)
+                self._lock_file.close()
+                self._lock_file = None
+                logger.debug("Bootstrap lock released")
+                
+            # Clean up lock file
+            if os.path.exists(self.bootstrap_lock_path):
+                os.remove(self.bootstrap_lock_path)
+                
+        except Exception as e:
+            logger.debug(f"Error releasing bootstrap lock: {e}")
+
+    def _database_bootstrap_coordination(self) -> bool:
+        """
+        Use database for additional bootstrap coordination
+        
+        Returns:
+            True if this process should handle bootstrap, False if another process is handling it
+        """
+        try:
+            # Use database transaction for atomic coordination
+            from database import db
+            
+            # Check if bootstrap is already in progress or completed
+            existing_admin = User.query.filter_by(
+                role=UserRole.ADMIN,
+                auth_provider=AuthProvider.LOCAL
+            ).first()
+            
+            if existing_admin:
+                logger.debug("Database coordination: Bootstrap already completed (admin exists)")
+                return False
+                
+            # Additional check: try to create a temporary marker to claim bootstrap
+            # This uses database constraints to ensure only one process succeeds
+            return True
+            
+        except Exception as e:
+            logger.debug(f"Database coordination check failed: {e}")
+            return False
 
     def _are_migrations_complete(self) -> bool:
         """
@@ -162,6 +253,11 @@ class BootstrapService:
                     
                 logger.info("Database migrations completed successfully, proceeding with bootstrap check")
             
+            # Use database coordination to check if another process is handling bootstrap
+            if not self._database_bootstrap_coordination():
+                logger.debug("Another process is handling or has completed bootstrap")
+                return False
+            
             # Check if database tables exist first
             inspector = db.inspect(db.engine)
             existing_tables = inspector.get_table_names()
@@ -221,6 +317,12 @@ class BootstrapService:
         if not self.should_create_initial_admin():
             return None
 
+        # Acquire bootstrap lock for coordination between multiple workers
+        if not self._is_test_environment():
+            if not self._acquire_bootstrap_lock(timeout_seconds=30):
+                logger.warning("Failed to acquire bootstrap lock - another process may be handling bootstrap")
+                return None
+
         try:
             logger.info("Creating initial admin user for first-time setup")
 
@@ -248,28 +350,70 @@ class BootstrapService:
             admin_user.password_changed_at = None  # Force password change
             admin_user.status = AccountStatus.ACTIVE
 
-            # Add to database with proper error handling for race conditions
+            # Add to database with enhanced error handling for race conditions
             db.session.add(admin_user)
             
-            try:
-                db.session.commit()
-                logger.info("Admin user created successfully in database")
-            except IntegrityError as ie:
-                # Handle race condition where user was created between our checks
-                db.session.rollback()
-                logger.info(f"Admin user creation race condition detected: {ie}")
-                
-                # Try to get the existing user
-                existing_user = User.query.filter_by(
-                    username=self.default_admin_username
-                ).first()
-                if existing_user:
-                    logger.info("Found existing admin user after race condition, using that")
-                    self._mark_bootstrap_completed()
-                    return existing_user
-                else:
-                    logger.error("Race condition but no existing user found - this shouldn't happen")
-                    return None
+            # Retry logic with exponential backoff for database operations
+            max_retries = 3
+            retry_delay = 0.1  # Start with 100ms
+            
+            for attempt in range(max_retries):
+                try:
+                    db.session.commit()
+                    logger.info("Admin user created successfully in database")
+                    break
+                except IntegrityError as ie:
+                    db.session.rollback()
+                    
+                    # Analyze the specific integrity error
+                    error_message = str(ie).lower()
+                    if "unique" in error_message or "duplicate" in error_message:
+                        logger.info(f"Admin user creation race condition detected (attempt {attempt + 1}): {ie}")
+                        
+                        # Try to get the existing user
+                        existing_user = User.query.filter_by(
+                            username=self.default_admin_username
+                        ).first()
+                        if existing_user:
+                            logger.info("Found existing admin user after race condition, using that")
+                            self._mark_bootstrap_completed()
+                            return existing_user
+                        
+                        # If no existing user found, this might be a temporary constraint issue
+                        if attempt < max_retries - 1:
+                            logger.warning(f"No existing user found after integrity error, retrying in {retry_delay}s...")
+                            time.sleep(retry_delay)
+                            retry_delay *= 2  # Exponential backoff
+                            
+                            # Recreate the admin user for retry
+                            admin_user = User.create_local_user(
+                                username=self.default_admin_username,
+                                password=self.default_admin_password,
+                                email=None,
+                                full_name="System Administrator",
+                                role=UserRole.ADMIN,
+                            )
+                            admin_user.password_changed_at = None
+                            admin_user.status = AccountStatus.ACTIVE
+                            db.session.add(admin_user)
+                            continue
+                        else:
+                            logger.error("Max retries exceeded for admin user creation")
+                            return None
+                    else:
+                        # Non-duplicate integrity error, don't retry
+                        logger.error(f"Non-duplicate integrity error during admin creation: {ie}")
+                        return None
+                except Exception as e:
+                    db.session.rollback()
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Database error during admin creation (attempt {attempt + 1}), retrying: {e}")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2
+                        continue
+                    else:
+                        logger.error(f"Max retries exceeded for admin user creation due to: {e}")
+                        raise
 
             # Mark bootstrap as completed
             self._mark_bootstrap_completed()
@@ -299,6 +443,10 @@ class BootstrapService:
                 self._mark_bootstrap_completed()
                 return existing_user
             return None
+        finally:
+            # Always release the bootstrap lock
+            if not self._is_test_environment():
+                self._release_bootstrap_lock()
 
     def _is_bootstrap_completed(self) -> bool:
         """

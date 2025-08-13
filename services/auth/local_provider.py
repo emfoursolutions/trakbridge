@@ -658,7 +658,15 @@ class LocalAuthProvider(BaseAuthenticationProvider):
             return False
 
         if not user.password_changed_at:
-            # If no password change date, consider it expired if max_age is set
+            # Special handling for initial setup users (bootstrap admin)
+            # Allow admin users with no password change date to login for initial setup
+            if (user.role == UserRole.ADMIN and 
+                user.username == "admin" and 
+                user.auth_provider == AuthProvider.LOCAL):
+                logger.debug(f"Allowing initial setup login for admin user: {user.username}")
+                return False  # Allow initial setup login
+            
+            # Other users with no password change date are considered expired
             return True
 
         expiry_date = user.password_changed_at + timedelta(days=self.max_age_days)

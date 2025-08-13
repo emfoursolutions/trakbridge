@@ -373,3 +373,129 @@ class TestBootstrapServiceErrorHandling:
                 # Should still detect bootstrap completion via database
                 assert bootstrap_service._is_bootstrap_completed() is True
                 assert bootstrap_service.should_create_initial_admin() is False
+
+
+class TestBootstrapServiceCoordination:
+    """Test coordination mechanisms in bootstrap service."""
+
+    @pytest.fixture
+    def clean_database(self, app, db_session):
+        """Ensure database is clean for each test."""
+        with app.app_context():
+            User.query.delete()
+            db_session.commit()
+            yield
+            User.query.delete()
+            db_session.commit()
+
+    @pytest.fixture
+    def bootstrap_service(self):
+        """Create a bootstrap service instance for testing."""
+        temp_dir = tempfile.mkdtemp()
+        bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
+        return BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
+
+    def test_database_coordination_with_existing_admin(self, app, clean_database, db_session, bootstrap_service):
+        """Test database coordination when admin already exists."""
+        with app.app_context():
+            # Create an existing admin user
+            existing_admin = User.create_local_user(
+                username="different_admin",
+                password="Password123!",
+                email="admin@test.com",
+                full_name="Existing Admin",
+                role=UserRole.ADMIN
+            )
+            existing_admin.status = AccountStatus.ACTIVE
+            db_session.add(existing_admin)
+            db_session.commit()
+
+            # Database coordination should detect existing admin
+            assert bootstrap_service._database_bootstrap_coordination() is False
+
+    def test_database_coordination_no_admin(self, app, clean_database, bootstrap_service):
+        """Test database coordination when no admin exists."""
+        with app.app_context():
+            # Database coordination should allow bootstrap
+            assert bootstrap_service._database_bootstrap_coordination() is True
+
+    def test_lock_coordination_in_test_environment(self, app, clean_database, bootstrap_service):
+        """Test that lock coordination is skipped in test environment."""
+        with app.app_context():
+            # In test environment, locks should be skipped
+            assert bootstrap_service._is_test_environment() is True
+            
+            # Should be able to create admin without acquiring lock
+            admin_user = bootstrap_service.create_initial_admin()
+            assert admin_user is not None
+            assert admin_user.username == bootstrap_service.default_admin_username
+
+
+class TestAuthenticationFlowIntegration:
+    """Test integration between bootstrap service and authentication flow."""
+
+    @pytest.fixture
+    def clean_database(self, app, db_session):
+        """Ensure database is clean for each test."""
+        with app.app_context():
+            User.query.delete()
+            db_session.commit()
+            yield
+            User.query.delete()
+            db_session.commit()
+
+    @pytest.fixture
+    def bootstrap_service(self):
+        """Create a bootstrap service instance for testing."""
+        temp_dir = tempfile.mkdtemp()
+        bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
+        return BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
+
+    def test_initial_admin_password_expiry_bypass(self, app, clean_database, db_session, bootstrap_service):
+        """Test that initial admin can authenticate despite password_changed_at being None."""
+        from services.auth.local_provider import LocalAuthProvider
+        
+        with app.app_context():
+            # Create initial admin user (simulating bootstrap)
+            admin_user = bootstrap_service.create_initial_admin()
+            assert admin_user is not None
+            assert admin_user.password_changed_at is None  # Should be None for initial setup
+
+            # Test authentication with LocalAuthProvider
+            auth_provider = LocalAuthProvider({"password_policy": {"max_age_days": 90}})
+            
+            # Should not be considered expired despite None password_changed_at
+            assert auth_provider._is_password_expired(admin_user) is False
+            
+            # Authentication should succeed
+            result = auth_provider.authenticate(
+                username=bootstrap_service.default_admin_username,
+                password=bootstrap_service.default_admin_password
+            )
+            
+            # Should succeed without password expired error
+            assert result.result.name != "PASSWORD_EXPIRED"
+
+    def test_non_admin_password_expiry_still_enforced(self, app, clean_database, db_session):
+        """Test that non-admin users still have password expiry enforced."""
+        from services.auth.local_provider import LocalAuthProvider
+        
+        with app.app_context():
+            # Create a regular user with no password change date
+            regular_user = User.create_local_user(
+                username="regular_user",
+                password="Password123!",
+                email="user@test.com",
+                full_name="Regular User",
+                role=UserRole.USER
+            )
+            regular_user.password_changed_at = None  # No password change date
+            regular_user.status = AccountStatus.ACTIVE
+            db_session.add(regular_user)
+            db_session.commit()
+
+            # Test authentication with LocalAuthProvider
+            auth_provider = LocalAuthProvider({"password_policy": {"max_age_days": 90}})
+            
+            # Should be considered expired for non-admin users
+            assert auth_provider._is_password_expired(regular_user) is True
