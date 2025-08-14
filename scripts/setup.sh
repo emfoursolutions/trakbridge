@@ -149,7 +149,7 @@ setup_docker_scripts() {
 -- CREATE EXTENSION IF NOT EXISTS "hstore";
 
 -- Set up proper permissions
-GRANT ALL PRIVILEGES ON DATABASE trakbridge TO postgres;
+GRANT ALL PRIVILEGES ON DATABASE trakbridge TO trakbridge;
 EOF
 
     # MySQL init script
@@ -161,7 +161,7 @@ EOF
 -- CREATE DATABASE trakbridge CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- Grant permissions
-GRANT ALL PRIVILEGES ON trakbridge.* TO 'mysql'@'%';
+GRANT ALL PRIVILEGES ON trakbridge.* TO 'trakbridge'@'%';
 FLUSH PRIVILEGES;
 EOF
 
