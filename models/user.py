@@ -159,16 +159,31 @@ class User(db.Model, TimestampMixin):
             return False
 
         # Check if account is temporarily locked
-        if self.locked_until and self.locked_until > datetime.now(timezone.utc):
-            return False
+        if self.locked_until:
+            current_time = datetime.now(timezone.utc)
+            locked_until = self.locked_until
+            if locked_until.tzinfo is None:
+                # If locked_until is naive, assume it's UTC
+                locked_until = locked_until.replace(tzinfo=timezone.utc)
+            if locked_until > current_time:
+                return False
 
         return True
 
     def is_locked(self) -> bool:
         """Check if user account is locked"""
-        return self.status == AccountStatus.LOCKED or (
-            self.locked_until and self.locked_until > datetime.now(timezone.utc)
-        )
+        if self.status == AccountStatus.LOCKED:
+            return True
+            
+        if self.locked_until:
+            current_time = datetime.now(timezone.utc)
+            locked_until = self.locked_until
+            if locked_until.tzinfo is None:
+                # If locked_until is naive, assume it's UTC
+                locked_until = locked_until.replace(tzinfo=timezone.utc)
+            return locked_until > current_time
+            
+        return False
 
     def lock_account(self, duration_minutes: int = 30) -> None:
         """

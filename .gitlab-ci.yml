@@ -1000,7 +1000,7 @@ build-tagged-image-shell:
   stage: build
   tags:
     - trakbridge-cd
-  timeout: 45m
+  timeout: 120m
   variables:
     DOCKER_DRIVER: overlay2
     DOCKER_TLS_CERTDIR: ""

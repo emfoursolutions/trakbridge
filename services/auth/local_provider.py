@@ -670,7 +670,14 @@ class LocalAuthProvider(BaseAuthenticationProvider):
             return True
 
         expiry_date = user.password_changed_at + timedelta(days=self.max_age_days)
-        return datetime.now(timezone.utc) > expiry_date
+        
+        # Handle timezone comparison - ensure both datetimes are timezone-aware
+        current_time = datetime.now(timezone.utc)
+        if expiry_date.tzinfo is None:
+            # If expiry_date is naive, assume it's UTC
+            expiry_date = expiry_date.replace(tzinfo=timezone.utc)
+        
+        return current_time > expiry_date
 
     def supports_feature(self, feature: str) -> bool:
         """
