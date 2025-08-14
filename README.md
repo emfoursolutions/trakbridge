@@ -25,7 +25,7 @@ A comprehensive web application for bridging tracking devices and services to TA
 ```bash
 # Download setup files
 wget https://raw.githubusercontent.com/emfoursolutions/trakbridge/main/docker-compose.yml
-wget https://raw.githubusercontent.com/emfoursolutions/trakbridge/main/init/setup.sh
+wget https://raw.githubusercontent.com/emfoursolutions/trakbridge/refs/heads/main/scripts/setup.sh
 
 # Setup and run
 chmod +x setup.sh
@@ -39,6 +39,47 @@ Access the web interface at `https://yourdomain.com`
 - Username: `admin`
 - Password: `TrakBridge-Setup-2025!`
 - You'll be forced to change the password on first logins
+
+### Environment Configuration
+All configuration is managed directly in the docker-compose.yml file. Edit the `x-environment` section to customize your deployment:
+
+```yaml
+# Edit these values in docker-compose.yml
+x-environment: &common-environment
+  # Application Settings
+  FLASK_ENV: "production"
+  USER_ID: "1000"  # Change if needed for filesystem permissions
+  GROUP_ID: "1000"  # Change if needed for filesystem permissions
+  
+  # Database Configuration (choose one)
+  DB_TYPE: "postgresql"  # postgresql, mysql, or sqlite
+  DB_HOST: "postgres"
+  DB_NAME: "trakbridge"
+  DB_USER: "trakbridge"
+  
+  # LDAP Authentication (set LDAP_ENABLED to "true" to enable)
+  LDAP_ENABLED: "false"
+  LDAP_SERVER: "ldap://your-ad-server.company.com"  # Update for your LDAP server
+  LDAP_BIND_DN: "CN=trakbridge,OU=Service Accounts,DC=company,DC=com"  # Update for your domain
+  
+  # OIDC/SSO Authentication (set OIDC_ENABLED to "true" to enable)
+  OIDC_ENABLED: "false"
+  OIDC_ISSUER: "https://your-identity-provider.com"  # Update for your OIDC provider
+  OIDC_CLIENT_ID: "trakbridge-client"  # Update with your client ID
+  OIDC_REDIRECT_URI: "https://trakbridge.company.com/auth/oidc/callback"  # Update for your domain
+```
+
+#### Docker Secrets Setup
+Sensitive credentials are managed through Docker secrets. These are created by the setup.sh script.
+If LDAP or OIDC authentication backends are being used the password / OIDC client secret must be inserted into their respective secret file.
+
+```bash
+# LDAP password (if using LDAP authentication)
+echo "your-ldap-bind-password" > secrets/ldap_bind_password
+
+# OIDC client secret (if using OIDC authentication)
+echo "your-oidc-client-secret" > secrets/oidc_client_secret
+```
 
 ### Python Development
 

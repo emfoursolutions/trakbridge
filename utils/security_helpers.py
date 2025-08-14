@@ -31,6 +31,86 @@ from typing import Any, Dict, List, Optional, Union
 logger = logging.getLogger(__name__)
 
 
+def mask_sensitive_value(value: str, show_chars: int = 2) -> str:
+    """
+    Mask a sensitive value showing only first and last few characters.
+    
+    Args:
+        value: The sensitive string to mask
+        show_chars: Number of characters to show at start and end
+        
+    Returns:
+        Masked string like "ab***ef" for "abcdef"
+    """
+    if not value or not isinstance(value, str):
+        return "[EMPTY]"
+    
+    if len(value) <= show_chars * 2:
+        return "*" * len(value)
+    
+    return f"{value[:show_chars]}{'*' * (len(value) - show_chars * 2)}{value[-show_chars:]}"
+
+
+def safe_debug_log(logger_obj: logging.Logger, message: str, sensitive_data: dict = None) -> None:
+    """
+    Safely log debug information with sensitive data masking.
+    
+    Args:
+        logger_obj: Logger instance to use
+        message: Base message to log
+        sensitive_data: Dict of key-value pairs where values should be masked
+    """
+    if not logger_obj.isEnabledFor(logging.DEBUG):
+        return
+        
+    if sensitive_data:
+        masked_data = {}
+        for key, value in sensitive_data.items():
+            if isinstance(value, str) and value:
+                masked_data[key] = {
+                    "length": len(value),
+                    "masked": mask_sensitive_value(value)
+                }
+            else:
+                masked_data[key] = {"length": 0, "masked": "[EMPTY]"}
+        
+        logger_obj.debug(f"{message} - Data: {masked_data}")
+    else:
+        logger_obj.debug(message)
+
+
+def sanitize_log_message(message: str, sensitive_patterns: list = None) -> str:
+    """
+    Remove sensitive data from log messages using regex patterns.
+    
+    Args:
+        message: Original log message
+        sensitive_patterns: List of regex patterns to replace with [REDACTED]
+        
+    Returns:
+        Sanitized log message
+    """
+    if not message:
+        return message
+        
+    # Default patterns for common sensitive data
+    default_patterns = [
+        r'password["\']?\s*[:=]\s*["\']?[^"\s,}]+',  # password=value
+        r'secret["\']?\s*[:=]\s*["\']?[^"\s,}]+',    # secret=value
+        r'token["\']?\s*[:=]\s*["\']?[^"\s,}]+',     # token=value
+        r'key["\']?\s*[:=]\s*["\']?[^"\s,}]+',       # key=value
+        r'["\'][^"\']*(?:password|secret|token|key)[^"\']*["\']',  # quoted strings containing sensitive words
+    ]
+    
+    patterns = sensitive_patterns or default_patterns
+    sanitized = message
+    
+    for pattern in patterns:
+        sanitized = re.sub(pattern, '[REDACTED]', sanitized, flags=re.IGNORECASE)
+    
+    return sanitized
+
+
 def validate_safe_path(
     file_path: Union[str, Path], allowed_base_dirs: List[Union[str, Path]]
 ) -> bool:

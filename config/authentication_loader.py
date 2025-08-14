@@ -405,18 +405,6 @@ def load_authentication_config(environment: str = None) -> Dict[str, Any]:
     loader = get_authentication_loader(environment)
     config = loader.load_authentication_config()
 
-    # DEBUG: Track LDAP password length issue
-    try:
-        ldap_password = config.get("authentication", {}).get("providers", {}).get("ldap", {}).get("bind_password", "")
-        if ldap_password:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"DEBUG AUTH_LOADER: LDAP bind_password length: {len(ldap_password)} chars: {repr(ldap_password)}")
-            # Also test direct secret manager call
-            direct_secret = loader.secret_manager.get_secret("LDAP_BIND_PASSWORD")
-            logger.error(f"DEBUG AUTH_LOADER: Direct secret manager call: {repr(direct_secret)} (len={len(direct_secret) if direct_secret else 'None'})")
-    except Exception as e:
-        logger.error(f"DEBUG AUTH_LOADER: Exception: {e}")
 
     # Validate the configuration
     validation_error = loader.validate_config(config)

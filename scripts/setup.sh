@@ -113,6 +113,16 @@ setup_secrets() {
         python3 -c "import secrets; print(secrets.token_urlsafe(64))" > secrets/tb_master_key
         log_info "Generated secure master key"
     fi
+    
+    if [[ ! -f "secrets/ldap_bind_password" ]] || [[ "$FORCE_RECREATE" == true ]]; then
+        touch secrets/ldap_bind_password
+        log_info "Generated secure LDAP bind password"
+    fi
+
+    if [[ ! -f "secrets/oidc_client_secret" ]] || [[ "$FORCE_RECREATE" == true ]]; then
+        touch secrets/oidc_client_secret
+        log_info "Generated secure OIDC client secret"
+    fi
 
     # Set appropriate permissions
     chmod 600 secrets/*

@@ -116,9 +116,6 @@ class DockerSecretProvider(SecretProvider):
         if secret_file.exists():
             try:
                 value = secret_file.read_text().strip()
-                # DEBUG: Track LDAP password length issue
-                if key == "LDAP_BIND_PASSWORD":
-                    logger.error(f"DEBUG SECRETS: {key} file length: {len(value)} chars: {repr(value)}")
                 if value:
                     logger.debug(f"Retrieved secret '{key}' from Docker Secrets")
                     return value

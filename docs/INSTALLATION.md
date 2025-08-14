@@ -41,7 +41,7 @@ mkdir trakbridge && cd trakbridge
 ```bash
 # Basic setup
 wget https://raw.githubusercontent.com/emfoursolutions/trakbridge/main/docker-compose.yml
-wget https://raw.githubusercontent.com/emfoursolutions/trakbridge/main/init/setup.sh
+wget https://raw.githubusercontent.com/emfoursolutions/trakbridge/refs/heads/main/scripts/setup.sh
 chmod +x setup.sh
 ```
 
@@ -49,7 +49,7 @@ chmod +x setup.sh
 ```bash
 # Start with SQLite (development/testing)
 ./setup.sh
-docker-compose up -d
+docker compose up -d
 
 # Access at http://yourdomain.com:5000
 ```
@@ -60,7 +60,7 @@ docker-compose up -d
 ./setup.sh --enable-nginx --nginx-ssl yourdomain.com
 
 # Start production stack
-docker-compose --profile postgres --profile nginx up -d
+docker compose --profile postgres --profile nginx up -d
 
 # Access at https://yourdomain.com
 ```
@@ -97,29 +97,15 @@ x-environment: &common-environment
 ```
 
 #### Docker Secrets Setup
-Sensitive credentials are managed through Docker secrets. Create the secrets directory and files:
+Sensitive credentials are managed through Docker secrets. These are created by the setup.sh script.
+If LDAP or OIDC authentication backends are being used the password / OIDC client secret must be inserted into their respective secret file.
 
 ```bash
-# Create secrets directory
-mkdir -p secrets
-
-# Generate database password
-echo "your-secure-database-password" > secrets/db_password
-
-# Generate application secret key (32 characters minimum)
-echo "your-super-secret-key-change-this-in-production" > secrets/secret_key
-
-# Generate master encryption key (32 characters exactly)
-openssl rand -base64 32 | cut -c1-32 > secrets/tb_master_key
-
 # LDAP password (if using LDAP authentication)
 echo "your-ldap-bind-password" > secrets/ldap_bind_password
 
 # OIDC client secret (if using OIDC authentication)
 echo "your-oidc-client-secret" > secrets/oidc_client_secret
-
-# Set secure permissions
-chmod 600 secrets/*
 ```
 
 #### Volume Mounts
@@ -130,21 +116,19 @@ volumes:
   - ./data:/app/data                   # Database and application data
   - ./logs:/app/logs                   # Log files
   - ./certs:/app/certs                 # TAK server certificates
-  - ./external_plugins:/app/external_plugins  # External custom plugins (optional)
+  - ./plugins:/app/external_plugins  # External custom plugins (optional)
 ```
 
 #### External Plugin Support
-To use external plugins, add them to your docker-compose.yml:
-```yaml
-volumes:
-  - ./my-plugins:/app/external_plugins:ro  # Mount custom plugins read-only
+To use external plugins, copy them into the ./plugins directory:
+```bash
+cp my_custom_tracker.py ./plugins
 ```
 
-Configure plugin modules in `config/settings/plugins.yaml`:
+Configure plugin modules in `config/plugins.yaml`:
 ```yaml
 allowed_plugin_modules:
   - external_plugins.my_custom_tracker
-  - external_plugins.enterprise_gps
 ```
 
 See [Docker Plugin Documentation](DOCKER_PLUGINS.md) for complete setup instructions.
