@@ -42,6 +42,10 @@ class SecureAuthenticationLoader:
         self.template_path = self.config_dir / "authentication.yaml.template"
         self.example_path = self.config_dir / "authentication.yaml.example"
 
+        # Initialize secret manager for secrets and environment variables
+        from .secrets import get_secret_manager
+        self.secret_manager = get_secret_manager(environment)
+
         # CI/CD detection
         self.is_ci = bool(os.getenv("CI"))
 
@@ -163,10 +167,10 @@ class SecureAuthenticationLoader:
                         # Extract the variable expression
                         var_expr = text[start : j - 1]
 
-                        # Process the variable
+                        # Process the variable using secret manager (checks secrets files first, then env vars)
                         if ":-" in var_expr:
                             var_name, default_value = var_expr.split(":-", 1)
-                            value = os.getenv(var_name.strip())
+                            value = self.secret_manager.get_secret(var_name.strip())
                             if value is None:
                                 result.append(default_value.strip())
                             else:
@@ -174,10 +178,10 @@ class SecureAuthenticationLoader:
                         else:
                             # Simple variable substitution
                             var_name = var_expr.strip()
-                            value = os.getenv(var_name)
+                            value = self.secret_manager.get_secret(var_name)
                             if value is None:
                                 logger.warning(
-                                    f"Environment variable {var_name} not set, using empty string"
+                                    f"Variable {var_name} not found in secrets or environment, using empty string"
                                 )
                                 result.append("")
                             else:
@@ -408,8 +412,11 @@ def load_authentication_config(environment: str = None) -> Dict[str, Any]:
             import logging
             logger = logging.getLogger(__name__)
             logger.error(f"DEBUG AUTH_LOADER: LDAP bind_password length: {len(ldap_password)} chars: {repr(ldap_password)}")
+            # Also test direct secret manager call
+            direct_secret = loader.secret_manager.get_secret("LDAP_BIND_PASSWORD")
+            logger.error(f"DEBUG AUTH_LOADER: Direct secret manager call: {repr(direct_secret)} (len={len(direct_secret) if direct_secret else 'None'})")
     except Exception as e:
-        pass
+        logger.error(f"DEBUG AUTH_LOADER: Exception: {e}")
 
     # Validate the configuration
     validation_error = loader.validate_config(config)
