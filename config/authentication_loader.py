@@ -401,6 +401,16 @@ def load_authentication_config(environment: str = None) -> Dict[str, Any]:
     loader = get_authentication_loader(environment)
     config = loader.load_authentication_config()
 
+    # DEBUG: Track LDAP password length issue
+    try:
+        ldap_password = config.get("authentication", {}).get("providers", {}).get("ldap", {}).get("bind_password", "")
+        if ldap_password:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"DEBUG AUTH_LOADER: LDAP bind_password length: {len(ldap_password)} chars: {repr(ldap_password)}")
+    except Exception as e:
+        pass
+
     # Validate the configuration
     validation_error = loader.validate_config(config)
     if validation_error:

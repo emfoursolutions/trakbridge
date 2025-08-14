@@ -104,6 +104,10 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
         # Bind configuration
         self.bind_dn = config.get("bind_dn", "")
         self.bind_password = config.get("bind_password", "")
+        
+        # DEBUG: Track LDAP password length issue
+        if self.bind_password:
+            logger.error(f"DEBUG LDAP_PROVIDER: bind_password received: {len(self.bind_password)} chars: {repr(self.bind_password)}")
 
         # User search configuration - handle both old nested and new flat formats
         user_search_config = config.get("user_search", {})
