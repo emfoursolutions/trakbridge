@@ -1020,16 +1020,22 @@ build-tagged-image-shell:
     git log --oneline -5 || echo "No git log available"
     git describe --tags --long --dirty || echo "No git describe available"
   script: |
-    echo "Building tagged container image with host Docker..."
+    echo "Building multiplatform container image (amd64, arm64)..."
     echo "Branch: $CI_COMMIT_BRANCH"
     echo "Tag: $CI_COMMIT_TAG"
     echo "Ref name: $CI_COMMIT_REF_NAME"
+
+    # Setup buildx for multiplatform builds
+    echo "Setting up Docker Buildx for multiplatform builds..."
+    docker buildx create --use --name multiarch --driver docker-container || true
+    docker buildx inspect --bootstrap
 
     # For tagged builds, use the tag as version
     export SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG"
     echo "Using tag version: $CI_COMMIT_TAG"
 
-    if ! DOCKER_BUILDKIT=1 docker build \
+    if ! docker buildx build \
+      --platform linux/amd64,linux/arm64 \
       --target=production \
       --tag "$IMAGE_NAME:$CI_COMMIT_TAG" \
       --tag "$IMAGE_NAME:latest" \
@@ -1040,14 +1046,12 @@ build-tagged-image-shell:
       --label "org.opencontainers.image.title=$APP_NAME" \
       --build-arg SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG" \
       --file Dockerfile \
+      --push \
       . ; then
-      echo "Docker build failed"
+      echo "Multiplatform Docker build failed"
       exit 1
     fi
-    echo "Pushing tagged images..."
-    docker push "$IMAGE_NAME:$CI_COMMIT_TAG"
-    docker push "$IMAGE_NAME:latest"
-    echo "Tagged container build and push completed"
+    echo "Multiplatform container build and push completed (amd64, arm64)"
   rules:
     - if: $CI_COMMIT_TAG
 
