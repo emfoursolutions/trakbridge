@@ -86,9 +86,9 @@ def upgrade():
     # 2. Create users table if it doesn't exist
     if not table_exists("users"):
         # Get appropriate enum column type for the database dialect
-        auth_provider_column = get_enum_column("auth_provider", AuthProvider, "LOCAL")
-        user_role_column = get_enum_column("role", UserRole, "USER") 
-        account_status_column = get_enum_column("status", AccountStatus, "ACTIVE")
+        auth_provider_column = get_enum_column(AuthProvider, "auth_provider", default="LOCAL")
+        user_role_column = get_enum_column(UserRole, "role", default="USER") 
+        account_status_column = get_enum_column(AccountStatus, "status", default="ACTIVE")
         
         op.create_table(
             "users",
@@ -131,7 +131,7 @@ def upgrade():
     # 3. Create user_sessions table if it doesn't exist
     if not table_exists("user_sessions"):
         # Get appropriate enum column type for auth provider
-        session_auth_provider_column = get_enum_column("provider", AuthProvider, "LOCAL")
+        session_auth_provider_column = get_enum_column(AuthProvider, "provider", default="LOCAL")
         
         op.create_table(
             "user_sessions",
@@ -166,7 +166,7 @@ def upgrade():
         
         if needs_provider:
             print("Adding provider column to existing user_sessions table")
-            provider_column = get_enum_column("provider", AuthProvider, "LOCAL", nullable=True)
+            provider_column = get_enum_column(AuthProvider, "provider", nullable=True, default="LOCAL")
             
             with op.batch_alter_table("user_sessions", schema=None) as batch_op:
                 # Add the provider column
@@ -201,7 +201,7 @@ def upgrade():
             
             # Create new table with timezone support
             temp_table_name = "user_sessions_new"
-            session_auth_provider_column = get_enum_column("provider", AuthProvider, "LOCAL")
+            session_auth_provider_column = get_enum_column(AuthProvider, "provider", default="LOCAL")
             
             op.create_table(
                 temp_table_name,
