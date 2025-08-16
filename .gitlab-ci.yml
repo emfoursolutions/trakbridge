@@ -1360,7 +1360,7 @@ staging-production-mirror:
     
     # Clean up any existing test environment
     echo "Cleaning up any existing test containers..."
-    docker-compose down -v --remove-orphans 2>/dev/null || true
+    docker compose down -v --remove-orphans 2>/dev/null || true
     docker system prune -f --volumes 2>/dev/null || true
   
   script: |
@@ -1520,7 +1520,7 @@ staging-production-mirror:
       echo "🧹 Cleaning up staging test environment..."
       
       # Ensure all test containers are stopped and removed
-      docker-compose down -v --remove-orphans 2>/dev/null || true
+      docker compose down -v --remove-orphans 2>/dev/null || true
       
       # Clean up any test data volumes
       docker volume prune -f 2>/dev/null || true
@@ -1991,7 +1991,7 @@ stop-feature-branch:
     else
       # Fallback cleanup if script not available
       echo "Deployment script not found, using fallback cleanup..."
-      docker-compose -p "trakbridge-$CI_COMMIT_REF_SLUG" down -v || echo "No containers to stop"
+      docker compose -p "trakbridge-$CI_COMMIT_REF_SLUG" down -v || echo "No containers to stop"
       
       # Clean up any containers on the dynamic port
       docker ps -q --filter "publish=$DYNAMIC_PORT" | xargs -r docker stop || echo "No containers on port $DYNAMIC_PORT"

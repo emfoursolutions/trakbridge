@@ -88,6 +88,11 @@ export APP_VERSION="$IMAGE_TAG"
 export USER_ID=${USER_ID:-$(id -u)}
 export GROUP_ID=${GROUP_ID:-$(id -g)}
 
+# Use dynamic port to avoid conflicts
+TEST_PORT=$(python3 -c "import socket; s=socket.socket(); s.bind(('', 0)); print(s.getsockname()[1]); s.close()")
+export TEST_PORT
+log_info "Using dynamic port for testing: $TEST_PORT"
+
 # Create test report directory
 mkdir -p test-reports logs
 
@@ -142,6 +147,9 @@ cleanup_database() {
     # Clean up any test data files
     rm -rf data/sqlite data/test* 2>/dev/null || true
     
+    # Clean up override file
+    rm -f docker-compose.override.yml 2>/dev/null || true
+    
     log_info "Cleanup completed for $DB_TYPE"
 }
 
@@ -150,14 +158,35 @@ trap cleanup_database EXIT
 
 log_step "Starting $DB_TYPE database test sequence..."
 
+# Clean up any existing containers to prevent conflicts
+log_info "Cleaning up any existing containers to prevent port conflicts..."
+docker ps -q --filter "name=trakbridge" | xargs -r docker stop 2>/dev/null || true
+docker ps -aq --filter "name=trakbridge" | xargs -r docker rm 2>/dev/null || true
+docker ps -q --filter "name=trakbridge-postgres" | xargs -r docker stop 2>/dev/null || true
+docker ps -aq --filter "name=trakbridge-postgres" | xargs -r docker rm 2>/dev/null || true
+docker ps -q --filter "name=trakbridge-mysql" | xargs -r docker stop 2>/dev/null || true
+docker ps -aq --filter "name=trakbridge-mysql" | xargs -r docker rm 2>/dev/null || true
+
 # Step 1: Deploy the database
 log_step "1. Deploying $DB_TYPE with production configuration..."
 
+# Create override file to use dynamic port
+cat > docker-compose.override.yml << EOF
+services:
+  trakbridge:
+    ports:
+      - "${TEST_PORT}:5000"
+    environment:
+      - FLASK_ENV=testing
+      - APP_VERSION=$IMAGE_TAG
+      - TEST_MODE=true
+EOF
+
 if [[ -n "$COMPOSE_PROFILE" ]]; then
-    log_info "Using docker compose profile: $COMPOSE_PROFILE"
+    log_info "Using docker compose profile: $COMPOSE_PROFILE on port $TEST_PORT"
     docker compose --profile "$COMPOSE_PROFILE" up -d
 else
-    log_info "Using docker compose without profile (SQLite)"
+    log_info "Using docker compose without profile (SQLite) on port $TEST_PORT"
     docker compose up -d
 fi
 
@@ -184,9 +213,16 @@ if [[ -n "$COMPOSE_PROFILE" ]]; then
 fi
 
 log_info "Checking application container health: $CONTAINER_NAME"
-timeout 120 bash -c "
+timeout 180 bash -c "
+    attempts=0
+    max_attempts=18
     while true; do
+        attempts=\$((attempts + 1))
         health_status=\$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER_NAME 2>/dev/null || echo 'none')
+        container_status=\$(docker inspect --format='{{.State.Status}}' $CONTAINER_NAME 2>/dev/null || echo 'unknown')
+        
+        echo \"Attempt \$attempts/\$max_attempts: Container status: \$container_status, Health: \$health_status\"
+        
         case \$health_status in
             'healthy')
                 echo 'Application container is healthy'
@@ -194,13 +230,23 @@ timeout 120 bash -c "
                 ;;
             'unhealthy')
                 echo 'Application container is unhealthy'
-                exit 1
+                echo 'Container logs:'
+                docker logs $CONTAINER_NAME --tail=20
+                if [ \$attempts -ge \$max_attempts ]; then
+                    exit 1
+                fi
                 ;;
             'starting'|'none')
+                if [ \$attempts -ge \$max_attempts ]; then
+                    echo 'Timeout waiting for container health'
+                    echo 'Container logs:'
+                    docker logs $CONTAINER_NAME --tail=20
+                    exit 1
+                fi
                 echo 'Waiting for application container to be healthy...'
-                sleep 10
                 ;;
         esac
+        sleep 10
     done
 "
 
