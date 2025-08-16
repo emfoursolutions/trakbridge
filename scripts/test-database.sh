@@ -9,7 +9,7 @@
 #
 # Usage: ./test-database.sh <db_type> <profile> <image_tag>
 #   db_type: postgresql, mysql, sqlite
-#   profile: docker-compose profile (postgres, mysql, or empty for sqlite)
+#   profile: docker compose profile (postgres, mysql, or empty for sqlite)
 #   image_tag: Docker image tag to test
 #
 # =============================================================================
@@ -131,9 +131,9 @@ cleanup_database() {
     
     # Stop and remove containers
     if [[ -n "$COMPOSE_PROFILE" ]]; then
-        docker-compose --profile "$COMPOSE_PROFILE" down -v --remove-orphans 2>/dev/null || true
+        docker compose --profile "$COMPOSE_PROFILE" down -v --remove-orphans 2>/dev/null || true
     else
-        docker-compose down -v --remove-orphans 2>/dev/null || true
+        docker compose down -v --remove-orphans 2>/dev/null || true
     fi
     
     # Remove any dangling volumes
@@ -154,11 +154,11 @@ log_step "Starting $DB_TYPE database test sequence..."
 log_step "1. Deploying $DB_TYPE with production configuration..."
 
 if [[ -n "$COMPOSE_PROFILE" ]]; then
-    log_info "Using docker-compose profile: $COMPOSE_PROFILE"
-    docker-compose --profile "$COMPOSE_PROFILE" up -d
+    log_info "Using docker compose profile: $COMPOSE_PROFILE"
+    docker compose --profile "$COMPOSE_PROFILE" up -d
 else
-    log_info "Using docker-compose without profile (SQLite)"
-    docker-compose up -d
+    log_info "Using docker compose without profile (SQLite)"
+    docker compose up -d
 fi
 
 # Wait for services to be ready
@@ -211,10 +211,10 @@ log_step "2. Testing database migrations..."
 
 log_info "Running migration tests for $DB_TYPE..."
 if docker exec "$CONTAINER_NAME" python -m pytest tests/unit/test_migrations.py -v --tb=short -x; then
-    log_info "✅ Migration tests passed for $DB_TYPE"
+    log_info "Migration tests passed for $DB_TYPE"
     add_test_result "migrations" "passed" "All migration tests passed"
 else
-    log_error "❌ Migration tests failed for $DB_TYPE"
+    log_error "Migration tests failed for $DB_TYPE"
     add_test_result "migrations" "failed" "Migration tests failed"
     finalize_test_report "failed"
     exit 1
@@ -225,10 +225,10 @@ log_step "3. Testing application health endpoint..."
 
 log_info "Testing health endpoint via container..."
 if docker exec "$CONTAINER_NAME" curl -f -s http://localhost:5000/api/health > /dev/null; then
-    log_info "✅ Health endpoint test passed for $DB_TYPE"
+    log_info "Health endpoint test passed for $DB_TYPE"
     add_test_result "health_endpoint" "passed" "Health endpoint responding correctly"
 else
-    log_error "❌ Health endpoint test failed for $DB_TYPE"
+    log_error "Health endpoint test failed for $DB_TYPE"
     add_test_result "health_endpoint" "failed" "Health endpoint not responding"
     
     # Get container logs for debugging
@@ -254,10 +254,10 @@ with app.app_context():
     db.engine.execute('SELECT 1')
     print('Database connectivity test passed')
 "; then
-    log_info "✅ Database connectivity test passed for $DB_TYPE"
+    log_info "Database connectivity test passed for $DB_TYPE"
     add_test_result "database_connectivity" "passed" "Database connection successful"
 else
-    log_error "❌ Database connectivity test failed for $DB_TYPE"
+    log_error "Database connectivity test failed for $DB_TYPE"
     add_test_result "database_connectivity" "failed" "Database connection failed"
     finalize_test_report "failed"
     exit 1
@@ -287,10 +287,10 @@ with app.app_context():
     else:
         raise Exception('Password verification failed')
 "; then
-    log_info "✅ Local authentication test passed for $DB_TYPE"
+    log_info "Local authentication test passed for $DB_TYPE"
     add_test_result "local_authentication" "passed" "Local authentication working correctly"
 else
-    log_error "❌ Local authentication test failed for $DB_TYPE"
+    log_error "Local authentication test failed for $DB_TYPE"
     add_test_result "local_authentication" "failed" "Local authentication not working"
     finalize_test_report "failed"
     exit 1
@@ -321,10 +321,10 @@ if ldap_config.get('enabled', False):
 else:
     print('LDAP not enabled, skipping test')
 "; then
-        log_info "✅ LDAP connectivity test passed for $DB_TYPE"
+        log_info "LDAP connectivity test passed for $DB_TYPE"
         add_test_result "ldap_connectivity" "passed" "LDAP connection successful"
     else
-        log_warn "⚠️ LDAP connectivity test failed for $DB_TYPE"
+        log_warn "LDAP connectivity test failed for $DB_TYPE"
         add_test_result "ldap_connectivity" "failed" "LDAP connection failed"
         # Don't fail the entire test for LDAP issues in staging
     fi
@@ -357,17 +357,17 @@ with app.test_client() as client:
     
     print('Basic API functionality test passed')
 "; then
-    log_info "✅ Basic API functionality test passed for $DB_TYPE"
+    log_info "Basic API functionality test passed for $DB_TYPE"
     add_test_result "api_functionality" "passed" "Basic API endpoints working"
 else
-    log_error "❌ Basic API functionality test failed for $DB_TYPE"
+    log_error "Basic API functionality test failed for $DB_TYPE"
     add_test_result "api_functionality" "failed" "API endpoints not working correctly"
     finalize_test_report "failed"
     exit 1
 fi
 
 # All tests passed
-log_info "✅ All tests passed for $DB_TYPE database!"
+log_info "All tests passed for $DB_TYPE database!"
 finalize_test_report "passed"
 
 # Generate JUnit XML report for GitLab
