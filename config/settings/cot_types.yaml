@@ -80,7 +80,7 @@ cot_types:
     description: "Friendly rotary wing (helicopter)"
     category: "friendly"
 
-  - value: "a-f-U-M"
+  - value: "a-f-S"
     sidc: "SFSP-------.svg"
     label: "Friendly Maritime Unit"
     description: "Friendly naval or maritime vessel"
@@ -110,7 +110,7 @@ cot_types:
     description: "Neutral air asset"
     category: "neutral"
 
-  - value: "a-n-U"
+  - value: "a-n-S"
     sidc: "SNSP-------.svg"
     label: "Neutral Maritime"
     description: "Neutral maritime vessel"

@@ -17,9 +17,12 @@ def get_dialect():
 def get_enum_column(enum_class, column_name, nullable=True, default=None):
     """
     Get database-appropriate enum column definition.
+    
+    Safely handles both proper Python Enum classes with .value attributes
+    and legacy string-based enum definitions used in migrations.
 
     Args:
-        enum_class: Python Enum class
+        enum_class: Python Enum class or enum-like class
         column_name: Column name
         nullable: Whether column is nullable
         default: Default value
@@ -28,10 +31,20 @@ def get_enum_column(enum_class, column_name, nullable=True, default=None):
         SQLAlchemy Column object appropriate for the database
     """
     dialect = get_dialect()
+    
+    # Safely extract enum values - handle both .value and direct string access
+    try:
+        # Try proper Enum with .value attribute first (modern approach)
+        enum_values = [member.value for member in enum_class]
+        # Test if this actually works by accessing the first value
+        if enum_values:
+            _ = enum_values[0]  # This will fail if .value doesn't exist
+    except (AttributeError, IndexError):
+        # Fallback to direct string access for legacy enum definitions
+        enum_values = [str(member) for member in enum_class]
 
     if dialect == "postgresql":
         # PostgreSQL supports native ENUMs
-        enum_values = [member.value for member in enum_class]
         return sa.Column(
             column_name,
             sa.Enum(*enum_values, name=f"{column_name}_enum"),
@@ -40,7 +53,7 @@ def get_enum_column(enum_class, column_name, nullable=True, default=None):
         )
     else:
         # MySQL and SQLite use VARCHAR with CHECK constraints
-        max_length = max(len(member.value) for member in enum_class)
+        max_length = max(len(value) for value in enum_values)
         return sa.Column(
             column_name,
             sa.String(length=max_length),

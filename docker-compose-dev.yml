@@ -57,7 +57,7 @@ services:
       LOG_DIR: "logs"
       
       # Application URL for development
-      TRAKBRIDGE_APPLICATION_URL: "http://localhost:5060"
+      TRAKBRIDGE_APPLICATION_URL: "http://localhost:5000"
 
       # Performance settings
       MAX_WORKER_THREADS: ${MAX_WORKER_THREADS:-8}
@@ -98,7 +98,7 @@ services:
       OIDC_ISSUER: "${OIDC_ISSUER:-https://your-identity-provider.com}"
       OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-trakbridge-client}"
       OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-default-oidc-secret}"
-      OIDC_REDIRECT_URI: "${OIDC_REDIRECT_URI:-http://localhost:5060/auth/oidc/callback}"
+      OIDC_REDIRECT_URI: "${OIDC_REDIRECT_URI:-http://localhost:5000/auth/oidc/callback}"
       OIDC_VERIFY_SIGNATURE: "${OIDC_VERIFY_SIGNATURE:-false}"
       OIDC_VERIFY_AUDIENCE: "${OIDC_VERIFY_AUDIENCE:-false}"
       OIDC_VERIFY_ISSUER: "${OIDC_VERIFY_ISSUER:-false}"
@@ -140,7 +140,7 @@ services:
 
     # Ports
     ports:
-      - "${APP_PORT:-5060}:5060"
+      - "${APP_PORT:-5000}:5000"
 
     # Volumes
     volumes:
@@ -153,7 +153,7 @@ services:
 
     # Health check
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5060/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 15s
       timeout: 10s
       retries: 5
