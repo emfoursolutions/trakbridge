@@ -57,7 +57,7 @@ services:
       LOG_DIR: "logs"
       
       # Application URL for development
-      TRAKBRIDGE_APPLICATION_URL: "http://localhost:5060"
+      TRAKBRIDGE_APPLICATION_URL: "http://localhost:5000"
 
       # Performance settings
       MAX_WORKER_THREADS: ${MAX_WORKER_THREADS:-8}
