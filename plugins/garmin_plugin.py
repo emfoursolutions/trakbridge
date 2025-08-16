@@ -417,12 +417,18 @@ class KMLDataExtractor:
             extended_data = self._extract_extended_data(feature)
             placemark_id = extended_data.get("IMEI", "Unknown")
 
-            name = str(getattr(feature, "name", "Unknown")).replace(" ", "")
+            # Use Map Display Name from extended data with fallback to feature name
+            name = extended_data.get("Map Display Name", "Unknown")
+            # Fallback to feature name if Map Display Name is not available
+            if name == "Unknown":
+                name = str(getattr(feature, "name", "Unknown"))
+            
+            clean_name = str(name).replace(" ", "")
             clean_id = str(placemark_id).replace(" ", "")
 
             return {
-                "uid": f"{name}-{clean_id}",
-                "name": getattr(feature, "name", "Unknown"),
+                "uid": f"{clean_name}-{clean_id}",
+                "name": name,
                 "lat": lat,
                 "lon": lon,
                 "description": getattr(feature, "description", "") or "",
@@ -523,13 +529,18 @@ class KMLDataExtractor:
             lon, lat = float(coord_parts[0]), float(coord_parts[1])
 
             # Get other data
-            name_elem = placemark_xml.find("kml:name", self.KML_NAMESPACE)
-            name = name_elem.text if name_elem is not None else "Unknown"
-
             desc_elem = placemark_xml.find("kml:description", self.KML_NAMESPACE)
             description = desc_elem.text if desc_elem is not None else ""
 
             extended_data = self._extract_xml_extended_data(placemark_xml)
+            
+            # Use Map Display Name from extended data (consistent with fastkml parsing)
+            name = extended_data.get("Map Display Name", "Unknown")
+            # Fallback to <name> element if Map Display Name is not available
+            if name == "Unknown":
+                name_elem = placemark_xml.find("kml:name", self.KML_NAMESPACE)
+                name = name_elem.text if name_elem is not None else "Unknown"
+            
             placemark_id = extended_data.get("IMEI", "Unknown")
 
             clean_name = str(name).replace(" ", "")
