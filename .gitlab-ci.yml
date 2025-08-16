@@ -1223,16 +1223,16 @@ deploy-development:
     export GROUP_ID=${GROUP_ID:-$(id -g)}
     
     # Set the application port to match docker-compose-dev.yml
-    export APP_PORT=5060
+    export APP_PORT=5000
     
     # Don't override CI_REGISTRY_IMAGE - let it use the GitLab registry name
     # The deploy script will set IMAGE_TAG="development" for --environment development
     
-    # Clean up any existing containers on port 5060 to prevent port conflicts
-    echo "Cleaning up any existing containers using port 5060..."
-    docker ps -q --filter "publish=5060" | xargs -r docker stop || echo "No containers using port 5050"
-    docker ps -aq --filter "publish=5060" | xargs -r docker rm || echo "No stopped containers to remove"
-    
+    # Clean up any existing containers on port 5000 to prevent port conflicts
+    echo "Cleaning up any existing containers using port 5000..."
+    docker ps -q --filter "publish=5000" | xargs -r docker stop || echo "No containers using port 5000"
+    docker ps -aq --filter "publish=5000" | xargs -r docker rm || echo "No stopped containers to remove"
+
     # Also check for containers with the default name
     docker ps -q --filter "name=trakbridge" | xargs -r docker stop || echo "No trakbridge containers running"
     docker ps -aq --filter "name=trakbridge" | xargs -r docker rm || echo "No trakbridge containers to remove"
@@ -1257,7 +1257,7 @@ deploy-development:
     echo "=== END CONTAINER DEBUG ==="
     
     echo "Development deployment completed"
-    echo "Application URL: http://localhost:5060"
+    echo "Application URL: http://localhost:5000"
     echo "Default login: admin / TrakBridge-Setup-2025!"
   
   rules:
