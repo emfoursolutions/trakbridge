@@ -93,8 +93,10 @@ TEST_PORT=$(python3 -c "import socket; s=socket.socket(); s.bind(('', 0)); print
 export TEST_PORT
 log_info "Using dynamic port for testing: $TEST_PORT"
 
-# Create test report directory
-mkdir -p test-reports logs
+# Create test report directory and ensure correct permissions
+mkdir -p test-reports logs data external_plugins external_config backups secrets
+# Set ownership to match the Docker container user
+chown -R ${USER_ID}:${GROUP_ID} test-reports logs data external_plugins external_config backups secrets 2>/dev/null || true
 
 # Initialize test report for this database
 TEST_REPORT="test-reports/${DB_TYPE}-test-report.json"
@@ -170,7 +172,7 @@ docker ps -aq --filter "name=trakbridge-mysql" | xargs -r docker rm 2>/dev/null 
 # Step 1: Deploy the database
 log_step "1. Deploying $DB_TYPE with production configuration..."
 
-# Create override file to use dynamic port
+# Create override file to use dynamic port and correct user ID
 cat > docker-compose.override.yml << EOF
 services:
   trakbridge:
@@ -180,6 +182,8 @@ services:
       - FLASK_ENV=testing
       - APP_VERSION=$IMAGE_TAG
       - TEST_MODE=true
+      - USER_ID=${USER_ID}
+      - GROUP_ID=${GROUP_ID}
 EOF
 
 if [[ -n "$COMPOSE_PROFILE" ]]; then
