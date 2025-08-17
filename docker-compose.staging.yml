@@ -33,20 +33,20 @@ x-environment: &staging-environment
   FLASK_ENV: "production"
   FLASK_APP: "app.py"
   APP_PORT: "5000"
-  USER_ID: "1000"  # Change if needed for staging environment
-  GROUP_ID: "1000"  # Change if needed for staging environment
+  USER_ID: "${DOCKER_USER_ID:-1000}"  # Dynamic user ID for GitLab CI compatibility
+  GROUP_ID: "${DOCKER_GROUP_ID:-1000}"  # Dynamic group ID for GitLab CI compatibility
   
   # Configuration Management
   TRAKBRIDGE_CONFIG_DIR: "/app/external_config"
   TRAKBRIDGE_CONFIG_AUTO_INSTALL: "true"
   TRAKBRIDGE_CONFIG_UPDATE_MODE: "preserve"
   
-  # Database Configuration
-  DB_TYPE: "postgresql"
-  DB_HOST: "postgres"
-  DB_PORT: "5432"
-  DB_NAME: "trakbridge_staging"
-  DB_USER: "trakbridge_staging"
+  # Database Configuration (dynamic for multi-database testing)
+  DB_TYPE: "${DB_TYPE:-postgresql}"
+  DB_HOST: "${DB_HOST:-postgres}"
+  DB_PORT: "${DB_PORT:-5432}"
+  DB_NAME: "${DB_NAME:-trakbridge}"
+  DB_USER: "${DB_USER:-trakbridge}"
   
   # Application Performance (Production-like)
   DEBUG: "false"
@@ -66,40 +66,40 @@ x-environment: &staging-environment
   ENABLE_TRACING: "true"
   ENABLE_PROFILING: "true"
   
-  # Authentication Configuration (Staging - Production-like settings)
-  # LDAP Settings (configure for staging LDAP environment)
-  LDAP_ENABLED: "false"  # Set to "true" and configure for staging LDAP testing
-  LDAP_SERVER: "ldap://staging-ad-server.company.com"  # Update for staging LDAP server
-  LDAP_PORT: "389"
-  LDAP_USE_SSL: "false"
-  LDAP_USE_TLS: "true"  # Production-like security
-  LDAP_VALIDATE_CERT: "true"  # Production-like security
-  LDAP_BIND_DN: "CN=trakbridge-staging,OU=Service Accounts,DC=staging,DC=company,DC=com"
-  LDAP_BIND_PASSWORD: "staging-ldap-password"  # Use staging-specific password
-  LDAP_USER_SEARCH_BASE: "OU=Users,DC=staging,DC=company,DC=com"
-  LDAP_USER_SEARCH_FILTER: "(sAMAccountName={username})"
-  LDAP_GROUP_SEARCH_BASE: "OU=Groups,DC=staging,DC=company,DC=com"
-  LDAP_GROUP_SEARCH_FILTER: "(member={user_dn})"
-  LDAP_ADMIN_GROUP: "CN=TrakBridge-Staging-Admins,OU=Groups,DC=staging,DC=company,DC=com"
-  LDAP_OPERATOR_GROUP: "CN=TrakBridge-Staging-Operators,OU=Groups,DC=staging,DC=company,DC=com"
-  LDAP_USER_GROUP: "CN=TrakBridge-Staging-Users,OU=Groups,DC=staging,DC=company,DC=com"
-  LDAP_DEFAULT_ROLE: "user"
-  LDAP_CONNECTION_TIMEOUT: "10"
-  LDAP_RESPONSE_TIMEOUT: "30"
+  # Authentication Configuration (Staging - Safe testing configuration)
+  # LDAP Settings (environment variables for safe testing)
+  LDAP_ENABLED: "${LDAP_ENABLED:-false}"
+  LDAP_SERVER: "${LDAP_SERVER:-ldap://your-ad-server.company.com}"
+  LDAP_PORT: "${LDAP_PORT:-389}"
+  LDAP_USE_SSL: "${LDAP_USE_SSL:-false}"
+  LDAP_USE_TLS: "${LDAP_USE_TLS:-false}"
+  LDAP_VALIDATE_CERT: "${LDAP_VALIDATE_CERT:-false}"
+  LDAP_BIND_DN: "${LDAP_BIND_DN:-CN=trakbridge,OU=Service Accounts,DC=company,DC=com}"
+  LDAP_BIND_PASSWORD: "${LDAP_BIND_PASSWORD:-default-ldap-password}"
+  LDAP_USER_SEARCH_BASE: "${LDAP_USER_SEARCH_BASE:-OU=Users,DC=company,DC=com}"
+  LDAP_USER_SEARCH_FILTER: "${LDAP_USER_SEARCH_FILTER:-(sAMAccountName={username})}"
+  LDAP_GROUP_SEARCH_BASE: "${LDAP_GROUP_SEARCH_BASE:-OU=Groups,DC=company,DC=com}"
+  LDAP_GROUP_SEARCH_FILTER: "${LDAP_GROUP_SEARCH_FILTER:-(member={user_dn})}"
+  LDAP_ADMIN_GROUP: "${LDAP_ADMIN_GROUP:-CN=TrakBridge-Admins,OU=Groups,DC=company,DC=com}"
+  LDAP_OPERATOR_GROUP: "${LDAP_OPERATOR_GROUP:-CN=TrakBridge-Operators,OU=Groups,DC=company,DC=com}"
+  LDAP_USER_GROUP: "${LDAP_USER_GROUP:-CN=TrakBridge-Users,OU=Groups,DC=company,DC=com}"
+  LDAP_DEFAULT_ROLE: "${LDAP_DEFAULT_ROLE:-user}"
+  LDAP_CONNECTION_TIMEOUT: "${LDAP_CONNECTION_TIMEOUT:-10}"
+  LDAP_RESPONSE_TIMEOUT: "${LDAP_RESPONSE_TIMEOUT:-30}"
   
-  # OIDC/SSO Settings (configure for staging identity provider)
-  OIDC_ENABLED: "false"  # Set to "true" and configure for staging OIDC testing
-  OIDC_ISSUER: "https://staging-identity-provider.com"  # Update for staging provider
-  OIDC_CLIENT_ID: "trakbridge-staging-client"  # Staging client ID
-  OIDC_CLIENT_SECRET: "staging-oidc-client-secret"  # Use staging-specific secret
-  OIDC_REDIRECT_URI: "https://staging.trakbridge.local/auth/oidc/callback"  # Staging callback URL
-  OIDC_VERIFY_SIGNATURE: "true"  # Production-like security
-  OIDC_VERIFY_AUDIENCE: "true"  # Production-like security
-  OIDC_VERIFY_ISSUER: "true"  # Production-like security
-  OIDC_ADMIN_GROUP: "trakbridge-staging-admins"
-  OIDC_OPERATOR_GROUP: "trakbridge-staging-operators"
-  OIDC_USER_GROUP: "trakbridge-staging-users"
-  OIDC_DEFAULT_ROLE: "user"
+  # OIDC/SSO Settings (environment variables for safe testing)
+  OIDC_ENABLED: "${OIDC_ENABLED:-false}"
+  OIDC_ISSUER: "${OIDC_ISSUER:-https://your-identity-provider.com}"
+  OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-trakbridge-client}"
+  OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-default-oidc-secret}"
+  OIDC_REDIRECT_URI: "${OIDC_REDIRECT_URI:-http://localhost:5000/auth/oidc/callback}"
+  OIDC_VERIFY_SIGNATURE: "${OIDC_VERIFY_SIGNATURE:-false}"
+  OIDC_VERIFY_AUDIENCE: "${OIDC_VERIFY_AUDIENCE:-false}"
+  OIDC_VERIFY_ISSUER: "${OIDC_VERIFY_ISSUER:-false}"
+  OIDC_ADMIN_GROUP: "${OIDC_ADMIN_GROUP:-trakbridge-admins}"
+  OIDC_OPERATOR_GROUP: "${OIDC_OPERATOR_GROUP:-trakbridge-operators}"
+  OIDC_USER_GROUP: "${OIDC_USER_GROUP:-trakbridge-users}"
+  OIDC_DEFAULT_ROLE: "${OIDC_DEFAULT_ROLE:-user}"
   
   # Local Authentication (Staging - Production-like security)
   LOCAL_AUTH_ENABLED: "true"
@@ -116,12 +116,15 @@ x-environment: &staging-environment
   SESSION_SECURE_COOKIES: "true"  # Production-like security
   SESSION_COOKIE_DOMAIN: "staging.trakbridge.local"  # Update for your staging domain
   SESSION_COOKIE_PATH: "/"
+  
+  # Secret file paths (if secrets are in /app/secrets instead of /run/secrets)
+  DB_PASSWORD_FILE: "/app/secrets/db_password"
+  SECRET_KEY_FILE: "/app/secrets/secret_key"
+  TB_MASTER_KEY_FILE: "/app/secrets/tb_master_key"
+  LDAP_BIND_PASSWORD_FILE: "/app/secrets/ldap_bind_password"
+  OIDC_CLIENT_SECRET_FILE: "/app/secrets/oidc_client_secret"
 
-# Database secrets for staging
-x-secrets: &staging-secrets
-  DB_PASSWORD_FILE: "/run/secrets/db_password"
-  SECRET_KEY_FILE: "/run/secrets/secret_key"
-  TB_MASTER_KEY_FILE: "/run/secrets/tb_master_key"
+# Secrets are now configured directly in environment variables above
 
 services:
   # =============================================================================
@@ -140,7 +143,6 @@ services:
     
     environment:
       <<: *staging-environment
-      <<: *staging-secrets
     
     secrets:
       - db_password
@@ -153,11 +155,12 @@ services:
       - "${APP_PORT:-5000}:5000"
     
     volumes:
-      - ./logs/staging:/app/logs
-      - ./data/staging:/app/data
-      - ./config/staging:/app/external_config
-      - ./plugins/staging:/app/external_plugins:ro
-      - ./backups/staging:/app/backups
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./config:/app/external_config
+      - ./plugins:/app/external_plugins:ro
+      - ./backups:/app/backups
+      - ./secrets:/app/secrets
     
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
@@ -169,7 +172,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-        required: true
+        required: false
+      mysql:
+        condition: service_healthy
+        required: false
       redis:
         condition: service_healthy
         required: false
@@ -204,8 +210,8 @@ services:
     profiles: ["postgres", "db"]
     
     environment:
-      POSTGRES_DB: trakbridge_staging
-      POSTGRES_USER: trakbridge_staging
+      POSTGRES_DB: trakbridge
+      POSTGRES_USER: trakbridge
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password
       POSTGRES_INITDB_ARGS: "--auth-host=md5"
       # Enable query logging for staging analysis
@@ -225,7 +231,7 @@ services:
       - ./backups/postgres-staging:/backups
     
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U trakbridge_staging -d trakbridge_staging"]
+      test: ["CMD-SHELL", "pg_isready -U trakbridge -d trakbridge"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -248,6 +254,47 @@ services:
       -c log_filename=postgresql-%Y-%m-%d.log
       -c log_rotation_age=1d
       -c log_rotation_size=100MB
+
+  # =============================================================================
+  # MySQL Database - Staging Configuration
+  # =============================================================================
+  mysql:
+    image: mysql:8.0
+    container_name: trakbridge-mysql-staging
+    restart: unless-stopped
+    profiles: ["mysql", "db"]
+    
+    environment:
+      MYSQL_DATABASE: trakbridge
+      MYSQL_USER: trakbridge
+      MYSQL_PASSWORD_FILE: /run/secrets/db_password
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_password
+    
+    secrets:
+      - db_password
+    
+    ports:
+      - "3306:3306"
+    
+    volumes:
+      - mysql_staging_data:/var/lib/mysql
+      - ./docker/init-scripts/mysql:/docker-entrypoint-initdb.d:ro
+      - ./logs/mysql-staging:/var/log/mysql
+      - ./backups/mysql-staging:/backups
+    
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    
+    networks:
+      - trakbridge-staging
+    
+    # Security configuration
+    security_opt:
+      - no-new-privileges:true
 
   # =============================================================================
   # Redis Cache - Optional for Staging
@@ -423,6 +470,10 @@ volumes:
     driver: local
     name: trakbridge-postgres-staging-data
   
+  mysql_staging_data:
+    driver: local
+    name: trakbridge-mysql-staging-data
+  
   redis_staging_data:
     driver: local
     name: trakbridge-redis-staging-data
@@ -436,20 +487,20 @@ volumes:
     name: trakbridge-grafana-staging-data
 
 # =============================================================================
-# Secrets - Staging Environment
+# Secrets - Staging Environment (using standard secrets directory)
 # =============================================================================
 secrets:
   db_password:
-    file: ${DB_PASSWORD_FILE:-./secrets/staging/db_password}
+    file: ${DB_PASSWORD_FILE:-./secrets/db_password}
   
   secret_key:
-    file: ${SECRET_KEY_FILE:-./secrets/staging/secret_key}
+    file: ${SECRET_KEY_FILE:-./secrets/secret_key}
   
   tb_master_key:
-    file: ${TB_MASTER_KEY_FILE:-./secrets/staging/tb_master_key}
+    file: ${TB_MASTER_KEY_FILE:-./secrets/tb_master_key}
   
   ldap_bind_password:
-    file: ${LDAP_BIND_PASSWORD_FILE:-./secrets/staging/ldap_bind_password}
+    file: ${LDAP_BIND_PASSWORD_FILE:-./secrets/ldap_bind_password}
   
   oidc_client_secret:
-    file: ${OIDC_CLIENT_SECRET_FILE:-./secrets/staging/oidc_client_secret}
+    file: ${OIDC_CLIENT_SECRET_FILE:-./secrets/oidc_client_secret}

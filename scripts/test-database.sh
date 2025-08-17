@@ -90,6 +90,24 @@ export GROUP_ID=${GROUP_ID:-$(id -g)}
 export DOCKER_USER_ID=${USER_ID}
 export DOCKER_GROUP_ID=${GROUP_ID}
 
+# Use staging compose file for validation (can be overridden by environment)
+export COMPOSE_FILE=${COMPOSE_FILE:-"docker-compose.staging.yml"}
+
+# Set container names based on compose file
+if [[ "$COMPOSE_FILE" == *"staging"* ]]; then
+    CONTAINER_NAME_SUFFIX="-staging"
+    APP_CONTAINER_NAME="trakbridge-staging"
+    APP_SERVICE_NAME="trakbridge"
+else
+    CONTAINER_NAME_SUFFIX=""
+    APP_CONTAINER_NAME="trakbridge"
+    APP_SERVICE_NAME="trakbridge"
+fi
+
+log_info "Using container name suffix: '$CONTAINER_NAME_SUFFIX'"
+log_info "Application container name: '$APP_CONTAINER_NAME'"
+log_info "Application service name: '$APP_SERVICE_NAME'"
+
 # Use dynamic port to avoid conflicts
 TEST_PORT=$(python3 -c "import socket; s=socket.socket(); s.bind(('', 0)); print(s.getsockname()[1]); s.close()")
 export TEST_PORT
@@ -167,9 +185,9 @@ cleanup_database() {
     
     # Stop and remove containers
     if [[ -n "$COMPOSE_PROFILE" ]]; then
-        docker compose --profile "$COMPOSE_PROFILE" down -v --remove-orphans 2>/dev/null || true
+        docker compose -f "$COMPOSE_FILE" --profile "$COMPOSE_PROFILE" down -v --remove-orphans 2>/dev/null || true
     else
-        docker compose down -v --remove-orphans 2>/dev/null || true
+        docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
     fi
     
     # Remove any dangling volumes
@@ -191,12 +209,12 @@ log_step "Starting $DB_TYPE database test sequence..."
 
 # Clean up any existing containers to prevent conflicts
 log_info "Cleaning up any existing containers to prevent port conflicts..."
-docker ps -q --filter "name=trakbridge" | xargs -r docker stop 2>/dev/null || true
-docker ps -aq --filter "name=trakbridge" | xargs -r docker rm 2>/dev/null || true
-docker ps -q --filter "name=trakbridge-postgres" | xargs -r docker stop 2>/dev/null || true
-docker ps -aq --filter "name=trakbridge-postgres" | xargs -r docker rm 2>/dev/null || true
-docker ps -q --filter "name=trakbridge-mysql" | xargs -r docker stop 2>/dev/null || true
-docker ps -aq --filter "name=trakbridge-mysql" | xargs -r docker rm 2>/dev/null || true
+docker ps -q --filter "name=$APP_CONTAINER_NAME" | xargs -r docker stop 2>/dev/null || true
+docker ps -aq --filter "name=$APP_CONTAINER_NAME" | xargs -r docker rm 2>/dev/null || true
+docker ps -q --filter "name=trakbridge-postgres$CONTAINER_NAME_SUFFIX" | xargs -r docker stop 2>/dev/null || true
+docker ps -aq --filter "name=trakbridge-postgres$CONTAINER_NAME_SUFFIX" | xargs -r docker rm 2>/dev/null || true
+docker ps -q --filter "name=trakbridge-mysql$CONTAINER_NAME_SUFFIX" | xargs -r docker stop 2>/dev/null || true
+docker ps -aq --filter "name=trakbridge-mysql$CONTAINER_NAME_SUFFIX" | xargs -r docker rm 2>/dev/null || true
 
 # Step 1: Deploy the database
 log_step "1. Deploying $DB_TYPE with production configuration..."
@@ -204,6 +222,7 @@ log_step "1. Deploying $DB_TYPE with production configuration..."
 # Debug: Show current working directory and file structure
 log_info "=== DEBUGGING DIRECTORY STRUCTURE ==="
 log_info "Current working directory: $(pwd)"
+log_info "Using compose file: $COMPOSE_FILE"
 log_info "Directory contents:"
 ls -la
 log_info "Checking for required directories..."
@@ -220,9 +239,10 @@ log_info "=== END DEBUGGING ==="
 
 # Create override file to use dynamic port and correct user ID
 # Include volume mounts for realistic testing (permissions fixed in staging job)
+# Using compose file: $COMPOSE_FILE
 cat > docker-compose.override.yml << EOF
 services:
-  trakbridge:
+  $APP_SERVICE_NAME:
     ports:
       - "${TEST_PORT}:5000"
     environment:
@@ -243,11 +263,11 @@ services:
 EOF
 
 if [[ -n "$COMPOSE_PROFILE" ]]; then
-    log_info "Using docker compose profile: $COMPOSE_PROFILE on port $TEST_PORT"
-    docker compose --profile "$COMPOSE_PROFILE" up -d
+    log_info "Using docker compose profile: $COMPOSE_PROFILE on port $TEST_PORT with file: $COMPOSE_FILE"
+    docker compose -f "$COMPOSE_FILE" --profile "$COMPOSE_PROFILE" up -d
 else
-    log_info "Using docker compose without profile (SQLite) on port $TEST_PORT"
-    docker compose up -d
+    log_info "Using docker compose without profile (SQLite) on port $TEST_PORT with file: $COMPOSE_FILE"
+    docker compose -f "$COMPOSE_FILE" up -d
 fi
 
 # Wait for services to be ready
@@ -255,9 +275,9 @@ log_info "Waiting for services to become ready..."
 sleep 10
 
 # Check container health
-CONTAINER_NAME="trakbridge"
+CONTAINER_NAME="$APP_CONTAINER_NAME"
 if [[ -n "$COMPOSE_PROFILE" ]]; then
-    DB_CONTAINER="trakbridge-${COMPOSE_PROFILE}"
+    DB_CONTAINER="trakbridge-${COMPOSE_PROFILE}${CONTAINER_NAME_SUFFIX}"
     
     log_info "Checking database container health: $DB_CONTAINER"
     timeout 60 bash -c "

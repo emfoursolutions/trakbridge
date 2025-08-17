@@ -1365,8 +1365,8 @@ staging-production-mirror:
     DEPLOY_ENV: "staging"
     APP_VERSION: "${CI_COMMIT_TAG}"
     DOCKER_TLS_CERTDIR: ""
-    # Use production docker-compose configuration
-    COMPOSE_FILE: "docker-compose.yml"
+    # Use staging docker-compose configuration for validation
+    COMPOSE_FILE: "docker-compose.staging.yml"
     PYTHONPATH: "${CI_PROJECT_DIR}:${PYTHONPATH:-}"
   
   before_script: |
