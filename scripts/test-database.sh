@@ -201,6 +201,23 @@ docker ps -aq --filter "name=trakbridge-mysql" | xargs -r docker rm 2>/dev/null 
 # Step 1: Deploy the database
 log_step "1. Deploying $DB_TYPE with production configuration..."
 
+# Debug: Show current working directory and file structure
+log_info "=== DEBUGGING DIRECTORY STRUCTURE ==="
+log_info "Current working directory: $(pwd)"
+log_info "Directory contents:"
+ls -la
+log_info "Checking for required directories..."
+for dir in logs data secrets config backups external_plugins; do
+    if [ -d "$dir" ]; then
+        log_info "✅ $dir exists ($(ls -ld "$dir" | awk '{print $1, $3, $4}'))"
+    else
+        log_warn "❌ $dir does NOT exist - creating it"
+        mkdir -p "$dir"
+        chmod 755 "$dir"
+    fi
+done
+log_info "=== END DEBUGGING ==="
+
 # Create override file to use dynamic port and correct user ID
 # Include volume mounts for realistic testing (permissions fixed in staging job)
 cat > docker-compose.override.yml << EOF
