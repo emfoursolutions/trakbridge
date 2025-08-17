@@ -50,6 +50,25 @@ variables:
   SAST_EXCLUDED_PATHS: "tests, docs, scripts"
   SECURE_LOG_LEVEL: "info"
 
+# Reusable script for cross-platform package installation
+.install_packages: &install_packages |
+  install_packages() {
+    # Detect package manager and install packages
+    if command -v apt-get >/dev/null 2>&1; then
+      echo "Using apt-get (Debian/Ubuntu)"
+      apt-get update -qq && apt-get install -y -qq "$@"
+    elif command -v dnf >/dev/null 2>&1; then
+      echo "Using dnf (Rocky Linux/Fedora)"
+      dnf install -y "$@"
+    elif command -v yum >/dev/null 2>&1; then
+      echo "Using yum (RHEL/CentOS)"
+      yum install -y "$@"
+    else
+      echo "ERROR: No supported package manager found (apt-get, dnf, yum)"
+      exit 1
+    fi
+  }
+
 # Enhanced cache configuration
 cache:
   - key: "pip-$CI_COMMIT_REF_SLUG-$PYTHON_VERSION"
@@ -100,7 +119,8 @@ validate-requirements:
     - trakbridge-ci
   timeout: 15m
   before_script:
-    - apt-get update && apt-get install -y git
+    - *install_packages
+    - install_packages git
     - pip install --upgrade pip
     - pip install --no-cache-dir pip-tools pip-audit
   script: |
@@ -154,7 +174,8 @@ validate-pyproject:
     - trakbridge-ci
   timeout: 15m
   before_script:
-    - apt-get update && apt-get install -y git
+    - *install_packages
+    - install_packages git
     - pip install --upgrade pip
     - pip install --no-cache-dir tomli validate-pyproject build setuptools-scm
   script: |
@@ -196,7 +217,8 @@ code-quality:
     - trakbridge-ci
   timeout: 15m
   before_script:
-    - apt-get update && apt-get install -y git jq
+    - *install_packages
+    - install_packages git jq
     - pip install --upgrade pip
     - pip install --no-cache-dir black flake8 isort
   script: |
@@ -386,7 +408,8 @@ unit-tests:
     PYTHONPATH: "${CI_PROJECT_DIR}:${PYTHONPATH:-}"
   
   before_script:
-    - apt-get update -qq && apt-get install -y -qq git curl build-essential
+    - *install_packages
+    - install_packages git curl build-essential
     - pip install --upgrade pip
     - pip install -e ".[dev]"
   
@@ -481,7 +504,8 @@ integration-tests:
     PYTHONPATH: "${CI_PROJECT_DIR}:${PYTHONPATH:-}"
   
   before_script:
-    - apt-get update -qq && apt-get install -y -qq git curl build-essential
+    - *install_packages
+    - install_packages git curl build-essential
     - pip install --upgrade pip
     - pip install -e ".[dev]"
   
@@ -567,7 +591,8 @@ bandit-sast:
     - trakbridge-ci
   timeout: 15m
   before_script:
-    - apt-get update && apt-get install -y git
+    - *install_packages
+    - install_packages git
     - pip install --upgrade pip
     - pip install --no-cache-dir bandit[toml]
   script: |
@@ -613,7 +638,8 @@ safety-check:
     - trakbridge-ci
   timeout: 10m
   before_script:
-    - apt-get update && apt-get install -y git jq
+    - *install_packages
+    - install_packages git jq
     - pip install --upgrade pip
     - pip install --no-cache-dir safety
   script: |
@@ -765,7 +791,8 @@ license-scanning:
     - trakbridge-ci
   timeout: 10m
   before_script:
-    - apt-get update && apt-get install -y git jq
+    - *install_packages
+    - install_packages git jq
     - pip install --upgrade pip
     - pip install --no-cache-dir pip-licenses
   script: |
@@ -1355,8 +1382,21 @@ staging-production-mirror:
     fi
     echo "${CI_REGISTRY_PASSWORD}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
     
-    # Install dependencies for testing
-    apt-get update -qq && apt-get install -y -qq curl jq openssl python3
+    # Install dependencies for testing  
+    # Detect package manager and install packages
+    if command -v apt-get >/dev/null 2>&1; then
+      echo "Using apt-get (Debian/Ubuntu)"
+      apt-get update -qq && apt-get install -y -qq curl jq openssl python3
+    elif command -v dnf >/dev/null 2>&1; then
+      echo "Using dnf (Rocky Linux/Fedora)"
+      dnf install -y curl jq openssl python3
+    elif command -v yum >/dev/null 2>&1; then
+      echo "Using yum (RHEL/CentOS)"
+      yum install -y curl jq openssl python3
+    else
+      echo "ERROR: No supported package manager found (apt-get, dnf, yum)"
+      exit 1
+    fi
     
     # Clean up any existing test environment
     echo "Cleaning up any existing test containers..."

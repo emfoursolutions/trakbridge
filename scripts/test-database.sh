@@ -87,6 +87,8 @@ export FLASK_ENV="testing"
 export APP_VERSION="$IMAGE_TAG"
 export USER_ID=${USER_ID:-$(id -u)}
 export GROUP_ID=${GROUP_ID:-$(id -g)}
+export DOCKER_USER_ID=${USER_ID}
+export DOCKER_GROUP_ID=${GROUP_ID}
 
 # Use dynamic port to avoid conflicts
 TEST_PORT=$(python3 -c "import socket; s=socket.socket(); s.bind(('', 0)); print(s.getsockname()[1]); s.close()")
@@ -94,9 +96,36 @@ export TEST_PORT
 log_info "Using dynamic port for testing: $TEST_PORT"
 
 # Create test report directory and ensure correct permissions
-mkdir -p test-reports logs data external_plugins external_config backups secrets
-# Set ownership to match the Docker container user
-chown -R ${USER_ID}:${GROUP_ID} test-reports logs data external_plugins external_config backups secrets 2>/dev/null || true
+mkdir -p test-reports logs data external_plugins external_config secrets
+
+# Handle backups directory specially - it might be created by deploy script as root
+if [ -d "backups" ]; then
+    log_warn "Backups directory already exists (likely created by deploy script)"
+    # Try to fix permissions if possible, otherwise create a test-specific subdirectory
+    if ! chown -R ${USER_ID}:${GROUP_ID} "backups" 2>/dev/null; then
+        log_warn "Cannot change ownership of backups directory, creating test subdirectory"
+        mkdir -p "backups/test-$$" 2>/dev/null || true
+        chmod 755 "backups/test-$$" 2>/dev/null || true
+    fi
+else
+    # Create backups directory with correct ownership from start
+    mkdir -p backups
+    chown ${USER_ID}:${GROUP_ID} backups 2>/dev/null || true
+fi
+
+# Set ownership to match the Docker container user (only if possible)
+log_info "Setting directory permissions for user ${USER_ID}:${GROUP_ID}..."
+for dir in test-reports logs data external_plugins external_config secrets; do
+    if [ -d "$dir" ] && [ -w "$dir" ]; then
+        chown -R ${USER_ID}:${GROUP_ID} "$dir" 2>/dev/null || {
+            log_warn "Could not change ownership of $dir, using current permissions"
+            # If we can't chown, at least make it writable
+            chmod -R u+w "$dir" 2>/dev/null || true
+        }
+    else
+        log_warn "Directory $dir not writable or doesn't exist"
+    fi
+done
 
 # Initialize test report for this database
 TEST_REPORT="test-reports/${DB_TYPE}-test-report.json"
@@ -173,6 +202,7 @@ docker ps -aq --filter "name=trakbridge-mysql" | xargs -r docker rm 2>/dev/null 
 log_step "1. Deploying $DB_TYPE with production configuration..."
 
 # Create override file to use dynamic port and correct user ID
+# For staging validation, we skip volume mounts to avoid permission issues
 cat > docker-compose.override.yml << EOF
 services:
   trakbridge:
@@ -184,6 +214,9 @@ services:
       - TEST_MODE=true
       - USER_ID=${USER_ID}
       - GROUP_ID=${GROUP_ID}
+      - DOCKER_USER_ID=${DOCKER_USER_ID}
+      - DOCKER_GROUP_ID=${DOCKER_GROUP_ID}
+    volumes: []  # Remove all volume mounts for testing to avoid permission issues
 EOF
 
 if [[ -n "$COMPOSE_PROFILE" ]]; then
