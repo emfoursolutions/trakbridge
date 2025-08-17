@@ -1401,11 +1401,28 @@ staging-production-mirror:
     chmod +x scripts/setup.sh
     scripts/setup.sh --force
     
+    # Fix file permissions for Docker container (setup.sh creates files as runner user 980:980, container runs as 1000:1000)
+    echo "🔧 Fixing file permissions for Docker container..."
+    if command -v sudo >/dev/null 2>&1; then
+      sudo chown -R 1000:1000 logs/ data/ secrets/ config/ backups/ external_plugins/ external_config/ 2>/dev/null || true
+      echo "✅ Fixed ownership using sudo"
+    else
+      # Fallback: make directories world-accessible
+      chmod -R 755 logs/ data/ config/ backups/ external_plugins/ external_config/ 2>/dev/null || true
+      chmod -R 644 secrets/* 2>/dev/null || true
+      chmod 755 secrets/ 2>/dev/null || true
+      echo "✅ Fixed permissions using chmod (no sudo available)"
+    fi
+    
     # Inject LDAP password from GitLab CI/CD variable into secrets file
     if [ -n "${LDAP_BIND_PASSWORD}" ]; then
       echo "Injecting LDAP password from GitLab CI variable..."
       echo "${LDAP_BIND_PASSWORD}" > secrets/ldap_bind_password
       chmod 600 secrets/ldap_bind_password
+      # Fix ownership after file injection (file gets created as runner user)
+      if command -v sudo >/dev/null 2>&1; then
+        sudo chown 1000:1000 secrets/ldap_bind_password 2>/dev/null || true
+      fi
       echo "LDAP password injected successfully (length: ${#LDAP_BIND_PASSWORD} chars)"
     else
       echo "WARNING: LDAP_BIND_PASSWORD not set in GitLab CI variables"

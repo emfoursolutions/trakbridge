@@ -202,7 +202,7 @@ docker ps -aq --filter "name=trakbridge-mysql" | xargs -r docker rm 2>/dev/null 
 log_step "1. Deploying $DB_TYPE with production configuration..."
 
 # Create override file to use dynamic port and correct user ID
-# For staging validation, we skip volume mounts to avoid permission issues
+# Include volume mounts for realistic testing (permissions fixed in staging job)
 cat > docker-compose.override.yml << EOF
 services:
   trakbridge:
@@ -216,7 +216,13 @@ services:
       - GROUP_ID=${GROUP_ID}
       - DOCKER_USER_ID=${DOCKER_USER_ID}
       - DOCKER_GROUP_ID=${DOCKER_GROUP_ID}
-    volumes: []  # Remove all volume mounts for testing to avoid permission issues
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./secrets:/app/secrets
+      - ./config:/app/external_config
+      - ./backups:/app/backups
+      - ./external_plugins:/app/external_plugins
 EOF
 
 if [[ -n "$COMPOSE_PROFILE" ]]; then
