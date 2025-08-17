@@ -1382,21 +1382,12 @@ staging-production-mirror:
     fi
     echo "${CI_REGISTRY_PASSWORD}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
     
-    # Install dependencies for testing  
-    # Detect package manager and install packages
-    if command -v apt-get >/dev/null 2>&1; then
-      echo "Using apt-get (Debian/Ubuntu)"
-      apt-get update -qq && apt-get install -y -qq curl jq openssl python3
-    elif command -v dnf >/dev/null 2>&1; then
-      echo "Using dnf (Rocky Linux/Fedora)"
-      dnf install -y curl jq openssl python3
-    elif command -v yum >/dev/null 2>&1; then
-      echo "Using yum (RHEL/CentOS)"
-      yum install -y curl jq openssl python3
-    else
-      echo "ERROR: No supported package manager found (apt-get, dnf, yum)"
-      exit 1
-    fi
+    # Verify required tools are available on the runner
+    echo "Checking for required tools..."
+    command -v curl >/dev/null 2>&1 || { echo "ERROR: curl not found"; exit 1; }
+    command -v jq >/dev/null 2>&1 || { echo "ERROR: jq not found"; exit 1; }
+    command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 not found"; exit 1; }
+    echo "✅ All required tools are available"
     
     # Clean up any existing test environment
     echo "Cleaning up any existing test containers..."
