@@ -1414,6 +1414,17 @@ staging-production-mirror:
       echo "✅ Fixed permissions using chmod (no sudo available)"
     fi
     
+    # Pre-create database-specific backup directories to prevent Docker from creating them as root
+    echo "🗂️ Pre-creating database-specific backup directories..."
+    mkdir -p backups/postgres-staging backups/mysql-staging backups/staging 2>/dev/null || true
+    if command -v sudo >/dev/null 2>&1; then
+      sudo chown -R 1000:1000 backups/postgres-staging backups/mysql-staging backups/staging 2>/dev/null || true
+      echo "✅ Fixed backup subdirectory ownership using sudo"
+    else
+      chmod -R 755 backups/postgres-staging backups/mysql-staging backups/staging 2>/dev/null || true
+      echo "✅ Fixed backup subdirectory permissions using chmod"
+    fi
+    
     # Inject LDAP password from GitLab CI/CD variable into secrets file
     if [ -n "${LDAP_BIND_PASSWORD}" ]; then
       echo "Injecting LDAP password from GitLab CI variable..."

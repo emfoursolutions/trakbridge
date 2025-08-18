@@ -118,17 +118,46 @@ mkdir -p test-reports logs data external_plugins external_config secrets
 
 # Handle backups directory specially - it might be created by deploy script as root
 if [ -d "backups" ]; then
-    log_warn "Backups directory already exists (likely created by deploy script)"
-    # Try to fix permissions if possible, otherwise create a test-specific subdirectory
-    if ! chown -R ${USER_ID}:${GROUP_ID} "backups" 2>/dev/null; then
-        log_warn "Cannot change ownership of backups directory, creating test subdirectory"
-        mkdir -p "backups/test-$$" 2>/dev/null || true
-        chmod 755 "backups/test-$$" 2>/dev/null || true
-    fi
+    log_warn "Backups directory already exists (likely created by deploy script or CI)"
+    
+    # Create database-specific backup directories if they don't exist
+    for backup_dir in "backups/postgres-staging" "backups/mysql-staging" "backups/staging"; do
+        if [ ! -d "$backup_dir" ]; then
+            log_info "Creating missing backup directory: $backup_dir"
+            mkdir -p "$backup_dir" 2>/dev/null || true
+        fi
+    done
+    
+    # Try to fix permissions on backup directories, but don't fail if we can't
+    log_info "Attempting to fix backup directory permissions..."
+    for backup_dir in "backups" "backups/postgres-staging" "backups/mysql-staging" "backups/staging"; do
+        if [ -d "$backup_dir" ] && [ -w "$backup_dir" ]; then
+            if chown -R ${USER_ID}:${GROUP_ID} "$backup_dir" 2>/dev/null; then
+                log_info "✅ Fixed ownership of $backup_dir"
+            else
+                log_warn "⚠️ Cannot change ownership of $backup_dir (likely root-owned), trying chmod..."
+                if chmod -R 755 "$backup_dir" 2>/dev/null; then
+                    log_info "✅ Fixed permissions of $backup_dir with chmod"
+                else
+                    log_warn "⚠️ Cannot fix permissions of $backup_dir, will use test subdirectory if needed"
+                    # Create a test-specific subdirectory as fallback
+                    test_backup_dir="$backup_dir/test-$$"
+                    mkdir -p "$test_backup_dir" 2>/dev/null || true
+                    chmod 755 "$test_backup_dir" 2>/dev/null || true
+                fi
+            fi
+        else
+            log_warn "$backup_dir not writable or doesn't exist"
+        fi
+    done
 else
-    # Create backups directory with correct ownership from start
-    mkdir -p backups
-    chown ${USER_ID}:${GROUP_ID} backups 2>/dev/null || true
+    # Create backups directory structure with correct ownership from start
+    log_info "Creating backup directory structure..."
+    mkdir -p backups/postgres-staging backups/mysql-staging backups/staging
+    chown -R ${USER_ID}:${GROUP_ID} backups 2>/dev/null || {
+        log_warn "Cannot set ownership, using chmod instead"
+        chmod -R 755 backups 2>/dev/null || true
+    }
 fi
 
 # Set ownership to match the Docker container user (only if possible)
