@@ -131,13 +131,7 @@ services:
   # TrakBridge Application - Staging Configuration
   # =============================================================================
   trakbridge:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: production
-      args:
-        BUILD_ENV: production
-    image: "trakbridge:staging-latest"  # Update tag as needed for staging releases
+    image: "${CI_REGISTRY_IMAGE:-trakbridge}:${CI_COMMIT_TAG:-latest}"
     container_name: trakbridge-staging
     restart: unless-stopped
     
@@ -158,7 +152,7 @@ services:
       - ./logs:/app/logs
       - ./data:/app/data
       - ./config:/app/external_config
-      - ./plugins:/app/external_plugins:ro
+      - ./plugins:/app/external_plugins
       - ./backups:/app/backups
       - ./secrets:/app/secrets
     
