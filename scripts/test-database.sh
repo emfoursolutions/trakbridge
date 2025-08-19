@@ -282,6 +282,11 @@ services:
       - GROUP_ID=${GROUP_ID}
       - DOCKER_USER_ID=${DOCKER_USER_ID}
       - DOCKER_GROUP_ID=${DOCKER_GROUP_ID}
+      - DB_TYPE=${DB_TYPE}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data
