@@ -232,7 +232,9 @@ services:
       start_period: 30s
     
     networks:
-      - trakbridge-staging
+      trakbridge-staging:
+        aliases:
+          - postgres
     
     # Security configuration
     security_opt:
@@ -284,7 +286,9 @@ services:
       start_period: 30s
     
     networks:
-      - trakbridge-staging
+      trakbridge-staging:
+        aliases:
+          - mysql
     
     # Security configuration
     security_opt:
