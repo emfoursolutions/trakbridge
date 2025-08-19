@@ -311,12 +311,56 @@ run_migrations() {
     log_info "Checking database initialization..."
 
     if command -v flask >/dev/null 2>&1; then
-        # Check if Flask-Migrate is configured
-        if flask db current >/dev/null 2>&1; then
-            log_info "Flask-Migrate is configured"
-
-            # Get current revision
-            current_rev=$(flask db current 2>/dev/null || echo "")
+        # =========================================================================
+        # TEMPORARY DIAGNOSTIC CODE - Remove after Flask migration issues resolved
+        # Added: 2025-08-19 for debugging Flask migration hanging in staging
+        # Issue: Flask migration commands hang instead of failing gracefully
+        # TODO: Once root cause identified and fixed, revert to simple:
+        #       if flask db current >/dev/null 2>&1; then
+        # =========================================================================
+        
+        # Comprehensive Flask-Migrate diagnostics
+        log_info "=== Flask Migration System Diagnostic ==="
+        
+        # Step 1: Test basic Flask CLI availability
+        log_info "Step 1: Testing Flask CLI availability..."
+        if flask --help >/dev/null 2>&1; then
+            log_info "✓ Flask CLI is available"
+        else
+            log_error "✗ Flask CLI is not available"
+            return 1
+        fi
+        
+        # Step 2: Test Flask application import
+        log_info "Step 2: Testing Flask application import..."
+        if FLASK_APP=app.py flask --help >/dev/null 2>&1; then
+            log_info "✓ Flask application import successful"
+        else
+            log_error "✗ Flask application import failed"
+            log_error "Error details:"
+            FLASK_APP=app.py flask --help 2>&1 | head -10 | while read -r line; do log_error "  $line"; done
+            return 1
+        fi
+        
+        # Step 3: Test Flask database commands availability
+        log_info "Step 3: Testing Flask database command availability..."
+        if FLASK_APP=app.py flask db --help >/dev/null 2>&1; then
+            log_info "✓ Flask-Migrate commands are available"
+        else
+            log_error "✗ Flask-Migrate commands not available"
+            log_error "Error details:"
+            FLASK_APP=app.py flask db --help 2>&1 | head -10 | while read -r line; do log_error "  $line"; done
+            log_info "Flask-Migrate not configured - database initialization handled by application"
+            return 0
+        fi
+        
+        # Step 4: Test Flask db current command with detailed logging
+        log_info "Step 4: Testing Flask database current revision check..."
+        log_info "Running: flask db current"
+        if flask_current_output=$(FLASK_APP=app.py flask db current 2>&1); then
+            log_info "✓ Flask db current command executed successfully"
+            log_info "Output: $flask_current_output"
+            current_rev="$flask_current_output"
 
             if [[ -z "$current_rev" ]] || [[ "$current_rev" == *"None"* ]]; then
                 log_info "No current migration revision found"
@@ -326,7 +370,12 @@ run_migrations() {
                     db_path="${SQLALCHEMY_DATABASE_URI#sqlite:///}"
                     if [[ -f "$db_path" ]]; then
                         log_info "Database file exists, stamping with current revision"
-                        flask db stamp head || log_warn "Could not stamp database"
+                        log_info "Attempting to stamp database with head revision..."
+                        if FLASK_APP=app.py flask db stamp head 2>&1; then
+                            log_info "✓ Database stamped successfully"
+                        else
+                            log_warn "Could not stamp database - will be handled by application"
+                        fi
                     else
                         log_info "New database - will be handled by application"
                     fi
@@ -337,27 +386,116 @@ run_migrations() {
                 log_info "Current migration revision: $current_rev"
                 
                 # Check if there are pending migrations before running upgrade
-                if flask db heads >/dev/null 2>&1; then
-                    head_rev=$(flask db heads 2>/dev/null | head -n1 | awk '{print $1}')
+                log_info "Checking for pending migrations..."
+                if head_output=$(FLASK_APP=app.py flask db heads 2>&1); then
+                    log_info "✓ Flask db heads command successful"
+                    head_rev=$(echo "$head_output" | head -n1 | awk '{print $1}')
                     if [[ -n "$head_rev" ]] && [[ "$current_rev" != "$head_rev" ]]; then
-                        log_info "Pending migrations found (head: $head_rev), running upgrade..."
-                        flask db upgrade || {
-                            log_warn "Migration failed, will retry in application"
-                        }
+                        log_info "Pending migrations found (current: $current_rev, head: $head_rev)"
+                        log_info "Running database migration upgrade..."
+                        if FLASK_APP=app.py flask db upgrade 2>&1; then
+                            log_info "✓ Database migration upgrade completed successfully"
+                        else
+                            log_warn "Migration upgrade failed - will retry in application"
+                        fi
                     else
                         log_info "Database is up to date, no migrations needed"
                     fi
                 else
-                    log_info "Could not check migration heads, skipping migrations"
+                    log_warn "Could not check migration heads - Flask command failed"
+                    log_warn "Error output: $head_output"
+                    log_info "Migration status unknown - will be handled by application"
                 fi
             fi
         else
-            log_info "Flask-Migrate not configured - database initialization handled by application"
+            # TEMPORARY DIAGNOSTIC CODE - detailed error analysis
+            log_error "✗ Flask db current command failed"
+            log_error "This is the critical failure point - Flask cannot check database state"
+            log_error "Error output: $flask_current_output"
+            log_error "--- Diagnosis ---"
+            log_error "Flask CLI works, but 'flask db current' fails"
+            log_error "This typically indicates:"
+            log_error "1. Flask application context cannot be created"
+            log_error "2. Database connection issues"
+            log_error "3. SQLAlchemy configuration problems" 
+            log_error "4. Migration table access issues"
+            log_error "--- Environment Debug Info ---"
+            log_error "FLASK_APP: ${FLASK_APP:-not set}"
+            log_error "Working directory: $(pwd)"
+            log_error "Database type: $DB_TYPE"
+            log_error "Database host: $DB_HOST"
+            log_error "Database name: $DB_NAME"
+            log_error "--- End Diagnosis ---"
+            return 1
         fi
     else
         log_warn "Flask CLI not available - database initialization handled by application"
     fi
 }
+
+# =========================================================================
+# CLEANUP INSTRUCTIONS FOR FLASK MIGRATION DIAGNOSTICS
+# =========================================================================
+# After the Flask migration hanging issue is resolved, revert run_migrations()
+# function to a simpler implementation by removing the diagnostic code above.
+#
+# ORIGINAL SIMPLE IMPLEMENTATION (to restore after fixing):
+#
+# run_migrations() {
+#     log_info "Checking database initialization..."
+#     
+#     if command -v flask >/dev/null 2>&1; then
+#         if flask db current >/dev/null 2>&1; then
+#             log_info "Flask-Migrate is configured"
+#             
+#             current_rev=$(flask db current 2>/dev/null || echo "")
+#             
+#             if [[ -z "$current_rev" ]] || [[ "$current_rev" == *"None"* ]]; then
+#                 log_info "No current migration revision found"
+#                 
+#                 if [[ "$DB_TYPE" == "sqlite" ]]; then
+#                     db_path="${SQLALCHEMY_DATABASE_URI#sqlite:///}"
+#                     if [[ -f "$db_path" ]]; then
+#                         log_info "Database file exists, stamping with current revision"
+#                         flask db stamp head || log_warn "Could not stamp database"
+#                     else
+#                         log_info "New database - will be handled by application"
+#                     fi
+#                 else
+#                     log_info "Database initialization will be handled by application"
+#                 fi
+#             else
+#                 log_info "Current migration revision: $current_rev"
+#                 
+#                 if flask db heads >/dev/null 2>&1; then
+#                     head_rev=$(flask db heads 2>/dev/null | head -n1 | awk '{print $1}')
+#                     if [[ -n "$head_rev" ]] && [[ "$current_rev" != "$head_rev" ]]; then
+#                         log_info "Pending migrations found, running upgrade..."
+#                         flask db upgrade || log_warn "Migration failed, will retry in application"
+#                     else
+#                         log_info "Database is up to date, no migrations needed"
+#                     fi
+#                 else
+#                     log_info "Could not check migration heads, skipping migrations"
+#                 fi
+#             fi
+#         else
+#             log_info "Flask-Migrate not configured - database initialization handled by application"
+#         fi
+#     else
+#         log_warn "Flask CLI not available - database initialization handled by application"
+#     fi
+# }
+#
+# BENEFITS OF CLEANUP:
+# - Removes ~100 lines of diagnostic code
+# - Simplifies log output for production
+# - Improves startup performance
+# - Reduces maintenance overhead
+#
+# COMMIT MESSAGE FOR CLEANUP:
+# "refactor: restore simple Flask migration check after resolving hanging issue"
+# =========================================================================
 
 # Function to validate configuration
 validate_config() {
