@@ -157,9 +157,9 @@ services:
       - ./secrets:/app/secrets
     
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      test: ["CMD", "sh", "-c", "echo 'Health check starting...' && curl -v -f --connect-timeout 5 --max-time 8 http://localhost:5000/api/health 2>&1 && echo 'Health check passed'"]
       interval: 30s
-      timeout: 15s
+      timeout: 12s
       retries: 3
       start_period: 60s
     
