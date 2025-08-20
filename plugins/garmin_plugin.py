@@ -422,7 +422,7 @@ class KMLDataExtractor:
             # Fallback to feature name if Map Display Name is not available
             if name == "Unknown":
                 name = str(getattr(feature, "name", "Unknown"))
-            
+
             clean_name = str(name).replace(" ", "")
             clean_id = str(placemark_id).replace(" ", "")
 
@@ -533,14 +533,14 @@ class KMLDataExtractor:
             description = desc_elem.text if desc_elem is not None else ""
 
             extended_data = self._extract_xml_extended_data(placemark_xml)
-            
+
             # Use Map Display Name from extended data (consistent with fastkml parsing)
             name = extended_data.get("Map Display Name", "Unknown")
             # Fallback to <name> element if Map Display Name is not available
             if name == "Unknown":
                 name_elem = placemark_xml.find("kml:name", self.KML_NAMESPACE)
                 name = name_elem.text if name_elem is not None else "Unknown"
-            
+
             placemark_id = extended_data.get("IMEI", "Unknown")
 
             clean_name = str(name).replace(" ", "")

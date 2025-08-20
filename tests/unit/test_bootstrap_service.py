@@ -48,7 +48,9 @@ class TestBootstrapServiceCore:
         # Create temporary directory for bootstrap file
         temp_dir = tempfile.mkdtemp()
         bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-        return BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
+        return BootstrapService(
+            bootstrap_file_path=bootstrap_file_path, skip_migration_check=True
+        )
 
     def test_bootstrap_service_creation(self, bootstrap_service):
         """Test creating a bootstrap service instance."""
@@ -62,13 +64,17 @@ class TestBootstrapServiceCore:
         service2 = get_bootstrap_service()
         assert service1 is service2
 
-    def test_should_create_initial_admin_clean_database(self, app, clean_database, bootstrap_service):
+    def test_should_create_initial_admin_clean_database(
+        self, app, clean_database, bootstrap_service
+    ):
         """Test should_create_initial_admin with clean database."""
         with app.app_context():
             result = bootstrap_service.should_create_initial_admin()
             assert result is True
 
-    def test_should_create_initial_admin_with_existing_admin(self, app, clean_database, db_session, bootstrap_service):
+    def test_should_create_initial_admin_with_existing_admin(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
         """Test should_create_initial_admin when admin users already exist."""
         with app.app_context():
             # Create an admin user
@@ -77,7 +83,7 @@ class TestBootstrapServiceCore:
                 password="ExistingPassword123!",
                 email="admin@test.com",
                 full_name="Existing Admin",
-                role=UserRole.ADMIN
+                role=UserRole.ADMIN,
             )
             admin_user.status = AccountStatus.ACTIVE
             db_session.add(admin_user)
@@ -86,28 +92,34 @@ class TestBootstrapServiceCore:
             result = bootstrap_service.should_create_initial_admin()
             assert result is False
 
-    def test_create_initial_admin_success(self, app, clean_database, db_session, bootstrap_service):
+    def test_create_initial_admin_success(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
         """Test successful initial admin creation."""
         with app.app_context():
             # Ensure clean state
             assert User.query.filter_by(role=UserRole.ADMIN).count() == 0
             assert bootstrap_service.should_create_initial_admin() is True
-            
+
             admin_user = bootstrap_service.create_initial_admin()
-            
+
             assert admin_user is not None
             assert admin_user.username == bootstrap_service.default_admin_username
             assert admin_user.role == UserRole.ADMIN
             assert admin_user.status == AccountStatus.ACTIVE
             assert admin_user.auth_provider == AuthProvider.LOCAL
             assert admin_user.password_changed_at is None  # Force password change
-            
+
             # Verify user was saved to database
-            db_user = User.query.filter_by(username=bootstrap_service.default_admin_username).first()
+            db_user = User.query.filter_by(
+                username=bootstrap_service.default_admin_username
+            ).first()
             assert db_user is not None
             assert db_user.id == admin_user.id
 
-    def test_create_initial_admin_when_exists(self, app, clean_database, db_session, bootstrap_service):
+    def test_create_initial_admin_when_exists(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
         """Test create_initial_admin when admin already exists."""
         with app.app_context():
             # Create admin user first
@@ -116,7 +128,7 @@ class TestBootstrapServiceCore:
                 password="ExistingPassword123!",
                 email="admin@test.com",
                 full_name="Existing Admin",
-                role=UserRole.ADMIN
+                role=UserRole.ADMIN,
             )
             existing_admin.status = AccountStatus.ACTIVE
             db_session.add(existing_admin)
@@ -124,7 +136,7 @@ class TestBootstrapServiceCore:
 
             # Try to create again - should handle gracefully
             admin_user = bootstrap_service.create_initial_admin()
-            
+
             # Should either return None or existing user, but not create duplicate
             if admin_user is not None:
                 assert admin_user.id == existing_admin.id
@@ -133,7 +145,9 @@ class TestBootstrapServiceCore:
             admin_count = User.query.filter_by(role=UserRole.ADMIN).count()
             assert admin_count == 1
 
-    def test_database_based_bootstrap_detection(self, app, clean_database, db_session, bootstrap_service):
+    def test_database_based_bootstrap_detection(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
         """Test database-based bootstrap completion detection."""
         with app.app_context():
             # Initially no bootstrap completion detected - ensure clean state first
@@ -146,7 +160,7 @@ class TestBootstrapServiceCore:
                 password="Password123!",
                 email="admin@test.com",
                 full_name="Database Admin",
-                role=UserRole.ADMIN
+                role=UserRole.ADMIN,
             )
             admin_user.status = AccountStatus.ACTIVE
             db_session.add(admin_user)
@@ -154,25 +168,27 @@ class TestBootstrapServiceCore:
 
             # Should now detect bootstrap completion via database
             assert bootstrap_service._is_bootstrap_completed() is True
-            
+
             # Should not create additional admin
             assert bootstrap_service.should_create_initial_admin() is False
 
-    def test_bootstrap_info_collection(self, app, clean_database, db_session, bootstrap_service):
+    def test_bootstrap_info_collection(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
         """Test comprehensive bootstrap info collection."""
         with app.app_context():
             # Ensure clean state first
             assert User.query.filter_by(role=UserRole.ADMIN).count() == 0
-            
+
             # Test with no admin users
             info = bootstrap_service.get_bootstrap_info()
-            
-            assert info['admin_count'] == 0
-            assert info['default_admin_exists'] is False
-            assert info['should_create_admin'] is True
-            assert info['bootstrap_completed'] is False
-            assert info['tables_exist'] is True
-            assert 'timestamp' in info
+
+            assert info["admin_count"] == 0
+            assert info["default_admin_exists"] is False
+            assert info["should_create_admin"] is True
+            assert info["bootstrap_completed"] is False
+            assert info["tables_exist"] is True
+            assert "timestamp" in info
 
             # Create admin user
             admin_user = User.create_local_user(
@@ -180,7 +196,7 @@ class TestBootstrapServiceCore:
                 password="Password123!",
                 email="admin@test.com",
                 full_name="Admin User",
-                role=UserRole.ADMIN
+                role=UserRole.ADMIN,
             )
             admin_user.status = AccountStatus.ACTIVE
             db_session.add(admin_user)
@@ -188,13 +204,15 @@ class TestBootstrapServiceCore:
 
             # Test with admin user
             info = bootstrap_service.get_bootstrap_info()
-            
-            assert info['admin_count'] == 1
-            assert info['default_admin_exists'] is True
-            assert info['should_create_admin'] is False
-            assert info['bootstrap_completed'] is True
 
-    def test_force_password_change_logic(self, app, clean_database, db_session, bootstrap_service):
+            assert info["admin_count"] == 1
+            assert info["default_admin_exists"] is True
+            assert info["should_create_admin"] is False
+            assert info["bootstrap_completed"] is True
+
+    def test_force_password_change_logic(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
         """Test force password change requirement detection."""
         with app.app_context():
             # Create admin user with no password change date (should require change)
@@ -203,7 +221,7 @@ class TestBootstrapServiceCore:
                 password=bootstrap_service.default_admin_password,
                 email="admin@test.com",
                 full_name="Admin User",
-                role=UserRole.ADMIN
+                role=UserRole.ADMIN,
             )
             admin_user.password_changed_at = None
             admin_user.status = AccountStatus.ACTIVE
@@ -216,7 +234,7 @@ class TestBootstrapServiceCore:
         """Test environment variable override for bootstrap completion."""
         with app.app_context():
             # Set environment variable
-            with patch.dict(os.environ, {bootstrap_service.bootstrap_flag_key: 'true'}):
+            with patch.dict(os.environ, {bootstrap_service.bootstrap_flag_key: "true"}):
                 assert bootstrap_service._is_bootstrap_completed() is True
                 assert bootstrap_service.should_create_initial_admin() is False
 
@@ -240,26 +258,28 @@ class TestBootstrapServiceRaceConditions:
             # Create a test-specific bootstrap service with temp file path
             temp_dir = tempfile.mkdtemp()
             bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-            bootstrap_service = BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
-            
+            bootstrap_service = BootstrapService(
+                bootstrap_file_path=bootstrap_file_path, skip_migration_check=True
+            )
+
             # Step 1: Initial state - no admin users
             assert User.query.filter_by(role=UserRole.ADMIN).count() == 0
             assert bootstrap_service.should_create_initial_admin() is True
-            
+
             # Step 2: Create initial admin
             admin_user = bootstrap_service.create_initial_admin()
             assert admin_user is not None
             assert admin_user.username == "admin"
-            
+
             # Step 3: Verify state after creation
             assert User.query.filter_by(role=UserRole.ADMIN).count() == 1
             assert bootstrap_service.should_create_initial_admin() is False
             assert bootstrap_service._is_bootstrap_completed() is True
-            
+
             # Step 4: Simulate container restart - try to create again
             admin_user_2 = bootstrap_service.create_initial_admin()
             # Should either return None or existing user, but not create duplicate
-            
+
             # Step 5: Verify no duplicates created
             final_count = User.query.filter_by(role=UserRole.ADMIN).count()
             assert final_count == 1
@@ -270,29 +290,31 @@ class TestBootstrapServiceRaceConditions:
             # Create a test-specific bootstrap service with temp file path
             temp_dir = tempfile.mkdtemp()
             bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-            bootstrap_service = BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
-            
+            bootstrap_service = BootstrapService(
+                bootstrap_file_path=bootstrap_file_path, skip_migration_check=True
+            )
+
             # Create admin user with different username
             existing_admin = User.create_local_user(
                 username="existing_admin",
                 password="ExistingPassword123!",
                 email="admin@existing.com",
                 full_name="Existing Admin",
-                role=UserRole.ADMIN
+                role=UserRole.ADMIN,
             )
             existing_admin.status = AccountStatus.ACTIVE
             db_session.add(existing_admin)
             db_session.commit()
-            
+
             # Bootstrap should detect existing admin and not create new one
             assert bootstrap_service.should_create_initial_admin() is False
             admin_user = bootstrap_service.create_initial_admin()
             assert admin_user is None
-            
+
             # Verify no new admin created
             admin_count = User.query.filter_by(role=UserRole.ADMIN).count()
             assert admin_count == 1
-            
+
             # Verify bootstrap is marked complete
             assert bootstrap_service._is_bootstrap_completed() is True
 
@@ -302,22 +324,24 @@ class TestBootstrapServiceRaceConditions:
             # Create a test-specific bootstrap service with temp file path
             temp_dir = tempfile.mkdtemp()
             bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-            bootstrap_service = BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
-            
+            bootstrap_service = BootstrapService(
+                bootstrap_file_path=bootstrap_file_path, skip_migration_check=True
+            )
+
             # Attempt multiple creations
             results = []
-            
+
             for i in range(3):
                 try:
                     admin_user = bootstrap_service.create_initial_admin()
                     results.append(admin_user)
                 except Exception as e:
                     results.append(None)
-            
+
             # Verify that at most one admin was created
             admin_count = User.query.filter_by(role=UserRole.ADMIN).count()
             assert admin_count <= 1
-            
+
             # Verify final state is consistent
             if admin_count == 1:
                 final_admin = User.query.filter_by(role=UserRole.ADMIN).first()
@@ -343,17 +367,21 @@ class TestBootstrapServiceErrorHandling:
         # Create temporary directory for bootstrap file
         temp_dir = tempfile.mkdtemp()
         bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-        return BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
+        return BootstrapService(
+            bootstrap_file_path=bootstrap_file_path, skip_migration_check=True
+        )
 
     def test_database_error_handling(self, app, bootstrap_service):
         """Test handling of database errors."""
         with app.app_context():
             # Test should_create_initial_admin with database error
-            with patch('database.db.inspect', side_effect=Exception("Database error")):
+            with patch("database.db.inspect", side_effect=Exception("Database error")):
                 result = bootstrap_service.should_create_initial_admin()
                 assert result is False
 
-    def test_file_system_error_resilience(self, app, clean_database, db_session, bootstrap_service):
+    def test_file_system_error_resilience(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
         """Test that file system errors don't prevent database-based operation."""
         with app.app_context():
             # Create admin user
@@ -362,14 +390,18 @@ class TestBootstrapServiceErrorHandling:
                 password="Password123!",
                 email="admin@test.com",
                 full_name="Resilience Admin",
-                role=UserRole.ADMIN
+                role=UserRole.ADMIN,
             )
             admin_user.status = AccountStatus.ACTIVE
             db_session.add(admin_user)
             db_session.commit()
 
             # Mock file operations to fail
-            with patch.object(bootstrap_service, '_mark_bootstrap_completed', side_effect=OSError("File system error")):
+            with patch.object(
+                bootstrap_service,
+                "_mark_bootstrap_completed",
+                side_effect=OSError("File system error"),
+            ):
                 # Should still detect bootstrap completion via database
                 assert bootstrap_service._is_bootstrap_completed() is True
                 assert bootstrap_service.should_create_initial_admin() is False
@@ -393,9 +425,13 @@ class TestBootstrapServiceCoordination:
         """Create a bootstrap service instance for testing."""
         temp_dir = tempfile.mkdtemp()
         bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-        return BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
+        return BootstrapService(
+            bootstrap_file_path=bootstrap_file_path, skip_migration_check=True
+        )
 
-    def test_database_coordination_with_existing_admin(self, app, clean_database, db_session, bootstrap_service):
+    def test_database_coordination_with_existing_admin(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
         """Test database coordination when admin already exists."""
         with app.app_context():
             # Create an existing admin user
@@ -404,7 +440,7 @@ class TestBootstrapServiceCoordination:
                 password="Password123!",
                 email="admin@test.com",
                 full_name="Existing Admin",
-                role=UserRole.ADMIN
+                role=UserRole.ADMIN,
             )
             existing_admin.status = AccountStatus.ACTIVE
             db_session.add(existing_admin)
@@ -413,18 +449,22 @@ class TestBootstrapServiceCoordination:
             # Database coordination should detect existing admin
             assert bootstrap_service._database_bootstrap_coordination() is False
 
-    def test_database_coordination_no_admin(self, app, clean_database, bootstrap_service):
+    def test_database_coordination_no_admin(
+        self, app, clean_database, bootstrap_service
+    ):
         """Test database coordination when no admin exists."""
         with app.app_context():
             # Database coordination should allow bootstrap
             assert bootstrap_service._database_bootstrap_coordination() is True
 
-    def test_lock_coordination_in_test_environment(self, app, clean_database, bootstrap_service):
+    def test_lock_coordination_in_test_environment(
+        self, app, clean_database, bootstrap_service
+    ):
         """Test that lock coordination is skipped in test environment."""
         with app.app_context():
             # In test environment, locks should be skipped
             assert bootstrap_service._is_test_environment() is True
-            
+
             # Should be able to create admin without acquiring lock
             admin_user = bootstrap_service.create_initial_admin()
             assert admin_user is not None
@@ -449,37 +489,45 @@ class TestAuthenticationFlowIntegration:
         """Create a bootstrap service instance for testing."""
         temp_dir = tempfile.mkdtemp()
         bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-        return BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
+        return BootstrapService(
+            bootstrap_file_path=bootstrap_file_path, skip_migration_check=True
+        )
 
-    def test_initial_admin_password_expiry_bypass(self, app, clean_database, db_session, bootstrap_service):
+    def test_initial_admin_password_expiry_bypass(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
         """Test that initial admin can authenticate despite password_changed_at being None."""
         from services.auth.local_provider import LocalAuthProvider
-        
+
         with app.app_context():
             # Create initial admin user (simulating bootstrap)
             admin_user = bootstrap_service.create_initial_admin()
             assert admin_user is not None
-            assert admin_user.password_changed_at is None  # Should be None for initial setup
+            assert (
+                admin_user.password_changed_at is None
+            )  # Should be None for initial setup
 
             # Test authentication with LocalAuthProvider
             auth_provider = LocalAuthProvider({"password_policy": {"max_age_days": 90}})
-            
+
             # Should not be considered expired despite None password_changed_at
             assert auth_provider._is_password_expired(admin_user) is False
-            
+
             # Authentication should succeed
             result = auth_provider.authenticate(
                 username=bootstrap_service.default_admin_username,
-                password=bootstrap_service.default_admin_password
+                password=bootstrap_service.default_admin_password,
             )
-            
+
             # Should succeed without password expired error
             assert result.result.name != "PASSWORD_EXPIRED"
 
-    def test_non_admin_password_expiry_still_enforced(self, app, clean_database, db_session):
+    def test_non_admin_password_expiry_still_enforced(
+        self, app, clean_database, db_session
+    ):
         """Test that non-admin users still have password expiry enforced."""
         from services.auth.local_provider import LocalAuthProvider
-        
+
         with app.app_context():
             # Create a regular user with no password change date
             regular_user = User.create_local_user(
@@ -487,7 +535,7 @@ class TestAuthenticationFlowIntegration:
                 password="Password123!",
                 email="user@test.com",
                 full_name="Regular User",
-                role=UserRole.USER
+                role=UserRole.USER,
             )
             regular_user.password_changed_at = None  # No password change date
             regular_user.status = AccountStatus.ACTIVE
@@ -496,6 +544,6 @@ class TestAuthenticationFlowIntegration:
 
             # Test authentication with LocalAuthProvider
             auth_provider = LocalAuthProvider({"password_policy": {"max_age_days": 90}})
-            
+
             # Should be considered expired for non-admin users
             assert auth_provider._is_password_expired(regular_user) is True

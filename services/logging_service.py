@@ -50,7 +50,7 @@ def setup_logging(app):
     )
 
     # Set up file handler with version in filename
-    log_filename = 'trakbridge.log'
+    log_filename = "trakbridge.log"
     file_handler = logging.FileHandler(os.path.join(log_dir, log_filename))
     file_handler.setFormatter(detailed_formatter)
     file_handler.setLevel(log_level)

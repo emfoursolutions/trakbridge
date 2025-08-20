@@ -144,7 +144,7 @@ class KeyRotationService:
     def _create_backup_directory(self) -> Path:
         """Create backup directory using Docker mounted volume"""
         backup_dir = Path("/app/backups")
-        
+
         try:
             backup_dir.mkdir(parents=True, exist_ok=True)
             # Test write permissions
@@ -155,7 +155,9 @@ class KeyRotationService:
             return backup_dir
         except (OSError, PermissionError) as e:
             logger.error(f"Cannot access mounted backup directory {backup_dir}: {e}")
-            logger.error("Ensure the backup volume is properly mounted in docker-compose.yml")
+            logger.error(
+                "Ensure the backup volume is properly mounted in docker-compose.yml"
+            )
             raise PermissionError(f"Cannot create backup directory: {e}")
 
     @staticmethod
@@ -191,20 +193,20 @@ class KeyRotationService:
 
             # Extract and validate database connection details from URI
             uri = db_info["uri"]
-            
+
             # Parse MySQL URI: mysql://user:pass@host:port/dbname
             if "://" not in uri:
                 raise ValueError("Invalid database URI format")
-            
+
             # Extract database name
             db_name = uri.split("/")[-1].split("?")[0]  # Handle query parameters
             if not db_name or not db_name.replace("_", "").replace("-", "").isalnum():
                 raise ValueError("Invalid database name")
-            
+
             # Extract host and port
             host = "localhost"  # Default
-            port = "3306"       # Default MySQL port
-            
+            port = "3306"  # Default MySQL port
+
             try:
                 # Split URI to get host:port part
                 uri_parts = uri.split("://")[1]  # Remove mysql://
@@ -214,17 +216,19 @@ class KeyRotationService:
                 else:
                     # Format: host:port/dbname (no credentials)
                     host_port_db = uri_parts
-                
+
                 host_port = host_port_db.split("/")[0]  # Get host:port part
-                
+
                 if ":" in host_port:
                     host, port = host_port.split(":", 1)
                 else:
                     host = host_port
-                    
+
             except (IndexError, ValueError) as e:
-                logger.warning(f"Could not parse host/port from URI, using defaults: {e}")
-                
+                logger.warning(
+                    f"Could not parse host/port from URI, using defaults: {e}"
+                )
+
             # Validate host and port
             if not host or not port:
                 raise ValueError("Invalid host or port in database URI")
@@ -242,14 +246,16 @@ class KeyRotationService:
                 "--single-transaction",
                 "--routines",
                 "--triggers",
-                "-h", host,
-                "-P", port,
+                "-h",
+                host,
+                "-P",
+                port,
                 db_name,
             ]
 
             # Handle credentials using secret manager (same source as main app)
             env = os.environ.copy()
-            
+
             # Get username from URI or environment
             username = "root"  # Default
             if "@" in uri:
@@ -260,12 +266,13 @@ class KeyRotationService:
                         username = user_pass.split(":", 1)[0]
                 except (ValueError, IndexError):
                     pass
-            
+
             # Get password from secret manager (same as main app)
             from config.secrets import get_secret_manager
+
             secret_manager = get_secret_manager()
             password = secret_manager.get_secret("DB_PASSWORD")
-            
+
             if username and password:
                 # Validate username
                 db_params = validate_database_params({"username": username})
@@ -273,7 +280,9 @@ class KeyRotationService:
                 env["MYSQL_PWD"] = password.strip()
                 cmd.extend(["-u", db_params["username"]])
             else:
-                logger.warning("Could not retrieve database credentials from secret manager")
+                logger.warning(
+                    "Could not retrieve database credentials from secret manager"
+                )
 
             # Validate command before execution
             if not runner.validate_command(cmd):
@@ -329,20 +338,20 @@ class KeyRotationService:
 
             # Extract and validate database connection details from URI
             uri = db_info["uri"]
-            
+
             # Parse PostgreSQL URI: postgresql://user:pass@host:port/dbname
             if "://" not in uri:
                 raise ValueError("Invalid database URI format")
-            
+
             # Extract database name
             db_name = uri.split("/")[-1].split("?")[0]  # Handle query parameters
             if not db_name or not db_name.replace("_", "").replace("-", "").isalnum():
                 raise ValueError("Invalid database name")
-            
+
             # Extract host and port
             host = "localhost"  # Default
-            port = "5432"       # Default PostgreSQL port
-            
+            port = "5432"  # Default PostgreSQL port
+
             try:
                 # Split URI to get host:port part
                 uri_parts = uri.split("://")[1]  # Remove postgresql://
@@ -352,17 +361,19 @@ class KeyRotationService:
                 else:
                     # Format: host:port/dbname (no credentials)
                     host_port_db = uri_parts
-                
+
                 host_port = host_port_db.split("/")[0]  # Get host:port part
-                
+
                 if ":" in host_port:
                     host, port = host_port.split(":", 1)
                 else:
                     host = host_port
-                    
+
             except (IndexError, ValueError) as e:
-                logger.warning(f"Could not parse host/port from URI, using defaults: {e}")
-                
+                logger.warning(
+                    f"Could not parse host/port from URI, using defaults: {e}"
+                )
+
             # Validate host and port
             if not host or not port:
                 raise ValueError("Invalid host or port in database URI")
@@ -378,14 +389,16 @@ class KeyRotationService:
                 "--if-exists",
                 "--no-owner",
                 "--no-privileges",
-                "-h", host,
-                "-p", port,
+                "-h",
+                host,
+                "-p",
+                port,
                 db_name,
             ]
 
             # Handle credentials using secret manager (same source as main app)
             env = os.environ.copy()
-            
+
             # Get username from URI or environment
             username = "postgres"  # Default
             if "@" in uri:
@@ -396,12 +409,13 @@ class KeyRotationService:
                         username = user_pass.split(":", 1)[0]
                 except (ValueError, IndexError):
                     pass
-            
+
             # Get password from secret manager (same as main app)
             from config.secrets import get_secret_manager
+
             secret_manager = get_secret_manager()
             password = secret_manager.get_secret("DB_PASSWORD")
-            
+
             if username and password:
                 # Validate username
                 db_params = validate_database_params({"username": username})
@@ -409,7 +423,9 @@ class KeyRotationService:
                 # Set password environment variable (strip any whitespace/newlines)
                 env["PGPASSWORD"] = password.strip()
             else:
-                logger.warning("Could not retrieve database credentials from secret manager")
+                logger.warning(
+                    "Could not retrieve database credentials from secret manager"
+                )
 
             # Initialize secure subprocess runner and validate command
             runner = SecureSubprocessRunner(["pg_dump"])

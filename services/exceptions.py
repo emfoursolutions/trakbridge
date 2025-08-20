@@ -51,8 +51,13 @@ class StreamStartupError(StreamManagerError):
 # Database Connection Exceptions
 class DatabaseError(Exception):
     """Base exception for database-related errors"""
-    
-    def __init__(self, message: str, original_error: Exception = None, troubleshooting_steps: list = None):
+
+    def __init__(
+        self,
+        message: str,
+        original_error: Exception = None,
+        troubleshooting_steps: list = None,
+    ):
         super().__init__(message)
         self.original_error = original_error
         self.troubleshooting_steps = troubleshooting_steps or []
@@ -60,24 +65,24 @@ class DatabaseError(Exception):
 
 class DatabaseConnectionError(DatabaseError):
     """Raised when database connection fails"""
-    
+
     def __init__(self, message: str = None, original_error: Exception = None):
         default_message = "Unable to connect to the database server"
         super().__init__(
-            message or default_message, 
+            message or default_message,
             original_error,
             [
                 "Verify the database server is running",
                 "Check network connectivity to the database host",
                 "Ensure the database port is accessible",
-                "Verify firewall settings allow database connections"
-            ]
+                "Verify firewall settings allow database connections",
+            ],
         )
 
 
 class DatabaseAuthenticationError(DatabaseError):
     """Raised when database authentication fails"""
-    
+
     def __init__(self, message: str = None, original_error: Exception = None):
         default_message = "Database authentication failed"
         super().__init__(
@@ -87,14 +92,14 @@ class DatabaseAuthenticationError(DatabaseError):
                 "Check database username and password",
                 "Verify database user has necessary permissions",
                 "Ensure credentials are properly configured in secrets",
-                "Check if database user account is locked or expired"
-            ]
+                "Check if database user account is locked or expired",
+            ],
         )
 
 
 class DatabaseNotFoundError(DatabaseError):
     """Raised when specified database or host cannot be found"""
-    
+
     def __init__(self, message: str = None, original_error: Exception = None):
         default_message = "Database or host not found"
         super().__init__(
@@ -102,16 +107,16 @@ class DatabaseNotFoundError(DatabaseError):
             original_error,
             [
                 "Verify the database name is correct",
-                "Check that the database exists on the server", 
+                "Check that the database exists on the server",
                 "Ensure the database host/IP address is correct",
-                "Verify DNS resolution for the database hostname"
-            ]
+                "Verify DNS resolution for the database hostname",
+            ],
         )
 
 
 class DatabaseConfigurationError(DatabaseError):
     """Raised when database configuration is invalid"""
-    
+
     def __init__(self, message: str = None, original_error: Exception = None):
         default_message = "Database configuration is invalid"
         super().__init__(
@@ -121,8 +126,8 @@ class DatabaseConfigurationError(DatabaseError):
                 "Review database connection settings",
                 "Check environment variables and configuration files",
                 "Verify database URL format is correct",
-                "Ensure all required configuration parameters are set"
-            ]
+                "Ensure all required configuration parameters are set",
+            ],
         )
 
 

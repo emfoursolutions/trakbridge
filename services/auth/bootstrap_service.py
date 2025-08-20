@@ -54,8 +54,12 @@ class BootstrapService:
         self.default_admin_username = "admin"
         self.default_admin_password = "TrakBridge-Setup-2025!"
         # Allow configurable bootstrap file path for testing
-        self.bootstrap_file_path = bootstrap_file_path or "/app/data/.bootstrap_completed"
-        self.bootstrap_lock_path = (bootstrap_file_path or "/app/data/.bootstrap_completed") + ".lock"
+        self.bootstrap_file_path = (
+            bootstrap_file_path or "/app/data/.bootstrap_completed"
+        )
+        self.bootstrap_lock_path = (
+            bootstrap_file_path or "/app/data/.bootstrap_completed"
+        ) + ".lock"
         # Allow skipping migration check for testing
         self.skip_migration_check = skip_migration_check
         # Lock file handle for coordination
@@ -64,7 +68,7 @@ class BootstrapService:
     def _is_test_environment(self) -> bool:
         """
         Detect if we're running in a test environment
-        
+
         Returns:
             True if in test environment, False otherwise
         """
@@ -77,48 +81,52 @@ class BootstrapService:
             # Check if pytest is in the current process
             any("pytest" in arg for arg in sys.argv),
         ]
-        
+
         # Also check if we're explicitly told to skip migration check
         if self.skip_migration_check is not None:
             return self.skip_migration_check
-            
+
         return any(test_indicators)
 
     def _acquire_bootstrap_lock(self, timeout_seconds: int = 30) -> bool:
         """
         Acquire exclusive lock for bootstrap process coordination
-        
+
         Args:
             timeout_seconds: Maximum time to wait for lock
-            
+
         Returns:
             True if lock acquired successfully, False if timeout
         """
         try:
             # Ensure directory exists
             os.makedirs(os.path.dirname(self.bootstrap_lock_path), exist_ok=True)
-            
+
             # Open lock file
-            self._lock_file = open(self.bootstrap_lock_path, 'w')
-            
+            self._lock_file = open(self.bootstrap_lock_path, "w")
+
             # Try to acquire exclusive lock with timeout
             start_time = time.time()
             while time.time() - start_time < timeout_seconds:
                 try:
                     fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                     # Write process info to lock file
-                    self._lock_file.write(f"Bootstrap locked by PID {os.getpid()} at {datetime.now(timezone.utc).isoformat()}\n")
+                    self._lock_file.write(
+                        f"Bootstrap locked by PID {os.getpid()} at {datetime.now(timezone.utc).isoformat()}\n"
+                    )
                     self._lock_file.flush()
                     logger.info(f"Bootstrap lock acquired by PID {os.getpid()}")
                     return True
                 except (IOError, OSError):
                     # Lock is held by another process, wait and retry
                     time.sleep(0.5)
-                    
-            logger.warning(f"Failed to acquire bootstrap lock within {timeout_seconds} seconds")
+
+            logger.warning(
+                f"Failed to acquire bootstrap lock within {timeout_seconds} seconds"
+            )
             self._release_bootstrap_lock()
             return False
-            
+
         except Exception as e:
             logger.error(f"Error acquiring bootstrap lock: {e}")
             self._release_bootstrap_lock()
@@ -134,39 +142,40 @@ class BootstrapService:
                 self._lock_file.close()
                 self._lock_file = None
                 logger.debug("Bootstrap lock released")
-                
+
             # Clean up lock file
             if os.path.exists(self.bootstrap_lock_path):
                 os.remove(self.bootstrap_lock_path)
-                
+
         except Exception as e:
             logger.debug(f"Error releasing bootstrap lock: {e}")
 
     def _database_bootstrap_coordination(self) -> bool:
         """
         Use database for additional bootstrap coordination
-        
+
         Returns:
             True if this process should handle bootstrap, False if another process is handling it
         """
         try:
             # Use database transaction for atomic coordination
             from database import db
-            
+
             # Check if bootstrap is already in progress or completed
             existing_admin = User.query.filter_by(
-                role=UserRole.ADMIN,
-                auth_provider=AuthProvider.LOCAL
+                role=UserRole.ADMIN, auth_provider=AuthProvider.LOCAL
             ).first()
-            
+
             if existing_admin:
-                logger.debug("Database coordination: Bootstrap already completed (admin exists)")
+                logger.debug(
+                    "Database coordination: Bootstrap already completed (admin exists)"
+                )
                 return False
-                
+
             # Additional check: try to create a temporary marker to claim bootstrap
             # This uses database constraints to ensure only one process succeeds
             return True
-            
+
         except Exception as e:
             logger.debug(f"Database coordination check failed: {e}")
             return False
@@ -174,7 +183,7 @@ class BootstrapService:
     def _are_migrations_complete(self) -> bool:
         """
         Check if all database migrations have completed
-        
+
         Returns:
             True if migrations are complete, False otherwise
         """
@@ -183,50 +192,58 @@ class BootstrapService:
             with db.engine.connect() as conn:
                 migration_ctx = MigrationContext.configure(conn)
                 current_rev = migration_ctx.get_current_revision()
-                
+
                 if current_rev is None:
-                    logger.debug("No migration revision found - migrations may not be initialized")
+                    logger.debug(
+                        "No migration revision found - migrations may not be initialized"
+                    )
                     return False
-                
+
                 # Get the latest revision from migration scripts
                 alembic_cfg = Config()
                 alembic_cfg.set_main_option("script_location", "migrations")
                 script_dir = ScriptDirectory.from_config(alembic_cfg)
                 latest_rev = script_dir.get_current_head()
-                
+
                 if current_rev == latest_rev:
                     logger.debug("Database migrations are up to date")
                     return True
                 else:
-                    logger.debug(f"Database revision {current_rev} is behind latest {latest_rev}")
+                    logger.debug(
+                        f"Database revision {current_rev} is behind latest {latest_rev}"
+                    )
                     return False
-                    
+
         except Exception as e:
             logger.debug(f"Could not check migration status: {e}")
-            logger.debug("This could be due to migrations still running or Alembic not being initialized yet")
+            logger.debug(
+                "This could be due to migrations still running or Alembic not being initialized yet"
+            )
             # If we can't check migration status, assume they're not complete
             return False
 
     def _wait_for_migrations(self, max_wait_seconds: int = 60) -> bool:
         """
         Wait for database migrations to complete
-        
+
         Args:
             max_wait_seconds: Maximum time to wait for migrations
-            
+
         Returns:
             True if migrations completed, False if timeout
         """
         start_time = time.time()
-        
+
         while time.time() - start_time < max_wait_seconds:
             if self._are_migrations_complete():
                 return True
-                
+
             logger.debug("Waiting for database migrations to complete...")
             time.sleep(2)
-            
-        logger.warning(f"Timed out waiting for migrations after {max_wait_seconds} seconds")
+
+        logger.warning(
+            f"Timed out waiting for migrations after {max_wait_seconds} seconds"
+        )
         return False
 
     def should_create_initial_admin(self) -> bool:
@@ -239,10 +256,14 @@ class BootstrapService:
         try:
             # Skip migration checking in test environments
             if self._is_test_environment():
-                logger.debug("Test environment detected, skipping migration completion check")
+                logger.debug(
+                    "Test environment detected, skipping migration completion check"
+                )
             else:
                 # First, wait for database migrations to complete
-                logger.info("Waiting for database migrations to complete before bootstrap check...")
+                logger.info(
+                    "Waiting for database migrations to complete before bootstrap check..."
+                )
                 if not self._wait_for_migrations(max_wait_seconds=120):
                     logger.error(
                         "Database migrations did not complete within 120 seconds. "
@@ -250,14 +271,16 @@ class BootstrapService:
                         "Bootstrap will be skipped to prevent race conditions."
                     )
                     return False
-                    
-                logger.info("Database migrations completed successfully, proceeding with bootstrap check")
-            
+
+                logger.info(
+                    "Database migrations completed successfully, proceeding with bootstrap check"
+                )
+
             # Use database coordination to check if another process is handling bootstrap
             if not self._database_bootstrap_coordination():
                 logger.debug("Another process is handling or has completed bootstrap")
                 return False
-            
+
             # Check if database tables exist first
             inspector = db.inspect(db.engine)
             existing_tables = inspector.get_table_names()
@@ -320,7 +343,9 @@ class BootstrapService:
         # Acquire bootstrap lock for coordination between multiple workers
         if not self._is_test_environment():
             if not self._acquire_bootstrap_lock(timeout_seconds=30):
-                logger.warning("Failed to acquire bootstrap lock - another process may be handling bootstrap")
+                logger.warning(
+                    "Failed to acquire bootstrap lock - another process may be handling bootstrap"
+                )
                 return None
 
         try:
@@ -352,11 +377,11 @@ class BootstrapService:
 
             # Add to database with enhanced error handling for race conditions
             db.session.add(admin_user)
-            
+
             # Retry logic with exponential backoff for database operations
             max_retries = 3
             retry_delay = 0.1  # Start with 100ms
-            
+
             for attempt in range(max_retries):
                 try:
                     db.session.commit()
@@ -364,27 +389,33 @@ class BootstrapService:
                     break
                 except IntegrityError as ie:
                     db.session.rollback()
-                    
+
                     # Analyze the specific integrity error
                     error_message = str(ie).lower()
                     if "unique" in error_message or "duplicate" in error_message:
-                        logger.info(f"Admin user creation race condition detected (attempt {attempt + 1}): {ie}")
-                        
+                        logger.info(
+                            f"Admin user creation race condition detected (attempt {attempt + 1}): {ie}"
+                        )
+
                         # Try to get the existing user
                         existing_user = User.query.filter_by(
                             username=self.default_admin_username
                         ).first()
                         if existing_user:
-                            logger.info("Found existing admin user after race condition, using that")
+                            logger.info(
+                                "Found existing admin user after race condition, using that"
+                            )
                             self._mark_bootstrap_completed()
                             return existing_user
-                        
+
                         # If no existing user found, this might be a temporary constraint issue
                         if attempt < max_retries - 1:
-                            logger.warning(f"No existing user found after integrity error, retrying in {retry_delay}s...")
+                            logger.warning(
+                                f"No existing user found after integrity error, retrying in {retry_delay}s..."
+                            )
                             time.sleep(retry_delay)
                             retry_delay *= 2  # Exponential backoff
-                            
+
                             # Recreate the admin user for retry
                             admin_user = User.create_local_user(
                                 username=self.default_admin_username,
@@ -402,17 +433,23 @@ class BootstrapService:
                             return None
                     else:
                         # Non-duplicate integrity error, don't retry
-                        logger.error(f"Non-duplicate integrity error during admin creation: {ie}")
+                        logger.error(
+                            f"Non-duplicate integrity error during admin creation: {ie}"
+                        )
                         return None
                 except Exception as e:
                     db.session.rollback()
                     if attempt < max_retries - 1:
-                        logger.warning(f"Database error during admin creation (attempt {attempt + 1}), retrying: {e}")
+                        logger.warning(
+                            f"Database error during admin creation (attempt {attempt + 1}), retrying: {e}"
+                        )
                         time.sleep(retry_delay)
                         retry_delay *= 2
                         continue
                     else:
-                        logger.error(f"Max retries exceeded for admin user creation due to: {e}")
+                        logger.error(
+                            f"Max retries exceeded for admin user creation due to: {e}"
+                        )
                         raise
 
             # Mark bootstrap as completed
@@ -439,7 +476,9 @@ class BootstrapService:
                 username=self.default_admin_username
             ).first()
             if existing_user:
-                logger.info("Admin user exists despite creation failure, marking bootstrap complete")
+                logger.info(
+                    "Admin user exists despite creation failure, marking bootstrap complete"
+                )
                 self._mark_bootstrap_completed()
                 return existing_user
             return None
@@ -465,26 +504,30 @@ class BootstrapService:
                 # Check if tables exist first
                 inspector = db.inspect(db.engine)
                 existing_tables = inspector.get_table_names()
-                
+
                 if "users" in existing_tables:
                     # Method 1: Check if any admin users exist
                     admin_count = User.query.filter_by(role=UserRole.ADMIN).count()
                     if admin_count > 0:
-                        logger.debug("Bootstrap completed: admin users found in database")
+                        logger.debug(
+                            "Bootstrap completed: admin users found in database"
+                        )
                         # Also create file marker for faster future checks
                         self._create_file_marker()
                         return True
-                    
+
                     # Method 2: Check if specific admin username exists
                     existing_admin = User.query.filter_by(
                         username=self.default_admin_username
                     ).first()
                     if existing_admin:
-                        logger.debug("Bootstrap completed: default admin user found in database")
+                        logger.debug(
+                            "Bootstrap completed: default admin user found in database"
+                        )
                         # Also create file marker for faster future checks
                         self._create_file_marker()
                         return True
-                        
+
             except Exception as db_error:
                 logger.debug(f"Database check for bootstrap status failed: {db_error}")
                 # Fall back to file-based check
@@ -513,7 +556,9 @@ class BootstrapService:
             if not os.path.exists(self.bootstrap_file_path):
                 # Ensure directory exists
                 try:
-                    os.makedirs(os.path.dirname(self.bootstrap_file_path), exist_ok=True)
+                    os.makedirs(
+                        os.path.dirname(self.bootstrap_file_path), exist_ok=True
+                    )
                 except (OSError, IOError) as dir_error:
                     logger.debug(f"Failed to create bootstrap directory: {dir_error}")
                     return  # Exit early if we can't create directory
@@ -532,7 +577,7 @@ class BootstrapService:
                     logger.debug("Bootstrap completion marker file created")
                 except (OSError, IOError) as file_error:
                     logger.debug(f"Failed to write bootstrap marker file: {file_error}")
-                
+
         except Exception as e:
             logger.debug(f"Failed to create bootstrap marker file: {e}")
 
@@ -568,7 +613,7 @@ class BootstrapService:
         except Exception as e:
             logger.debug(f"Failed to mark bootstrap as completed: {e}")
             # Don't fail the entire bootstrap process for file operations
-            
+
         # Note: Database-based tracking is implicit - the presence of admin users
         # in the database serves as the primary indicator of bootstrap completion
 
@@ -586,24 +631,27 @@ class BootstrapService:
             except (OSError, IOError):
                 # File system access failed, continue with database checks
                 pass
-            
+
             admin_count = 0
             default_admin_exists = False
             tables_exist = False
-            
+
             try:
                 inspector = db.inspect(db.engine)
                 existing_tables = inspector.get_table_names()
                 tables_exist = "users" in existing_tables
-                
+
                 if tables_exist:
                     admin_count = User.query.filter_by(role=UserRole.ADMIN).count()
-                    default_admin_exists = User.query.filter_by(
-                        username=self.default_admin_username
-                    ).first() is not None
+                    default_admin_exists = (
+                        User.query.filter_by(
+                            username=self.default_admin_username
+                        ).first()
+                        is not None
+                    )
             except Exception as db_error:
                 logger.debug(f"Database check in bootstrap info failed: {db_error}")
-            
+
             return {
                 "bootstrap_completed": self._is_bootstrap_completed(),
                 "admin_count": admin_count,

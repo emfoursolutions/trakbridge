@@ -65,35 +65,48 @@ class PluginManager:
         try:
             # Import config manager safely
             from utils.config_manager import config_manager
-            
+
             # Use safe configuration loading with validation and auto-repair
             config = config_manager.load_config_safe(
-                "plugins.yaml", 
-                required_fields=["allowed_plugin_modules"]
+                "plugins.yaml", required_fields=["allowed_plugin_modules"]
             )
-            
+
             if config and "allowed_plugin_modules" in config:
                 additional_modules = config["allowed_plugin_modules"]
                 if isinstance(additional_modules, list):
                     modules_added = 0
                     for module in additional_modules:
-                        if isinstance(module, str) and self._is_safe_module_name(module):
+                        if isinstance(module, str) and self._is_safe_module_name(
+                            module
+                        ):
                             self._allowed_modules.add(module)
                             logger.info(f"✅ Added allowed plugin module: {module}")
                             modules_added += 1
                         else:
-                            logger.warning(f"⚠️ Ignoring unsafe plugin module name: {module}")
-                    
-                    logger.info(f"Plugin configuration loaded successfully: {modules_added} modules added")
+                            logger.warning(
+                                f"⚠️ Ignoring unsafe plugin module name: {module}"
+                            )
+
+                    logger.info(
+                        f"Plugin configuration loaded successfully: {modules_added} modules added"
+                    )
                 else:
-                    logger.warning("Plugin configuration 'allowed_plugin_modules' must be a list")
+                    logger.warning(
+                        "Plugin configuration 'allowed_plugin_modules' must be a list"
+                    )
             else:
-                logger.info("No additional plugin modules configured (using built-in plugins only)")
-                
+                logger.info(
+                    "No additional plugin modules configured (using built-in plugins only)"
+                )
+
         except Exception as e:
             # Graceful fallback - continue with built-in plugins only
-            logger.warning(f"Failed to load plugin configuration, using built-in plugins only: {e}")
-            logger.info("Application startup will continue with default built-in plugins")
+            logger.warning(
+                f"Failed to load plugin configuration, using built-in plugins only: {e}"
+            )
+            logger.info(
+                "Application startup will continue with default built-in plugins"
+            )
 
     def _is_safe_module_name(self, module_name: str) -> bool:
         """

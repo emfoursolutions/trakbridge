@@ -98,7 +98,10 @@ def initialize_database_safely():
     import os
 
     from flask_migrate import current, stamp, upgrade
-    from utils.database_error_formatter import create_database_exception, log_database_error
+    from utils.database_error_formatter import (
+        create_database_exception,
+        log_database_error,
+    )
 
     try:
         # Check if migrations directory exists
@@ -162,7 +165,7 @@ def initialize_database_safely():
 
     except Exception as e:
         # Enhanced error handling for database initialization
-        if hasattr(e, 'troubleshooting_steps'):
+        if hasattr(e, "troubleshooting_steps"):
             # Already a formatted database error, re-raise as is
             raise
         else:
@@ -363,7 +366,11 @@ def create_app(config_name=None):
         db.init_app(app)
         migrate.init_app(app, db)
     except Exception as db_init_error:
-        from utils.database_error_formatter import create_database_exception, log_database_error
+        from utils.database_error_formatter import (
+            create_database_exception,
+            log_database_error,
+        )
+
         log_database_error(db_init_error, "Database extension initialization")
         db_error = create_database_exception(db_init_error)
         logger.error(f"Failed to initialize database extensions: {db_error}")
@@ -918,14 +925,14 @@ def setup_template_helpers(app):
 
 def setup_error_handlers(app):
     """Set up error handlers"""
-    
+
     # Import database exception classes
     from services.exceptions import (
         DatabaseError,
         DatabaseConnectionError,
         DatabaseAuthenticationError,
         DatabaseNotFoundError,
-        DatabaseConfigurationError
+        DatabaseConfigurationError,
     )
     from utils.database_error_formatter import format_error_response
 
@@ -933,12 +940,12 @@ def setup_error_handlers(app):
     def handle_database_connection_error(error):
         """Handle database connection errors"""
         logger.error(f"Database connection error: {error}")
-        if hasattr(db, 'session'):
+        if hasattr(db, "session"):
             try:
                 db.session.rollback()
             except:
                 pass  # Session may not be available
-        
+
         error_response = format_error_response(error)
         return jsonify(error_response), 503
 
@@ -946,12 +953,12 @@ def setup_error_handlers(app):
     def handle_database_auth_error(error):
         """Handle database authentication errors"""
         logger.error(f"Database authentication error: {error}")
-        if hasattr(db, 'session'):
+        if hasattr(db, "session"):
             try:
                 db.session.rollback()
             except:
                 pass
-        
+
         error_response = format_error_response(error)
         return jsonify(error_response), 500
 
@@ -959,12 +966,12 @@ def setup_error_handlers(app):
     def handle_database_not_found_error(error):
         """Handle database/table not found errors"""
         logger.error(f"Database not found error: {error}")
-        if hasattr(db, 'session'):
+        if hasattr(db, "session"):
             try:
                 db.session.rollback()
             except:
                 pass
-        
+
         error_response = format_error_response(error)
         return jsonify(error_response), 500
 
@@ -972,12 +979,12 @@ def setup_error_handlers(app):
     def handle_database_config_error(error):
         """Handle database configuration errors"""
         logger.error(f"Database configuration error: {error}")
-        if hasattr(db, 'session'):
+        if hasattr(db, "session"):
             try:
                 db.session.rollback()
             except:
                 pass
-        
+
         error_response = format_error_response(error)
         return jsonify(error_response), 500
 
@@ -985,12 +992,12 @@ def setup_error_handlers(app):
     def handle_generic_database_error(error):
         """Handle generic database errors"""
         logger.error(f"Database error: {error}")
-        if hasattr(db, 'session'):
+        if hasattr(db, "session"):
             try:
                 db.session.rollback()
             except:
                 pass
-        
+
         error_response = format_error_response(error)
         return jsonify(error_response), 500
 
@@ -1012,18 +1019,37 @@ def setup_error_handlers(app):
     def handle_exception(e):
         """Handle uncaught exceptions"""
         logging.error(f"Unhandled exception: {e}", exc_info=True)
-        
+
         # Check if this is a raw database exception that should be converted
         exception_type = type(e).__name__
         exception_str = str(e).lower()
-        
-        if any(db_indicator in exception_str for db_indicator in [
-            'psycopg2', 'mysql', 'sqlite', 'sqlalchemy', 'database', 'connection'
-        ]) or any(db_type in exception_type.lower() for db_type in [
-            'operational', 'integrity', 'programming', 'data', 'internal'
-        ]):
+
+        if any(
+            db_indicator in exception_str
+            for db_indicator in [
+                "psycopg2",
+                "mysql",
+                "sqlite",
+                "sqlalchemy",
+                "database",
+                "connection",
+            ]
+        ) or any(
+            db_type in exception_type.lower()
+            for db_type in [
+                "operational",
+                "integrity",
+                "programming",
+                "data",
+                "internal",
+            ]
+        ):
             # This looks like a database error - convert it to user-friendly format
-            from utils.database_error_formatter import create_database_exception, format_error_response
+            from utils.database_error_formatter import (
+                create_database_exception,
+                format_error_response,
+            )
+
             try:
                 db_error = create_database_exception(e)
                 error_response = format_error_response(db_error)

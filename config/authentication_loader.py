@@ -44,6 +44,7 @@ class SecureAuthenticationLoader:
 
         # Initialize secret manager for secrets and environment variables
         from .secrets import get_secret_manager
+
         self.secret_manager = get_secret_manager(environment)
 
         # CI/CD detection
@@ -404,7 +405,6 @@ def load_authentication_config(environment: str = None) -> Dict[str, Any]:
     """
     loader = get_authentication_loader(environment)
     config = loader.load_authentication_config()
-
 
     # Validate the configuration
     validation_error = loader.validate_config(config)

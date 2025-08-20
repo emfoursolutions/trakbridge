@@ -224,7 +224,9 @@ def detailed_health_check():
             "database", health_service.run_all_database_checks
         ),
         "encryption": get_cached_health_check("encryption", check_encryption_health),
-        "configuration": get_cached_health_check("configuration", check_configuration_health),
+        "configuration": get_cached_health_check(
+            "configuration", check_configuration_health
+        ),
         "stream_manager": get_cached_health_check(
             "stream_manager", check_stream_manager_health
         ),
@@ -344,26 +346,28 @@ def check_configuration_health():
     """Check configuration management health with validation and status"""
     try:
         from utils.config_manager import config_manager
-        
+
         # Get detailed configuration validation results
         results = config_manager.validate_all_configs()
-        
+
         # Count status
         total_configs = len(results)
         valid_configs = len([r for r in results.values() if r is True])
         invalid_configs = total_configs - valid_configs
-        
+
         # Determine overall configuration health status
         if invalid_configs == 0:
             overall_status = "healthy"
             message = f"All {total_configs} configuration files are valid"
         elif invalid_configs < total_configs / 2:
-            overall_status = "degraded" 
+            overall_status = "degraded"
             message = f"{valid_configs}/{total_configs} configuration files are valid"
         else:
             overall_status = "unhealthy"
-            message = f"Only {valid_configs}/{total_configs} configuration files are valid"
-        
+            message = (
+                f"Only {valid_configs}/{total_configs} configuration files are valid"
+            )
+
         # Build detailed response
         health_response = {
             "status": overall_status,
@@ -372,32 +376,31 @@ def check_configuration_health():
                 "total_configs": total_configs,
                 "valid_configs": valid_configs,
                 "invalid_configs": invalid_configs,
-                "config_status": results
+                "config_status": results,
             },
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-        
+
         # Add summary for invalid configurations
         if invalid_configs > 0:
             invalid_details = []
             for config_name, result in results.items():
                 if result is not True:
-                    invalid_details.append({
-                        "config": config_name,
-                        "error": str(result)
-                    })
+                    invalid_details.append(
+                        {"config": config_name, "error": str(result)}
+                    )
             health_response["details"]["invalid_configs_details"] = invalid_details
-        
+
         return health_response
-        
+
     except Exception as e:
         logger.error(f"Configuration health check failed: {e}")
         return {
-            "status": "unhealthy", 
-            "error": str(e), 
+            "status": "unhealthy",
+            "error": str(e),
             "error_type": type(e).__name__,
             "message": "Configuration health check system failed",
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
 
@@ -426,7 +429,7 @@ def plugin_health():
 def configuration_health():
     """Configuration health check endpoint with detailed status"""
     result = check_configuration_health()
-    
+
     # Return appropriate HTTP status code
     status_code = 503 if result.get("status") == "unhealthy" else 200
     return jsonify(result), status_code
@@ -658,23 +661,30 @@ def bootstrap_status():
     """Get bootstrap service status and diagnostic information"""
     try:
         from services.auth.bootstrap_service import get_bootstrap_service
-        
+
         bootstrap_service = get_bootstrap_service()
         bootstrap_info = bootstrap_service.get_bootstrap_info()
-        
-        return jsonify({
-            "status": "success",
-            "bootstrap": bootstrap_info,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        })
-        
+
+        return jsonify(
+            {
+                "status": "success",
+                "bootstrap": bootstrap_info,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+
     except Exception as e:
         logger.error(f"Error getting bootstrap status: {e}")
-        return jsonify({
-            "status": "error", 
-            "error": str(e),
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }), 500
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "error": str(e),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            ),
+            500,
+        )
 
 
 @bp.route("/version")

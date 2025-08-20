@@ -26,11 +26,11 @@ depends_on = None
 def upgrade():
     """
     Merge migration - no operations needed.
-    
+
     This migration serves only to merge the two migration heads:
     - Sequential migrations: e2f64ceef0b8 -> 0a9c5469abc6 -> 3120f5bf60a4 -> add_timezone_to_user_sessions
     - Consolidated migration: consolidated_initial_migration
-    
+
     Both paths result in the same database state, so no additional operations are required.
     """
     print("Merge migration: Unifying sequential and consolidated migration heads")
@@ -40,7 +40,7 @@ def upgrade():
 def downgrade():
     """
     Merge migration downgrade - no operations needed.
-    
+
     Downgrading from this merge will return to having multiple heads,
     which is the expected behavior.
     """

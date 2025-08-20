@@ -17,7 +17,7 @@ def get_dialect():
 def get_enum_column(enum_class, column_name, nullable=True, default=None):
     """
     Get database-appropriate enum column definition.
-    
+
     Safely handles both proper Python Enum classes with .value attributes
     and legacy string-based enum definitions used in migrations.
 
@@ -31,7 +31,7 @@ def get_enum_column(enum_class, column_name, nullable=True, default=None):
         SQLAlchemy Column object appropriate for the database
     """
     dialect = get_dialect()
-    
+
     # Safely extract enum values - handle both .value and direct string access
     try:
         # Try proper Enum with .value attribute first (modern approach)

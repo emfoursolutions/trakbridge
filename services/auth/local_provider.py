@@ -660,23 +660,27 @@ class LocalAuthProvider(BaseAuthenticationProvider):
         if not user.password_changed_at:
             # Special handling for initial setup users (bootstrap admin)
             # Allow admin users with no password change date to login for initial setup
-            if (user.role == UserRole.ADMIN and 
-                user.username == "admin" and 
-                user.auth_provider == AuthProvider.LOCAL):
-                logger.debug(f"Allowing initial setup login for admin user: {user.username}")
+            if (
+                user.role == UserRole.ADMIN
+                and user.username == "admin"
+                and user.auth_provider == AuthProvider.LOCAL
+            ):
+                logger.debug(
+                    f"Allowing initial setup login for admin user: {user.username}"
+                )
                 return False  # Allow initial setup login
-            
+
             # Other users with no password change date are considered expired
             return True
 
         expiry_date = user.password_changed_at + timedelta(days=self.max_age_days)
-        
+
         # Handle timezone comparison - ensure both datetimes are timezone-aware
         current_time = datetime.now(timezone.utc)
         if expiry_date.tzinfo is None:
             # If expiry_date is naive, assume it's UTC
             expiry_date = expiry_date.replace(tzinfo=timezone.utc)
-        
+
         return current_time > expiry_date
 
     def supports_feature(self, feature: str) -> bool:

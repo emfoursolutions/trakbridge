@@ -104,7 +104,6 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
         # Bind configuration
         self.bind_dn = config.get("bind_dn", "")
         self.bind_password = config.get("bind_password", "")
-        
 
         # User search configuration - handle both old nested and new flat formats
         user_search_config = config.get("user_search", {})
