@@ -1,9 +1,12 @@
 """Unit tests for TrakBridge configuration."""
 
 import os
+import tempfile
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
+import yaml
 
 from config.base import BaseConfig
 from config.environments import (
@@ -12,6 +15,7 @@ from config.environments import (
     TestingEnvironmentConfig,
     get_config,
 )
+from utils.config_manager import ConfigManager, ConfigValidationError
 
 
 class TestConfigurationSystem:
@@ -101,3 +105,138 @@ class TestTestEnvironmentConfig:
             "sqlite" in config.SQLALCHEMY_DATABASE_URI.lower()
             or "memory" in config.SQLALCHEMY_DATABASE_URI.lower()
         )
+
+
+class TestConfigManagerPluginValidation:
+    """Test ConfigManager plugin configuration validation."""
+
+    def test_plugins_yaml_schema_allows_null(self):
+        """Test that plugins.yaml schema allows null values for allowed_plugin_modules."""
+        manager = ConfigManager()
+        schema = manager.schemas.get("plugins.yaml")
+
+        assert schema is not None
+        field_schema = schema["properties"]["allowed_plugin_modules"]
+
+        # Should have oneOf with null and array types
+        assert "oneOf" in field_schema
+        allowed_types = [item.get("type") for item in field_schema["oneOf"]]
+        assert "null" in allowed_types
+        assert "array" in [item.get("type") for item in field_schema["oneOf"]]
+
+    def test_plugins_yaml_validation_with_null(self):
+        """Test validation of plugins.yaml with null allowed_plugin_modules."""
+        config_data = {"allowed_plugin_modules": None}
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(config_data, f)
+            temp_path = Path(f.name)
+
+        try:
+            manager = ConfigManager()
+            # This should not raise a ConfigValidationError
+            result = manager._load_and_validate_file(temp_path, "plugins.yaml")
+            assert result == config_data
+        finally:
+            temp_path.unlink()
+
+    def test_plugins_yaml_validation_with_empty_list(self):
+        """Test validation of plugins.yaml with empty list allowed_plugin_modules."""
+        config_data = {"allowed_plugin_modules": []}
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(config_data, f)
+            temp_path = Path(f.name)
+
+        try:
+            manager = ConfigManager()
+            result = manager._load_and_validate_file(temp_path, "plugins.yaml")
+            assert result == config_data
+        finally:
+            temp_path.unlink()
+
+    def test_plugins_yaml_validation_with_valid_list(self):
+        """Test validation of plugins.yaml with valid plugin module list."""
+        config_data = {
+            "allowed_plugin_modules": [
+                "plugins.custom_plugin",
+                "external_plugins.company_tracker",
+            ]
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(config_data, f)
+            temp_path = Path(f.name)
+
+        try:
+            manager = ConfigManager()
+            result = manager._load_and_validate_file(temp_path, "plugins.yaml")
+            assert result == config_data
+        finally:
+            temp_path.unlink()
+
+    def test_plugins_yaml_validation_with_invalid_type(self):
+        """Test validation of plugins.yaml with invalid type for allowed_plugin_modules."""
+        config_data = {"allowed_plugin_modules": "not_a_list_or_null"}
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(config_data, f)
+            temp_path = Path(f.name)
+
+        try:
+            manager = ConfigManager()
+            # Config manager loads the data but plugin manager should handle the invalid type gracefully
+            result = manager._load_and_validate_file(temp_path, "plugins.yaml")
+            assert result["allowed_plugin_modules"] == "not_a_list_or_null"
+            
+            # The plugin manager should handle this gracefully by logging a warning
+            # and falling back to built-in plugins only
+        finally:
+            temp_path.unlink()
+
+    def test_load_config_safe_with_none_value(self):
+        """Test load_config_safe handles None values gracefully."""
+        config_data = {"allowed_plugin_modules": None}
+
+        with patch("utils.config_manager.Path.exists", return_value=True):
+            with patch("builtins.open", mock_open_yaml(config_data)):
+                manager = ConfigManager()
+                result = manager.load_config_safe(
+                    "plugins.yaml", required_fields=["allowed_plugin_modules"]
+                )
+
+                assert result is not None
+                assert result["allowed_plugin_modules"] is None
+
+    def test_load_config_safe_with_empty_list(self):
+        """Test load_config_safe handles empty lists gracefully."""
+        config_data = {"allowed_plugin_modules": []}
+
+        with patch("utils.config_manager.Path.exists", return_value=True):
+            with patch("builtins.open", mock_open_yaml(config_data)):
+                manager = ConfigManager()
+                result = manager.load_config_safe(
+                    "plugins.yaml", required_fields=["allowed_plugin_modules"]
+                )
+
+                assert result is not None
+                assert result["allowed_plugin_modules"] == []
+
+    def test_default_config_generation_for_plugins(self):
+        """Test that default config for plugins.yaml includes valid structure."""
+        manager = ConfigManager()
+        default = manager._get_minimal_default_config("plugins.yaml")
+
+        assert "allowed_plugin_modules" in default
+        assert isinstance(default["allowed_plugin_modules"], list)
+        # Should have built-in plugins
+        assert len(default["allowed_plugin_modules"]) > 0
+        assert all("plugins." in module for module in default["allowed_plugin_modules"])
+
+
+def mock_open_yaml(data):
+    """Helper to mock file opening with YAML data."""
+    import io
+
+    yaml_content = yaml.dump(data)
+    return Mock(return_value=io.StringIO(yaml_content))

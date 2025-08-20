@@ -1,8 +1,11 @@
 """Unit tests for TrakBridge plugin system."""
 
+import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+import yaml
 
 from plugins.base_plugin import BaseGPSPlugin
 from plugins.plugin_manager import PluginManager
@@ -186,3 +189,155 @@ class TestPluginValidation:
         except (AttributeError, NameError):
             # Method might not exist, which is fine
             assert True
+
+
+class TestPluginConfigurationHandling:
+    """Test plugin configuration loading and validation edge cases."""
+
+    def test_none_allowed_modules_handling(self):
+        """Test that None values for allowed_plugin_modules are handled gracefully."""
+        # Create a temporary config with None value
+        config_data = {"allowed_plugin_modules": None}
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(config_data, f)
+            temp_config_path = f.name
+
+        try:
+            with patch(
+                "utils.config_manager.config_manager.load_config_safe"
+            ) as mock_load:
+                mock_load.return_value = config_data
+
+                manager = PluginManager()
+                # This should not raise an exception and should log appropriately
+                manager._load_allowed_plugins_config()
+
+                # Verify that only built-in plugins are loaded
+                allowed_modules = manager.get_allowed_plugin_modules()
+                assert isinstance(allowed_modules, list)
+                # Should contain built-in modules
+                assert any("plugins." in module for module in allowed_modules)
+        finally:
+            Path(temp_config_path).unlink()
+
+    def test_empty_list_allowed_modules_handling(self):
+        """Test that empty list values for allowed_plugin_modules are handled gracefully."""
+        config_data = {"allowed_plugin_modules": []}
+
+        with patch("utils.config_manager.config_manager.load_config_safe") as mock_load:
+            mock_load.return_value = config_data
+
+            manager = PluginManager()
+            # This should not raise an exception
+            manager._load_allowed_plugins_config()
+
+            # Should still have built-in plugins
+            allowed_modules = manager.get_allowed_plugin_modules()
+            assert isinstance(allowed_modules, list)
+            assert len(allowed_modules) > 0  # Built-in plugins should be present
+
+    def test_valid_plugin_modules_list_handling(self):
+        """Test that valid plugin module lists are processed correctly."""
+        config_data = {
+            "allowed_plugin_modules": [
+                "plugins.custom_plugin",
+                "external_plugins.company_tracker",
+            ]
+        }
+
+        with patch("utils.config_manager.config_manager.load_config_safe") as mock_load:
+            mock_load.return_value = config_data
+
+            manager = PluginManager()
+            manager._load_allowed_plugins_config()
+
+            allowed_modules = manager.get_allowed_plugin_modules()
+            assert isinstance(allowed_modules, list)
+            # Should contain our custom modules plus built-ins
+            assert "plugins.custom_plugin" in allowed_modules
+            assert "external_plugins.company_tracker" in allowed_modules
+
+    def test_invalid_plugin_modules_type_handling(self):
+        """Test that invalid types for allowed_plugin_modules are handled gracefully."""
+        config_data = {"allowed_plugin_modules": "not_a_list"}
+
+        with patch("utils.config_manager.config_manager.load_config_safe") as mock_load:
+            mock_load.return_value = config_data
+
+            manager = PluginManager()
+            # Should not raise an exception, should log warning
+            manager._load_allowed_plugins_config()
+
+            # Should still work with built-in plugins only
+            allowed_modules = manager.get_allowed_plugin_modules()
+            assert isinstance(allowed_modules, list)
+
+    def test_config_loading_failure_graceful_fallback(self):
+        """Test that configuration loading failures fall back gracefully."""
+        with patch("utils.config_manager.config_manager.load_config_safe") as mock_load:
+            mock_load.side_effect = Exception("Config loading failed")
+
+            manager = PluginManager()
+            # Should not raise an exception
+            manager._load_allowed_plugins_config()
+
+            # Should still work with built-in plugins
+            allowed_modules = manager.get_allowed_plugin_modules()
+            assert isinstance(allowed_modules, list)
+            assert len(allowed_modules) > 0  # Built-in plugins should be present
+
+    def test_unsafe_module_name_filtering(self):
+        """Test that unsafe module names are filtered out."""
+        config_data = {
+            "allowed_plugin_modules": [
+                "plugins.safe_plugin",  # Safe
+                "__builtin__",  # Unsafe
+                "os.system",  # Unsafe
+                "external_plugins.safe_external",  # Safe
+            ]
+        }
+
+        with patch("utils.config_manager.config_manager.load_config_safe") as mock_load:
+            mock_load.return_value = config_data
+
+            manager = PluginManager()
+            manager._load_allowed_plugins_config()
+
+            allowed_modules = manager.get_allowed_plugin_modules()
+            # Should contain safe modules but not unsafe ones
+            assert "plugins.safe_plugin" in allowed_modules
+            assert "external_plugins.safe_external" in allowed_modules
+            assert "__builtin__" not in allowed_modules
+            assert "os.system" not in allowed_modules
+
+    def test_missing_config_key_handling(self):
+        """Test handling when allowed_plugin_modules key is missing."""
+        config_data = {"other_config": "value"}  # Missing allowed_plugin_modules
+
+        with patch("utils.config_manager.config_manager.load_config_safe") as mock_load:
+            mock_load.return_value = config_data
+
+            manager = PluginManager()
+            # Should not raise an exception
+            manager._load_allowed_plugins_config()
+
+            # Should work with built-in plugins only
+            allowed_modules = manager.get_allowed_plugin_modules()
+            assert isinstance(allowed_modules, list)
+
+    def test_config_manager_schema_validation(self):
+        """Test that config manager schema accepts both None and list values."""
+        from utils.config_manager import ConfigManager
+
+        manager = ConfigManager()
+        schema = manager.schemas.get("plugins.yaml")
+
+        assert schema is not None
+        assert "allowed_plugin_modules" in schema["properties"]
+
+        # Schema should accept both null and array types
+        field_schema = schema["properties"]["allowed_plugin_modules"]
+        assert "oneOf" in field_schema
+        assert {"type": "null"} in field_schema["oneOf"]
+        assert any(item.get("type") == "array" for item in field_schema["oneOf"])

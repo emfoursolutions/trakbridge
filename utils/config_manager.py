@@ -69,8 +69,10 @@ class ConfigManager:
                 "type": "object",
                 "properties": {
                     "allowed_plugin_modules": {
-                        "type": "array",
-                        "items": {"type": "string"},
+                        "oneOf": [
+                            {"type": "null"},
+                            {"type": "array", "items": {"type": "string"}},
+                        ]
                     }
                 },
             },
