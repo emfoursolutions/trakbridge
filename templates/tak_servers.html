@@ -119,6 +119,21 @@
     </div>
 </div>
 {% endif %}
+
+<!-- Toast Container for Notifications -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1055;">
+    <div id="notification-toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <i class="fas fa-info-circle me-2" id="toast-icon"></i>
+            <strong class="me-auto" id="toast-title">Notification</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body" id="toast-message">
+            Message content
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -139,51 +154,24 @@ function testServer(serverId) {
     })
     .then(response => response.json())
     .then(data => {
+        button.disabled = false;
+        button.innerHTML = originalContent;
+
         if (data.success) {
-            // Show success feedback
-            button.innerHTML = '<i class="fas fa-check text-success"></i>';
-            button.classList.add('btn-success');
-            button.classList.remove('btn-outline-secondary');
-            
-            setTimeout(() => {
-                button.innerHTML = originalContent;
-                button.classList.remove('btn-success');
-                button.classList.add('btn-outline-secondary');
-                button.disabled = false;
-            }, 2000);
-            
-            // Show success message
-            showAlert('success', 'Connection test successful!');
+            let message = data.message || 'Connection test successful';
+            if (data.device_count !== undefined) {
+                message += ` (${data.device_count} device${data.device_count !== 1 ? 's' : ''} found)`;
+            }
+            showToast('Test Successful', message, 'success');
         } else {
-            // Show error feedback
-            button.innerHTML = '<i class="fas fa-times text-danger"></i>';
-            button.classList.add('btn-danger');
-            button.classList.remove('btn-outline-secondary');
-            
-            setTimeout(() => {
-                button.innerHTML = originalContent;
-                button.classList.remove('btn-danger');
-                button.classList.add('btn-outline-secondary');
-                button.disabled = false;
-            }, 2000);
-            
-            showAlert('danger', 'Connection test failed: ' + data.error);
+            showToast('Test Failed', data.error || 'Unknown error', 'danger');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        button.innerHTML = '<i class="fas fa-times text-danger"></i>';
-        button.classList.add('btn-danger');
-        button.classList.remove('btn-outline-secondary');
-        
-        setTimeout(() => {
-            button.innerHTML = originalContent;
-            button.classList.remove('btn-danger');
-            button.classList.add('btn-outline-secondary');
-            button.disabled = false;
-        }, 2000);
-        
-        showAlert('danger', 'Network error occurred during connection test');
+        button.disabled = false;
+        button.innerHTML = originalContent;
+        showToast('Network Error', 'Failed to test connection', 'danger');
     });
 }
 
@@ -198,47 +186,50 @@ function deleteServer(serverId) {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                showAlert('success', 'TAK Server deleted successfully');
+                showToast('Success', 'TAK Server deleted successfully', 'success');
                 setTimeout(() => {
                     location.reload();
                 }, 1000);
             } else {
-                showAlert('danger', 'Error: ' + data.error);
+                showToast('Error', data.error || 'Unknown error occurred', 'danger');
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            showAlert('danger', 'Network error occurred');
+            showToast('Network Error', 'Failed to delete server', 'danger');
         });
     }
 }
 
-function showAlert(type, message) {
-    // Create alert element
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
-    alertDiv.style.cssText = `
-        top: 20px;
-        right: 20px;
-        z-index: 9999;
-        max-width: 400px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    `;
-    alertDiv.setAttribute('role', 'alert');
-    alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    `;
+function showToast(title, message, type) {
+    const toast = document.getElementById('notification-toast');
+    const toastTitle = document.getElementById('toast-title');
+    const toastMessage = document.getElementById('toast-message');
+    const toastIcon = document.getElementById('toast-icon');
     
-    // Add to body to ensure it's above everything
-    document.body.appendChild(alertDiv);
+    // Set content
+    toastTitle.textContent = title;
+    toastMessage.textContent = message;
     
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-        if (alertDiv && alertDiv.parentNode) {
-            alertDiv.remove();
-        }
-    }, 5000);
+    // Set icon based on type
+    toastIcon.className = 'me-2 fas ';
+    switch(type) {
+        case 'success':
+            toastIcon.className += 'fa-check-circle text-success';
+            break;
+        case 'danger':
+            toastIcon.className += 'fa-exclamation-circle text-danger';
+            break;
+        case 'warning':
+            toastIcon.className += 'fa-exclamation-triangle text-warning';
+            break;
+        default:
+            toastIcon.className += 'fa-info-circle text-info';
+    }
+    
+    // Show toast
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
 }
 </script>
 {% endblock %}

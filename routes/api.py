@@ -224,6 +224,7 @@ def detailed_health_check():
             "database", health_service.run_all_database_checks
         ),
         "encryption": get_cached_health_check("encryption", check_encryption_health),
+        "configuration": get_cached_health_check("configuration", check_configuration_health),
         "stream_manager": get_cached_health_check(
             "stream_manager", check_stream_manager_health
         ),
@@ -339,6 +340,67 @@ def check_encryption_health():
         return {"status": "unhealthy", "error": str(e), "error_type": type(e).__name__}
 
 
+def check_configuration_health():
+    """Check configuration management health with validation and status"""
+    try:
+        from utils.config_manager import config_manager
+        
+        # Get detailed configuration validation results
+        results = config_manager.validate_all_configs()
+        
+        # Count status
+        total_configs = len(results)
+        valid_configs = len([r for r in results.values() if r is True])
+        invalid_configs = total_configs - valid_configs
+        
+        # Determine overall configuration health status
+        if invalid_configs == 0:
+            overall_status = "healthy"
+            message = f"All {total_configs} configuration files are valid"
+        elif invalid_configs < total_configs / 2:
+            overall_status = "degraded" 
+            message = f"{valid_configs}/{total_configs} configuration files are valid"
+        else:
+            overall_status = "unhealthy"
+            message = f"Only {valid_configs}/{total_configs} configuration files are valid"
+        
+        # Build detailed response
+        health_response = {
+            "status": overall_status,
+            "message": message,
+            "details": {
+                "total_configs": total_configs,
+                "valid_configs": valid_configs,
+                "invalid_configs": invalid_configs,
+                "config_status": results
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Add summary for invalid configurations
+        if invalid_configs > 0:
+            invalid_details = []
+            for config_name, result in results.items():
+                if result is not True:
+                    invalid_details.append({
+                        "config": config_name,
+                        "error": str(result)
+                    })
+            health_response["details"]["invalid_configs_details"] = invalid_details
+        
+        return health_response
+        
+    except Exception as e:
+        logger.error(f"Configuration health check failed: {e}")
+        return {
+            "status": "unhealthy", 
+            "error": str(e), 
+            "error_type": type(e).__name__,
+            "message": "Configuration health check system failed",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+
 @bp.route("/health/plugins", methods=["GET"])
 @require_permission("api", "read")
 def plugin_health():
@@ -357,6 +419,17 @@ def plugin_health():
     )
     health_status = future.result()
     return jsonify(health_status)
+
+
+@bp.route("/health/configuration", methods=["GET"])
+@optional_auth
+def configuration_health():
+    """Configuration health check endpoint with detailed status"""
+    result = check_configuration_health()
+    
+    # Return appropriate HTTP status code
+    status_code = 503 if result.get("status") == "unhealthy" else 200
+    return jsonify(result), status_code
 
 
 # =============================================================================
