@@ -175,23 +175,6 @@ services:
     networks:
       - trakbridge-staging
     
-    # Resource limits for staging environment
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 2G
-        reservations:
-          cpus: '1.0'
-          memory: 1G
-    
-    # Security settings
-    security_opt:
-      - no-new-privileges:true
-    read_only: false
-    tmpfs:
-      - /tmp:noexec,nosuid,size=100m
-
   # =============================================================================
   # PostgreSQL Database - Staging Configuration
   # =============================================================================
@@ -219,8 +202,6 @@ services:
     volumes:
       - postgres_staging_data:/var/lib/postgresql/data
       - ./docker/init-scripts/postgres:/docker-entrypoint-initdb.d:ro
-      - ./logs/postgres-staging:/var/log/postgresql
-      - ./backups/postgres-staging:/backups
     
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U trakbridge -d trakbridge"]
@@ -234,21 +215,6 @@ services:
         aliases:
           - postgres
     
-    # Security configuration
-    security_opt:
-      - no-new-privileges:true
-    command: >
-      postgres
-      -c shared_preload_libraries=pg_stat_statements
-      -c pg_stat_statements.track=all
-      -c pg_stat_statements.max=1000
-      -c log_destination=stderr
-      -c logging_collector=on
-      -c log_directory=/var/log/postgresql
-      -c log_filename=postgresql-%Y-%m-%d.log
-      -c log_rotation_age=1d
-      -c log_rotation_size=100MB
-
   # =============================================================================
   # MySQL Database - Staging Configuration
   # =============================================================================
@@ -273,8 +239,6 @@ services:
     volumes:
       - mysql_staging_data:/var/lib/mysql
       - ./docker/init-scripts/mysql:/docker-entrypoint-initdb.d:ro
-      - ./logs/mysql-staging:/var/log/mysql
-      - ./backups/mysql-staging:/backups
     
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
@@ -287,41 +251,6 @@ services:
       trakbridge-staging:
         aliases:
           - mysql
-    
-    # Security configuration
-    security_opt:
-      - no-new-privileges:true
-
-  # =============================================================================
-  # Redis Cache - Optional for Staging
-  # =============================================================================
-  redis:
-    image: redis:7-alpine
-    container_name: trakbridge-redis-staging
-    restart: unless-stopped
-    profiles: ["redis", "cache"]
-    
-    ports:
-      - "6379:6379"
-    
-    volumes:
-      - redis_staging_data:/data
-      - ./config/redis/staging.conf:/usr/local/etc/redis/redis.conf:ro
-    
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    
-    networks:
-      - trakbridge-staging
-    
-    command: redis-server /usr/local/etc/redis/redis.conf
-    
-    # Security settings
-    security_opt:
-      - no-new-privileges:true
 
   # =============================================================================
   # Nginx Reverse Proxy - Staging Configuration
@@ -363,93 +292,6 @@ services:
       - /var/cache/nginx:rw,noexec,nosuid,size=50m
       - /var/run:rw,noexec,nosuid,size=50m
 
-  # =============================================================================
-  # Monitoring & Observability - Staging
-  # =============================================================================
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: trakbridge-prometheus-staging
-    restart: unless-stopped
-    profiles: ["monitoring", "observability"]
-    
-    ports:
-      - "9090:9090"
-    
-    volumes:
-      - ./docker/prometheus/staging.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_staging_data:/prometheus
-    
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--web.enable-lifecycle'
-      - '--storage.tsdb.retention.time=30d'
-    
-    networks:
-      - trakbridge-staging
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: trakbridge-grafana-staging
-    restart: unless-stopped
-    profiles: ["monitoring", "observability"]
-    
-    ports:
-      - "3000:3000"
-    
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_PASSWORD:-staging-admin-password}"
-      GF_INSTALL_PLUGINS: "grafana-piechart-panel"
-    
-    volumes:
-      - grafana_staging_data:/var/lib/grafana
-      - ./docker/grafana/staging-dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./docker/grafana/staging-datasources:/etc/grafana/provisioning/datasources:ro
-    
-    networks:
-      - trakbridge-staging
-
-  # =============================================================================
-  # Backup Service - Staging
-  # =============================================================================
-  backup:
-    image: postgres:15-alpine
-    container_name: trakbridge-backup-staging
-    restart: "no"
-    profiles: ["backup"]
-    
-    environment:
-      PGHOST: postgres
-      PGPORT: 5432
-      PGDATABASE: trakbridge_staging
-      PGUSER: trakbridge_staging
-      PGPASSWORD_FILE: /run/secrets/db_password
-    
-    secrets:
-      - db_password
-    
-    volumes:
-      - ./backups/staging:/backups
-      - ./scripts:/scripts:ro
-    
-    networks:
-      - trakbridge-staging
-    
-    command: >
-      sh -c "
-        echo 'Starting backup service...'
-        while true; do
-          echo 'Creating database backup...'
-          pg_dump -h postgres -U trakbridge_staging trakbridge_staging > /backups/trakbridge_staging_$$(date +%Y%m%d_%H%M%S).sql
-          echo 'Backup completed'
-          # Clean up old backups (keep last 7 days)
-          find /backups -name '*.sql' -mtime +7 -delete
-          sleep 86400  # Run daily
-        done
-      "
-
 # =============================================================================
 # Networks & Volumes
 # =============================================================================
@@ -470,18 +312,6 @@ volumes:
     driver: local
     name: trakbridge-mysql-staging-data
   
-  redis_staging_data:
-    driver: local
-    name: trakbridge-redis-staging-data
-  
-  prometheus_staging_data:
-    driver: local
-    name: trakbridge-prometheus-staging-data
-  
-  grafana_staging_data:
-    driver: local
-    name: trakbridge-grafana-staging-data
-
 # =============================================================================
 # Secrets - Staging Environment (using standard secrets directory)
 # =============================================================================
