@@ -188,7 +188,7 @@ class TestConfigManagerPluginValidation:
             # Config manager loads the data but plugin manager should handle the invalid type gracefully
             result = manager._load_and_validate_file(temp_path, "plugins.yaml")
             assert result["allowed_plugin_modules"] == "not_a_list_or_null"
-            
+
             # The plugin manager should handle this gracefully by logging a warning
             # and falling back to built-in plugins only
         finally:
