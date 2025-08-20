@@ -168,10 +168,7 @@ services:
       mysql:
         condition: service_healthy
         required: false
-      redis:
-        condition: service_healthy
-        required: false
-    
+
     networks:
       - trakbridge-staging
     
@@ -269,7 +266,7 @@ services:
       - ./init/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./docker/nginx/staging-ssl:/etc/nginx/ssl:ro
       - ./logs/nginx-staging:/var/log/nginx
-      - ./static:/var/www/html/static:ro
+
     
     depends_on:
       trakbridge:
@@ -283,14 +280,6 @@ services:
     
     networks:
       - trakbridge-staging
-    
-    # Security settings
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
-    tmpfs:
-      - /var/cache/nginx:rw,noexec,nosuid,size=50m
-      - /var/run:rw,noexec,nosuid,size=50m
 
 # =============================================================================
 # Networks & Volumes
