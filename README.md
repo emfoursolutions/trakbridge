@@ -38,7 +38,7 @@ Access the web interface at `https://yourdomain.com`
 **First-time login**:
 - Username: `admin`
 - Password: `TrakBridge-Setup-2025!`
-- You'll be forced to change the password on first logins
+- You'll be forced to change the password on first login
 
 ### Environment Configuration
 All configuration is managed directly in the docker-compose.yml file. Edit the `x-environment` section to customize your deployment:
