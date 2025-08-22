@@ -149,8 +149,6 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data
-      - ./config:/app/external_config
-      - ./plugins:/app/external_plugins
       - ./backups:/app/backups
       - ./secrets:/app/secrets
     

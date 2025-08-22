@@ -146,9 +146,7 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data
-      - ./plugins:/app/external-plugins
       - ./backups:/app/backups
-      - ./config:/app/external-config
       - ./secrets:/app/secrets
 
     # Health check
