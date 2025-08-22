@@ -110,22 +110,23 @@ class TestTestEnvironmentConfig:
 class TestConfigManagerPluginValidation:
     """Test ConfigManager plugin configuration validation."""
 
-    def test_plugins_yaml_schema_allows_null(self):
-        """Test that plugins.yaml schema allows null values for allowed_plugin_modules."""
+    def test_plugins_yaml_schema_structure(self):
+        """Test that plugins.yaml schema has correct structure for allowed_plugin_modules."""
         manager = ConfigManager()
         schema = manager.schemas.get("plugins.yaml")
 
         assert schema is not None
         field_schema = schema["properties"]["allowed_plugin_modules"]
 
-        # Should have oneOf with null and array types
-        assert "oneOf" in field_schema
-        allowed_types = [item.get("type") for item in field_schema["oneOf"]]
-        assert "null" in allowed_types
-        assert "array" in [item.get("type") for item in field_schema["oneOf"]]
+        # Should be a simple array schema (oneOf causes recursion issues)
+        assert field_schema["type"] == "array"
+        assert field_schema["items"]["type"] == "string"
+
+        # Should NOT use oneOf to prevent recursion in simplified validator
+        assert "oneOf" not in field_schema
 
     def test_plugins_yaml_validation_with_null(self):
-        """Test validation of plugins.yaml with null allowed_plugin_modules."""
+        """Test that null values load without recursion (plugin manager handles gracefully)."""
         config_data = {"allowed_plugin_modules": None}
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -134,9 +135,14 @@ class TestConfigManagerPluginValidation:
 
         try:
             manager = ConfigManager()
-            # This should not raise a ConfigValidationError
+            # Direct file loading should work without recursion errors
+            # Even though schema expects array, the simplified validator should handle this
             result = manager._load_and_validate_file(temp_path, "plugins.yaml")
-            assert result == config_data
+
+            # Should load the actual data (PluginManager handles None gracefully)
+            assert result is not None
+            assert "allowed_plugin_modules" in result
+            assert result["allowed_plugin_modules"] is None  # Actual value from file
         finally:
             temp_path.unlink()
 
@@ -232,6 +238,38 @@ class TestConfigManagerPluginValidation:
         # Should have built-in plugins
         assert len(default["allowed_plugin_modules"]) > 0
         assert all("plugins." in module for module in default["allowed_plugin_modules"])
+
+    def test_schema_recursion_prevention(self):
+        """Test that schemas don't use unsupported keywords that cause recursion."""
+        manager = ConfigManager()
+
+        # Check all schemas for unsupported keywords that cause recursion
+        unsupported_keywords = ["oneOf", "anyOf", "allOf", "$ref"]
+
+        for schema_name, schema in manager.schemas.items():
+            self._check_schema_for_unsupported_keywords(
+                schema, unsupported_keywords, schema_name
+            )
+
+    def _check_schema_for_unsupported_keywords(
+        self, schema, unsupported_keywords, path=""
+    ):
+        """Recursively check schema for unsupported keywords."""
+        if isinstance(schema, dict):
+            for keyword in unsupported_keywords:
+                assert (
+                    keyword not in schema
+                ), f"Unsupported keyword '{keyword}' found in schema at {path} - causes recursion in simplified validator"
+
+            for key, value in schema.items():
+                self._check_schema_for_unsupported_keywords(
+                    value, unsupported_keywords, f"{path}.{key}"
+                )
+        elif isinstance(schema, list):
+            for i, item in enumerate(schema):
+                self._check_schema_for_unsupported_keywords(
+                    item, unsupported_keywords, f"{path}[{i}]"
+                )
 
 
 def mock_open_yaml(data):

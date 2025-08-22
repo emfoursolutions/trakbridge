@@ -327,7 +327,7 @@ class TestPluginConfigurationHandling:
             assert isinstance(allowed_modules, list)
 
     def test_config_manager_schema_validation(self):
-        """Test that config manager schema accepts both None and list values."""
+        """Test that config manager schema structure prevents recursion issues."""
         from utils.config_manager import ConfigManager
 
         manager = ConfigManager()
@@ -336,8 +336,10 @@ class TestPluginConfigurationHandling:
         assert schema is not None
         assert "allowed_plugin_modules" in schema["properties"]
 
-        # Schema should accept both null and array types
+        # Schema should be simple array type (oneOf causes recursion in simplified validator)
         field_schema = schema["properties"]["allowed_plugin_modules"]
-        assert "oneOf" in field_schema
-        assert {"type": "null"} in field_schema["oneOf"]
-        assert any(item.get("type") == "array" for item in field_schema["oneOf"])
+        assert field_schema["type"] == "array"
+        assert field_schema["items"]["type"] == "string"
+
+        # Should NOT use oneOf to prevent maximum recursion depth issues
+        assert "oneOf" not in field_schema
