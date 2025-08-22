@@ -1402,31 +1402,24 @@ staging-production-mirror:
     - trakbridge-cd
   timeout: 90m  # Extended for comprehensive multi-database testing
   
+  # Use deployment-only approach (no source clone)
+  variables:
+    GIT_STRATEGY: none
+    DEPLOY_ENV: "staging"
+    APP_VERSION: "${CI_COMMIT_TAG}"
+    DOCKER_TLS_CERTDIR: ""
+    COMPOSE_FILE: "docker-compose.staging.yml"
+  
   environment:
     name: staging-production-mirror
     url: http://localhost:5000
     deployment_tier: staging
   
-  variables:
-    DEPLOY_ENV: "staging"
-    APP_VERSION: "${CI_COMMIT_TAG}"
-    DOCKER_TLS_CERTDIR: ""
-    # Use staging docker-compose configuration for validation
-    COMPOSE_FILE: "docker-compose.staging.yml"
-    PYTHONPATH: "${CI_PROJECT_DIR}:${PYTHONPATH:-}"
-  
   before_script: |
     echo "🚀 Starting Production-Mirrored Staging Validation for Release: ${CI_COMMIT_TAG}"
-    echo "This comprehensive test validates all database types with production-like configuration"
-    echo ""
+    echo "📦 Using deployment-only approach (no source clone) - mirroring production deployment"
     echo "🔍 This validation gates the release before DockerHub publication"
-    
-    # Authenticate with GitLab Container Registry to pull built images
-    if [ -z "${CI_REGISTRY_USER}" ] || [ -z "${CI_REGISTRY_PASSWORD}" ]; then
-      echo "Error: CI_REGISTRY_USER and CI_REGISTRY_PASSWORD must be set"
-      exit 1
-    fi
-    echo "${CI_REGISTRY_PASSWORD}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
+    echo ""
     
     # Verify required tools are available on the runner
     echo "Checking for required tools..."
@@ -1435,26 +1428,46 @@ staging-production-mirror:
     command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 not found"; exit 1; }
     echo "✅ All required tools are available"
     
+    # Authenticate with GitLab Container Registry to pull built images
+    if [ -z "${CI_REGISTRY_USER}" ] || [ -z "${CI_REGISTRY_PASSWORD}" ]; then
+      echo "Error: CI_REGISTRY_USER and CI_REGISTRY_PASSWORD must be set"
+      exit 1
+    fi
+    echo "${CI_REGISTRY_PASSWORD}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
+    
     # Clean up any existing test environment
     echo "Cleaning up any existing test containers..."
     docker compose down -v --remove-orphans 2>/dev/null || true
     docker system prune -f --volumes 2>/dev/null || true
     
-    # Clean up any root-owned or mismatched directories that may interfere
-    echo "🧹 Cleaning up directory permissions before staging deployment..."
-    sudo find . -type d -name "data" -exec chmod 755 {} \; 2>/dev/null || true
-    sudo find . -type d -name "logs" -exec chmod 755 {} \; 2>/dev/null || true
-    sudo find . -type d -name "config" -exec chmod 755 {} \; 2>/dev/null || true
-    sudo find . -type d -name "external_config" -exec chmod 755 {} \; 2>/dev/null || true
-    sudo find . -type d -name "backups" -exec chmod 755 {} \; 2>/dev/null || true
-    sudo find . -type d -name "secrets" -exec chmod 755 {} \; 2>/dev/null || true
-    sudo find . -type d -name "external_plugins" -exec chmod 755 {} \; 2>/dev/null || true
-    sudo find . -type d -name "build" -exec chmod 755 {} \; 2>/dev/null || true
-    sudo find . -type d -name "dist" -exec chmod 755 {} \; 2>/dev/null || true
-    sudo find . -type d -name "__pycache__" -exec chmod 755 {} \; 2>/dev/null || true
-    sudo find . -name "*.egg-info" -type d -exec chmod 755 {} \; 2>/dev/null || true
-    sudo chown -R gitlab-runner:gitlab-runner . 2>/dev/null || true
-    echo "✅ Permission cleanup completed"
+    # Download required deployment files using GitLab API
+    echo "📥 Downloading deployment files for tag: ${CI_COMMIT_TAG}..."
+    
+    # Create directory structure for deployment
+    mkdir -p scripts/ logs/ data/ secrets/ backups/ external_plugins/
+    
+    # Download deployment files from GitLab repository
+    REPO_API_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository"
+    
+    echo "Downloading setup.sh..."
+    curl -H "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
+         "${REPO_API_URL}/files/scripts%2Fsetup.sh/raw?ref=${CI_COMMIT_TAG}" \
+         -o scripts/setup.sh
+    chmod +x scripts/setup.sh
+    
+    echo "Downloading docker-compose.staging.yml..."
+    curl -H "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
+         "${REPO_API_URL}/files/docker-compose.staging.yml/raw?ref=${CI_COMMIT_TAG}" \
+         -o docker-compose.staging.yml
+    
+    echo "Downloading test-database.sh..."
+    curl -H "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
+         "${REPO_API_URL}/files/scripts%2Ftest-database.sh/raw?ref=${CI_COMMIT_TAG}" \
+         -o scripts/test-database.sh
+    chmod +x scripts/test-database.sh
+    
+    echo "✅ Deployment files downloaded successfully"
+    ls -la scripts/ *.yml
   
   script: |
     echo "🔧 Setting up production-like secrets and configuration..."
@@ -1634,8 +1647,6 @@ staging-production-mirror:
   
   needs:
     - job: build-tagged-image-shell
-      artifacts: false
-    - job: cleanup-build-artifacts
       artifacts: false
   
   after_script:
