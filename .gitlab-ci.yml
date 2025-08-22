@@ -1393,6 +1393,22 @@ staging-production-mirror:
     echo "Cleaning up any existing test containers..."
     docker compose down -v --remove-orphans 2>/dev/null || true
     docker system prune -f --volumes 2>/dev/null || true
+    
+    # Clean up any root-owned or mismatched directories that may interfere
+    echo "🧹 Cleaning up directory permissions before staging deployment..."
+    sudo find . -type d -name "data" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -type d -name "logs" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -type d -name "config" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -type d -name "external_config" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -type d -name "backups" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -type d -name "secrets" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -type d -name "external_plugins" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -type d -name "build" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -type d -name "dist" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -type d -name "__pycache__" -exec chmod 755 {} \; 2>/dev/null || true
+    sudo find . -name "*.egg-info" -type d -exec chmod 755 {} \; 2>/dev/null || true
+    sudo chown -R gitlab-runner:gitlab-runner . 2>/dev/null || true
+    echo "✅ Permission cleanup completed"
   
   script: |
     echo "🔧 Setting up production-like secrets and configuration..."
