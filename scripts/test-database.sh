@@ -83,7 +83,7 @@ case "$DB_TYPE" in
 esac
 
 # Set common environment
-export FLASK_ENV="testing"
+export FLASK_ENV="production"
 export APP_VERSION="$IMAGE_TAG"
 export USER_ID=${USER_ID:-$(id -u)}
 export GROUP_ID=${GROUP_ID:-$(id -g)}
@@ -277,7 +277,6 @@ services:
     environment:
       - FLASK_ENV=production
       - APP_VERSION=$IMAGE_TAG
-      - TEST_MODE=true
       - USER_ID=${USER_ID}
       - GROUP_ID=${GROUP_ID}
       - DOCKER_USER_ID=${DOCKER_USER_ID}
