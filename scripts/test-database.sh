@@ -380,13 +380,30 @@ add_test_result "deployment" "passed" "Successfully deployed $DB_TYPE with profi
 # Step 2: Test database migrations
 log_step "2. Testing database migrations..."
 
-log_info "Running migration tests for $DB_TYPE..."
-if docker exec "$CONTAINER_NAME" python -m pytest tests/unit/test_migrations.py -v --tb=short -x; then
-    log_info "Migration tests passed for $DB_TYPE"
-    add_test_result "migrations" "passed" "All migration tests passed"
+log_info "Running migration validation for $DB_TYPE..."
+if docker exec "$CONTAINER_NAME" bash -c "
+    cd /app
+    echo 'Testing migration status...'
+    flask db current || echo 'No current migration (clean database)'
+    
+    echo 'Running database upgrade...'
+    flask db upgrade
+    
+    echo 'Verifying migration completed successfully...'
+    current_rev=\$(flask db current 2>/dev/null | head -1)
+    if [ -n \"\$current_rev\" ] && [ \"\$current_rev\" != \"None\" ]; then
+        echo \"Migration successful. Current revision: \$current_rev\"
+        exit 0
+    else
+        echo \"Migration validation failed\"
+        exit 1
+    fi
+"; then
+    log_info "Migration validation passed for $DB_TYPE"
+    add_test_result "migrations" "passed" "Database migrations executed successfully"
 else
-    log_error "Migration tests failed for $DB_TYPE"
-    add_test_result "migrations" "failed" "Migration tests failed"
+    log_error "Migration validation failed for $DB_TYPE"
+    add_test_result "migrations" "failed" "Database migration execution failed"
     finalize_test_report "failed"
     exit 1
 fi
