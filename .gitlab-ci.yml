@@ -17,6 +17,7 @@ stages:
   - test
   - build
   - security
+  - cleanup
   - deploy
 
 # Global variables - OPTIMIZED
@@ -1165,6 +1166,50 @@ build-feature-branch-shell:
       when: on_success
 
 # =============================================================================
+# CLEANUP STAGE - Build Directory Cleanup After Security
+# =============================================================================
+
+# Cleanup build artifacts after security scanning to prevent config conflicts
+cleanup-build-artifacts:
+  stage: cleanup
+  image: alpine:latest
+  tags:
+    - trakbridge-ci
+  timeout: 5m
+  
+  script: |
+    echo "🧹 Cleaning up build artifacts after security scanning..."
+    
+    # Remove directories that may contain leftover build artifacts
+    echo "Removing potentially problematic directories..."
+    rm -rf config/ || echo "config/ not found"
+    rm -rf data/ || echo "data/ not found" 
+    rm -rf logs/ || echo "logs/ not found"
+    rm -rf external_config/ || echo "external_config/ not found"
+    rm -rf external_plugins/ || echo "external_plugins/ not found"
+    rm -rf backups/ || echo "backups/ not found"
+    rm -rf build/ || echo "build/ not found"
+    rm -rf dist/ || echo "dist/ not found"
+    rm -rf .pytest_cache/ || echo ".pytest_cache/ not found"
+    rm -rf __pycache__/ || echo "__pycache__/ not found"
+    find . -name "*.egg-info" -type d -exec rm -rf {} + 2>/dev/null || echo "No .egg-info directories found"
+    find . -name "*.pyc" -delete 2>/dev/null || echo "No .pyc files found"
+    
+    # List remaining files to verify cleanup
+    echo "Remaining files after cleanup:"
+    ls -la
+    
+    echo "✅ Build artifact cleanup completed"
+  
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_COMMIT_TAG == null
+      when: on_success
+
+# =============================================================================
 # DEPLOYMENT STAGE - Environment-specific Deployments
 # =============================================================================
 
@@ -1293,6 +1338,7 @@ deploy-development:
   
   dependencies:
     - build-image-shell
+    - cleanup-build-artifacts
   
   after_script:
     - |
@@ -1588,6 +1634,8 @@ staging-production-mirror:
   
   needs:
     - job: build-tagged-image-shell
+      artifacts: false
+    - job: cleanup-build-artifacts
       artifacts: false
   
   after_script:
@@ -2007,6 +2055,7 @@ deploy-feature-branch:
   
   dependencies:
     - build-feature-branch-shell
+    - cleanup-build-artifacts
 
   artifacts:
     paths:
