@@ -76,7 +76,8 @@ case "$DB_TYPE" in
         export DB_TYPE="sqlite"
         export DB_HOST=""
         export DB_PORT=""
-        export DB_NAME=""
+        # Don't set DB_NAME - let it fall back to config default (data/app.db)
+        unset DB_NAME
         export DB_USER=""
         COMPOSE_PROFILE=""
         ;;
@@ -491,7 +492,16 @@ try:
     with app.app_context():
         # Bootstrap the admin user to ensure it exists
         bootstrap_service = BootstrapService()
-        admin_user = bootstrap_service.ensure_admin_user()
+        admin_user = bootstrap_service.create_initial_admin()
+        
+        # If admin user creation returns None, try to find existing admin
+        if admin_user is None:
+            from models.user import User, UserRole
+            admin_user = User.query.filter_by(role=UserRole.ADMIN).first()
+            
+        if admin_user is None:
+            raise Exception('No admin user available for authentication testing')
+            
         admin_username = admin_user.username
         admin_password = bootstrap_service.default_admin_password
         
@@ -508,8 +518,9 @@ try:
         if result.success:
             print(f'Authentication successful for {admin_username}')
             
-            # Check if user needs password change (expected for initial admin)
-            if result.requires_password_change:
+            # Check if user needs password change using bootstrap service
+            from services.auth.bootstrap_service import check_password_change_required
+            if result.user and check_password_change_required(result.user):
                 print('Initial admin requires password change (as expected)')
             
             # Verify user has admin role
