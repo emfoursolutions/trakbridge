@@ -226,6 +226,10 @@ cleanup_database() {
     # Clean up any test data files
     rm -rf data/sqlite data/test* 2>/dev/null || true
     
+    # Clean up bootstrap marker files to prevent cross-test contamination
+    rm -f data/.bootstrap_completed 2>/dev/null || true
+    rm -f data/.bootstrap_completed.lock 2>/dev/null || true
+    
     # Clean up override file
     rm -f docker-compose.override.yml 2>/dev/null || true
     

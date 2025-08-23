@@ -1614,6 +1614,9 @@ staging-production-mirror:
     
     # Test SQLite
     echo "📊 Testing SQLite Database..."
+    # Clear DB_NAME to ensure SQLite uses config defaults (data/app.db) instead of 
+    # PostgreSQL/MySQL values (trakbridge) that persist from previous tests
+    unset DB_NAME
     if ./scripts/test-database.sh "sqlite" "" "${CI_COMMIT_TAG}"; then
       echo "✅ SQLite test PASSED"
       jq '.database_tests += [{"database": "sqlite", "status": "passed", "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}]' staging-test-results.json > temp.json && mv temp.json staging-test-results.json
