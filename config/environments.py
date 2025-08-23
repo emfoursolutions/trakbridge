@@ -56,6 +56,7 @@ class DevelopmentConfig(BaseConfig):
         dev_overrides = {
             "sqlite": {
                 "echo": self.get_feature_flag("enable_sql_echo", False),
+                # Note: SQLite uses StaticPool, no pool_size/max_overflow allowed
                 "pool_pre_ping": True,
                 "pool_recycle": 300,
                 "connect_args": {"check_same_thread": False, "timeout": 20},
@@ -237,12 +238,21 @@ class TestingEnvironmentConfig(BaseConfig):
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
-        """Use database appropriate for testing - SQLite for unit tests, PostgreSQL for integration tests."""
+        """Use database appropriate for testing - SQLite for unit tests, PostgreSQL/MySQL for integration tests."""
         # Check if DATABASE_URL is explicitly set (for integration tests)
         database_url = self.secret_manager.get_secret("DATABASE_URL")
         if database_url:
             return database_url
 
+        # Check if specific DB_TYPE is set (for integration tests)
+        db_type = self._get_database_type()
+        if db_type == "postgresql":
+            # Use parent class logic to build PostgreSQL URI
+            return super().SQLALCHEMY_DATABASE_URI
+        elif db_type == "mysql":
+            # Use parent class logic to build MySQL URI  
+            return super().SQLALCHEMY_DATABASE_URI
+        
         # Default to SQLite in-memory for unit tests
         return "sqlite:///:memory:"
 

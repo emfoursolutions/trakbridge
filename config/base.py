@@ -354,7 +354,17 @@ class BaseConfig:
     def SQLALCHEMY_ENGINE_OPTIONS(self) -> Dict[str, Any]:
         """Get database engine options."""
         db_type = self._get_database_type()
-        return self.db_config.get("engine_options", {}).get(db_type, {})
+        engine_options = self.db_config.get("engine_options", {}).get(db_type, {}).copy()
+        
+        # SQLite validation: Remove pool settings that SQLite doesn't support
+        if db_type == "sqlite":
+            invalid_sqlite_options = ["pool_size", "max_overflow"]
+            for option in invalid_sqlite_options:
+                if option in engine_options:
+                    logger.warning(f"Removing invalid SQLite engine option: {option}")
+                    engine_options.pop(option)
+        
+        return engine_options
 
     @property
     def SQLALCHEMY_TRACK_MODIFICATIONS(self) -> bool:
