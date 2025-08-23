@@ -480,7 +480,7 @@ import sys
 sys.path.append('/app')
 try:
     from app import create_app
-    from services.auth.auth_manager import AuthManager
+    from services.auth.auth_manager import AuthenticationManager
     from services.auth.bootstrap_service import BootstrapService
     import os
     
@@ -499,7 +499,7 @@ try:
         # Initialize auth manager
         from config.authentication_loader import load_authentication_config
         auth_config = load_authentication_config()
-        auth_manager = AuthManager(auth_config.get('authentication', {}))
+        auth_manager = AuthenticationManager(auth_config.get('authentication', {}))
         
         # Test authentication
         result = auth_manager.authenticate(admin_username, admin_password)

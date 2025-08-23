@@ -798,7 +798,15 @@ start_server() {
             # Check if hypercorn.toml exists
             if [[ -f "/app/hypercorn.toml" ]]; then
                 log_info "Using Hypercorn production server with config file"
-                exec hypercorn --config /app/hypercorn.toml app:app
+                
+                # SQLite concurrency check: Override workers for SQLite even with config file
+                if [[ "${DB_TYPE:-}" == "sqlite" ]] || [[ -z "${DB_TYPE:-}" && -z "${DATABASE_URL:-}" ]]; then
+                    log_warn "SQLite detected: Overriding config file to use single worker (--workers 1)"
+                    log_warn "For better performance with multiple workers, consider using PostgreSQL or MySQL"
+                    exec hypercorn --config /app/hypercorn.toml --workers 1 app:app
+                else
+                    exec hypercorn --config /app/hypercorn.toml app:app
+                fi
             else
                 log_info "Using Hypercorn production server with inline configuration"
                 # Sanitize and validate environment variables
@@ -809,6 +817,15 @@ start_server() {
                 local max_requests=${HYPERCORN_MAX_REQUESTS:-1000}
                 local max_requests_jitter=${HYPERCORN_MAX_REQUESTS_JITTER:-100}
                 local log_level=${HYPERCORN_LOG_LEVEL:-info}
+
+                # SQLite concurrency check: Force single worker for SQLite to avoid file locking issues
+                if [[ "${DB_TYPE:-}" == "sqlite" ]] || [[ -z "${DB_TYPE:-}" && -z "${DATABASE_URL:-}" ]]; then
+                    if [[ "$workers" -gt 1 ]]; then
+                        log_warn "SQLite detected: Forcing single worker (workers=1) to avoid database file locking issues"
+                        log_warn "For better performance with multiple workers, consider using PostgreSQL or MySQL"
+                        workers=1
+                    fi
+                fi
 
                 # Validate numeric values to prevent injection
                 if ! [[ "$workers" =~ ^[0-9]+$ ]] || [[ "$workers" -lt 1 ]] || [[ "$workers" -gt 16 ]]; then
