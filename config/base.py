@@ -273,9 +273,13 @@ class BaseConfig:
         if self.environment == "testing":
             return self.db_config.get("database_uri", "sqlite:///:memory:")
 
-        db_path = os.path.join(
-            os.path.abspath(os.path.dirname(__file__)), "..", db_name
-        )
+        # For Docker/production, use absolute paths; for development, use relative to app root
+        if os.path.isabs(db_name):
+            db_path = db_name
+        else:
+            # Use app root directory (parent of config directory) as base path
+            app_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            db_path = os.path.join(app_root, db_name)
         return f"sqlite:///{db_path}"
 
     def _build_mysql_uri(self) -> str:

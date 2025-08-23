@@ -474,7 +474,7 @@ log_info "Note: Any 'Working outside of application context' messages above are 
 # Step 5: Test authentication system
 log_step "5. Testing authentication system..."
 
-log_info "Testing authentication with built-in admin account..."
+log_info "Testing local authentication system..."
 if docker exec "$CONTAINER_NAME" python -c "
 import sys
 sys.path.append('/app')
@@ -489,12 +489,13 @@ try:
     
     app = create_app('testing')
     with app.app_context():
-        # Get the bootstrap service to know the admin credentials
+        # Bootstrap the admin user to ensure it exists
         bootstrap_service = BootstrapService()
-        admin_username = bootstrap_service.default_admin_username
+        admin_user = bootstrap_service.ensure_admin_user()
+        admin_username = admin_user.username
         admin_password = bootstrap_service.default_admin_password
         
-        print(f'Testing authentication for admin user: {admin_username}')
+        print(f'Testing authentication for bootstrapped admin user: {admin_username}')
         
         # Initialize auth manager
         from config.authentication_loader import load_authentication_config
@@ -522,7 +523,7 @@ try:
             print('Local authentication test passed')
             sys.exit(0)
         else:
-            print(f'Authentication failed: {result.error_message}')
+            print(f'Authentication failed: {result.message}')
             raise Exception('Authentication failed')
             
 except Exception as e:

@@ -1524,7 +1524,7 @@ staging-production-mirror:
     export LDAP_VALIDATE_CERT="${LDAP_VALIDATE_CERT:-true}"
     export LDAP_BIND_DN="${LDAP_BIND_DN:-CN=trakbridge,OU=Service Accounts,DC=company,DC=com}"
     export LDAP_USER_SEARCH_BASE="${LDAP_USER_SEARCH_BASE:-OU=Users,DC=company,DC=com}"
-    export LDAP_USER_SEARCH_FILTER="${LDAP_USER_SEARCH_FILTER:-(\sAMAccountName={username})}"
+    export LDAP_USER_SEARCH_FILTER="${LDAP_USER_SEARCH_FILTER:-(sAMAccountName={username})}"
     export LDAP_GROUP_SEARCH_BASE="${LDAP_GROUP_SEARCH_BASE:-OU=Groups,DC=company,DC=com}"
     export LDAP_GROUP_SEARCH_FILTER="${LDAP_GROUP_SEARCH_FILTER:-member={user_dn}}"
     export LDAP_ADMIN_GROUP="${LDAP_ADMIN_GROUP:-CN=TrakBridge-Admins,OU=Groups,DC=company,DC=com}"
