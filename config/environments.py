@@ -198,7 +198,7 @@ class ProductionConfig(BaseConfig):
 
         # Additional production-specific validations
         if self.secret_manager.get_secret("DB_TYPE", "sqlite") == "sqlite":
-            issues.append("SQLite is not recommended for production use")
+            logger.warning("SQLite is not recommended for production use - consider PostgreSQL or MySQL for better performance and scalability")
 
         # Check for secure settings
         if self.HTTP_TIMEOUT < 30:

@@ -54,7 +54,7 @@ class ConfigManager:
         self,
         external_config_dir: str = "external_config",
         container_config_dir: str = "config/settings",
-        backup_dir: str = "config_backups",
+        backup_dir: str = "backups",
     ):
         self.external_config_dir = Path(external_config_dir)
         self.container_config_dir = Path(container_config_dir)
