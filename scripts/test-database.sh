@@ -502,22 +502,21 @@ try:
     # Set environment to avoid issues with delayed startup tasks
     os.environ['SKIP_DB_INIT'] = 'false'
     
-    app = create_app('testing')
+    app = create_app('production')  # Use production config to match running container
     with app.app_context():
-        # Bootstrap the admin user to ensure it exists
-        bootstrap_service = BootstrapService()
-        admin_user = bootstrap_service.create_initial_admin()
-        
-        # If admin user creation returns None, try to find existing admin
-        if admin_user is None:
-            from models.user import User, UserRole
-            admin_user = User.query.filter_by(role=UserRole.ADMIN).first()
+        # Find existing admin user created by container startup (don't recreate to avoid DB conflicts)
+        from models.user import User, UserRole, AuthProvider
+        admin_user = User.query.filter_by(
+            role=UserRole.ADMIN, 
+            auth_provider=AuthProvider.LOCAL
+        ).first()
             
         if admin_user is None:
             raise Exception('No admin user available for authentication testing')
             
         admin_username = admin_user.username
-        admin_password = bootstrap_service.default_admin_password
+        # Use default admin password (same as used by bootstrap service)
+        admin_password = "TrakBridge-Setup-2025!"
         
         print(f'Testing authentication for bootstrapped admin user: {admin_username}')
         
