@@ -76,8 +76,8 @@ case "$DB_TYPE" in
         export DB_TYPE="sqlite"
         export DB_HOST=""
         export DB_PORT=""
-        # Don't set DB_NAME - let it fall back to config default (data/app.db)
-        unset DB_NAME
+        # Explicitly set DB_NAME for SQLite to ensure consistent path
+        export DB_NAME="/app/data/app.db"
         export DB_USER=""
         COMPOSE_PROFILE=""
         ;;
@@ -566,20 +566,23 @@ if [[ "${LDAP_ENABLED:-false}" == "true" ]] && [[ -s "secrets/ldap_bind_password
     if docker exec "$CONTAINER_NAME" python -c "
 import sys
 sys.path.append('/app')
-from services.auth.ldap_provider import LDAPProvider
+from services.auth.ldap_provider import LDAPAuthProvider
 from config.authentication_loader import load_authentication_config
+from models.user import AuthProvider
 
 # Load LDAP configuration
 auth_config = load_authentication_config()
-ldap_config = auth_config.get('ldap', {})
+providers = auth_config.get('authentication', {}).get('providers', {})
+ldap_config = providers.get('ldap', {})
 
 if ldap_config.get('enabled', False):
-    provider = LDAPProvider(ldap_config)
-    # Test basic LDAP connection
-    if provider.test_connection():
+    provider = LDAPAuthProvider(ldap_config)
+    # Test LDAP provider health
+    health_result = provider.health_check()
+    if health_result.get('status') == 'healthy':
         print('LDAP connectivity test passed')
     else:
-        raise Exception('LDAP connection failed')
+        raise Exception(f'LDAP connection failed: {health_result.get(\"message\", health_result.get(\"status\", \"Unknown error\"))}')
 else:
     print('LDAP not enabled, skipping test')
 "; then
