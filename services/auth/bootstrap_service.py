@@ -76,6 +76,7 @@ class BootstrapService:
         test_indicators = [
             os.environ.get("FLASK_ENV") == "testing",
             os.environ.get("TESTING") == "true",
+            os.environ.get("DB_TEST_MODE") == "true",
             "pytest" in os.environ.get("_", ""),
             "test" in os.environ.get("DB_TYPE", "").lower(),
             # Check if pytest is in the current process

@@ -85,6 +85,8 @@ esac
 
 # Set common environment
 export FLASK_ENV="production"
+# Mark as database test environment to skip migration timing checks
+export DB_TEST_MODE="true"
 export APP_VERSION="$IMAGE_TAG"
 export USER_ID=${USER_ID:-$(id -u)}
 export GROUP_ID=${GROUP_ID:-$(id -g)}
@@ -240,6 +242,11 @@ cleanup_database() {
 trap cleanup_database EXIT
 
 log_step "Starting $DB_TYPE database test sequence..."
+
+# Clean up bootstrap files from previous tests to prevent cross-contamination
+log_info "Cleaning up bootstrap files from previous tests..."
+rm -f data/.bootstrap_completed 2>/dev/null || true
+rm -f data/.bootstrap_completed.lock 2>/dev/null || true
 
 # Clean up any existing containers to prevent conflicts
 log_info "Cleaning up any existing containers to prevent port conflicts..."
