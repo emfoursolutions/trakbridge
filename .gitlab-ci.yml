@@ -19,6 +19,7 @@ stages:
   - security
   - cleanup
   - deploy
+  - final-cleanup
 
 # Global variables - OPTIMIZED
 variables:
@@ -1178,28 +1179,21 @@ cleanup-build-artifacts:
   timeout: 5m
   
   script: |
-    echo "🧹 Cleaning up build artifacts after security scanning..."
+    echo "🧹 Complete workspace cleanup - removing all source code and build artifacts..."
     
-    # Remove directories that may contain leftover build artifacts
-    echo "Removing potentially problematic directories..."
-    rm -rf config/ || echo "config/ not found"
-    rm -rf data/ || echo "data/ not found" 
-    rm -rf logs/ || echo "logs/ not found"
-    rm -rf external_config/ || echo "external_config/ not found"
-    rm -rf external_plugins/ || echo "external_plugins/ not found"
-    rm -rf backups/ || echo "backups/ not found"
-    rm -rf build/ || echo "build/ not found"
-    rm -rf dist/ || echo "dist/ not found"
-    rm -rf .pytest_cache/ || echo ".pytest_cache/ not found"
-    rm -rf __pycache__/ || echo "__pycache__/ not found"
-    find . -name "*.egg-info" -type d -exec rm -rf {} + 2>/dev/null || echo "No .egg-info directories found"
-    find . -name "*.pyc" -delete 2>/dev/null || echo "No .pyc files found"
+    # Remove everything from the current directory
+    # This forces deployment stages to pull fresh files from the repo as needed
+    echo "Wiping entire workspace..."
+    rm -rf ./* .[^.]* ..?* 2>/dev/null || true
     
-    # List remaining files to verify cleanup
-    echo "Remaining files after cleanup:"
+    # Verify complete cleanup
+    echo "=== VERIFICATION - Workspace after complete cleanup ==="
     ls -la
+    echo ""
+    echo "Directory should be completely empty except for hidden Git files"
+    echo "Deployment stages will pull required files fresh from the repository"
     
-    echo "✅ Build artifact cleanup completed"
+    echo "✅ Complete workspace cleanup completed"
   
   rules:
     - if: $CI_COMMIT_TAG
@@ -1233,7 +1227,25 @@ deploy-development:
   before_script: |
     # Authenticate with GitLab Container Registry
     echo "${CI_REGISTRY_PASSWORD}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
-  
+
+    # Create directory structure for deployment
+    mkdir -p scripts/
+    
+    # Download deployment files from GitLab repository
+    REPO_API_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository"
+
+    echo "Downloading docker-compose-dev.yml..."
+    curl -H "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
+         "${REPO_API_URL}/files/docker-compose.dev.yml/raw?ref=${CI_COMMIT_TAG}" \
+         -o docker-compose.dev.yml
+    
+    echo "Downloading deploy.sh..."
+    curl -H "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
+         "${REPO_API_URL}/files/scripts%2Fdeploy.sh/raw?ref=${CI_COMMIT_TAG}" \
+         -o scripts/deploy.sh
+    chmod +x scripts/deploy.sh
+
+
   script: |
     echo "Deploying to development environment..."
     
@@ -1641,6 +1653,14 @@ staging-production-mirror:
       echo "✅ STAGING VALIDATION PASSED"
       echo "All database types validated successfully. Release ${CI_COMMIT_TAG} is ready for production!"
     fi
+    
+    # Clean up build files and test artifacts after all tests complete
+    echo "🧹 Cleaning up build files and test artifacts..."
+    docker-compose -f docker-compose.staging.yml down --volumes --remove-orphans 2>/dev/null || true
+    docker system prune -f --volumes 2>/dev/null || true
+    rm -rf data logs backups secrets external_plugins config 2>/dev/null || true
+    rm -f docker-compose.override.yml 2>/dev/null || true
+    echo "✅ Cleanup completed"
   
   rules:
     # Automatic trigger on tagged releases after successful build
@@ -1863,7 +1883,24 @@ deploy-feature-branch:
         "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/environments/$(echo "review/$CI_COMMIT_REF_SLUG" | sed 's/\//%2F/g')" \
         || echo "Failed to update environment URL (this is non-critical)"
     fi
-  
+
+      # Create directory structure for deployment
+    mkdir -p scripts/
+    
+    # Download deployment files from GitLab repository
+    REPO_API_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository"
+
+    echo "Downloading docker-compose-dev.yml..."
+    curl -H "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
+         "${REPO_API_URL}/files/docker-compose.dev.yml/raw?ref=${CI_COMMIT_TAG}" \
+         -o docker-compose.dev.yml
+    
+    echo "Downloading deploy.sh..."
+    curl -H "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
+         "${REPO_API_URL}/files/scripts%2Fdeploy.sh/raw?ref=${CI_COMMIT_TAG}" \
+         -o scripts/deploy.sh
+    chmod +x scripts/deploy.sh
+
   script: |
     # Debug: Show current environment and available images
     echo "=== DEPLOYMENT DEBUG INFO ==="
@@ -2142,6 +2179,48 @@ stop-feature-branch:
       when: manual
   
   dependencies: []
+
+# =============================================================================
+# FINAL CLEANUP STAGE - Complete Workspace Cleanup After All Operations
+# =============================================================================
+
+# Final cleanup after entire pipeline completion
+final-workspace-cleanup:
+  stage: final-cleanup
+  image: alpine:latest
+  tags:
+    - trakbridge-ci
+  timeout: 5m
+  
+  script: |
+    echo "🧹 Final workspace cleanup after entire pipeline completion..."
+    
+    # Complete workspace cleanup - remove everything
+    echo "Performing final workspace wipe..."
+    rm -rf ./* .[^.]* ..?* 2>/dev/null || true
+    
+    # Clean up any Docker artifacts if Docker is available
+    if command -v docker >/dev/null 2>&1; then
+      echo "Cleaning up Docker artifacts..."
+      docker system prune -f --volumes 2>/dev/null || true
+    fi
+    
+    # Final verification
+    echo "=== FINAL VERIFICATION - Workspace after complete pipeline cleanup ==="
+    ls -la
+    echo ""
+    echo "✅ Final workspace cleanup completed - CI runner is clean"
+  
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: always
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: always
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_COMMIT_TAG == null
+      when: always
+  
+  # Always run cleanup regardless of previous job failures
+  when: always
 
 # =============================================================================
 # PIPELINE COMPLETION

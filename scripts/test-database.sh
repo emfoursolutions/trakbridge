@@ -225,8 +225,9 @@ cleanup_database() {
     # Remove any dangling volumes
     docker volume prune -f 2>/dev/null || true
     
-    # Clean up any test data files
+    # Clean up any test data files including SQLite databases
     rm -rf data/sqlite data/test* 2>/dev/null || true
+    rm -f data/app.db data/app.db-* 2>/dev/null || true
     
     # Clean up bootstrap marker files to prevent cross-test contamination
     rm -f data/.bootstrap_completed 2>/dev/null || true
@@ -243,10 +244,14 @@ trap cleanup_database EXIT
 
 log_step "Starting $DB_TYPE database test sequence..."
 
-# Clean up bootstrap files from previous tests to prevent cross-contamination
-log_info "Cleaning up bootstrap files from previous tests..."
+# Clean up bootstrap files and SQLite databases from previous tests to prevent cross-contamination
+log_info "Cleaning up bootstrap files and databases from previous tests..."
 rm -f data/.bootstrap_completed 2>/dev/null || true
 rm -f data/.bootstrap_completed.lock 2>/dev/null || true
+if [[ "$DB_TYPE" == "sqlite" ]]; then
+    rm -f data/app.db data/app.db-* 2>/dev/null || true
+    log_info "Removed existing SQLite database files"
+fi
 
 # Clean up any existing containers to prevent conflicts
 log_info "Cleaning up any existing containers to prevent port conflicts..."
@@ -264,8 +269,6 @@ log_step "1. Deploying $DB_TYPE with production configuration..."
 log_info "=== DEBUGGING DIRECTORY STRUCTURE ==="
 log_info "Current working directory: $(pwd)"
 log_info "Using compose file: $COMPOSE_FILE"
-log_info "Directory contents:"
-ls -la
 log_info "Checking for required directories..."
 for dir in logs data secrets config backups external_plugins; do
     if [ -d "$dir" ]; then
