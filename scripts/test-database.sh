@@ -516,7 +516,7 @@ try:
             
         admin_username = admin_user.username
         # Use default admin password (same as used by bootstrap service)
-        admin_password = "TrakBridge-Setup-2025!"
+        admin_password = 'TrakBridge-Setup-2025!'
         
         print(f'Testing authentication for bootstrapped admin user: {admin_username}')
         
