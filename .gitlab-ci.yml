@@ -1236,12 +1236,12 @@ deploy-development:
 
     echo "Downloading docker-compose-dev.yml..."
     curl -H "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
-         "${REPO_API_URL}/files/docker-compose.dev.yml/raw?ref=${CI_COMMIT_TAG}" \
+         "${REPO_API_URL}/files/docker-compose.dev.yml/raw?ref=${CI_COMMIT_SHA}" \
          -o docker-compose.dev.yml
     
     echo "Downloading deploy.sh..."
     curl -H "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
-         "${REPO_API_URL}/files/scripts%2Fdeploy.sh/raw?ref=${CI_COMMIT_TAG}" \
+         "${REPO_API_URL}/files/scripts%2Fdeploy.sh/raw?ref=${CI_COMMIT_SHA}" \
          -o scripts/deploy.sh
     chmod +x scripts/deploy.sh
 
@@ -1892,12 +1892,12 @@ deploy-feature-branch:
 
     echo "Downloading docker-compose-dev.yml..."
     curl -H "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
-         "${REPO_API_URL}/files/docker-compose.dev.yml/raw?ref=${CI_COMMIT_TAG}" \
+         "${REPO_API_URL}/files/docker-compose.dev.yml/raw?ref=${CI_COMMIT_SHA}" \
          -o docker-compose.dev.yml
     
     echo "Downloading deploy.sh..."
     curl -H "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
-         "${REPO_API_URL}/files/scripts%2Fdeploy.sh/raw?ref=${CI_COMMIT_TAG}" \
+         "${REPO_API_URL}/files/scripts%2Fdeploy.sh/raw?ref=${CI_COMMIT_SHA}" \
          -o scripts/deploy.sh
     chmod +x scripts/deploy.sh
 
