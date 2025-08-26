@@ -167,6 +167,9 @@ class BootstrapService:
             True if this process should handle bootstrap, False if another process is handling it
         """
         try:
+            # Import at method level to avoid scoping issues
+            from database import db
+            
             # First check if tables exist - if not, database isn't ready
             inspector = db.inspect(db.engine)
             existing_tables = inspector.get_table_names()
@@ -175,9 +178,6 @@ class BootstrapService:
                 logger.debug("Users table doesn't exist - database not ready for bootstrap coordination")
                 # Return True because this process should handle bootstrap once database is ready
                 return True
-
-            # Use database transaction for atomic coordination
-            from database import db
 
             # Check if bootstrap is already in progress or completed
             existing_admin = User.query.filter_by(
@@ -196,9 +196,22 @@ class BootstrapService:
 
         except Exception as e:
             logger.debug(f"Database coordination check failed: {e}")
-            # If we can't check due to database issues, this process should handle bootstrap
-            # Don't assume another process is handling it when there might be database problems
-            return True
+            # Analyze the exception to determine appropriate response
+            error_str = str(e).lower()
+            
+            # If it's a connection or table-related error, assume database isn't ready
+            # and this process should handle bootstrap
+            connection_errors = ['connection', 'connect', 'network', 'timeout', 'refused']
+            table_errors = ['table', 'relation', 'column', 'database', 'schema']
+            
+            if any(err in error_str for err in connection_errors + table_errors):
+                logger.debug("Database/connection error - this process should handle bootstrap")
+                return True
+            
+            # For other types of errors, be conservative and assume another process
+            # might be handling it
+            logger.debug("Other database error - assuming another process may be handling bootstrap")
+            return False
 
     def _are_migrations_complete(self) -> bool:
         """
