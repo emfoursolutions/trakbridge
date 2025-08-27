@@ -108,7 +108,10 @@ class BootstrapService:
                 # If we can't create the directory, try using temp directory
                 logger.debug(f"Cannot create lock directory {lock_dir}: {dir_error}")
                 import tempfile
-                self.bootstrap_lock_path = os.path.join(tempfile.gettempdir(), "trakbridge_bootstrap.lock")
+
+                self.bootstrap_lock_path = os.path.join(
+                    tempfile.gettempdir(), "trakbridge_bootstrap.lock"
+                )
                 logger.debug(f"Using temporary lock file: {self.bootstrap_lock_path}")
 
             # Open lock file
@@ -169,13 +172,15 @@ class BootstrapService:
         try:
             # Import at method level to avoid scoping issues
             from database import db
-            
+
             # First check if tables exist - if not, database isn't ready
             inspector = db.inspect(db.engine)
             existing_tables = inspector.get_table_names()
-            
+
             if "users" not in existing_tables:
-                logger.debug("Users table doesn't exist - database not ready for bootstrap coordination")
+                logger.debug(
+                    "Users table doesn't exist - database not ready for bootstrap coordination"
+                )
                 # Return True because this process should handle bootstrap once database is ready
                 return True
 
@@ -198,19 +203,29 @@ class BootstrapService:
             logger.debug(f"Database coordination check failed: {e}")
             # Analyze the exception to determine appropriate response
             error_str = str(e).lower()
-            
+
             # If it's a connection or table-related error, assume database isn't ready
             # and this process should handle bootstrap
-            connection_errors = ['connection', 'connect', 'network', 'timeout', 'refused']
-            table_errors = ['table', 'relation', 'column', 'database', 'schema']
-            
+            connection_errors = [
+                "connection",
+                "connect",
+                "network",
+                "timeout",
+                "refused",
+            ]
+            table_errors = ["table", "relation", "column", "database", "schema"]
+
             if any(err in error_str for err in connection_errors + table_errors):
-                logger.debug("Database/connection error - this process should handle bootstrap")
+                logger.debug(
+                    "Database/connection error - this process should handle bootstrap"
+                )
                 return True
-            
+
             # For other types of errors, be conservative and assume another process
             # might be handling it
-            logger.debug("Other database error - assuming another process may be handling bootstrap")
+            logger.debug(
+                "Other database error - assuming another process may be handling bootstrap"
+            )
             return False
 
     def _are_migrations_complete(self) -> bool:
@@ -223,23 +238,27 @@ class BootstrapService:
         try:
             # First check if this is SQLite and if the database file actually exists
             database_url = str(db.engine.url)
-            if database_url.startswith('sqlite:///'):
+            if database_url.startswith("sqlite:///"):
                 # Extract SQLite database file path
-                db_path = database_url.replace('sqlite:///', '')
-                
+                db_path = database_url.replace("sqlite:///", "")
+
                 # Quick file existence check
                 if not os.path.exists(db_path):
                     logger.debug(f"SQLite database file does not exist: {db_path}")
                     return False
-                
+
                 # Quick file size check to see if it's empty
                 try:
                     file_size = os.path.getsize(db_path)
                     if file_size == 0:
-                        logger.debug("SQLite database file is empty - migrations not complete")
+                        logger.debug(
+                            "SQLite database file is empty - migrations not complete"
+                        )
                         return False
                     elif file_size < 1024:  # Less than 1KB likely means uninitialized
-                        logger.debug("SQLite database file is very small - likely uninitialized")
+                        logger.debug(
+                            "SQLite database file is very small - likely uninitialized"
+                        )
                         return False
                 except (OSError, IOError):
                     logger.debug("Cannot check SQLite database file size")
@@ -249,28 +268,40 @@ class BootstrapService:
             try:
                 inspector = db.inspect(db.engine)
                 existing_tables = inspector.get_table_names()
-                
+
                 # If no tables exist, this is an empty database - migrations definitely not complete
                 if not existing_tables:
-                    logger.debug("Database is empty (no tables found) - migrations not complete")
+                    logger.debug(
+                        "Database is empty (no tables found) - migrations not complete"
+                    )
                     return False
-                    
+
                 # If alembic_version table doesn't exist but other tables do, inconsistent state
-                if 'alembic_version' not in existing_tables:
+                if "alembic_version" not in existing_tables:
                     # Check if this looks like a working database despite missing alembic_version
-                    essential_tables = ['users', 'streams', 'tak_servers']
-                    has_essential_tables = all(table in existing_tables for table in essential_tables)
-                    
+                    essential_tables = ["users", "streams", "tak_servers"]
+                    has_essential_tables = all(
+                        table in existing_tables for table in essential_tables
+                    )
+
                     if has_essential_tables:
-                        logger.info(f"Database has {len(existing_tables)} tables including essential ones, but no alembic_version table")
-                        logger.info("Database may have been created via db.create_all() instead of migrations")
-                        logger.info("Considering database as functional for bootstrap purposes")
+                        logger.info(
+                            f"Database has {len(existing_tables)} tables including essential ones, but no alembic_version table"
+                        )
+                        logger.info(
+                            "Database may have been created via db.create_all() instead of migrations"
+                        )
+                        logger.info(
+                            "Considering database as functional for bootstrap purposes"
+                        )
                         # Return True - database is functional even without migration tracking
                         return True
                     else:
-                        logger.debug(f"No alembic_version table found, but {len(existing_tables)} other tables exist - migrations not properly initialized")
+                        logger.debug(
+                            f"No alembic_version table found, but {len(existing_tables)} other tables exist - migrations not properly initialized"
+                        )
                         return False
-                    
+
             except Exception as table_check_error:
                 logger.debug(f"Could not check database tables: {table_check_error}")
                 return False
@@ -321,7 +352,7 @@ class BootstrapService:
         """
         start_time = time.time()
         empty_database_count = 0
-        
+
         while time.time() - start_time < max_wait_seconds:
             if self._are_migrations_complete():
                 return True
@@ -329,16 +360,18 @@ class BootstrapService:
             # Check if we have an empty database consistently
             try:
                 database_url = str(db.engine.url)
-                if database_url.startswith('sqlite:///'):
-                    db_path = database_url.replace('sqlite:///', '')
+                if database_url.startswith("sqlite:///"):
+                    db_path = database_url.replace("sqlite:///", "")
                     if os.path.exists(db_path):
                         # Check if database file exists but is empty/small
                         try:
                             file_size = os.path.getsize(db_path)
                             if file_size < 1024:  # Less than 1KB
                                 empty_database_count += 1
-                                logger.debug(f"Empty database detected (count: {empty_database_count})")
-                                
+                                logger.debug(
+                                    f"Empty database detected (count: {empty_database_count})"
+                                )
+
                                 # If we've seen empty database for 5 consecutive checks (10 seconds)
                                 if empty_database_count >= 5:
                                     logger.warning(
@@ -403,13 +436,19 @@ class BootstrapService:
                 logger.debug(f"Database tables found: {existing_tables}")
 
                 if "users" not in existing_tables:
-                    logger.info("Users table does not exist yet - database migration may still be in progress")
-                    logger.info("Bootstrap check will be deferred until database is ready")
+                    logger.info(
+                        "Users table does not exist yet - database migration may still be in progress"
+                    )
+                    logger.info(
+                        "Bootstrap check will be deferred until database is ready"
+                    )
                     return False
-                    
+
             except Exception as table_error:
                 logger.warning(f"Could not check database tables: {table_error}")
-                logger.info("Bootstrap check will be deferred until database connectivity is restored")
+                logger.info(
+                    "Bootstrap check will be deferred until database connectivity is restored"
+                )
                 return False
 
             # Check if any admin users exist (most reliable check)

@@ -198,7 +198,9 @@ class ProductionConfig(BaseConfig):
 
         # Additional production-specific validations
         if self.secret_manager.get_secret("DB_TYPE", "sqlite") == "sqlite":
-            logger.warning("SQLite is not recommended for production use - consider PostgreSQL or MySQL for better performance and scalability")
+            logger.warning(
+                "SQLite is not recommended for production use - consider PostgreSQL or MySQL for better performance and scalability"
+            )
 
         # Check for secure settings
         if self.HTTP_TIMEOUT < 30:
@@ -250,9 +252,9 @@ class TestingEnvironmentConfig(BaseConfig):
             # Use parent class logic to build PostgreSQL URI
             return super().SQLALCHEMY_DATABASE_URI
         elif db_type == "mysql":
-            # Use parent class logic to build MySQL URI  
+            # Use parent class logic to build MySQL URI
             return super().SQLALCHEMY_DATABASE_URI
-        
+
         # Default to SQLite in-memory for unit tests
         return "sqlite:///:memory:"
 
