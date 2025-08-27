@@ -2231,6 +2231,8 @@ final-workspace-cleanup:
 # ============================================================================= 
 success_notification:
   stage: notification
+  tags:
+    - trakbridge-cd
   script:
     - wget https://raw.githubusercontent.com/DiscordHooks/gitlab-ci-discord-webhook/master/send.sh
     - chmod +x send.sh
@@ -2256,6 +2258,8 @@ success_notification:
 
 failure_notification:
   stage: notification
+  tags:
+    - trakbridge-cd
   script:
     - wget https://raw.githubusercontent.com/DiscordHooks/gitlab-ci-discord-webhook/master/send.sh
     - chmod +x send.sh
