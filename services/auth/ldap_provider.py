@@ -562,9 +562,9 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
             connection.unbind()
 
             # Determine role from groups
-            logger.info(f"LDAP user {username} retrieved groups: {user_info['groups']}")
+            logger.debug(f"LDAP user {username} retrieved groups: {user_info['groups']}")
             user_info["role"] = self._determine_role_from_groups(user_info["groups"])
-            logger.info(
+            logger.debug(
                 f"LDAP user {username} assigned role: {user_info['role']} ({user_info['role'].value})"
             )
 
@@ -608,12 +608,12 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
         Returns:
             UserRole for the user
         """
-        logger.info(f"LDAP role determination - Input groups: {groups}")
-        logger.info(f"LDAP role determination - Group mappings: {self.group_mappings}")
-        logger.info(f"LDAP role determination - Default role: {self.default_role}")
+        logger.debug(f"LDAP role determination - Input groups: {groups}")
+        logger.debug(f"LDAP role determination - Group mappings: {self.group_mappings}")
+        logger.debug(f"LDAP role determination - Default role: {self.default_role}")
 
         if not groups:
-            logger.info("LDAP role determination - No groups found, using default role")
+            logger.debug("LDAP role determination - No groups found, using default role")
             return self.default_role
 
         # Check group mappings
@@ -624,7 +624,7 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
             if group in self.group_mappings:
                 try:
                     role = UserRole(self.group_mappings[group])
-                    logger.info(
+                    logger.debug(
                         f"LDAP role determination - EXACT MATCH: {group} -> {role} ({role.value})"
                     )
                     return role
@@ -639,7 +639,7 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
                 if mapped_group.lower() in group.lower():
                     try:
                         role_obj = UserRole(role)
-                        logger.info(
+                        logger.debug(
                             f"LDAP role determination - SUBSTRING MATCH: {mapped_group} in {group} -> {role_obj} ({role_obj.value})"
                         )
                         return role_obj
