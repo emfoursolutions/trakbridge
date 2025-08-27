@@ -20,6 +20,7 @@ stages:
   - cleanup
   - deploy
   - final-cleanup
+  - notification
 
 # Global variables - OPTIMIZED
 variables:
@@ -28,6 +29,9 @@ variables:
   GIT_STRATEGY: clone
   GIT_SUBMODULE_STRATEGY: none
   GIT_FETCH_EXTRA_FLAGS: "--tags"
+    
+  LINK_ARTIFACT: true
+  DISCORD_WEBHOOK_URL: $WEBHOOK_URL  # Use your existing webhook variable
 
   # Python configuration
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
@@ -2221,6 +2225,50 @@ final-workspace-cleanup:
   
   # Always run cleanup regardless of previous job failures
   when: always
+
+# =============================================================================
+# NOTIFICATIONS - Discord Webhook Notifications on Pipeline Success/Failure
+# ============================================================================= 
+success_notification:
+  stage: notification
+  script:
+    - wget https://raw.githubusercontent.com/DiscordHooks/gitlab-ci-discord-webhook/master/send.sh
+    - chmod +x send.sh
+    - ./send.sh success $DISCORD_WEBHOOK_URL
+  when: on_success
+  dependencies:
+    - code-quality-check      # Links: gl-code-quality-report.json, black/flake8/isort outputs
+    - unit-tests              # Links: coverage reports, test results, htmlcov/
+    - integration-tests       # Links: integration test results
+    - security-scan          # Links: bandit-report.json, dependency scanning
+    - license-scan           # Links: license reports  
+    - production-release     # Links: production release report (if applicable)
+    - staging-validation     # Links: staging test results (if applicable)
+  artifacts:
+    paths:
+      - "*.json"              # Capture any summary reports
+      - "*.xml"
+    expire_in: 1 week
+
+failure_notification:
+  stage: notification
+  script:
+    - wget https://raw.githubusercontent.com/DiscordHooks/gitlab-ci-discord-webhook/master/send.sh
+    - chmod +x send.sh
+    - ./send.sh failure $DISCORD_WEBHOOK_URL
+  when: on_failure
+  dependencies:
+    # Include jobs that might have diagnostic artifacts even on failure
+    - code-quality-check
+    - unit-tests
+    - security-scan
+  artifacts:
+    paths:
+      - "*.json"
+      - "*.txt"
+      - logs/
+    expire_in: 3 days
+    when: always
 
 # =============================================================================
 # PIPELINE COMPLETION
