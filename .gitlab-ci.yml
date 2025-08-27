@@ -2237,13 +2237,17 @@ success_notification:
     - ./send.sh success $DISCORD_WEBHOOK_URL
   when: on_success
   dependencies:
-    - code-quality-check      # Links: gl-code-quality-report.json, black/flake8/isort outputs
-    - unit-tests              # Links: coverage reports, test results, htmlcov/
-    - integration-tests       # Links: integration test results
-    - security-scan          # Links: bandit-report.json, dependency scanning
-    - license-scan           # Links: license reports  
-    - production-release     # Links: production release report (if applicable)
-    - staging-validation     # Links: staging test results (if applicable)
+    - code-quality
+    - unit-tests 
+    - integration-tests
+    - bandit-sast
+    - safety-check
+    - license-scanning
+    - deploy-development
+    - staging-production-mirror
+    - deploy-to-dockerhub
+    - deploy-feature-branch
+
   artifacts:
     paths:
       - "*.json"              # Capture any summary reports
@@ -2258,13 +2262,20 @@ failure_notification:
     - ./send.sh failure $DISCORD_WEBHOOK_URL
   when: on_failure
   dependencies:
-    # Include jobs that might have diagnostic artifacts even on failure
-    - code-quality-check
-    - unit-tests
-    - security-scan
+    - code-quality
+    - unit-tests 
+    - integration-tests
+    - bandit-sast
+    - safety-check
+    - license-scanning
+    - deploy-development
+    - staging-production-mirror
+    - deploy-to-dockerhub
+    - deploy-feature-branch
   artifacts:
     paths:
       - "*.json"
+      - "*.xml"
       - "*.txt"
       - logs/
     expire_in: 3 days
