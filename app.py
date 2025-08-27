@@ -871,13 +871,14 @@ def setup_cleanup_handlers():
             try:
                 # Check if we have an active Flask application context
                 from flask import has_app_context
+
                 if has_app_context():
                     db.session.remove()
                     db.engine.dispose()
                     logger.info("Database connections closed")
                 else:
                     # Outside of application context, try direct engine disposal
-                    if hasattr(db, 'engine') and db.engine:
+                    if hasattr(db, "engine") and db.engine:
                         db.engine.dispose()
                         logger.info("Database engine disposed (outside app context)")
                     else:

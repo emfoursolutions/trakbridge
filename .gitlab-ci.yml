@@ -20,6 +20,7 @@ stages:
   - cleanup
   - deploy
   - final-cleanup
+  - notification
 
 # Global variables - OPTIMIZED
 variables:
@@ -28,6 +29,9 @@ variables:
   GIT_STRATEGY: clone
   GIT_SUBMODULE_STRATEGY: none
   GIT_FETCH_EXTRA_FLAGS: "--tags"
+    
+  LINK_ARTIFACT: true
+  DISCORD_WEBHOOK_URL: $WEBHOOK_URL  # Use your existing webhook variable
 
   # Python configuration
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
@@ -1236,12 +1240,12 @@ deploy-development:
 
     echo "Downloading docker-compose-dev.yml..."
     curl -H "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
-         "${REPO_API_URL}/files/docker-compose.dev.yml/raw?ref=${CI_COMMIT_TAG}" \
+         "${REPO_API_URL}/files/docker-compose.dev.yml/raw?ref=${CI_COMMIT_SHA}" \
          -o docker-compose.dev.yml
     
     echo "Downloading deploy.sh..."
     curl -H "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
-         "${REPO_API_URL}/files/scripts%2Fdeploy.sh/raw?ref=${CI_COMMIT_TAG}" \
+         "${REPO_API_URL}/files/scripts%2Fdeploy.sh/raw?ref=${CI_COMMIT_SHA}" \
          -o scripts/deploy.sh
     chmod +x scripts/deploy.sh
 
@@ -1892,12 +1896,12 @@ deploy-feature-branch:
 
     echo "Downloading docker-compose-dev.yml..."
     curl -H "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
-         "${REPO_API_URL}/files/docker-compose.dev.yml/raw?ref=${CI_COMMIT_TAG}" \
+         "${REPO_API_URL}/files/docker-compose.dev.yml/raw?ref=${CI_COMMIT_SHA}" \
          -o docker-compose.dev.yml
     
     echo "Downloading deploy.sh..."
     curl -H "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
-         "${REPO_API_URL}/files/scripts%2Fdeploy.sh/raw?ref=${CI_COMMIT_TAG}" \
+         "${REPO_API_URL}/files/scripts%2Fdeploy.sh/raw?ref=${CI_COMMIT_SHA}" \
          -o scripts/deploy.sh
     chmod +x scripts/deploy.sh
 
@@ -2221,6 +2225,65 @@ final-workspace-cleanup:
   
   # Always run cleanup regardless of previous job failures
   when: always
+
+# =============================================================================
+# NOTIFICATIONS - Discord Webhook Notifications on Pipeline Success/Failure
+# ============================================================================= 
+success_notification:
+  stage: notification
+  tags:
+    - trakbridge-cd
+  script:
+    - wget https://raw.githubusercontent.com/DiscordHooks/gitlab-ci-discord-webhook/master/send.sh
+    - chmod +x send.sh
+    - ./send.sh success $DISCORD_WEBHOOK_URL
+  when: on_success
+  dependencies:
+    - code-quality
+    - unit-tests 
+    - integration-tests
+    - bandit-sast
+    - safety-check
+    - license-scanning
+    - deploy-development
+    - staging-production-mirror
+    - deploy-to-dockerhub
+    - deploy-feature-branch
+
+  artifacts:
+    paths:
+      - "*.json"              # Capture any summary reports
+      - "*.xml"
+    expire_in: 1 week
+
+failure_notification:
+  stage: notification
+  tags:
+    - trakbridge-cd
+  script:
+    - wget https://raw.githubusercontent.com/DiscordHooks/gitlab-ci-discord-webhook/master/send.sh
+    - chmod +x send.sh
+    - ./send.sh failure $DISCORD_WEBHOOK_URL
+  when: on_failure
+  dependencies:
+    - code-quality
+    - unit-tests 
+    - integration-tests
+    - bandit-sast
+    - safety-check
+    - license-scanning
+    - deploy-development
+    - staging-production-mirror
+    - deploy-to-dockerhub
+    - deploy-feature-branch
+  artifacts:
+    paths:
+      - "*.json"
+      - "*.xml"
+      - "*.txt"
+      - logs/
+    expire_in: 3 days
+    when: always
 
 # =============================================================================
 # PIPELINE COMPLETION
