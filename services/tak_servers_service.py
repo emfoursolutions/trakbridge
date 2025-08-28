@@ -344,8 +344,8 @@ class TakServerConnectionTester:
                     server, temp_files
                 )
 
-            # Create pytak configuration
-            config = ConfigParser()
+            # Create pytak configuration - disable interpolation to handle special characters in passwords
+            config = ConfigParser(interpolation=None)
             config_dict = {
                 "COT_URL": f"{server.protocol}://{server.host}:{server.port}"
             }

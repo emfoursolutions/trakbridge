@@ -133,6 +133,129 @@ allowed_plugin_modules:
 
 See [Docker Plugin Documentation](DOCKER_PLUGINS.md) for complete setup instructions.
 
+### Reverse Proxy Setup
+
+TrakBridge includes built-in support for reverse proxies (Apache, Nginx, etc.) with automatic handling of proxy headers.
+
+#### Apache Configuration
+
+**Basic reverse proxy setup:**
+
+```apache
+<VirtualHost *:80>
+    ServerName your-domain.com
+    
+    # Redirect HTTP to HTTPS (recommended)
+    Redirect permanent / https://your-domain.com/
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName your-domain.com
+    
+    # SSL Configuration
+    SSLEngine on
+    SSLCertificateFile /path/to/your/certificate.crt
+    SSLCertificateKeyFile /path/to/your/private.key
+    
+    # Reverse Proxy Configuration
+    ProxyPreserveHost On
+    ProxyRequests Off
+    
+    # Essential proxy headers for TrakBridge
+    ProxyPassReverse / http://localhost:8080/
+    ProxyPass / http://localhost:8080/
+    
+    # Set required headers for proper redirect handling
+    ProxyPassReverse / http://localhost:8080/
+    ProxyPassReverseInterpolateEnv On
+    
+    # WebSocket support (if needed)
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} websocket [NC]
+    RewriteCond %{HTTP:Connection} upgrade [NC]
+    RewriteRule ^/?(.*) "ws://localhost:8080/$1" [P,L]
+    
+    # Security headers
+    Header always set X-Frame-Options DENY
+    Header always set X-Content-Type-Options nosniff
+    Header always set Referrer-Policy strict-origin-when-cross-origin
+</VirtualHost>
+```
+
+**Required Apache modules:**
+```bash
+sudo a2enmod proxy
+sudo a2enmod proxy_http
+sudo a2enmod ssl
+sudo a2enmod headers
+sudo a2enmod rewrite
+```
+
+#### Nginx Configuration (Alternative)
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com;
+    
+    # SSL Configuration
+    ssl_certificate /path/to/your/certificate.crt;
+    ssl_certificate_key /path/to/your/private.key;
+    
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+#### Docker with Reverse Proxy
+
+If running TrakBridge in Docker behind a reverse proxy, ensure the container port is accessible:
+
+```yaml
+services:
+  trakbridge:
+    image: emfoursolutions/trakbridge:latest
+    ports:
+      - "127.0.0.1:8080:8080"  # Only bind to localhost for security
+    environment:
+      - FLASK_ENV=production
+```
+
+#### Troubleshooting Reverse Proxy Issues
+
+**Common Issues:**
+- **Redirects to wrong port**: Fixed automatically by ProxyFix middleware
+- **HTTPS redirects to HTTP**: Ensure `X-Forwarded-Proto` header is set
+- **Authentication redirects fail**: Verify `X-Forwarded-Host` is configured
+- **WebSocket connections fail**: Enable WebSocket proxy support
+
+**Testing your reverse proxy setup:**
+```bash
+# Test that proxy headers are working
+curl -H "X-Forwarded-Proto: https" -H "X-Forwarded-Host: your-domain.com" http://localhost:8080/
+
+# Check application logs for any redirect issues
+docker logs your-trakbridge-container
+```
+
 ## Option 2: Development Installation
 
 ### Local Python Setup

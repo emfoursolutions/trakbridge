@@ -597,7 +597,7 @@ class EnhancedCOTService:
             # Create PyTAK configuration
             from configparser import ConfigParser
 
-            tak_config = ConfigParser()
+            tak_config = ConfigParser(interpolation=None)
 
             # Determine protocol
             protocol = "tls" if tak_server.protocol.lower() in ["tls", "ssl"] else "tcp"
@@ -1261,7 +1261,7 @@ class PersistentCOTService:
         """Create PyTAK configuration from TAK server settings"""
         from configparser import ConfigParser
 
-        config = ConfigParser()
+        config = ConfigParser(interpolation=None)
         config.add_section("pytak")
 
         # Determine protocol
