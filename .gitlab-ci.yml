@@ -1756,28 +1756,22 @@ deploy-to-dockerhub:
     echo "${DOCKERHUB_TOKEN}" | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin docker.io
   
   script: |
-    echo "📦 Pulling validated images from GitLab Container Registry..."
+    echo "📦 Copying multiplatform images from GitLab Container Registry to DockerHub..."
     
-    # Pull the validated release candidate images
+    # Source and destination images
     SOURCE_IMAGE="$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
-    echo "Source image: $SOURCE_IMAGE"
-    docker pull "$SOURCE_IMAGE"
-    
-    # Tag for DockerHub release
     DOCKERHUB_IMAGE="$IMAGE_NAME:$CI_COMMIT_TAG"
     DOCKERHUB_LATEST="$IMAGE_NAME:latest"
     
-    echo "🏷️  Tagging images for DockerHub release..."
-    docker tag "$SOURCE_IMAGE" "$DOCKERHUB_IMAGE"
-    docker tag "$SOURCE_IMAGE" "$DOCKERHUB_LATEST"
+    echo "Source image: $SOURCE_IMAGE"
+    echo "📋 Destination images:"
+    echo "   - $DOCKERHUB_IMAGE (tagged release)"
+    echo "   - $DOCKERHUB_LATEST (latest release)"
     
-    echo "📋 Release images:"
-    echo "   - $DOCKERHUB_IMAGE"
-    echo "   - $DOCKERHUB_LATEST"
-    
-    echo "🚀 Pushing validated release to DockerHub..."
-    docker push "$DOCKERHUB_IMAGE"
-    docker push "$DOCKERHUB_LATEST"
+    # Use buildx imagetools to copy multiplatform manifests preserving all architectures
+    echo "🚀 Copying multiplatform image with all architectures (amd64, arm64)..."
+    docker buildx imagetools create --tag "$DOCKERHUB_IMAGE" "$SOURCE_IMAGE"
+    docker buildx imagetools create --tag "$DOCKERHUB_LATEST" "$SOURCE_IMAGE"
     
     echo ""
     echo "✅ PRODUCTION RELEASE COMPLETED"
