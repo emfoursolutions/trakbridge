@@ -46,13 +46,21 @@ class Stream(db.Model, TimestampMixin):
 
     # New minimal fields for callsign mapping functionality
     enable_callsign_mapping = db.Column(db.Boolean, default=False)
-    callsign_identifier_field = db.Column(db.String(100), nullable=True)  # Selected field name
-    callsign_error_handling = db.Column(db.String(20), default="fallback")  # "fallback" or "skip"
-    enable_per_callsign_cot_types = db.Column(db.Boolean, default=False)  # Feature toggle
+    callsign_identifier_field = db.Column(
+        db.String(100), nullable=True
+    )  # Selected field name
+    callsign_error_handling = db.Column(
+        db.String(20), default="fallback"
+    )  # "fallback" or "skip"
+    enable_per_callsign_cot_types = db.Column(
+        db.Boolean, default=False
+    )  # Feature toggle
 
     # Relationships
     tak_server = db.relationship("TakServer", back_populates="streams")
-    callsign_mappings = db.relationship("CallsignMapping", back_populates="stream", cascade="all, delete-orphan")
+    callsign_mappings = db.relationship(
+        "CallsignMapping", back_populates="stream", cascade="all, delete-orphan"
+    )
 
     def __init__(
         self,

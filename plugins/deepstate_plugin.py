@@ -342,7 +342,7 @@ class DeepstatePlugin(BaseGPSPlugin):
                 api_url, timeout=timeout_config, headers=headers, ssl=ssl_context
             ) as response:
                 if response.status != 200:
-                    error_text = await response.text(encoding='utf-8')
+                    error_text = await response.text(encoding="utf-8")
                     logger.error(
                         f"API request failed with status {response.status}: {error_text}"
                     )

@@ -436,10 +436,17 @@ class PluginManager:
             logger.error(f"Failed to create plugin instance for '{plugin_name}': {e}")
             # Use secure logging to avoid exposing credentials in config
             from utils.security_helpers import safe_debug_log
-            safe_debug_log(logger, f"Plugin creation failed for '{plugin_name}'", {
-                "config_type": str(type(config)),
-                "config_fields": len(config) if isinstance(config, dict) else "non-dict"
-            })
+
+            safe_debug_log(
+                logger,
+                f"Plugin creation failed for '{plugin_name}'",
+                {
+                    "config_type": str(type(config)),
+                    "config_fields": (
+                        len(config) if isinstance(config, dict) else "non-dict"
+                    ),
+                },
+            )
             return None
 
     def list_plugins(self) -> List[str]:

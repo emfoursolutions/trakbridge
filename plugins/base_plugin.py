@@ -17,6 +17,7 @@ Version: 1.0.0
 # Standard library imports
 import logging
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 # Third-party imports
@@ -24,6 +25,52 @@ import aiohttp
 
 # Module-level logger
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class FieldMetadata:
+    """Metadata for available identifier fields in tracker plugins"""
+
+    name: str  # Field name in data (e.g., "imei", "device_name")
+    display_name: str  # User-friendly name (e.g., "Device IMEI", "Device Name")
+    type: str  # Data type ("string", "number")
+    recommended: bool = False  # UI should highlight recommended fields
+    description: str = ""  # Optional help text for users
+
+
+class CallsignMappable(ABC):
+    """
+    Optional interface for plugins that support custom callsign mapping.
+
+    Plugins can choose to implement this interface to enable callsign mapping
+    functionality. If not implemented, plugins will use their existing
+    hardcoded extraction behavior as fallback.
+    """
+
+    @abstractmethod
+    def get_available_fields(self) -> List[FieldMetadata]:
+        """
+        Return available identifier fields for callsign mapping.
+
+        Returns:
+            List of FieldMetadata objects describing available fields
+            that can be used as identifiers for callsign mapping.
+        """
+        pass
+
+    @abstractmethod
+    def apply_callsign_mapping(
+        self, tracker_data: List[dict], field_name: str, callsign_map: dict
+    ) -> None:
+        """
+        Apply callsign mappings to tracker data in-place.
+
+        Args:
+            tracker_data: List of tracker dictionaries to modify
+            field_name: Name of field to use as identifier
+            callsign_map: Dictionary mapping identifier values to custom callsigns
+        """
+        pass
 
 
 class PluginConfigField:
@@ -225,6 +272,52 @@ class BaseGPSPlugin(ABC):
             return encryption_service.decrypt_config(config, sensitive_fields)
 
         return config
+
+    def supports_callsign_mapping(self) -> bool:
+        """
+        Check if this plugin implements the CallsignMappable interface.
+
+        Returns:
+            True if plugin supports callsign mapping, False otherwise
+        """
+        return isinstance(self, CallsignMappable)
+
+    def get_callsign_fields(self) -> List[FieldMetadata]:
+        """
+        Get available fields for callsign mapping with fallback behavior.
+
+        Returns:
+            List of FieldMetadata if plugin implements CallsignMappable,
+            empty list otherwise for graceful degradation
+        """
+        if self.supports_callsign_mapping():
+            return self.get_available_fields()
+        return []
+
+    def apply_callsign_mappings(
+        self, tracker_data: List[dict], field_name: str, callsign_map: dict
+    ) -> bool:
+        """
+        Apply callsign mappings with fallback behavior.
+
+        Args:
+            tracker_data: List of tracker dictionaries to modify
+            field_name: Name of field to use as identifier
+            callsign_map: Dictionary mapping identifier values to custom callsigns
+
+        Returns:
+            True if mapping was applied, False if fallback behavior should be used
+        """
+        if self.supports_callsign_mapping() and callsign_map:
+            try:
+                self.apply_callsign_mapping(tracker_data, field_name, callsign_map)
+                return True
+            except Exception as e:
+                logger.error(
+                    f"[{self.plugin_name}] Failed to apply callsign mapping: {e}"
+                )
+                return False
+        return False
 
     @abstractmethod
     async def fetch_locations(

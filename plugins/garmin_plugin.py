@@ -22,12 +22,17 @@ import certifi
 import defusedxml.ElementTree as ET
 from fastkml import kml
 
-from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
+from plugins.base_plugin import (
+    BaseGPSPlugin,
+    PluginConfigField,
+    CallsignMappable,
+    FieldMetadata,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class GarminPlugin(BaseGPSPlugin):
+class GarminPlugin(BaseGPSPlugin, CallsignMappable):
     """Enhanced Plugin for fetching location data from Garmin InReach KML feeds"""
 
     PLUGIN_NAME = "garmin"
@@ -118,6 +123,63 @@ class GarminPlugin(BaseGPSPlugin):
             ],
         }
 
+    def get_available_fields(self) -> List[FieldMetadata]:
+        """Return available identifier fields for callsign mapping"""
+        return [
+            FieldMetadata(
+                name="imei",
+                display_name="Device IMEI",
+                type="string",
+                recommended=True,
+                description="Device IMEI from Garmin extended data (most stable identifier)",
+            ),
+            FieldMetadata(
+                name="name",
+                display_name="Map Display Name",
+                type="string",
+                recommended=False,
+                description="Device name from Garmin Map Display Name field",
+            ),
+            FieldMetadata(
+                name="uid",
+                display_name="Generated UID",
+                type="string",
+                recommended=False,
+                description="TrakBridge generated unique identifier (name-imei)",
+            ),
+        ]
+
+    def apply_callsign_mapping(
+        self, tracker_data: List[dict], field_name: str, callsign_map: dict
+    ) -> None:
+        """Apply callsign mappings to Garmin tracker data in-place"""
+        for location in tracker_data:
+            # Get identifier value based on selected field
+            identifier_value = None
+
+            if field_name == "imei":
+                # Extract IMEI from extended_data in additional_data
+                extended_data = (
+                    location.get("additional_data", {})
+                    .get("raw_placemark", {})
+                    .get("extended_data", {})
+                )
+                identifier_value = extended_data.get("IMEI")
+            elif field_name == "name":
+                # Use the name field (Map Display Name)
+                identifier_value = location.get("name")
+            elif field_name == "uid":
+                # Use the generated UID
+                identifier_value = location.get("uid")
+
+            # Apply mapping if identifier found and mapping exists
+            if identifier_value and identifier_value in callsign_map:
+                custom_callsign = callsign_map[identifier_value]
+                location["name"] = custom_callsign
+                logger.debug(
+                    f"[Garmin] Applied callsign mapping: {identifier_value} -> {custom_callsign}"
+                )
+
     async def fetch_locations(
         self, session: aiohttp.ClientSession
     ) -> List[Dict[str, Any]]:
@@ -199,7 +261,7 @@ class GarminPlugin(BaseGPSPlugin):
         # Ensure credentials are properly encoded as strings to avoid latin-1 encoding issues
         username = str(config["username"]) if config["username"] is not None else ""
         password = str(config["password"]) if config["password"] is not None else ""
-        auth = aiohttp.BasicAuth(username, password, encoding='utf-8')
+        auth = aiohttp.BasicAuth(username, password, encoding="utf-8")
         delay = int(config.get("retry_delay", 60))
         ssl_context = ssl.create_default_context(cafile=certifi.where())
 
@@ -209,7 +271,7 @@ class GarminPlugin(BaseGPSPlugin):
                     config["url"], auth=auth, ssl=ssl_context
                 ) as response:
                     if response.status == 200:
-                        content = await response.text(encoding='utf-8')
+                        content = await response.text(encoding="utf-8")
                         return self._validate_kml_content(content)
                     else:
                         return await self._handle_http_error(response)
@@ -222,7 +284,7 @@ class GarminPlugin(BaseGPSPlugin):
                         config["url"], auth=auth, ssl=False
                     ) as response:
                         if response.status == 200:
-                            content = await response.text(encoding='utf-8')
+                            content = await response.text(encoding="utf-8")
                             if content and "<kml" in content:
                                 logger.warning(
                                     "Using insecure SSL connection due to certificate issues"
@@ -267,7 +329,7 @@ class GarminPlugin(BaseGPSPlugin):
             404: "Resource not found. Check the KML feed URL.",
         }
 
-        error_text = await response.text(encoding='utf-8')
+        error_text = await response.text(encoding="utf-8")
         message = error_messages.get(
             response.status, f"HTTP {response.status}: {error_text}"
         )

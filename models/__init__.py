@@ -23,7 +23,7 @@ __all__ = [
     "db",
     "TimestampMixin",
     "CallsignMapping",
-    "TakServer", 
+    "TakServer",
     "Stream",
     "User",
     "UserSession",

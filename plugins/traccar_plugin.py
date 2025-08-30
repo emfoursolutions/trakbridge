@@ -43,13 +43,18 @@ import aiohttp
 import certifi
 
 # Local application imports
-from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
+from plugins.base_plugin import (
+    BaseGPSPlugin,
+    PluginConfigField,
+    CallsignMappable,
+    FieldMetadata,
+)
 
 # Module-level logger
 logger = logging.getLogger(__name__)
 
 
-class TraccarPlugin(BaseGPSPlugin):
+class TraccarPlugin(BaseGPSPlugin, CallsignMappable):
     """Plugin for fetching location data from Traccar GPS tracking platform"""
 
     PLUGIN_NAME = "traccar"
@@ -147,6 +152,61 @@ class TraccarPlugin(BaseGPSPlugin):
                 ),
             ],
         }
+
+    def get_available_fields(self) -> List[FieldMetadata]:
+        """Return available identifier fields for callsign mapping"""
+        return [
+            FieldMetadata(
+                name="name",
+                display_name="Device Name",
+                type="string",
+                recommended=True,
+                description="Traccar device name (most commonly used identifier)",
+            ),
+            FieldMetadata(
+                name="device_id",
+                display_name="Device ID",
+                type="number",
+                recommended=False,
+                description="Traccar internal device ID (numeric)",
+            ),
+            FieldMetadata(
+                name="unique_id",
+                display_name="Unique ID",
+                type="string",
+                recommended=False,
+                description="Device unique identifier (IMEI, serial number, etc.)",
+            ),
+        ]
+
+    def apply_callsign_mapping(
+        self, tracker_data: List[dict], field_name: str, callsign_map: dict
+    ) -> None:
+        """Apply callsign mappings to Traccar tracker data in-place"""
+        for location in tracker_data:
+            # Get identifier value based on selected field
+            identifier_value = None
+
+            if field_name == "name":
+                # Use the device name
+                identifier_value = location.get("name")
+            elif field_name == "device_id":
+                # Extract device_id from additional_data
+                identifier_value = str(
+                    location.get("additional_data", {}).get("device_id", "")
+                )
+            elif field_name == "unique_id":
+                # Extract unique_id from additional_data device info
+                device_info = location.get("additional_data", {}).get("device_info", {})
+                identifier_value = device_info.get("uniqueId")
+
+            # Apply mapping if identifier found and mapping exists
+            if identifier_value and identifier_value in callsign_map:
+                custom_callsign = callsign_map[identifier_value]
+                location["name"] = custom_callsign
+                logger.debug(
+                    f"[Traccar] Applied callsign mapping: {identifier_value} -> {custom_callsign}"
+                )
 
     @staticmethod
     def _create_ssl_context() -> ssl.SSLContext:
@@ -316,7 +376,7 @@ class TraccarPlugin(BaseGPSPlugin):
         # Ensure credentials are properly encoded as strings to avoid latin-1 encoding issues
         username = str(config["username"]) if config["username"] is not None else ""
         password = str(config["password"]) if config["password"] is not None else ""
-        auth = aiohttp.BasicAuth(username, password, encoding='utf-8')
+        auth = aiohttp.BasicAuth(username, password, encoding="utf-8")
         timeout = aiohttp.ClientTimeout(total=int(config.get("timeout", 30)))
 
         # Create SSL context for certificate verification
@@ -333,24 +393,24 @@ class TraccarPlugin(BaseGPSPlugin):
                     )
                     return data
                 elif response.status == 401:
-                    error_text = await response.text(encoding='utf-8')
+                    error_text = await response.text(encoding="utf-8")
                     logger.error(
                         "Unauthorized access (401). Check Traccar credentials."
                     )
                     # Return error indicator instead of empty list
                     return [{"_error": "401", "_error_message": "Unauthorized access"}]
                 elif response.status == 403:
-                    error_text = await response.text(encoding='utf-8')
+                    error_text = await response.text(encoding="utf-8")
                     logger.error("Forbidden access (403). Check user permissions.")
                     return [{"_error": "403", "_error_message": "Forbidden access"}]
                 elif response.status == 404:
-                    error_text = await response.text(encoding='utf-8')
+                    error_text = await response.text(encoding="utf-8")
                     logger.error(
                         "Resource not found (404). Check server URL and API endpoint."
                     )
                     return [{"_error": "404", "_error_message": "Resource not found"}]
                 else:
-                    error_text = await response.text(encoding='utf-8')
+                    error_text = await response.text(encoding="utf-8")
                     logger.error(
                         f"API request failed with status {response.status}: {error_text}"
                     )
@@ -394,7 +454,7 @@ class TraccarPlugin(BaseGPSPlugin):
         # Ensure credentials are properly encoded as strings to avoid latin-1 encoding issues
         username = str(config["username"]) if config["username"] is not None else ""
         password = str(config["password"]) if config["password"] is not None else ""
-        auth = aiohttp.BasicAuth(username, password, encoding='utf-8')
+        auth = aiohttp.BasicAuth(username, password, encoding="utf-8")
         timeout = aiohttp.ClientTimeout(total=int(config.get("timeout", 30)))
 
         # Create SSL context for certificate verification

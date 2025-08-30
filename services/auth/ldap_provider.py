@@ -562,7 +562,9 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
             connection.unbind()
 
             # Determine role from groups
-            logger.debug(f"LDAP user {username} retrieved groups: {user_info['groups']}")
+            logger.debug(
+                f"LDAP user {username} retrieved groups: {user_info['groups']}"
+            )
             user_info["role"] = self._determine_role_from_groups(user_info["groups"])
             logger.debug(
                 f"LDAP user {username} assigned role: {user_info['role']} ({user_info['role'].value})"
@@ -613,7 +615,9 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
         logger.debug(f"LDAP role determination - Default role: {self.default_role}")
 
         if not groups:
-            logger.debug("LDAP role determination - No groups found, using default role")
+            logger.debug(
+                "LDAP role determination - No groups found, using default role"
+            )
             return self.default_role
 
         # Check group mappings

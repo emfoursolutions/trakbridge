@@ -23,26 +23,33 @@ from database import TimestampMixin, db
 class CallsignMapping(db.Model, TimestampMixin):
     """
     Maps tracker identifiers to custom callsigns for individual streams
-    
+
     Each mapping belongs to a specific stream and maps a tracker identifier
     (extracted from GPS data using the stream's configured field) to a
     user-assigned callsign. Optional per-callsign CoT type overrides are
     supported for advanced operational requirements.
     """
+
     __tablename__ = "callsign_mappings"
-    
+
     id = db.Column(db.Integer, primary_key=True)
     stream_id = db.Column(db.Integer, db.ForeignKey("streams.id"), nullable=False)
-    identifier_value = db.Column(db.String(255), nullable=False)  # Raw identifier (IMEI, device_name, etc.)
-    custom_callsign = db.Column(db.String(100), nullable=False)   # User-assigned callsign
-    cot_type = db.Column(db.String(50), nullable=True)           # Per-callsign CoT type override
-    
+    identifier_value = db.Column(
+        db.String(255), nullable=False
+    )  # Raw identifier (IMEI, device_name, etc.)
+    custom_callsign = db.Column(
+        db.String(100), nullable=False
+    )  # User-assigned callsign
+    cot_type = db.Column(db.String(50), nullable=True)  # Per-callsign CoT type override
+
     # Relationships
     stream = db.relationship("Stream", back_populates="callsign_mappings")
-    
+
     # Constraints
     __table_args__ = (
-        db.UniqueConstraint('stream_id', 'identifier_value', name='unique_stream_identifier'),
+        db.UniqueConstraint(
+            "stream_id", "identifier_value", name="unique_stream_identifier"
+        ),
     )
 
     def __init__(

@@ -141,7 +141,7 @@ class SampleCustomTrackerPlugin(BaseGPSPlugin):
                         {"_error": "404", "_error_message": "API endpoint not found"}
                     ]
                 else:
-                    error_text = await response.text(encoding='utf-8')
+                    error_text = await response.text(encoding="utf-8")
                     logger.error(f"API returned status {response.status}: {error_text}")
                     return [
                         {
