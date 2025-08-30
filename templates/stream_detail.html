@@ -204,6 +204,74 @@
             </div>
         </div>
 
+        <!-- Callsign Mapping Configuration Card -->
+        {% if stream.enable_callsign_mapping %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-tags"></i> Callsign Mapping Configuration
+                    </h5>
+                    <span class="badge bg-success">Enabled</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="info-group">
+                            <label class="info-label">Identifier Field</label>
+                            <div class="info-value">
+                                <span class="text-mono">{{ stream.callsign_identifier_field or 'Not configured' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="info-group">
+                            <label class="info-label">Error Handling</label>
+                            <div class="info-value">
+                                <span class="version-badge {% if stream.callsign_error_handling == 'fallback' %}bg-primary{% else %}bg-warning{% endif %}">
+                                    {{ stream.callsign_error_handling|title }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <div class="info-group">
+                            <label class="info-label">Per-Callsign CoT Types</label>
+                            <div class="info-value">
+                                {% if stream.enable_per_callsign_cot_types %}
+                                    <span class="badge bg-success">Enabled</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Disabled</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Callsign Mappings Table -->
+                <div class="mt-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0">Current Callsign Mappings</h6>
+                        <button class="btn btn-outline-primary btn-sm" onclick="refreshCallsignMappings()">
+                            <i class="fas fa-sync"></i> Refresh
+                        </button>
+                    </div>
+                    
+                    <div id="callsign-mappings-container">
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                            <p>Loading callsign mappings...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Activity Timeline Card -->
         <div class="card">
             <div class="card-header">
@@ -532,6 +600,110 @@ function refreshStatus() {
         location.reload();
     }, 500);
 }
+
+// Callsign mapping display functionality
+async function refreshCallsignMappings() {
+    const container = document.getElementById('callsign-mappings-container');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div class="text-center text-muted py-4">
+            <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+            <p>Loading callsign mappings...</p>
+        </div>
+    `;
+    
+    try {
+        const streamId = {{ stream.id }};
+        const response = await fetch(`/api/streams/${streamId}/callsign-mappings`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            displayCallsignMappings(data.mappings || []);
+        } else {
+            container.innerHTML = `
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-exclamation-triangle fa-2x mb-3 text-warning"></i>
+                    <p>Failed to load callsign mappings</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading callsign mappings:', error);
+        container.innerHTML = `
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-times fa-2x mb-3 text-danger"></i>
+                <p>Error loading callsign mappings</p>
+            </div>
+        `;
+    }
+}
+
+function displayCallsignMappings(mappings) {
+    const container = document.getElementById('callsign-mappings-container');
+    
+    if (mappings.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-tags fa-2x mb-3 opacity-50"></i>
+                <p>No callsign mappings configured</p>
+                <p><small>Edit the stream to configure callsign mappings</small></p>
+            </div>
+        `;
+        return;
+    }
+    
+    const perCallsignCotEnabled = {{ stream.enable_per_callsign_cot_types|lower }};
+    
+    let tableHtml = `
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Identifier</th>
+                        <th>Custom Callsign</th>
+                        ${perCallsignCotEnabled ? '<th>CoT Type</th>' : ''}
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    mappings.forEach(mapping => {
+        const createdDate = new Date(mapping.created_at).toLocaleDateString();
+        const cotType = mapping.cot_type ? mapping.cot_type : 'Default';
+        
+        tableHtml += `
+            <tr>
+                <td class="text-mono">${mapping.identifier_value}</td>
+                <td><strong>${mapping.custom_callsign}</strong></td>
+                ${perCallsignCotEnabled ? `<td><span class="version-badge">${cotType}</span></td>` : ''}
+                <td class="text-muted"><small>${createdDate}</small></td>
+            </tr>
+        `;
+    });
+    
+    tableHtml += `
+                </tbody>
+            </table>
+        </div>
+        <div class="mt-3">
+            <small class="text-muted">
+                <i class="fas fa-info-circle"></i>
+                ${mappings.length} callsign mapping${mappings.length !== 1 ? 's' : ''} configured
+            </small>
+        </div>
+    `;
+    
+    container.innerHTML = tableHtml;
+}
+
+// Load callsign mappings on page load
+document.addEventListener('DOMContentLoaded', function() {
+    {% if stream.enable_callsign_mapping %}
+    refreshCallsignMappings();
+    {% endif %}
+});
 
 // Auto-refresh every 30 seconds if stream is active
 {% if stream.is_active %}

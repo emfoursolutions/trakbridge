@@ -67,7 +67,16 @@ class StreamOperationsService:
                 cot_type=data.get("cot_type", "a-f-G-U-C"),
                 cot_stale_time=int(data.get("cot_stale_time", 300)),
                 tak_server_id=int(data["tak_server_id"]),
-                cot_type_mode=data.get("cot_type_mode", "stream"),  # Add this line
+                cot_type_mode=data.get("cot_type_mode", "stream"),
+                # Callsign mapping fields
+                enable_callsign_mapping=bool(
+                    data.get("enable_callsign_mapping", False)
+                ),
+                callsign_identifier_field=data.get("callsign_identifier_field"),
+                callsign_error_handling=data.get("callsign_error_handling", "fallback"),
+                enable_per_callsign_cot_types=bool(
+                    data.get("enable_per_callsign_cot_types", False)
+                ),
             )
 
             # Set plugin configuration
@@ -79,6 +88,12 @@ class StreamOperationsService:
             stream.set_plugin_config(plugin_config)
 
             self.db.session.add(stream)
+            self.db.session.flush()  # Flush to get stream.id for callsign mappings
+
+            # Handle callsign mappings if enabled
+            if stream.enable_callsign_mapping:
+                self._create_callsign_mappings(stream, data)
+
             self.db.session.commit()
 
             # Auto-start if requested
@@ -234,6 +249,18 @@ class StreamOperationsService:
             stream.tak_server_id = int(data["tak_server_id"])
             stream.cot_type_mode = data.get("cot_type_mode", "stream")
 
+            # Update callsign mapping fields
+            stream.enable_callsign_mapping = bool(
+                data.get("enable_callsign_mapping", False)
+            )
+            stream.callsign_identifier_field = data.get("callsign_identifier_field")
+            stream.callsign_error_handling = data.get(
+                "callsign_error_handling", "fallback"
+            )
+            stream.enable_per_callsign_cot_types = bool(
+                data.get("enable_per_callsign_cot_types", False)
+            )
+
             # Update plugin configuration
             plugin_config: Dict[str, Any] = {}
             for key, value in data.items():
@@ -266,6 +293,10 @@ class StreamOperationsService:
                                 plugin_config[field_name] = False
 
             stream.set_plugin_config(plugin_config)
+
+            # Update callsign mappings if enabled
+            if stream.enable_callsign_mapping:
+                self._update_callsign_mappings(stream, data)
 
             self.db.session.commit()
 
@@ -393,3 +424,40 @@ class StreamOperationsService:
         except Exception as e:
             logger.error(f"Error getting status for stream {stream_id}: {e}")
             return {"running": False, "error": str(e)}
+
+    def _create_callsign_mappings(self, stream: Any, data: Dict[str, Any]) -> None:
+        """Create callsign mappings from form data"""
+        from models.callsign_mapping import CallsignMapping
+
+        # Extract callsign mapping data from form
+        mapping_index = 0
+        while f"callsign_mapping_{mapping_index}_identifier" in data:
+            identifier_key = f"callsign_mapping_{mapping_index}_identifier"
+            callsign_key = f"callsign_mapping_{mapping_index}_callsign"
+            cot_type_key = f"callsign_mapping_{mapping_index}_cot_type"
+
+            identifier_value = data.get(identifier_key)
+            custom_callsign = data.get(callsign_key)
+            cot_type = data.get(cot_type_key) or None  # Empty string becomes None
+
+            # Only create mapping if both identifier and callsign are provided
+            if identifier_value and custom_callsign:
+                mapping = CallsignMapping(
+                    stream_id=stream.id,
+                    identifier_value=identifier_value,
+                    custom_callsign=custom_callsign,
+                    cot_type=cot_type,
+                )
+                self.db.session.add(mapping)
+
+            mapping_index += 1
+
+    def _update_callsign_mappings(self, stream: Any, data: Dict[str, Any]) -> None:
+        """Update callsign mappings from form data"""
+        from models.callsign_mapping import CallsignMapping
+
+        # Clear existing mappings for this stream
+        CallsignMapping.query.filter_by(stream_id=stream.id).delete()
+
+        # Create new mappings from form data (reuse the create logic)
+        self._create_callsign_mappings(stream, data)

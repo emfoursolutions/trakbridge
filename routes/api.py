@@ -687,6 +687,219 @@ def bootstrap_status():
         )
 
 
+# Callsign mapping API endpoints
+@bp.route("/streams/discover-trackers", methods=["POST"])
+@require_permission("streams", "read")
+def discover_trackers():
+    """Discover trackers for callsign mapping configuration"""
+    try:
+        from models.stream import Stream
+        from plugins.plugin_manager import get_plugin_manager
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        plugin_type = data.get("plugin_type")
+        plugin_config = data.get("plugin_config", {})
+        stream_id = data.get("stream_id")  # Optional for edit mode
+
+        if not plugin_type:
+            return jsonify({"error": "Plugin type is required"}), 400
+
+        plugin_manager = get_plugin_manager()
+
+        # Get the plugin instance
+        plugin = plugin_manager.get_plugin_instance(plugin_type)
+        if not plugin:
+            return jsonify({"error": f"Plugin {plugin_type} not found"}), 404
+
+        # For edit mode, merge with existing config
+        if stream_id:
+            stream = Stream.query.get(stream_id)
+            if stream:
+                existing_config = stream.get_plugin_config()
+                # Merge existing config with new config, prioritizing new values
+                merged_config = {**existing_config, **plugin_config}
+                plugin_config = merged_config
+
+        # Use ConnectionTestService to test connection and get tracker data
+        connection_service = ConnectionTestService()
+        result = connection_service.test_plugin_connection(plugin_type, plugin_config)
+
+        if not result["success"]:
+            return (
+                jsonify({"error": result.get("error", "Connection test failed")}),
+                400,
+            )
+
+        # Extract tracker data from the successful connection test
+        tracker_data = result.get("tracker_data", [])
+
+        # Get available fields from plugin if it supports callsign mapping
+        available_fields = []
+        if hasattr(plugin, "get_available_fields"):
+            try:
+                fields = plugin.get_available_fields()
+                available_fields = [
+                    {
+                        "name": field.name,
+                        "display_name": field.display_name,
+                        "type": field.type,
+                        "recommended": field.recommended,
+                        "description": field.description,
+                    }
+                    for field in fields
+                ]
+            except Exception as e:
+                logger.warning(
+                    f"Error getting available fields from {plugin_type}: {e}"
+                )
+
+        return jsonify(
+            {
+                "success": True,
+                "tracker_count": len(tracker_data),
+                "trackers": tracker_data,
+                "available_fields": available_fields,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error discovering trackers: {e}")
+        return jsonify({"error": "Failed to discover trackers"}), 500
+
+
+@bp.route("/streams/<int:stream_id>/callsign-mappings", methods=["GET"])
+@require_permission("streams", "read")
+def get_callsign_mappings(stream_id):
+    """Get callsign mappings for a stream"""
+    try:
+        from models.stream import Stream
+        from models.callsign_mapping import CallsignMapping
+
+        stream = Stream.query.get_or_404(stream_id)
+        mappings = CallsignMapping.query.filter_by(stream_id=stream_id).all()
+
+        return jsonify(
+            {
+                "success": True,
+                "stream_id": stream_id,
+                "enable_callsign_mapping": stream.enable_callsign_mapping,
+                "callsign_identifier_field": stream.callsign_identifier_field,
+                "callsign_error_handling": stream.callsign_error_handling,
+                "enable_per_callsign_cot_types": stream.enable_per_callsign_cot_types,
+                "mappings": [mapping.to_dict() for mapping in mappings],
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting callsign mappings for stream {stream_id}: {e}")
+        return jsonify({"error": "Failed to get callsign mappings"}), 500
+
+
+@bp.route("/streams/<int:stream_id>/callsign-mappings", methods=["POST", "PUT"])
+@require_permission("streams", "write")
+def update_callsign_mappings(stream_id):
+    """Create or update callsign mappings for a stream"""
+    try:
+        from models.stream import Stream
+        from models.callsign_mapping import CallsignMapping
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        stream = Stream.query.get_or_404(stream_id)
+
+        # Update stream callsign configuration
+        stream.enable_callsign_mapping = data.get("enable_callsign_mapping", False)
+        stream.callsign_identifier_field = data.get("callsign_identifier_field")
+        stream.callsign_error_handling = data.get("callsign_error_handling", "fallback")
+        stream.enable_per_callsign_cot_types = data.get(
+            "enable_per_callsign_cot_types", False
+        )
+
+        # Handle mappings if provided
+        mappings_data = data.get("mappings", [])
+
+        if mappings_data:
+            # Clear existing mappings
+            CallsignMapping.query.filter_by(stream_id=stream_id).delete()
+
+            # Create new mappings
+            for mapping_data in mappings_data:
+                if not mapping_data.get("identifier_value") or not mapping_data.get(
+                    "custom_callsign"
+                ):
+                    continue
+
+                mapping = CallsignMapping(
+                    stream_id=stream_id,
+                    identifier_value=mapping_data["identifier_value"],
+                    custom_callsign=mapping_data["custom_callsign"],
+                    cot_type=mapping_data.get("cot_type"),
+                )
+                db.session.add(mapping)
+
+        db.session.commit()
+
+        return jsonify(
+            {"success": True, "message": "Callsign mappings updated successfully"}
+        )
+
+    except Exception as e:
+        logger.error(f"Error updating callsign mappings for stream {stream_id}: {e}")
+        db.session.rollback()
+        return jsonify({"error": "Failed to update callsign mappings"}), 500
+
+
+@bp.route("/plugins/<plugin_type>/available-fields", methods=["GET"])
+@require_permission("streams", "read")
+def get_plugin_available_fields(plugin_type):
+    """Get available identifier fields for a plugin"""
+    try:
+        from plugins.plugin_manager import get_plugin_manager
+
+        plugin_manager = get_plugin_manager()
+        plugin = plugin_manager.get_plugin_instance(plugin_type)
+
+        if not plugin:
+            return jsonify({"error": f"Plugin {plugin_type} not found"}), 404
+
+        available_fields = []
+        if hasattr(plugin, "get_available_fields"):
+            try:
+                fields = plugin.get_available_fields()
+                available_fields = [
+                    {
+                        "name": field.name,
+                        "display_name": field.display_name,
+                        "type": field.type,
+                        "recommended": field.recommended,
+                        "description": field.description,
+                    }
+                    for field in fields
+                ]
+            except Exception as e:
+                logger.warning(
+                    f"Error getting available fields from {plugin_type}: {e}"
+                )
+
+        return jsonify(
+            {
+                "success": True,
+                "plugin_type": plugin_type,
+                "available_fields": available_fields,
+                "supports_callsign_mapping": len(available_fields) > 0,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting available fields for {plugin_type}: {e}")
+        return jsonify({"error": "Failed to get available fields"}), 500
+
+
 @bp.route("/version")
 def version():
     return {"version": format_version()}

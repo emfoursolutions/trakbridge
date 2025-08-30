@@ -35,7 +35,7 @@ def mock_app_with_categories(app):
 def create_test_user_and_server(db_session):
     """Helper function to create test user and server with unique names"""
     unique_id = uuid.uuid4().hex[:8]
-    
+
     # Create test user with unique credentials
     test_user = User(
         username=f"test_user_{unique_id}",
@@ -50,15 +50,15 @@ def create_test_user_and_server(db_session):
     # Create test TAK server with unique name
     unique_name = f"Test TAK Server {uuid.uuid4().hex[:8]}"
     test_server = TakServer(
-        name=unique_name, 
-        host="test.example.com", 
-        port=8087, 
+        name=unique_name,
+        host="test.example.com",
+        port=8087,
         protocol="tls",
-        verify_ssl=True
+        verify_ssl=True,
     )
     db_session.add(test_server)
     db_session.commit()
-    
+
     return test_user, test_server
 
 
@@ -71,7 +71,7 @@ class TestPluginCategoryAPI:
         """Test the /api/plugins/categories endpoint"""
         # Create test user and server for this specific test
         create_test_user_and_server(db_session)
-        
+
         # Authenticate as admin user
         auth_client = authenticated_client("admin")
         response = auth_client.get("/api/plugins/categories")
@@ -105,10 +105,10 @@ class TestPluginCategoryAPI:
         """Test the /api/plugins/by-category/<category> endpoint"""
         # Create test user and server for this specific test
         create_test_user_and_server(db_session)
-        
+
         # Authenticate as admin user
         auth_client = authenticated_client("admin")
-        
+
         # Test Tracker category
         response = auth_client.get("/api/plugins/by-category/Tracker")
 
@@ -138,10 +138,10 @@ class TestPluginCategoryAPI:
         """Test getting plugins for non-existent category"""
         # Create test user and server for this specific test
         create_test_user_and_server(db_session)
-        
+
         # Authenticate as admin user
         auth_client = authenticated_client("admin")
-        
+
         response = auth_client.get("/api/plugins/by-category/NonExistent")
 
         assert response.status_code == 200
@@ -156,10 +156,10 @@ class TestPluginCategoryAPI:
         """Test the /api/plugins/categorized endpoint"""
         # Create test user and server for this specific test
         create_test_user_and_server(db_session)
-        
+
         # Authenticate as admin user
         auth_client = authenticated_client("admin")
-        
+
         response = auth_client.get("/api/plugins/categorized")
 
         assert response.status_code == 200
@@ -184,10 +184,10 @@ class TestPluginCategoryAPI:
         """Test the /api/plugins/category-statistics endpoint"""
         # Create test user and server for this specific test
         create_test_user_and_server(db_session)
-        
+
         # Authenticate as admin user
         auth_client = authenticated_client("admin")
-        
+
         response = auth_client.get("/api/plugins/category-statistics")
 
         assert response.status_code == 200

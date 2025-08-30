@@ -139,7 +139,6 @@ class TestSecureAuthenticationIntegration(unittest.TestCase):
             "LDAP_USER_SEARCH_BASE": "ou=users,dc=example,dc=com",
         },
     )
-
     def test_secure_logging_masks_secrets(self):
         """Test that sensitive values are masked in log output."""
         from config.authentication_loader import SecureAuthenticationLoader
