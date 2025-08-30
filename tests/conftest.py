@@ -426,6 +426,75 @@ authentication:
     return config_file
 
 
+@pytest.fixture
+def test_callsign_mappings(app, db_session, test_users):
+    """Create test callsign mappings - follows existing fixture patterns"""
+    mappings = {}
+    
+    with app.app_context():
+        from models.callsign_mapping import CallsignMapping
+        from models.stream import Stream
+        
+        # Create test streams for tracker plugins
+        test_streams = {}
+        for plugin_type in ['garmin', 'spot', 'traccar']:
+            stream = Stream(
+                name=f"Test {plugin_type.title()} Stream",
+                plugin_type=plugin_type,
+                enable_callsign_mapping=True,
+                callsign_identifier_field="imei" if plugin_type == "garmin" else "device_name"
+            )
+            db_session.add(stream)
+            test_streams[plugin_type] = stream
+        
+        db_session.commit()
+        
+        # Create test callsign mappings
+        for plugin_type, stream in test_streams.items():
+            mapping = CallsignMapping(
+                stream_id=stream.id,
+                identifier_value=f"TEST_{plugin_type.upper()}_123",
+                custom_callsign=f"CALL_{plugin_type.upper()}_1",
+                cot_type="a-f-G-U-C"
+            )
+            db_session.add(mapping)
+            mappings[plugin_type] = mapping
+    
+        db_session.commit()
+        
+    return mappings
+
+
+@pytest.fixture  
+def test_streams(app, db_session):
+    """Create test streams - add to existing fixtures for callsign testing"""
+    streams = {}
+    
+    with app.app_context():
+        from models.stream import Stream
+        
+        # Create basic streams
+        basic_stream = Stream(name="Basic Stream", plugin_type="garmin")
+        db_session.add(basic_stream)
+        streams["basic"] = basic_stream
+        
+        # Create callsign-enabled streams
+        callsign_stream = Stream(
+            name="Callsign Stream",
+            plugin_type="spot", 
+            enable_callsign_mapping=True,
+            callsign_identifier_field="device_name",
+            callsign_error_handling="fallback",
+            enable_per_callsign_cot_types=True
+        )
+        db_session.add(callsign_stream)
+        streams["callsign"] = callsign_stream
+        
+        db_session.commit()
+        
+    return streams
+
+
 # Test utilities
 def create_test_user(
     username,
@@ -465,6 +534,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "oidc: mark test as requiring OIDC provider")
     config.addinivalue_line("markers", "performance: mark test as performance test")
     config.addinivalue_line("markers", "security: mark test as security test")
+    config.addinivalue_line("markers", "callsign: mark test as callsign mapping test")
+    config.addinivalue_line("markers", "database: mark test as requiring specific database")
 
 
 def pytest_collection_modifyitems(config, items):
