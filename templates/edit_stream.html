@@ -403,9 +403,9 @@ function generateFormField(field, currentConfig) {
 
     switch (fieldType) {
         case 'password':
-            // For password fields, show placeholder text instead of current value
+            // For password fields, don't populate with encrypted values - leave empty with placeholder
             const passwordPlaceholder = currentValue ? 'Leave blank to keep current password' : field.placeholder || '';
-            inputHtml = `<input type="password" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} value="${currentValue}" ${dataPluginAttr}>`;
+            inputHtml = `<input type="password" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} placeholder="${passwordPlaceholder}" value="" ${dataPluginAttr}>`;
             break;
         case 'url':
             inputHtml = `<input type="url" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} value="${currentValue}" ${dataPluginAttr}>`;
@@ -513,7 +513,8 @@ function testStreamConfig() {
     const formData = {
         name: document.getElementById('name').value,
         plugin_type: document.getElementById('plugin_type').value,
-        plugin_config: {}
+        plugin_config: {},
+        stream_id: {{ stream.id }}  // Include stream ID for merging with existing config
     };
     
     // Collect plugin-specific configuration

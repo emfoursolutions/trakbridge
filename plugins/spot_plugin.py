@@ -248,7 +248,7 @@ class SpotPlugin(BaseGPSPlugin):
                     return [{"_error": "404", "_error_message": "Resource not found"}]
                 else:
                     logger.error(f"Error fetching SPOT data: HTTP {response.status}")
-                    error_text = await response.text()
+                    error_text = await response.text(encoding='utf-8')
                     logger.debug(f"Response: {error_text}")
                     return [
                         {

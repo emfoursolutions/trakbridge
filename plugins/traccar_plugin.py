@@ -313,7 +313,10 @@ class TraccarPlugin(BaseGPSPlugin):
         server_url = config["server_url"].rstrip("/")
         url = f"{server_url}/api/positions"
 
-        auth = aiohttp.BasicAuth(config["username"], config["password"])
+        # Ensure credentials are properly encoded as strings to avoid latin-1 encoding issues
+        username = str(config["username"]) if config["username"] is not None else ""
+        password = str(config["password"]) if config["password"] is not None else ""
+        auth = aiohttp.BasicAuth(username, password, encoding='utf-8')
         timeout = aiohttp.ClientTimeout(total=int(config.get("timeout", 30)))
 
         # Create SSL context for certificate verification
@@ -330,24 +333,24 @@ class TraccarPlugin(BaseGPSPlugin):
                     )
                     return data
                 elif response.status == 401:
-                    error_text = await response.text()
+                    error_text = await response.text(encoding='utf-8')
                     logger.error(
                         "Unauthorized access (401). Check Traccar credentials."
                     )
                     # Return error indicator instead of empty list
                     return [{"_error": "401", "_error_message": "Unauthorized access"}]
                 elif response.status == 403:
-                    error_text = await response.text()
+                    error_text = await response.text(encoding='utf-8')
                     logger.error("Forbidden access (403). Check user permissions.")
                     return [{"_error": "403", "_error_message": "Forbidden access"}]
                 elif response.status == 404:
-                    error_text = await response.text()
+                    error_text = await response.text(encoding='utf-8')
                     logger.error(
                         "Resource not found (404). Check server URL and API endpoint."
                     )
                     return [{"_error": "404", "_error_message": "Resource not found"}]
                 else:
-                    error_text = await response.text()
+                    error_text = await response.text(encoding='utf-8')
                     logger.error(
                         f"API request failed with status {response.status}: {error_text}"
                     )
@@ -388,7 +391,10 @@ class TraccarPlugin(BaseGPSPlugin):
         server_url = config["server_url"].rstrip("/")
         url = f"{server_url}/api/devices"
 
-        auth = aiohttp.BasicAuth(config["username"], config["password"])
+        # Ensure credentials are properly encoded as strings to avoid latin-1 encoding issues
+        username = str(config["username"]) if config["username"] is not None else ""
+        password = str(config["password"]) if config["password"] is not None else ""
+        auth = aiohttp.BasicAuth(username, password, encoding='utf-8')
         timeout = aiohttp.ClientTimeout(total=int(config.get("timeout", 30)))
 
         # Create SSL context for certificate verification

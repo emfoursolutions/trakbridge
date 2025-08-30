@@ -196,7 +196,10 @@ class GarminPlugin(BaseGPSPlugin):
         self, session: aiohttp.ClientSession, config: Dict[str, Any]
     ) -> str | Dict[str, str] | None:
         """Fetch Garmin KML feed with retry mechanism"""
-        auth = aiohttp.BasicAuth(config["username"], config["password"])
+        # Ensure credentials are properly encoded as strings to avoid latin-1 encoding issues
+        username = str(config["username"]) if config["username"] is not None else ""
+        password = str(config["password"]) if config["password"] is not None else ""
+        auth = aiohttp.BasicAuth(username, password, encoding='utf-8')
         delay = int(config.get("retry_delay", 60))
         ssl_context = ssl.create_default_context(cafile=certifi.where())
 
@@ -206,7 +209,7 @@ class GarminPlugin(BaseGPSPlugin):
                     config["url"], auth=auth, ssl=ssl_context
                 ) as response:
                     if response.status == 200:
-                        content = await response.text()
+                        content = await response.text(encoding='utf-8')
                         return self._validate_kml_content(content)
                     else:
                         return await self._handle_http_error(response)
@@ -219,7 +222,7 @@ class GarminPlugin(BaseGPSPlugin):
                         config["url"], auth=auth, ssl=False
                     ) as response:
                         if response.status == 200:
-                            content = await response.text()
+                            content = await response.text(encoding='utf-8')
                             if content and "<kml" in content:
                                 logger.warning(
                                     "Using insecure SSL connection due to certificate issues"
@@ -264,7 +267,7 @@ class GarminPlugin(BaseGPSPlugin):
             404: "Resource not found. Check the KML feed URL.",
         }
 
-        error_text = await response.text()
+        error_text = await response.text(encoding='utf-8')
         message = error_messages.get(
             response.status, f"HTTP {response.status}: {error_text}"
         )
