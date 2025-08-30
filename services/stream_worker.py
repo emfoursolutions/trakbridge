@@ -317,6 +317,9 @@ class StreamWorker:
                         f"from {self.stream.plugin_type} plugin"
                     )
 
+                    # Apply callsign mapping if enabled
+                    await self._apply_callsign_mapping(locations)
+
                     # Send to persistent TAK server if configured
                     if self.stream.tak_server and self._tak_worker_ensured:
                         success = await self._send_locations_to_persistent_tak(
@@ -534,3 +537,164 @@ class StreamWorker:
             "total_persistent_workers": len(cot_service.workers) if cot_service else 0,
             "total_persistent_queues": len(cot_service.queues) if cot_service else 0,
         }
+
+    async def _apply_callsign_mapping(self, locations: List[Dict]) -> None:
+        """Apply callsign mapping to locations if configured"""
+        # Early exit if callsign mapping not enabled (preserves current behavior)
+        if not getattr(self.stream, "enable_callsign_mapping", False):
+            self.logger.debug("Callsign mapping disabled, skipping")
+            return
+
+        # Load mappings from database table
+        callsign_mappings = await self._load_callsign_mappings()
+        if not callsign_mappings:
+            self.logger.debug("No callsign mappings found for stream")
+            # If skip mode is enabled and we have no mappings, we need to process locations
+            # to potentially skip them all
+            if self.stream.callsign_error_handling != "skip":
+                return
+
+        self.logger.debug(
+            f"Applying callsign mappings for {len(locations)} locations "
+            f"using field '{self.stream.callsign_identifier_field}'"
+        )
+
+        # Apply mappings with fallback behavior
+        locations_to_skip = []
+        for i, location in enumerate(locations):
+            try:
+                identifier = self._extract_identifier(location)
+                if identifier and callsign_mappings and identifier in callsign_mappings:
+                    mapping = callsign_mappings[identifier]
+
+                    # Apply callsign mapping through plugin interface if available
+                    if self.plugin and hasattr(
+                        self.plugin, "supports_callsign_mapping"
+                    ):
+                        if self.plugin.supports_callsign_mapping():
+                            # Use plugin's apply_callsign_mapping method
+                            self.plugin.apply_callsign_mapping(
+                                [location],
+                                self.stream.callsign_identifier_field,
+                                {identifier: mapping.custom_callsign},
+                            )
+                        else:
+                            # Fallback: apply directly to name field
+                            location["name"] = mapping.custom_callsign
+                    else:
+                        # Fallback: apply directly to name field
+                        location["name"] = mapping.custom_callsign
+
+                    # Apply per-callsign CoT type if enabled and configured
+                    if (
+                        getattr(self.stream, "enable_per_callsign_cot_types", False)
+                        and mapping.cot_type
+                    ):
+                        location["cot_type"] = mapping.cot_type
+
+                    self.logger.debug(
+                        f"Applied callsign '{mapping.custom_callsign}' to identifier '{identifier}'"
+                    )
+                elif identifier:
+                    # Handle unmapped identifiers based on error handling mode
+                    if self.stream.callsign_error_handling == "skip":
+                        locations_to_skip.append(i)
+                        self.logger.debug(f"Skipping unmapped identifier: {identifier}")
+                    else:  # fallback mode
+                        self.logger.debug(
+                            f"Using fallback for unmapped identifier: {identifier}"
+                        )
+                        # Keep original name (fallback behavior)
+
+            except Exception as e:
+                self.logger.error(f"Error applying callsign mapping to location: {e}")
+                # Handle based on error handling mode
+                if self.stream.callsign_error_handling == "skip":
+                    locations_to_skip.append(i)
+                # Otherwise use fallback (keep original location unchanged)
+
+        # Remove locations marked for skipping (in reverse order to maintain indices)
+        for i in reversed(locations_to_skip):
+            removed_location = locations.pop(i)
+            self.logger.debug(
+                f"Removed location due to callsign mapping error: {removed_location.get('name', 'Unknown')}"
+            )
+
+        self.logger.info(f"Callsign mapping applied to {len(locations)} locations")
+
+    async def _load_callsign_mappings(self) -> Dict[str, any]:
+        """Load callsign mappings from database for this stream"""
+        try:
+            # Import here to avoid circular imports
+            from models.callsign_mapping import CallsignMapping
+            from database import db
+
+            # Direct database query (same pattern as other services in codebase)
+            mappings = (
+                db.session.query(CallsignMapping)
+                .filter_by(stream_id=self.stream.id)
+                .all()
+            )
+
+            # Convert to dictionary for efficient lookup
+            mappings_dict = {mapping.identifier_value: mapping for mapping in mappings}
+
+            self.logger.debug(
+                f"Loaded {len(mappings_dict)} callsign mappings for stream {self.stream.id}"
+            )
+            return mappings_dict
+
+        except Exception as e:
+            self.logger.error(f"Failed to load callsign mappings: {e}")
+            return {}
+
+    def _extract_identifier(self, location: Dict) -> str:
+        """Extract identifier value from location data based on configured field"""
+        if not self.stream.callsign_identifier_field:
+            return None
+
+        field_name = self.stream.callsign_identifier_field
+
+        try:
+            # Handle different plugin data structures
+            # This is a basic implementation - plugin-specific extraction should be done via the plugin interface
+            if field_name == "imei":
+                # Garmin-style extraction
+                return (
+                    location.get("additional_data", {})
+                    .get("raw_placemark", {})
+                    .get("extended_data", {})
+                    .get("IMEI")
+                )
+            elif field_name == "name":
+                # Direct name field
+                return location.get("name")
+            elif field_name == "uid":
+                # UID field
+                return location.get("uid")
+            elif field_name == "messenger_name":
+                # SPOT-style extraction
+                return (
+                    location.get("additional_data", {})
+                    .get("raw_message", {})
+                    .get("messengerName")
+                )
+            elif field_name == "device_id":
+                # Traccar-style extraction
+                return location.get("additional_data", {}).get("device_id")
+            elif field_name == "feed_id":
+                # SPOT feed ID
+                return location.get("additional_data", {}).get("feed_id")
+            else:
+                # Generic field extraction - try direct access first
+                if field_name in location:
+                    return location[field_name]
+
+                # Try additional_data
+                return location.get("additional_data", {}).get(field_name)
+
+        except Exception as e:
+            self.logger.debug(
+                f"Failed to extract identifier '{field_name}' from location: {e}"
+            )
+            return None
