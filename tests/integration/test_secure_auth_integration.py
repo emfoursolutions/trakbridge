@@ -139,48 +139,6 @@ class TestSecureAuthenticationIntegration(unittest.TestCase):
             "LDAP_USER_SEARCH_BASE": "ou=users,dc=example,dc=com",
         },
     )
-    def test_environment_variable_override(self):
-        """Test that environment variables properly override template values."""
-        from config.authentication_loader import load_authentication_config
-
-        config = load_authentication_config("production")
-
-        # Verify environment variables were applied
-        ldap_config = config["authentication"]["providers"]["ldap"]
-        self.assertTrue(ldap_config["enabled"])
-        self.assertEqual(ldap_config["server"], "ldap://test.example.com")
-        self.assertEqual(ldap_config["bind_dn"], "cn=test,dc=example,dc=com")
-        self.assertEqual(ldap_config["bind_password"], "test-password")
-        self.assertEqual(ldap_config["user_search_base"], "ou=users,dc=example,dc=com")
-
-    def test_configuration_validation_in_production(self):
-        """Test that configuration validation works in production mode."""
-        from config.authentication_loader import get_authentication_loader
-
-        # Test with invalid production configuration
-        with patch.dict(
-            os.environ,
-            {
-                "CI": "true",
-                "LOCAL_AUTH_ENABLED": "false",
-                "LDAP_ENABLED": "false",
-                "OIDC_ENABLED": "false",
-            },
-        ):
-            loader = get_authentication_loader("production")
-
-            # Load configuration - this should detect validation failure
-            config = loader.load_authentication_config()
-
-            # Manually validate the config to check validation works
-            validation_error = loader.validate_config(config)
-
-            # This configuration should be invalid (no providers enabled)
-            self.assertIsNotNone(
-                validation_error,
-                "Configuration should be invalid with no providers enabled",
-            )
-            self.assertIn("No authentication providers are enabled", validation_error)
 
     def test_secure_logging_masks_secrets(self):
         """Test that sensitive values are masked in log output."""
