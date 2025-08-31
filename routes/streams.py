@@ -366,10 +366,26 @@ def test_stream_config():
     """Test stream configuration without saving to database"""
     try:
         data = request.get_json()
-        logger.info(f"Received test-config data: {data}")
+        # Log non-sensitive fields normally, avoid logging plugin_config which contains credentials
         logger.info(
-            f"Plugin config type: {type(data.get('plugin_config'))}, value: {data.get('plugin_config')}"
+            f"Received test-config request for plugin_type: {data.get('plugin_type')}, has_plugin_config: {'plugin_config' in data}"
         )
+
+        # Debug plugin config structure without exposing credentials
+        plugin_config = data.get("plugin_config", {})
+        if isinstance(plugin_config, dict):
+            config_keys = list(plugin_config.keys())
+            logger.info(
+                f"Plugin config validation - type: dict, field_count: {len(plugin_config)}, fields: {config_keys}"
+            )
+            # Check for empty values that might cause issues
+            empty_fields = [k for k, v in plugin_config.items() if not v]
+            if empty_fields:
+                logger.warning(f"Plugin config has empty fields: {empty_fields}")
+        else:
+            logger.info(
+                f"Plugin config validation - type: {type(plugin_config)}, value_is_empty: {not plugin_config}"
+            )
 
         # Validate required fields
         if "plugin_type" not in data or not data["plugin_type"]:
@@ -391,15 +407,22 @@ def test_stream_config():
                 400,
             )
 
-        # Test the connection using the plugin
+        # Merge form config with existing config for empty password fields
         from plugins.plugin_manager import get_plugin_manager
+        from services.stream_config_service import StreamConfigService
 
         plugin_manager = get_plugin_manager()
+        config_service = StreamConfigService(plugin_manager)
+        stream_id = data.get("stream_id")
 
-        # Get plugin instance
-        plugin_instance = plugin_manager.get_plugin(
-            data["plugin_type"], data["plugin_config"]
+        merged_config = config_service.merge_plugin_config_with_existing(
+            data["plugin_config"], data["plugin_type"], stream_id
         )
+
+        # Test the connection using the plugin
+
+        # Get plugin instance with merged config
+        plugin_instance = plugin_manager.get_plugin(data["plugin_type"], merged_config)
         if not plugin_instance:
             logger.error(
                 f"Plugin type not found or failed to create: {data['plugin_type']}"
@@ -414,9 +437,7 @@ def test_stream_config():
                 400,
             )
 
-        logger.info(
-            f"Created plugin instance for {data['plugin_type']} with config: {data['plugin_config']}"
-        )
+        logger.info(f"Successfully created plugin instance for {data['plugin_type']}")
 
         # Test connection
         import asyncio

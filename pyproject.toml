@@ -127,8 +127,41 @@ local_scheme = "node-and-date"
 normalize = false
 
 [tool.pytest.ini_options]
+# Test discovery and execution
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Enhanced output for CI debugging
+addopts = [
+    "-v",                    # Verbose output
+    "--tb=short",           # Shorter traceback format
+    "--strict-markers",     # Treat unregistered markers as errors
+    "--durations=10",       # Show 10 slowest tests
+    "--maxfail=10"          # Stop after 10 failures
+]
+
+# Test markers for categorization
+markers = [
+    "integration: Integration tests that require external dependencies",
+    "ldap: Tests that require LDAP server connectivity",
+    "oidc: Tests that require OIDC provider connectivity", 
+    "performance: Performance and benchmarking tests",
+    "security: Security-focused tests",
+    "callsign: Callsign mapping functionality tests",
+    "database: Database-specific tests",
+    "slow: Slow-running tests that may be skipped in quick runs"
+]
+
+# Warning filters
 filterwarnings = [
     "ignore::DeprecationWarning:pyasn1.*",
     "ignore::DeprecationWarning:aiohttp.*",
-    "ignore:enable_cleanup_closed ignored:DeprecationWarning:aiohttp.*"
+    "ignore:enable_cleanup_closed ignored:DeprecationWarning:aiohttp.*",
+    "ignore::sqlalchemy.exc.LegacyAPIWarning",  # Ignore SQLAlchemy legacy API warnings
+    "ignore::RuntimeWarning:cryptography.*"     # Ignore cryptography runtime warnings in tests
 ]
+
+# Minimum version requirements
+minversion = "6.0"

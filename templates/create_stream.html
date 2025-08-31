@@ -114,6 +114,104 @@
                 </div>
             </div>
 
+            <!-- Callsign Mapping Configuration -->
+            <div id="callsign-mapping-section" class="card" style="display: none;">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-tags"></i>
+                        Callsign Mapping Configuration
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- Enable callsign mapping toggle -->
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="enable_callsign_mapping" name="enable_callsign_mapping" onchange="toggleCallsignMapping()">
+                            <label class="form-check-label" for="enable_callsign_mapping">
+                                <strong>Enable custom callsign mapping</strong>
+                            </label>
+                        </div>
+                        <div class="form-text">
+                            When enabled, you can assign custom callsigns to individual trackers instead of using the provider's default names.
+                        </div>
+                    </div>
+
+                    <!-- Callsign mapping configuration (hidden by default) -->
+                    <div id="callsign-config-section" style="display: none;">
+                        <!-- Identifier field selection -->
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="callsign_identifier_field" class="form-label">Identifier Field</label>
+                                    <select class="form-select" id="callsign_identifier_field" name="callsign_identifier_field" onchange="refreshTrackerDiscovery()">
+                                        <option value="">Select identifier field</option>
+                                    </select>
+                                    <div class="form-text">Which field from tracker data to use as unique identifier</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="callsign_error_handling" class="form-label">Error Handling</label>
+                                    <select class="form-select" id="callsign_error_handling" name="callsign_error_handling">
+                                        <option value="fallback" selected>Fallback to default name</option>
+                                        <option value="skip">Skip problematic trackers</option>
+                                    </select>
+                                    <div class="form-text">How to handle trackers with missing callsign mappings</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Advanced options -->
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="enable_per_callsign_cot_types" name="enable_per_callsign_cot_types" onchange="togglePerCallsignCotTypes()">
+                                <label class="form-check-label" for="enable_per_callsign_cot_types">
+                                    Enable per-callsign CoT type overrides
+                                </label>
+                            </div>
+                            <div class="form-text">Allow different CoT types for individual trackers</div>
+                        </div>
+
+                        <!-- Tracker discovery and mapping -->
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0">Tracker Discovery & Callsign Assignment</h6>
+                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="refreshTrackerDiscovery()">
+                                <i class="fas fa-sync"></i> Refresh Trackers
+                            </button>
+                        </div>
+
+                        <!-- Discovery status -->
+                        <div id="discovery-status" class="alert alert-info" style="display: none;">
+                            <i class="fas fa-spinner fa-spin"></i> Discovering trackers...
+                        </div>
+
+                        <!-- Tracker mapping table -->
+                        <div id="tracker-mapping-container">
+                            <div class="text-center text-muted py-4" id="no-trackers-message">
+                                <i class="fas fa-satellite-dish fa-2x mb-3 opacity-50"></i>
+                                <p>Select an identifier field and ensure your provider credentials are configured to discover trackers.</p>
+                            </div>
+                            <div id="tracker-mapping-table" style="display: none;">
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Identifier</th>
+                                                <th>Current Name</th>
+                                                <th>Assigned Callsign</th>
+                                                <th id="cot-type-header" style="display: none;">CoT Type</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tracker-mapping-tbody">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="card">
                 <div class="card-body">
                     <div class="d-flex gap-2 flex-wrap">
@@ -290,10 +388,12 @@ function updatePluginsByCategory() {
 function updatePluginConfig() {
     const pluginType = document.getElementById('plugin_type').value;
     const configSection = document.getElementById('plugin-config-section');
+    const callsignSection = document.getElementById('callsign-mapping-section');
     const helpContent = document.getElementById('help-content');
 
     if (!pluginType) {
         configSection.style.display = 'none';
+        callsignSection.style.display = 'none';
         helpContent.innerHTML = '<p class="text-muted">Select a stream provider to see configuration instructions.</p>';
         return;
     }
@@ -313,6 +413,16 @@ function updatePluginConfig() {
 
     // Show config section
     configSection.style.display = 'block';
+    
+    // Show callsign mapping section for tracker plugins
+    const trackerCategories = ['tracker', 'satellite', 'platform'];
+    const isTrackerPlugin = trackerCategories.includes(pluginMeta.category?.toLowerCase());
+    if (isTrackerPlugin) {
+        callsignSection.style.display = 'block';
+        loadAvailableFields(pluginType);
+    } else {
+        callsignSection.style.display = 'none';
+    }
 }
 
 function renderPluginConfig(pluginMeta) {
@@ -608,6 +718,256 @@ function getCategoryMapping(pluginCategory) {
         'ems': 'EMS'
     };
     return mapping[pluginCategory?.toLowerCase()] || 'Other';
+}
+
+// Callsign mapping functionality
+let currentTrackerData = [];
+let availableFields = [];
+
+async function loadAvailableFields(pluginType) {
+    try {
+        const response = await fetch(`/api/plugins/${pluginType}/available-fields`);
+        if (response.ok) {
+            const data = await response.json();
+            availableFields = data.available_fields || [];
+            populateIdentifierFieldDropdown();
+        }
+    } catch (error) {
+        console.error('Error loading available fields:', error);
+    }
+}
+
+function populateIdentifierFieldDropdown() {
+    const dropdown = document.getElementById('callsign_identifier_field');
+    dropdown.innerHTML = '<option value="">Select identifier field</option>';
+    
+    availableFields.forEach(field => {
+        const option = document.createElement('option');
+        option.value = field.name;
+        option.textContent = field.display_name;
+        if (field.description) {
+            option.title = field.description;
+        }
+        if (field.recommended) {
+            option.textContent += ' (Recommended)';
+        }
+        dropdown.appendChild(option);
+    });
+}
+
+function toggleCallsignMapping() {
+    const enabled = document.getElementById('enable_callsign_mapping').checked;
+    const configSection = document.getElementById('callsign-config-section');
+    
+    if (enabled) {
+        configSection.style.display = 'block';
+        // Auto-trigger discovery if we have required fields
+        const identifierField = document.getElementById('callsign_identifier_field').value;
+        if (identifierField && hasPluginConfiguration()) {
+            refreshTrackerDiscovery();
+        }
+    } else {
+        configSection.style.display = 'none';
+        clearTrackerMappingTable();
+    }
+}
+
+function togglePerCallsignCotTypes() {
+    const enabled = document.getElementById('enable_per_callsign_cot_types').checked;
+    const header = document.getElementById('cot-type-header');
+    const cells = document.querySelectorAll('.cot-type-cell');
+    
+    if (enabled) {
+        header.style.display = 'table-cell';
+        cells.forEach(cell => cell.style.display = 'table-cell');
+    } else {
+        header.style.display = 'none';
+        cells.forEach(cell => cell.style.display = 'none');
+    }
+}
+
+function hasPluginConfiguration() {
+    const pluginType = document.getElementById('plugin_type').value;
+    if (!pluginType) return false;
+    
+    // Check if required plugin fields have values
+    const configFields = document.querySelectorAll(`[data-plugin="${pluginType}"]`);
+    let hasRequiredFields = true;
+    
+    configFields.forEach(field => {
+        if (field.hasAttribute('required') && !field.value) {
+            hasRequiredFields = false;
+        }
+    });
+    
+    return hasRequiredFields;
+}
+
+async function refreshTrackerDiscovery() {
+    const identifierField = document.getElementById('callsign_identifier_field').value;
+    const pluginType = document.getElementById('plugin_type').value;
+    
+    if (!identifierField || !pluginType || !hasPluginConfiguration()) {
+        clearTrackerMappingTable();
+        return;
+    }
+    
+    showDiscoveryStatus(true);
+    
+    try {
+        // Collect plugin configuration
+        const pluginConfig = {};
+        const configFields = document.querySelectorAll(`[data-plugin="${pluginType}"]`);
+        
+        configFields.forEach(field => {
+            const fieldName = field.name.replace('plugin_', '');
+            const fieldValue = field.type === 'checkbox' ? field.checked : field.value;
+            pluginConfig[fieldName] = fieldValue;
+        });
+        
+        // Discover trackers
+        const response = await fetch('/api/streams/discover-trackers', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                plugin_type: pluginType,
+                plugin_config: pluginConfig
+            })
+        });
+        
+        const data = await response.json();
+        showDiscoveryStatus(false);
+        
+        if (data.success) {
+            currentTrackerData = data.trackers || [];
+            populateTrackerMappingTable(identifierField);
+        } else {
+            showAlert('Failed to discover trackers: ' + (data.error || 'Unknown error'), 'warning');
+            clearTrackerMappingTable();
+        }
+        
+    } catch (error) {
+        console.error('Error discovering trackers:', error);
+        showDiscoveryStatus(false);
+        showAlert('Network error while discovering trackers', 'danger');
+        clearTrackerMappingTable();
+    }
+}
+
+function showDiscoveryStatus(show) {
+    const status = document.getElementById('discovery-status');
+    if (!status) {
+        console.warn('Discovery status element not found');
+        return;
+    }
+    if (show) {
+        status.style.display = 'block';
+    } else {
+        status.style.display = 'none';
+    }
+}
+
+function populateTrackerMappingTable(identifierField) {
+    const table = document.getElementById('tracker-mapping-table');
+    const tbody = document.getElementById('tracker-mapping-tbody');
+    const noTrackersMessage = document.getElementById('no-trackers-message');
+    const perCallsignCotEnabled = document.getElementById('enable_per_callsign_cot_types').checked;
+    
+    // Clear existing rows
+    tbody.innerHTML = '';
+    
+    if (currentTrackerData.length === 0) {
+        table.style.display = 'none';
+        noTrackersMessage.style.display = 'block';
+        noTrackersMessage.innerHTML = `
+            <i class="fas fa-exclamation-triangle fa-2x mb-3 text-warning"></i>
+            <p>No trackers found. Please check your provider configuration and try again.</p>
+        `;
+        return;
+    }
+    
+    currentTrackerData.forEach((tracker, index) => {
+        const identifierValue = extractIdentifierValue(tracker, identifierField);
+        const currentName = tracker.name || tracker.device_name || identifierValue;
+        const cleanCallsign = generateCleanCallsign(identifierValue);
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td class="text-mono">${identifierValue}</td>
+            <td>${currentName}</td>
+            <td>
+                <input type="text" class="form-control form-control-sm" 
+                       name="callsign_mapping_${index}_callsign"
+                       data-identifier="${identifierValue}"
+                       value="${cleanCallsign}"
+                       placeholder="Enter callsign">
+                <input type="hidden" name="callsign_mapping_${index}_identifier" value="${identifierValue}">
+            </td>
+            <td class="cot-type-cell" style="display: ${perCallsignCotEnabled ? 'table-cell' : 'none'}">
+                <select class="form-select form-select-sm" name="callsign_mapping_${index}_cot_type">
+                    <option value="">Use stream default</option>
+                    {% for cot_type in cot_types %}
+                    <option value="{{ cot_type.value }}">{{ cot_type.label }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+    
+    table.style.display = 'block';
+    noTrackersMessage.style.display = 'none';
+}
+
+function extractIdentifierValue(tracker, identifierField) {
+    /**
+     * Extract identifier value from tracker data based on field type.
+     * Handles nested data structures for different identifier fields.
+     */
+    switch (identifierField) {
+        case 'imei':
+            return tracker.additional_data?.raw_placemark?.extended_data?.IMEI || 'Unknown';
+        case 'name':
+            return tracker.name || tracker.device_name || 'Unknown';
+        case 'uid':
+            return tracker.uid || 'Unknown';
+        default:
+            return tracker[identifierField] || 'Unknown';
+    }
+}
+
+function generateCleanCallsign(identifier) {
+    if (!identifier || identifier === 'Unknown') {
+        return '';
+    }
+    
+    // Clean up identifier to make a reasonable callsign
+    let callsign = identifier.toString()
+        .replace(/[^a-zA-Z0-9]/g, '-')  // Replace special chars with dashes
+        .replace(/-+/g, '-')           // Collapse multiple dashes
+        .replace(/^-|-$/g, '')         // Remove leading/trailing dashes
+        .toUpperCase();
+    
+    // Limit length
+    if (callsign.length > 12) {
+        callsign = callsign.substring(0, 12);
+    }
+    
+    return callsign;
+}
+
+function clearTrackerMappingTable() {
+    const table = document.getElementById('tracker-mapping-table');
+    const noTrackersMessage = document.getElementById('no-trackers-message');
+    
+    table.style.display = 'none';
+    noTrackersMessage.style.display = 'block';
+    noTrackersMessage.innerHTML = `
+        <i class="fas fa-satellite-dish fa-2x mb-3 opacity-50"></i>
+        <p>Select an identifier field and ensure your provider credentials are configured to discover trackers.</p>
+    `;
 }
 </script>
 {% endblock %}

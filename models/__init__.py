@@ -12,6 +12,7 @@ Version: {{VERSION}}
 
 from database import TimestampMixin, db
 
+from .callsign_mapping import CallsignMapping
 from .stream import Stream
 
 # Local application imports
@@ -21,6 +22,7 @@ from .user import AccountStatus, AuthProvider, User, UserRole, UserSession
 __all__ = [
     "db",
     "TimestampMixin",
+    "CallsignMapping",
     "TakServer",
     "Stream",
     "User",

@@ -44,8 +44,23 @@ class Stream(db.Model, TimestampMixin):
         db.String(20), default="stream"
     )  # "stream" or "per_point"
 
-    # Relationship to TAK server
+    # New minimal fields for callsign mapping functionality
+    enable_callsign_mapping = db.Column(db.Boolean, default=False)
+    callsign_identifier_field = db.Column(
+        db.String(100), nullable=True
+    )  # Selected field name
+    callsign_error_handling = db.Column(
+        db.String(20), default="fallback"
+    )  # "fallback" or "skip"
+    enable_per_callsign_cot_types = db.Column(
+        db.Boolean, default=False
+    )  # Feature toggle
+
+    # Relationships
     tak_server = db.relationship("TakServer", back_populates="streams")
+    callsign_mappings = db.relationship(
+        "CallsignMapping", back_populates="stream", cascade="all, delete-orphan"
+    )
 
     def __init__(
         self,
@@ -55,6 +70,10 @@ class Stream(db.Model, TimestampMixin):
         cot_type: str = "a-f-G-U-C",
         cot_stale_time: int = 300,
         tak_server_id: int = None,
+        enable_callsign_mapping: bool = False,
+        callsign_identifier_field: str = None,
+        callsign_error_handling: str = "fallback",
+        enable_per_callsign_cot_types: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -64,6 +83,10 @@ class Stream(db.Model, TimestampMixin):
         self.cot_type = cot_type
         self.cot_stale_time = cot_stale_time
         self.tak_server_id = tak_server_id
+        self.enable_callsign_mapping = enable_callsign_mapping
+        self.callsign_identifier_field = callsign_identifier_field
+        self.callsign_error_handling = callsign_error_handling
+        self.enable_per_callsign_cot_types = enable_per_callsign_cot_types
 
     def __repr__(self):
         return f"<Stream {self.name}>"

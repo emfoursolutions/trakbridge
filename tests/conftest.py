@@ -38,11 +38,17 @@ def app():
 
     # Set environment variables for clean testing
     original_env = {}
+    
+    # Use CI environment variables if available, otherwise use test defaults
+    # This ensures compatibility between local testing and CI/CD environments
+    ci_encryption_key = os.environ.get("TRAKBRIDGE_ENCRYPTION_KEY")
+    ci_secret_key = os.environ.get("SECRET_KEY")
+    
     test_env_vars = {
         "FLASK_ENV": "testing",
         "DB_TYPE": "sqlite",
-        "TRAKBRIDGE_ENCRYPTION_KEY": "test-encryption-key-for-testing-12345",
-        "SECRET_KEY": "test-secret-key-for-sessions",
+        "TRAKBRIDGE_ENCRYPTION_KEY": ci_encryption_key or "test-encryption-key-for-testing-12345",
+        "SECRET_KEY": ci_secret_key or "test-secret-key-for-sessions",
     }
 
     # Save original values and set test values
@@ -73,17 +79,45 @@ def client(app):
 
 @pytest.fixture
 def db_session(app):
-    """Create database session for tests"""
+    """Create database session for tests with enhanced CI compatibility"""
     with app.app_context():
-        # Create tables
-        db.create_all()
+        try:
+            # Enhanced database cleanup for CI environment
+            # Close any existing connections to avoid lock issues
+            db.session.close()
+            db.engine.dispose()
+            
+            # Drop and recreate tables for each test
+            db.drop_all()
+            db.create_all()
+            
+            # Ensure clean session state
+            db.session.commit()
 
-        # Provide the session
-        yield db.session
+            # Provide the session
+            yield db.session
 
-        # Cleanup
-        db.session.rollback()
-        db.session.remove()
+        except Exception as e:
+            # Enhanced error handling for CI debugging
+            print(f"Database session setup error: {e}")
+            # Try to recover by creating tables if they don't exist
+            try:
+                db.create_all()
+                yield db.session
+            except Exception as recovery_error:
+                print(f"Database recovery failed: {recovery_error}")
+                raise
+        finally:
+            # Enhanced cleanup for CI environment
+            try:
+                db.session.rollback()
+                db.session.close()
+                db.session.remove()
+                # Dispose engine connections to prevent hanging connections
+                db.engine.dispose()
+            except Exception as cleanup_error:
+                print(f"Database cleanup warning: {cleanup_error}")
+                # Don't fail the test due to cleanup issues
 
 
 @pytest.fixture
@@ -142,13 +176,14 @@ def auth_manager(app):
         }
 
         with patch(
-            "services.auth.auth_manager.load_auth_config", return_value=test_config
+            "config.authentication_loader.load_authentication_config",
+            return_value=test_config,
         ):
             manager = AuthenticationManager()
             yield manager
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def test_users(app, db_session):
     """Create test users for authentication tests"""
     users = {}
@@ -342,10 +377,10 @@ def authenticated_client(client, app, test_users, auth_manager):
 
     def _authenticate_as(username):
         user = test_users[username]
-        session_id = auth_manager.create_session(user)
+        session = auth_manager.create_session(user)
 
         with client.session_transaction() as sess:
-            sess["session_id"] = session_id
+            sess["session_id"] = session.session_id
             sess["user_id"] = user.id
 
         return client
@@ -426,6 +461,77 @@ authentication:
     return config_file
 
 
+@pytest.fixture
+def test_callsign_mappings(app, db_session, test_users):
+    """Create test callsign mappings - follows existing fixture patterns"""
+    mappings = {}
+
+    with app.app_context():
+        from models.callsign_mapping import CallsignMapping
+        from models.stream import Stream
+
+        # Create test streams for tracker plugins
+        test_streams = {}
+        for plugin_type in ["garmin", "spot", "traccar"]:
+            stream = Stream(
+                name=f"Test {plugin_type.title()} Stream",
+                plugin_type=plugin_type,
+                enable_callsign_mapping=True,
+                callsign_identifier_field=(
+                    "imei" if plugin_type == "garmin" else "device_name"
+                ),
+            )
+            db_session.add(stream)
+            test_streams[plugin_type] = stream
+
+        db_session.commit()
+
+        # Create test callsign mappings
+        for plugin_type, stream in test_streams.items():
+            mapping = CallsignMapping(
+                stream_id=stream.id,
+                identifier_value=f"TEST_{plugin_type.upper()}_123",
+                custom_callsign=f"CALL_{plugin_type.upper()}_1",
+                cot_type="a-f-G-U-C",
+            )
+            db_session.add(mapping)
+            mappings[plugin_type] = mapping
+
+        db_session.commit()
+
+    return mappings
+
+
+@pytest.fixture
+def test_streams(app, db_session):
+    """Create test streams - add to existing fixtures for callsign testing"""
+    streams = {}
+
+    with app.app_context():
+        from models.stream import Stream
+
+        # Create basic streams
+        basic_stream = Stream(name="Basic Stream", plugin_type="garmin")
+        db_session.add(basic_stream)
+        streams["basic"] = basic_stream
+
+        # Create callsign-enabled streams
+        callsign_stream = Stream(
+            name="Callsign Stream",
+            plugin_type="spot",
+            enable_callsign_mapping=True,
+            callsign_identifier_field="device_name",
+            callsign_error_handling="fallback",
+            enable_per_callsign_cot_types=True,
+        )
+        db_session.add(callsign_stream)
+        streams["callsign"] = callsign_stream
+
+        db_session.commit()
+
+    return streams
+
+
 # Test utilities
 def create_test_user(
     username,
@@ -465,6 +571,44 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "oidc: mark test as requiring OIDC provider")
     config.addinivalue_line("markers", "performance: mark test as performance test")
     config.addinivalue_line("markers", "security: mark test as security test")
+    config.addinivalue_line("markers", "callsign: mark test as callsign mapping test")
+    config.addinivalue_line(
+        "markers", "database: mark test as requiring specific database"
+    )
+
+
+def pytest_sessionstart(session):
+    """Called after the Session object has been created"""
+    import os
+    
+    # Clean up any existing test database files in CI environment
+    ci_project_dir = os.environ.get('CI_PROJECT_DIR')
+    if ci_project_dir:
+        import glob
+        test_db_files = glob.glob(os.path.join(ci_project_dir, 'test_db*.sqlite*'))
+        for db_file in test_db_files:
+            try:
+                os.remove(db_file)
+                print(f"Cleaned up old test database: {db_file}")
+            except OSError:
+                pass  # Ignore if file doesn't exist or can't be removed
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Called after whole test run finished, right before returning the exit status"""
+    import os
+    
+    # Clean up test database files after session
+    ci_project_dir = os.environ.get('CI_PROJECT_DIR')
+    if ci_project_dir:
+        import glob
+        test_db_files = glob.glob(os.path.join(ci_project_dir, 'test_db*.sqlite*'))
+        for db_file in test_db_files:
+            try:
+                os.remove(db_file)
+                print(f"Cleaned up test database: {db_file}")
+            except OSError:
+                pass  # Ignore if file doesn't exist or can't be removed
 
 
 def pytest_collection_modifyitems(config, items):

@@ -342,17 +342,18 @@ def create_app(config_name=None):
     global _stream_manager_ref
 
     app = Flask(__name__)
-    
+
     # Configure reverse proxy support for Apache, Nginx, etc.
     # This fixes redirect issues when behind reverse proxies
     from werkzeug.middleware.proxy_fix import ProxyFix
+
     app.wsgi_app = ProxyFix(
-        app.wsgi_app, 
-        x_for=1,      # Trust one proxy for X-Forwarded-For
-        x_proto=1,    # Trust one proxy for X-Forwarded-Proto  
-        x_host=1,     # Trust one proxy for X-Forwarded-Host
-        x_port=1,     # Trust one proxy for X-Forwarded-Port
-        x_prefix=1    # Trust one proxy for X-Forwarded-Prefix
+        app.wsgi_app,
+        x_for=1,  # Trust one proxy for X-Forwarded-For
+        x_proto=1,  # Trust one proxy for X-Forwarded-Proto
+        x_host=1,  # Trust one proxy for X-Forwarded-Host
+        x_port=1,  # Trust one proxy for X-Forwarded-Port
+        x_prefix=1,  # Trust one proxy for X-Forwarded-Prefix
     )
 
     def app_context_factory():
@@ -1121,6 +1122,10 @@ def setup_startup_routes(app):
 
         # Allow API health checks
         if request.path.startswith("/api/health"):
+            return None
+
+        # Skip startup check in testing environment
+        if app.config.get("TESTING", False):
             return None
 
         # Redirect to startup page if not ready

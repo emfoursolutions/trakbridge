@@ -22,12 +22,17 @@ import certifi
 import defusedxml.ElementTree as ET
 from fastkml import kml
 
-from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
+from plugins.base_plugin import (
+    BaseGPSPlugin,
+    PluginConfigField,
+    CallsignMappable,
+    FieldMetadata,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class GarminPlugin(BaseGPSPlugin):
+class GarminPlugin(BaseGPSPlugin, CallsignMappable):
     """Enhanced Plugin for fetching location data from Garmin InReach KML feeds"""
 
     PLUGIN_NAME = "garmin"
@@ -118,6 +123,63 @@ class GarminPlugin(BaseGPSPlugin):
             ],
         }
 
+    def get_available_fields(self) -> List[FieldMetadata]:
+        """Return available identifier fields for callsign mapping"""
+        return [
+            FieldMetadata(
+                name="imei",
+                display_name="Device IMEI",
+                type="string",
+                recommended=True,
+                description="Device IMEI from Garmin extended data (most stable identifier)",
+            ),
+            FieldMetadata(
+                name="name",
+                display_name="Map Display Name",
+                type="string",
+                recommended=False,
+                description="Device name from Garmin Map Display Name field",
+            ),
+            FieldMetadata(
+                name="uid",
+                display_name="Generated UID",
+                type="string",
+                recommended=False,
+                description="TrakBridge generated unique identifier (name-imei)",
+            ),
+        ]
+
+    def apply_callsign_mapping(
+        self, tracker_data: List[dict], field_name: str, callsign_map: dict
+    ) -> None:
+        """Apply callsign mappings to Garmin tracker data in-place"""
+        for location in tracker_data:
+            # Get identifier value based on selected field
+            identifier_value = None
+
+            if field_name == "imei":
+                # Extract IMEI from extended_data in additional_data
+                extended_data = (
+                    location.get("additional_data", {})
+                    .get("raw_placemark", {})
+                    .get("extended_data", {})
+                )
+                identifier_value = extended_data.get("IMEI")
+            elif field_name == "name":
+                # Use the name field (Map Display Name)
+                identifier_value = location.get("name")
+            elif field_name == "uid":
+                # Use the generated UID
+                identifier_value = location.get("uid")
+
+            # Apply mapping if identifier found and mapping exists
+            if identifier_value and identifier_value in callsign_map:
+                custom_callsign = callsign_map[identifier_value]
+                location["name"] = custom_callsign
+                logger.debug(
+                    f"[Garmin] Applied callsign mapping: {identifier_value} -> {custom_callsign}"
+                )
+
     async def fetch_locations(
         self, session: aiohttp.ClientSession
     ) -> List[Dict[str, Any]]:
@@ -196,7 +258,10 @@ class GarminPlugin(BaseGPSPlugin):
         self, session: aiohttp.ClientSession, config: Dict[str, Any]
     ) -> str | Dict[str, str] | None:
         """Fetch Garmin KML feed with retry mechanism"""
-        auth = aiohttp.BasicAuth(config["username"], config["password"])
+        # Ensure credentials are properly encoded as strings to avoid latin-1 encoding issues
+        username = str(config["username"]) if config["username"] is not None else ""
+        password = str(config["password"]) if config["password"] is not None else ""
+        auth = aiohttp.BasicAuth(username, password, encoding="utf-8")
         delay = int(config.get("retry_delay", 60))
         ssl_context = ssl.create_default_context(cafile=certifi.where())
 
@@ -206,7 +271,7 @@ class GarminPlugin(BaseGPSPlugin):
                     config["url"], auth=auth, ssl=ssl_context
                 ) as response:
                     if response.status == 200:
-                        content = await response.text()
+                        content = await response.text(encoding="utf-8")
                         return self._validate_kml_content(content)
                     else:
                         return await self._handle_http_error(response)
@@ -219,7 +284,7 @@ class GarminPlugin(BaseGPSPlugin):
                         config["url"], auth=auth, ssl=False
                     ) as response:
                         if response.status == 200:
-                            content = await response.text()
+                            content = await response.text(encoding="utf-8")
                             if content and "<kml" in content:
                                 logger.warning(
                                     "Using insecure SSL connection due to certificate issues"
@@ -264,7 +329,7 @@ class GarminPlugin(BaseGPSPlugin):
             404: "Resource not found. Check the KML feed URL.",
         }
 
-        error_text = await response.text()
+        error_text = await response.text(encoding="utf-8")
         message = error_messages.get(
             response.status, f"HTTP {response.status}: {error_text}"
         )
@@ -415,7 +480,9 @@ class KMLDataExtractor:
 
             lon, lat = coords
             extended_data = self._extract_extended_data(feature)
-            placemark_id = extended_data.get("IMEI", "Unknown")
+            placemark_id = self._extract_device_imei(
+                extended_data, getattr(feature, "name", "Unknown")
+            )
 
             # Use Map Display Name from extended data with fallback to feature name
             name = extended_data.get("Map Display Name", "Unknown")
@@ -541,7 +608,7 @@ class KMLDataExtractor:
                 name_elem = placemark_xml.find("kml:name", self.KML_NAMESPACE)
                 name = name_elem.text if name_elem is not None else "Unknown"
 
-            placemark_id = extended_data.get("IMEI", "Unknown")
+            placemark_id = self._extract_device_imei(extended_data, name)
 
             clean_name = str(name).replace(" ", "")
             clean_id = str(placemark_id).replace(" ", "")
@@ -596,3 +663,76 @@ class KMLDataExtractor:
                             return parsed
 
         return None
+
+    def _extract_device_imei(
+        self, extended_data: Dict[str, Any], device_name: str
+    ) -> str:
+        """Extract IMEI with multiple fallback strategies to avoid 'Unknown' identifiers"""
+        # Primary: Standard IMEI field
+        imei = extended_data.get("IMEI")
+        if imei and imei.strip() and imei.strip().lower() != "unknown":
+            logger.debug(f"[Garmin] Found IMEI from primary field: {imei}")
+            return imei.strip()
+
+        # Fallback 1: Alternative IMEI field names
+        for field_name in ["Device IMEI", "IMEI Number", "Device ID", "ESN"]:
+            imei = extended_data.get(field_name)
+            if imei and imei.strip() and imei.strip().lower() != "unknown":
+                logger.debug(f"[Garmin] Found IMEI from {field_name}: {imei}")
+                return imei.strip()
+
+        # Fallback 2: Extract from device name if it contains IMEI-like pattern
+        if device_name and device_name != "Unknown":
+            # Look for 15-digit IMEI pattern in device name
+            import re
+
+            imei_pattern = re.search(r"\b\d{15}\b", device_name)
+            if imei_pattern:
+                logger.debug(
+                    f"[Garmin] Extracted IMEI from device name: {imei_pattern.group()}"
+                )
+                return imei_pattern.group()
+
+        # Fallback 3: Generate stable identifier from other extended data
+        stable_fields = [
+            "In Emergency",
+            "Latitude",
+            "Longitude",
+            "Elevation (ft)",
+            "Velocity (mph)",
+            "Course",
+            "Valid GPS Fix",
+        ]
+        for field_name in stable_fields:
+            value = extended_data.get(field_name)
+            if value and str(value).strip():
+                # Create a hash-based stable identifier from field name + first non-empty value
+                import hashlib
+
+                stable_id = hashlib.md5(f"{field_name}:{value}".encode()).hexdigest()[
+                    :12
+                ]
+                logger.warning(
+                    f"[Garmin] IMEI not found, using generated stable ID from {field_name}: {stable_id}"
+                )
+                return f"GEN-{stable_id}"
+
+        # Final fallback: Use device name if available
+        if device_name and device_name != "Unknown":
+            import re
+
+            clean_name = re.sub(r"[^a-zA-Z0-9]", "", device_name)[:12]
+            if clean_name:
+                logger.warning(
+                    f"[Garmin] IMEI not found, using cleaned device name: {clean_name}"
+                )
+                return f"DEV-{clean_name}"
+
+        # Last resort: Generate based on timestamp to ensure uniqueness
+        from datetime import datetime
+
+        timestamp_id = str(int(datetime.now().timestamp()))[-8:]
+        logger.error(
+            f"[Garmin] IMEI extraction failed completely, using timestamp-based ID: TS-{timestamp_id}"
+        )
+        return f"TS-{timestamp_id}"

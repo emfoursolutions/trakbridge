@@ -11,6 +11,7 @@ These tests verify the complete plugin categorization system including:
 
 import json
 import pytest
+import uuid
 from unittest.mock import patch, Mock
 from flask import Flask
 from database import db
@@ -23,41 +24,57 @@ from utils.app_helpers import get_plugin_manager
 
 @pytest.fixture
 def mock_app_with_categories(app):
-    """Flask app with categorization system initialized"""
+    """Flask app with categorization system initialized (no database objects)"""
     with app.app_context():
         # Initialize the category service
         plugin_manager = get_plugin_manager()
         initialize_category_service(plugin_manager)
-
-        # Create test user
-        test_user = User(
-            username="test_user",
-            email="test@example.com",
-            full_name="Test User",
-            role=UserRole.ADMIN,
-            auth_provider=AuthProvider.LOCAL,
-        )
-        test_user.set_password("test_password")
-        db.session.add(test_user)
-
-        # Create test TAK server
-        test_server = TakServer(
-            name="Test TAK Server", host="test.example.com", port=8087, use_ssl=True
-        )
-        db.session.add(test_server)
-        db.session.commit()
-
         yield app
+
+
+def create_test_user_and_server(db_session):
+    """Helper function to create test user and server with unique names"""
+    unique_id = uuid.uuid4().hex[:8]
+
+    # Create test user with unique credentials
+    test_user = User(
+        username=f"test_user_{unique_id}",
+        email=f"test_{unique_id}@example.com",
+        full_name="Test User",
+        role=UserRole.ADMIN,
+        auth_provider=AuthProvider.LOCAL,
+    )
+    test_user.set_password("test_password")
+    db_session.add(test_user)
+
+    # Create test TAK server with unique name
+    unique_name = f"Test TAK Server {uuid.uuid4().hex[:8]}"
+    test_server = TakServer(
+        name=unique_name,
+        host="test.example.com",
+        port=8087,
+        protocol="tls",
+        verify_ssl=True,
+    )
+    db_session.add(test_server)
+    db_session.commit()
+
+    return test_user, test_server
 
 
 class TestPluginCategoryAPI:
     """Test plugin category API endpoints"""
 
     def test_get_plugin_categories_endpoint(
-        self, client, mock_app_with_categories, auth_headers
+        self, authenticated_client, mock_app_with_categories, db_session
     ):
         """Test the /api/plugins/categories endpoint"""
-        response = client.get("/api/plugins/categories", headers=auth_headers)
+        # Create test user and server for this specific test
+        create_test_user_and_server(db_session)
+
+        # Authenticate as admin user
+        auth_client = authenticated_client("admin")
+        response = auth_client.get("/api/plugins/categories")
 
         assert response.status_code == 200
         data = response.get_json()
@@ -83,11 +100,17 @@ class TestPluginCategoryAPI:
             assert isinstance(category_data["plugin_count"], int)
 
     def test_get_plugins_by_category_endpoint(
-        self, client, mock_app_with_categories, auth_headers
+        self, authenticated_client, mock_app_with_categories, db_session
     ):
         """Test the /api/plugins/by-category/<category> endpoint"""
+        # Create test user and server for this specific test
+        create_test_user_and_server(db_session)
+
+        # Authenticate as admin user
+        auth_client = authenticated_client("admin")
+
         # Test Tracker category
-        response = client.get("/api/plugins/by-category/Tracker", headers=auth_headers)
+        response = auth_client.get("/api/plugins/by-category/Tracker")
 
         assert response.status_code == 200
         data = response.get_json()
@@ -110,12 +133,16 @@ class TestPluginCategoryAPI:
             assert plugin["category"] == "Tracker"
 
     def test_get_plugins_by_nonexistent_category(
-        self, client, mock_app_with_categories, auth_headers
+        self, authenticated_client, mock_app_with_categories, db_session
     ):
         """Test getting plugins for non-existent category"""
-        response = client.get(
-            "/api/plugins/by-category/NonExistent", headers=auth_headers
-        )
+        # Create test user and server for this specific test
+        create_test_user_and_server(db_session)
+
+        # Authenticate as admin user
+        auth_client = authenticated_client("admin")
+
+        response = auth_client.get("/api/plugins/by-category/NonExistent")
 
         assert response.status_code == 200
         data = response.get_json()
@@ -124,10 +151,16 @@ class TestPluginCategoryAPI:
         assert data["plugins"] == []
 
     def test_get_categorized_plugins_endpoint(
-        self, client, mock_app_with_categories, auth_headers
+        self, authenticated_client, mock_app_with_categories, db_session
     ):
         """Test the /api/plugins/categorized endpoint"""
-        response = client.get("/api/plugins/categorized", headers=auth_headers)
+        # Create test user and server for this specific test
+        create_test_user_and_server(db_session)
+
+        # Authenticate as admin user
+        auth_client = authenticated_client("admin")
+
+        response = auth_client.get("/api/plugins/categorized")
 
         assert response.status_code == 200
         data = response.get_json()
@@ -146,10 +179,16 @@ class TestPluginCategoryAPI:
                 assert plugin["category"] == category
 
     def test_get_category_statistics_endpoint(
-        self, client, mock_app_with_categories, auth_headers
+        self, authenticated_client, mock_app_with_categories, db_session
     ):
         """Test the /api/plugins/category-statistics endpoint"""
-        response = client.get("/api/plugins/category-statistics", headers=auth_headers)
+        # Create test user and server for this specific test
+        create_test_user_and_server(db_session)
+
+        # Authenticate as admin user
+        auth_client = authenticated_client("admin")
+
+        response = auth_client.get("/api/plugins/category-statistics")
 
         assert response.status_code == 200
         data = response.get_json()

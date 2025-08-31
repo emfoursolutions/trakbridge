@@ -255,8 +255,32 @@ class TestingEnvironmentConfig(BaseConfig):
             # Use parent class logic to build MySQL URI
             return super().SQLALCHEMY_DATABASE_URI
 
-        # Default to SQLite in-memory for unit tests
-        return "sqlite:///:memory:"
+        # Default to SQLite file-based database for better CI compatibility
+        # Use process-specific database file to avoid conflicts in parallel testing
+        import os
+        import tempfile
+        
+        # Check if we're in CI environment
+        ci_project_dir = os.environ.get('CI_PROJECT_DIR')
+        if ci_project_dir:
+            # In CI: Use predictable path in project directory for better debugging
+            # Ensure the directory exists and is writable
+            try:
+                os.makedirs(ci_project_dir, exist_ok=True)
+                db_file = os.path.join(ci_project_dir, 'test_db.sqlite')
+                # Test write access by creating and removing a test file
+                test_file = os.path.join(ci_project_dir, '.write_test')
+                with open(test_file, 'w') as f:
+                    f.write('test')
+                os.remove(test_file)
+            except (OSError, PermissionError):
+                # Fallback to temp directory if CI directory isn't writable
+                db_file = os.path.join(tempfile.gettempdir(), f'trakbridge_ci_test_{os.getpid()}.sqlite')
+        else:
+            # Local: Use temporary file that gets cleaned up
+            db_file = os.path.join(tempfile.gettempdir(), f'trakbridge_test_{os.getpid()}.sqlite')
+        
+        return f"sqlite:///{db_file}"
 
     @property
     def SQLALCHEMY_ENGINE_OPTIONS(self) -> Dict[str, Any]:
@@ -264,10 +288,25 @@ class TestingEnvironmentConfig(BaseConfig):
         db_type = self._get_database_type()
 
         if db_type == "sqlite":
-            # SQLite options for unit tests
+            # Enhanced SQLite options for CI/testing compatibility
+            import os
+            
+            connect_args = {
+                "check_same_thread": False,
+                "timeout": 30,  # 30 second timeout for database locks
+            }
+            
+            # Add WAL mode for better concurrent access in CI
+            if os.environ.get('CI_PROJECT_DIR'):
+                connect_args.update({
+                    "isolation_level": None,  # Autocommit mode
+                })
+            
             return {
                 "pool_pre_ping": False,
-                "connect_args": {"check_same_thread": False},
+                "connect_args": connect_args,
+                "pool_timeout": 30,
+                "pool_recycle": 300,
             }
         elif db_type == "postgresql":
             # PostgreSQL options for integration tests

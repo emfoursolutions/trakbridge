@@ -33,13 +33,18 @@ import aiohttp
 import certifi
 
 # Local application imports
-from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
+from plugins.base_plugin import (
+    BaseGPSPlugin,
+    PluginConfigField,
+    CallsignMappable,
+    FieldMetadata,
+)
 
 # Module-level logger
 logger = logging.getLogger(__name__)
 
 
-class SpotPlugin(BaseGPSPlugin):
+class SpotPlugin(BaseGPSPlugin, CallsignMappable):
     """Plugin for fetching location data from SPOT Satellite trackers"""
 
     # Class-level plugin name for easier discovery
@@ -113,6 +118,67 @@ class SpotPlugin(BaseGPSPlugin):
                 ),
             ],
         }
+
+    def get_available_fields(self) -> List[FieldMetadata]:
+        """Return available identifier fields for callsign mapping"""
+        return [
+            FieldMetadata(
+                name="messenger_name",
+                display_name="Device Name",
+                type="string",
+                recommended=True,
+                description="SPOT device messenger name (most stable identifier)",
+            ),
+            FieldMetadata(
+                name="feed_id",
+                display_name="Feed ID",
+                type="string",
+                recommended=False,
+                description="SPOT feed ID from configuration",
+            ),
+            FieldMetadata(
+                name="device_id",
+                display_name="Device ID",
+                type="string",
+                recommended=False,
+                description="SPOT internal device ID from message data",
+            ),
+        ]
+
+    def apply_callsign_mapping(
+        self, tracker_data: List[dict], field_name: str, callsign_map: dict
+    ) -> None:
+        """Apply callsign mappings to SPOT tracker data in-place"""
+        for location in tracker_data:
+            # Get identifier value based on selected field
+            identifier_value = None
+
+            if field_name == "messenger_name":
+                # Extract messenger name from additional_data
+                identifier_value = (
+                    location.get("additional_data", {})
+                    .get("raw_message", {})
+                    .get("messengerName")
+                )
+                # Fallback to name field if raw message not available
+                if not identifier_value:
+                    identifier_value = location.get("name")
+            elif field_name == "feed_id":
+                # Extract feed_id from additional_data
+                identifier_value = location.get("additional_data", {}).get("feed_id")
+            elif field_name == "device_id":
+                # Extract device ID from raw message data
+                identifier_value = (
+                    location.get("additional_data", {}).get("raw_message", {}).get("id")
+                )
+
+            # Apply mapping if identifier found and mapping exists
+            if identifier_value and identifier_value in callsign_map:
+                custom_callsign = callsign_map[identifier_value]
+                location["name"] = custom_callsign
+                logger.debug(
+                    f"[SPOT] Applied callsign mapping: {identifier_value} -> {custom_callsign}"
+                )
 
     async def fetch_locations(
         self, session: aiohttp.ClientSession
@@ -248,7 +314,7 @@ class SpotPlugin(BaseGPSPlugin):
                     return [{"_error": "404", "_error_message": "Resource not found"}]
                 else:
                     logger.error(f"Error fetching SPOT data: HTTP {response.status}")
-                    error_text = await response.text()
+                    error_text = await response.text(encoding="utf-8")
                     logger.debug(f"Response: {error_text}")
                     return [
                         {
