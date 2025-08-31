@@ -2,25 +2,25 @@
 # Compatible with MIL-STD-2525C format for military symbology
 
 cot_types:
-  - value: "a-f-G-F-U"
+  - value: "a-f-G-U"
     sidc: "SFGPU------.svg"
     label: "Friendly - Generic"
     description: "Generic friendly marker"
     category: "friendly"
 
-  - value: "a-h-G-F-U"
+  - value: "a-h-G-U"
     sidc: "SHGPU------.svg"
     label: "Hostile - Generic"
     description: "Generic hostile marker"
     category: "hostile"
 
-  - value: "a-n-G-F-U"
+  - value: "a-n-G-U"
     sidc: "SNGPU------.svg"
     label: "Neutral - Generic"
     description: "Generic neutral marker"
     category: "neutral"
 
-  - value: "a-u-G-F-U"
+  - value: "a-u-G-U"
     sidc: "SUGPU------.svg"
     label: "Unknown - Generic"
     description: "Unknown affiliation marker"
@@ -74,7 +74,7 @@ cot_types:
     description: "Friendly fixed-wing aircraft"
     category: "friendly"
 
-  - value: "a-f-A-M-"
+  - value: "a-f-A-M-h"
     sidc: "SFAPMh------.svg"
     label: "Friendly Air Unit - Rotary Wing"
     description: "Friendly rotary wing (helicopter)"
@@ -104,7 +104,7 @@ cot_types:
     description: "Hostile civilian vehicle"
     category: "hostile"
 
-  - value: "a-n-A"
+  - value: "a-n-A-M-F"
     sidc: "SNAP-------.svg"
     label: "Neutral Air"
     description: "Neutral air asset"
