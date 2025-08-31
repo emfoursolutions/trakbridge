@@ -38,11 +38,17 @@ def app():
 
     # Set environment variables for clean testing
     original_env = {}
+    
+    # Use CI environment variables if available, otherwise use test defaults
+    # This ensures compatibility between local testing and CI/CD environments
+    ci_encryption_key = os.environ.get("TRAKBRIDGE_ENCRYPTION_KEY")
+    ci_secret_key = os.environ.get("SECRET_KEY")
+    
     test_env_vars = {
         "FLASK_ENV": "testing",
         "DB_TYPE": "sqlite",
-        "TRAKBRIDGE_ENCRYPTION_KEY": "test-encryption-key-for-testing-12345",
-        "SECRET_KEY": "test-secret-key-for-sessions",
+        "TRAKBRIDGE_ENCRYPTION_KEY": ci_encryption_key or "test-encryption-key-for-testing-12345",
+        "SECRET_KEY": ci_secret_key or "test-secret-key-for-sessions",
     }
 
     # Save original values and set test values
@@ -73,18 +79,45 @@ def client(app):
 
 @pytest.fixture
 def db_session(app):
-    """Create database session for tests"""
+    """Create database session for tests with enhanced CI compatibility"""
     with app.app_context():
-        # Drop and recreate tables for each test
-        db.drop_all()
-        db.create_all()
+        try:
+            # Enhanced database cleanup for CI environment
+            # Close any existing connections to avoid lock issues
+            db.session.close()
+            db.engine.dispose()
+            
+            # Drop and recreate tables for each test
+            db.drop_all()
+            db.create_all()
+            
+            # Ensure clean session state
+            db.session.commit()
 
-        # Provide the session
-        yield db.session
+            # Provide the session
+            yield db.session
 
-        # Cleanup
-        db.session.rollback()
-        db.session.remove()
+        except Exception as e:
+            # Enhanced error handling for CI debugging
+            print(f"Database session setup error: {e}")
+            # Try to recover by creating tables if they don't exist
+            try:
+                db.create_all()
+                yield db.session
+            except Exception as recovery_error:
+                print(f"Database recovery failed: {recovery_error}")
+                raise
+        finally:
+            # Enhanced cleanup for CI environment
+            try:
+                db.session.rollback()
+                db.session.close()
+                db.session.remove()
+                # Dispose engine connections to prevent hanging connections
+                db.engine.dispose()
+            except Exception as cleanup_error:
+                print(f"Database cleanup warning: {cleanup_error}")
+                # Don't fail the test due to cleanup issues
 
 
 @pytest.fixture
@@ -542,6 +575,40 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "database: mark test as requiring specific database"
     )
+
+
+def pytest_sessionstart(session):
+    """Called after the Session object has been created"""
+    import os
+    
+    # Clean up any existing test database files in CI environment
+    ci_project_dir = os.environ.get('CI_PROJECT_DIR')
+    if ci_project_dir:
+        import glob
+        test_db_files = glob.glob(os.path.join(ci_project_dir, 'test_db*.sqlite*'))
+        for db_file in test_db_files:
+            try:
+                os.remove(db_file)
+                print(f"Cleaned up old test database: {db_file}")
+            except OSError:
+                pass  # Ignore if file doesn't exist or can't be removed
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Called after whole test run finished, right before returning the exit status"""
+    import os
+    
+    # Clean up test database files after session
+    ci_project_dir = os.environ.get('CI_PROJECT_DIR')
+    if ci_project_dir:
+        import glob
+        test_db_files = glob.glob(os.path.join(ci_project_dir, 'test_db*.sqlite*'))
+        for db_file in test_db_files:
+            try:
+                os.remove(db_file)
+                print(f"Cleaned up test database: {db_file}")
+            except OSError:
+                pass  # Ignore if file doesn't exist or can't be removed
 
 
 def pytest_collection_modifyitems(config, items):
