@@ -344,13 +344,22 @@ class BaseAuthenticationProvider(ABC):
         session = UserSession.query.filter_by(session_id=session_id).first()
 
         if session and session.is_valid():
-            session.update_activity()
-            try:
-                from database import db
+            # Only commit to database if activity was actually updated (5-minute throttling)
+            activity_updated = session.update_activity()
+            
+            if activity_updated:
+                try:
+                    from database import db
 
-                db.session.commit()
-            except Exception as e:
-                self.logger.warning(f"Failed to update session activity: {e}")
+                    db.session.commit()
+                except Exception as e:
+                    self.logger.warning(f"Failed to update session activity: {e}")
+                    # Try to rollback in case of MySQL concurrency errors
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass  # Ignore rollback errors
+                        
             return session
 
         return None
