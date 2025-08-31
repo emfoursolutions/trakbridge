@@ -480,7 +480,9 @@ class KMLDataExtractor:
 
             lon, lat = coords
             extended_data = self._extract_extended_data(feature)
-            placemark_id = self._extract_device_imei(extended_data, getattr(feature, "name", "Unknown"))
+            placemark_id = self._extract_device_imei(
+                extended_data, getattr(feature, "name", "Unknown")
+            )
 
             # Use Map Display Name from extended data with fallback to feature name
             name = extended_data.get("Map Display Name", "Unknown")
@@ -662,51 +664,75 @@ class KMLDataExtractor:
 
         return None
 
-    def _extract_device_imei(self, extended_data: Dict[str, Any], device_name: str) -> str:
+    def _extract_device_imei(
+        self, extended_data: Dict[str, Any], device_name: str
+    ) -> str:
         """Extract IMEI with multiple fallback strategies to avoid 'Unknown' identifiers"""
         # Primary: Standard IMEI field
         imei = extended_data.get("IMEI")
         if imei and imei.strip() and imei.strip().lower() != "unknown":
             logger.debug(f"[Garmin] Found IMEI from primary field: {imei}")
             return imei.strip()
-        
+
         # Fallback 1: Alternative IMEI field names
         for field_name in ["Device IMEI", "IMEI Number", "Device ID", "ESN"]:
             imei = extended_data.get(field_name)
             if imei and imei.strip() and imei.strip().lower() != "unknown":
                 logger.debug(f"[Garmin] Found IMEI from {field_name}: {imei}")
                 return imei.strip()
-        
+
         # Fallback 2: Extract from device name if it contains IMEI-like pattern
         if device_name and device_name != "Unknown":
             # Look for 15-digit IMEI pattern in device name
             import re
-            imei_pattern = re.search(r'\b\d{15}\b', device_name)
+
+            imei_pattern = re.search(r"\b\d{15}\b", device_name)
             if imei_pattern:
-                logger.debug(f"[Garmin] Extracted IMEI from device name: {imei_pattern.group()}")
+                logger.debug(
+                    f"[Garmin] Extracted IMEI from device name: {imei_pattern.group()}"
+                )
                 return imei_pattern.group()
-        
+
         # Fallback 3: Generate stable identifier from other extended data
-        stable_fields = ["In Emergency", "Latitude", "Longitude", "Elevation (ft)", "Velocity (mph)", "Course", "Valid GPS Fix"]
+        stable_fields = [
+            "In Emergency",
+            "Latitude",
+            "Longitude",
+            "Elevation (ft)",
+            "Velocity (mph)",
+            "Course",
+            "Valid GPS Fix",
+        ]
         for field_name in stable_fields:
             value = extended_data.get(field_name)
             if value and str(value).strip():
                 # Create a hash-based stable identifier from field name + first non-empty value
                 import hashlib
-                stable_id = hashlib.md5(f"{field_name}:{value}".encode()).hexdigest()[:12]
-                logger.warning(f"[Garmin] IMEI not found, using generated stable ID from {field_name}: {stable_id}")
+
+                stable_id = hashlib.md5(f"{field_name}:{value}".encode()).hexdigest()[
+                    :12
+                ]
+                logger.warning(
+                    f"[Garmin] IMEI not found, using generated stable ID from {field_name}: {stable_id}"
+                )
                 return f"GEN-{stable_id}"
-        
+
         # Final fallback: Use device name if available
         if device_name and device_name != "Unknown":
             import re
-            clean_name = re.sub(r'[^a-zA-Z0-9]', '', device_name)[:12]
+
+            clean_name = re.sub(r"[^a-zA-Z0-9]", "", device_name)[:12]
             if clean_name:
-                logger.warning(f"[Garmin] IMEI not found, using cleaned device name: {clean_name}")
+                logger.warning(
+                    f"[Garmin] IMEI not found, using cleaned device name: {clean_name}"
+                )
                 return f"DEV-{clean_name}"
-        
+
         # Last resort: Generate based on timestamp to ensure uniqueness
         from datetime import datetime
+
         timestamp_id = str(int(datetime.now().timestamp()))[-8:]
-        logger.error(f"[Garmin] IMEI extraction failed completely, using timestamp-based ID: TS-{timestamp_id}")
+        logger.error(
+            f"[Garmin] IMEI extraction failed completely, using timestamp-based ID: TS-{timestamp_id}"
+        )
         return f"TS-{timestamp_id}"

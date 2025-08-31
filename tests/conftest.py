@@ -75,7 +75,8 @@ def client(app):
 def db_session(app):
     """Create database session for tests"""
     with app.app_context():
-        # Create tables
+        # Drop and recreate tables for each test
+        db.drop_all()
         db.create_all()
 
         # Provide the session
@@ -142,13 +143,14 @@ def auth_manager(app):
         }
 
         with patch(
-            "services.auth.auth_manager.load_auth_config", return_value=test_config
+            "config.authentication_loader.load_authentication_config",
+            return_value=test_config,
         ):
             manager = AuthenticationManager()
             yield manager
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def test_users(app, db_session):
     """Create test users for authentication tests"""
     users = {}
@@ -342,10 +344,10 @@ def authenticated_client(client, app, test_users, auth_manager):
 
     def _authenticate_as(username):
         user = test_users[username]
-        session_id = auth_manager.create_session(user)
+        session = auth_manager.create_session(user)
 
         with client.session_transaction() as sess:
-            sess["session_id"] = session_id
+            sess["session_id"] = session.session_id
             sess["user_id"] = user.id
 
         return client

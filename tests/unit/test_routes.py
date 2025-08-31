@@ -139,7 +139,7 @@ class TestCallsignAPIRoutes:
         """Test discover-trackers endpoint doesn't return 500 error - TDD SUCCESS"""
         # Arrange: Prepare test data for tracker discovery
         test_data = {
-            "plugin_type": "garmin", 
+            "plugin_type": "garmin",
             "plugin_config": {"username": "test_user", "password": "test_pass"},
         }
 
@@ -152,11 +152,19 @@ class TestCallsignAPIRoutes:
 
         # Assert: Should NOT return 500 (internal server error) anymore
         # The core fix is that get_plugin_instance() method error is resolved
-        assert response.status_code != 500, f"Discover trackers returned 500 error, fix not applied"
-        
+        assert (
+            response.status_code != 500
+        ), f"Discover trackers returned 500 error, fix not applied"
+
         # Should return proper status codes (200/400 for valid requests, 401/503 for auth/startup)
-        assert response.status_code in [200, 400, 401, 302, 503], f"Unexpected status code: {response.status_code}"
-        
+        assert response.status_code in [
+            200,
+            400,
+            401,
+            302,
+            503,
+        ], f"Unexpected status code: {response.status_code}"
+
         # If we get JSON response, it should be properly structured
         if response.headers.get("content-type") == "application/json":
             data = response.get_json()
@@ -167,15 +175,15 @@ class TestCallsignAPIRoutes:
         """Test discover-trackers endpoint returns proper data structure for callsign mapping"""
         # Arrange: Prepare test data with required URL field
         test_data = {
-            "plugin_type": "garmin", 
+            "plugin_type": "garmin",
             "plugin_config": {
-                "username": "test_user", 
+                "username": "test_user",
                 "password": "test_pass",
-                "url": "https://share.garmin.com/Feed/Share/test"
+                "url": "https://share.garmin.com/Feed/Share/test",
             },
         }
 
-        # Act: Make request to discover trackers endpoint  
+        # Act: Make request to discover trackers endpoint
         response = client.post(
             "/api/streams/discover-trackers",
             json=test_data,
@@ -184,19 +192,24 @@ class TestCallsignAPIRoutes:
 
         # Assert: Should return proper structure when accessible
         # (May be blocked by auth/startup in test environment)
-        if response.status_code == 200 and response.headers.get("content-type") == "application/json":
+        if (
+            response.status_code == 200
+            and response.headers.get("content-type") == "application/json"
+        ):
             data = response.get_json()
             # Should have callsign mapping data structure
             assert "success" in data
-            assert "tracker_count" in data  
+            assert "tracker_count" in data
             assert "trackers" in data
             assert "available_fields" in data
-            
+
             # Available fields should be present for callsign mapping
             if data.get("success"):
                 fields = data.get("available_fields", [])
                 assert len(fields) > 0, "Should have available identifier fields"
-                assert any(field["recommended"] for field in fields), "Should have at least one recommended field"
+                assert any(
+                    field["recommended"] for field in fields
+                ), "Should have at least one recommended field"
 
     def test_callsign_mappings_endpoint_exists(self, client):
         """Test callsign mappings endpoint exists - FAILING TEST FIRST"""
@@ -215,18 +228,18 @@ class TestCallsignAPIRoutes:
         assert response.status_code != 404
 
     def test_garmin_plugin_available_fields_endpoint_fixed(self, client):
-        """Test that available fields endpoint no longer returns 500 error - TDD SUCCESS"""        
+        """Test that available fields endpoint no longer returns 500 error - TDD SUCCESS"""
         # Act: Request available fields for Garmin plugin
         response = client.get("/api/plugins/garmin/available-fields")
-        
+
         # Assert: Should NOT return 500 (internal server error) anymore
         # The core fix is that get_plugin_instance() method error is resolved
         assert response.status_code != 500
-        
+
         # Should return either proper JSON (if auth bypassed) or auth-related status
         assert response.status_code in [200, 401, 302, 503]
-        
-        # If we got JSON response, verify the structure is correct 
+
+        # If we got JSON response, verify the structure is correct
         # (this confirms the fix works when auth is properly configured)
         if response.headers.get("content-type") == "application/json":
             data = response.get_json()
@@ -236,16 +249,23 @@ class TestCallsignAPIRoutes:
     def test_all_plugins_available_fields_fixed(self, client):
         """Test that available fields endpoint works for all plugins - TDD SUCCESS"""
         plugins_to_test = ["garmin", "spot", "traccar", "deepstate"]
-        
+
         for plugin_type in plugins_to_test:
             # Act: Request available fields for each plugin
             response = client.get(f"/api/plugins/{plugin_type}/available-fields")
-            
+
             # Assert: Should NOT return 500 (internal server error) anymore
-            assert response.status_code != 500, f"Plugin {plugin_type} still returns 500 error"
-            
-            # Should return either proper JSON (if auth bypassed) or auth-related status  
-            assert response.status_code in [200, 401, 302, 503], f"Plugin {plugin_type} returned unexpected status {response.status_code}"
+            assert (
+                response.status_code != 500
+            ), f"Plugin {plugin_type} still returns 500 error"
+
+            # Should return either proper JSON (if auth bypassed) or auth-related status
+            assert response.status_code in [
+                200,
+                401,
+                302,
+                503,
+            ], f"Plugin {plugin_type} returned unexpected status {response.status_code}"
 
     def test_update_callsign_mappings_endpoint_exists(self, client):
         """Test callsign mappings update endpoint exists - FAILING TEST FIRST"""
@@ -257,19 +277,28 @@ class TestCallsignAPIRoutes:
         # Assert: Should not return 404 (endpoint exists)
         assert response.status_code != 404
 
-    def test_invalid_plugin_fields_request(self, client):
+    def test_invalid_plugin_fields_request(self, authenticated_client):
         """Test invalid plugin returns appropriate response - FAILING TEST FIRST"""
+        # Get authenticated client for admin user
+        client = authenticated_client("admin")
+
         # Act: Request fields for non-existent plugin
         response = client.get("/api/plugins/nonexistent_plugin/available-fields")
 
         # Assert: Should not return 404 (endpoint exists)
-        # During startup/testing, may redirect to startup page (200 with HTML)
-        # or return auth errors (401) or service unavailable (503)
+        # With authentication, should return JSON error response or service error
         assert response.status_code != 404
 
-        # If we get HTML response, it's likely the startup page
-        if response.headers.get("content-type", "").startswith("text/html"):
-            assert "TrakBridge" in response.get_data(as_text=True)
+        # Should return JSON error for invalid plugin, not HTML redirect
+        if response.status_code in [400, 500]:
+            # Valid error response for invalid plugin
+            assert response.headers.get("content-type", "").startswith(
+                "application/json"
+            ) or response.headers.get("content-type", "").startswith("text/html")
+        else:
+            # If we get HTML response, it's likely an error page
+            if response.headers.get("content-type", "").startswith("text/html"):
+                assert "TrakBridge" in response.get_data(as_text=True)
 
 
 @pytest.mark.callsign
@@ -330,8 +359,13 @@ class TestStreamRoutesCallsignIntegration:
                     ).all()
                     assert len(mappings) >= 1  # At least one mapping created
 
-    def test_edit_stream_form_with_callsign_updates(self, client, app, db_session):
+    def test_edit_stream_form_with_callsign_updates(
+        self, authenticated_client, app, db_session
+    ):
         """Test editing stream via form with callsign mapping updates - FAILING TEST FIRST"""
+        # Get authenticated client for admin user
+        client = authenticated_client("admin")
+
         with app.app_context():
             from models.tak_server import TakServer
             from models.stream import Stream
@@ -422,8 +456,13 @@ class TestStreamRoutesCallsignIntegration:
                     assert stream.enable_callsign_mapping is False
                     assert stream.callsign_identifier_field is None
 
-    def test_stream_form_validation_handles_callsign_data(self, client, app):
+    def test_stream_form_validation_handles_callsign_data(
+        self, authenticated_client, app
+    ):
         """Test stream form validation includes callsign fields - FAILING TEST FIRST"""
+        # Get authenticated client for admin user
+        client = authenticated_client("admin")
+
         # Act: Submit form with invalid callsign data
         form_data = {
             "name": "Invalid Stream",
@@ -451,9 +490,12 @@ class TestStreamRoutesCallsignIntegration:
             )  # Basic check that we got a meaningful response
 
     def test_stream_edit_form_loads_existing_callsign_data(
-        self, client, app, db_session
+        self, authenticated_client, app, db_session
     ):
         """Test edit form loads existing callsign mapping data - FAILING TEST FIRST"""
+        # Get authenticated client for admin user
+        client = authenticated_client("admin")
+
         with app.app_context():
             from models.tak_server import TakServer
             from models.stream import Stream

@@ -713,7 +713,7 @@ def discover_trackers():
         # Check if plugin class exists
         if plugin_type not in plugin_manager.plugins:
             return jsonify({"error": f"Plugin {plugin_type} not found"}), 404
-        
+
         # Create temporary plugin instance with empty config for metadata only
         plugin_class = plugin_manager.plugins[plugin_type]
         plugin = plugin_class({})
@@ -733,9 +733,12 @@ def discover_trackers():
 
         # Use ConnectionTestService to discover actual tracker data for callsign mapping
         from flask import current_app
-        stream_manager = getattr(current_app, 'stream_manager', None)
+
+        stream_manager = getattr(current_app, "stream_manager", None)
         connection_service = ConnectionTestService(plugin_manager, stream_manager)
-        result = connection_service.discover_plugin_trackers_sync(plugin_type, plugin_config)
+        result = connection_service.discover_plugin_trackers_sync(
+            plugin_type, plugin_config
+        )
 
         if not result["success"]:
             return (
@@ -872,11 +875,11 @@ def get_plugin_available_fields(plugin_type):
         from plugins.plugin_manager import get_plugin_manager
 
         plugin_manager = get_plugin_manager()
-        
+
         # Check if plugin class exists
         if plugin_type not in plugin_manager.plugins:
             return jsonify({"error": f"Plugin {plugin_type} not found"}), 404
-        
+
         # Create temporary plugin instance with empty config for metadata only
         plugin_class = plugin_manager.plugins[plugin_type]
         plugin = plugin_class({})

@@ -192,7 +192,7 @@ class ConnectionTestService:
                     "success": False,
                     "tracker_data": [],
                     "device_count": 0,
-                    "error": "Plugin type required"
+                    "error": "Plugin type required",
                 }
 
             # Get plugin instance
@@ -202,7 +202,7 @@ class ConnectionTestService:
                     "success": False,
                     "tracker_data": [],
                     "device_count": 0,
-                    "error": "Failed to create plugin instance"
+                    "error": "Failed to create plugin instance",
                 }
 
             # Fetch actual location data using the shared session manager
@@ -222,26 +222,32 @@ class ConnectionTestService:
                     "success": False,
                     "tracker_data": [],
                     "device_count": 0,
-                    "error": "No data returned from plugin"
+                    "error": "No data returned from plugin",
                 }
-                
+
             # Empty list is valid (no trackers currently active)
             if not tracker_data:
                 return {
                     "success": True,
                     "tracker_data": [],
                     "device_count": 0,
-                    "error": None
+                    "error": None,
                 }
 
             # Check for error data from plugin
-            if len(tracker_data) == 1 and isinstance(tracker_data[0], dict) and tracker_data[0].get("_error"):
+            if (
+                len(tracker_data) == 1
+                and isinstance(tracker_data[0], dict)
+                and tracker_data[0].get("_error")
+            ):
                 error_data = tracker_data[0]
                 return {
                     "success": False,
                     "tracker_data": [],
                     "device_count": 0,
-                    "error": error_data.get("_error_message", f"Plugin error: {error_data.get('_error')}")
+                    "error": error_data.get(
+                        "_error_message", f"Plugin error: {error_data.get('_error')}"
+                    ),
                 }
 
             # Success - return the actual tracker data
@@ -249,7 +255,7 @@ class ConnectionTestService:
                 "success": True,
                 "tracker_data": tracker_data,
                 "device_count": len(tracker_data),
-                "error": None
+                "error": None,
             }
 
         except asyncio.TimeoutError:
@@ -258,7 +264,7 @@ class ConnectionTestService:
                 "success": False,
                 "tracker_data": [],
                 "device_count": 0,
-                "error": "Tracker discovery timed out"
+                "error": "Tracker discovery timed out",
             }
         except Exception as e:
             logger.error(f"Error discovering trackers for {plugin_type}: {e}")
@@ -266,7 +272,7 @@ class ConnectionTestService:
                 "success": False,
                 "tracker_data": [],
                 "device_count": 0,
-                "error": str(e)
+                "error": str(e),
             }
 
     def test_stream_connection_sync(self, stream_id, timeout=30):

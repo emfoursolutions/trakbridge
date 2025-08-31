@@ -410,11 +410,11 @@ def test_stream_config():
         # Merge form config with existing config for empty password fields
         from plugins.plugin_manager import get_plugin_manager
         from services.stream_config_service import StreamConfigService
-        
+
         plugin_manager = get_plugin_manager()
         config_service = StreamConfigService(plugin_manager)
         stream_id = data.get("stream_id")
-        
+
         merged_config = config_service.merge_plugin_config_with_existing(
             data["plugin_config"], data["plugin_type"], stream_id
         )

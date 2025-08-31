@@ -422,39 +422,6 @@ unit-tests:
   script: |
     echo "Running comprehensive unit test suite..."
     
-    # Create unit test directory if it doesn't exist
-
-    if [ ! -d "tests/unit" ]; then
-      echo "No unit tests found - creating test directory structure"
-      mkdir -p tests/unit
-      echo "# Unit tests directory created" > tests/unit/__init__.py
-      
-      # Create basic unit test
-      cat > tests/unit/test_basic_unit.py << 'EOF'
-    """Basic unit tests for TrakBridge."""
-    import pytest
-    from app import create_app
-    
-    def test_app_creation():
-        """Test that the Flask app can be created."""
-        app = create_app('testing')
-        assert app is not None
-        assert app.config['TESTING'] is True
-    
-    def test_health_endpoint():
-        """Test the health endpoint."""
-        app = create_app('testing')
-        with app.test_client() as client:
-            response = client.get('/api/health')
-            assert response.status_code == 200
-            
-    def test_basic_functionality():
-        """Test basic application functionality."""
-        app = create_app('testing')
-        assert app.name == 'app'
-    EOF
-    fi
-    
     # Run tests with comprehensive coverage reporting
 
     pytest tests/unit/ -v \
