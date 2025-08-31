@@ -1124,6 +1124,10 @@ def setup_startup_routes(app):
         if request.path.startswith("/api/health"):
             return None
 
+        # Skip startup check in testing environment
+        if app.config.get("TESTING", False):
+            return None
+
         # Redirect to startup page if not ready
         if not _startup_complete and request.endpoint:
             if request.is_json:

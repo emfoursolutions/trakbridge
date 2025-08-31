@@ -278,27 +278,24 @@ class TestCallsignAPIRoutes:
         assert response.status_code != 404
 
     def test_invalid_plugin_fields_request(self, authenticated_client):
-        """Test invalid plugin returns appropriate response - FAILING TEST FIRST"""
+        """Test invalid plugin returns 404 with proper JSON error response"""
         # Get authenticated client for admin user
         client = authenticated_client("admin")
 
         # Act: Request fields for non-existent plugin
         response = client.get("/api/plugins/nonexistent_plugin/available-fields")
 
-        # Assert: Should not return 404 (endpoint exists)
-        # With authentication, should return JSON error response or service error
-        assert response.status_code != 404
+        # Assert: Should return 404 for non-existent plugin (this is correct API behavior)
+        assert response.status_code == 404
 
-        # Should return JSON error for invalid plugin, not HTML redirect
-        if response.status_code in [400, 500]:
-            # Valid error response for invalid plugin
-            assert response.headers.get("content-type", "").startswith(
-                "application/json"
-            ) or response.headers.get("content-type", "").startswith("text/html")
-        else:
-            # If we get HTML response, it's likely an error page
-            if response.headers.get("content-type", "").startswith("text/html"):
-                assert "TrakBridge" in response.get_data(as_text=True)
+        # Should return JSON error response with proper structure
+        assert response.headers.get("content-type", "").startswith("application/json")
+        
+        # Verify JSON error structure
+        json_data = response.get_json()
+        assert json_data is not None
+        assert "error" in json_data
+        assert "nonexistent_plugin" in json_data["error"]
 
 
 @pytest.mark.callsign
@@ -477,17 +474,26 @@ class TestStreamRoutesCallsignIntegration:
         response = client.post("/streams/create", data=form_data)
 
         # Assert: Should handle validation appropriately
-        assert response.status_code in [200, 400, 401, 503]
+        # 302 is expected when form validation fails and redirects back to create page
+        assert response.status_code in [200, 302, 400, 401, 503]
 
-        # If we get a form response, it should contain validation feedback
-        if response.status_code == 200 and "text/html" in response.headers.get(
+        # Handle different response types appropriately
+        if response.status_code == 302:
+            # Form validation failed and redirected - this is expected behavior
+            # Verify redirect location is reasonable (should redirect to create form)
+            location = response.headers.get("Location", "")
+            assert "create" in location or location == "/streams/create"
+            
+        elif response.status_code == 200 and "text/html" in response.headers.get(
             "content-type", ""
         ):
+            # Form response - should contain some indication of validation or form processing
             response_text = response.get_data(as_text=True)
-            # Should contain some indication of validation or form processing
-            assert (
-                len(response_text) > 100
-            )  # Basic check that we got a meaningful response
+            assert len(response_text) > 100  # Basic check that we got a meaningful response
+            
+        elif response.status_code in [400, 401, 503]:
+            # Error responses are acceptable for validation failures
+            pass
 
     def test_stream_edit_form_loads_existing_callsign_data(
         self, authenticated_client, app, db_session
