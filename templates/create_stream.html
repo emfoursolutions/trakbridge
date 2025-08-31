@@ -858,6 +858,10 @@ async function refreshTrackerDiscovery() {
 
 function showDiscoveryStatus(show) {
     const status = document.getElementById('discovery-status');
+    if (!status) {
+        console.warn('Discovery status element not found');
+        return;
+    }
     if (show) {
         status.style.display = 'block';
     } else {
@@ -885,7 +889,7 @@ function populateTrackerMappingTable(identifierField) {
     }
     
     currentTrackerData.forEach((tracker, index) => {
-        const identifierValue = tracker[identifierField] || 'Unknown';
+        const identifierValue = extractIdentifierValue(tracker, identifierField);
         const currentName = tracker.name || tracker.device_name || identifierValue;
         const cleanCallsign = generateCleanCallsign(identifierValue);
         
@@ -915,6 +919,23 @@ function populateTrackerMappingTable(identifierField) {
     
     table.style.display = 'block';
     noTrackersMessage.style.display = 'none';
+}
+
+function extractIdentifierValue(tracker, identifierField) {
+    /**
+     * Extract identifier value from tracker data based on field type.
+     * Handles nested data structures for different identifier fields.
+     */
+    switch (identifierField) {
+        case 'imei':
+            return tracker.additional_data?.raw_placemark?.extended_data?.IMEI || 'Unknown';
+        case 'name':
+            return tracker.name || tracker.device_name || 'Unknown';
+        case 'uid':
+            return tracker.uid || 'Unknown';
+        default:
+            return tracker[identifierField] || 'Unknown';
+    }
 }
 
 function generateCleanCallsign(identifier) {

@@ -35,7 +35,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import psutil
-from flask import Blueprint, current_app, jsonify
+from flask import Blueprint, current_app, jsonify, request
 
 # Local application imports
 from database import db
@@ -695,6 +695,7 @@ def discover_trackers():
     try:
         from models.stream import Stream
         from plugins.plugin_manager import get_plugin_manager
+        from services.connection_test_service import ConnectionTestService
 
         data = request.get_json()
         if not data:
@@ -709,31 +710,40 @@ def discover_trackers():
 
         plugin_manager = get_plugin_manager()
 
-        # Get the plugin instance
-        plugin = plugin_manager.get_plugin_instance(plugin_type)
-        if not plugin:
+        # Check if plugin class exists
+        if plugin_type not in plugin_manager.plugins:
             return jsonify({"error": f"Plugin {plugin_type} not found"}), 404
+        
+        # Create temporary plugin instance with empty config for metadata only
+        plugin_class = plugin_manager.plugins[plugin_type]
+        plugin = plugin_class({})
 
         # For edit mode, merge with existing config
         if stream_id:
             stream = Stream.query.get(stream_id)
             if stream:
                 existing_config = stream.get_plugin_config()
-                # Merge existing config with new config, prioritizing new values
-                merged_config = {**existing_config, **plugin_config}
+                # In edit mode, prioritize existing config over potentially empty form values
+                # Only override with new values if they are non-empty
+                merged_config = existing_config.copy()
+                for key, value in plugin_config.items():
+                    if value:  # Only use non-empty values from form
+                        merged_config[key] = value
                 plugin_config = merged_config
 
-        # Use ConnectionTestService to test connection and get tracker data
-        connection_service = ConnectionTestService()
-        result = connection_service.test_plugin_connection(plugin_type, plugin_config)
+        # Use ConnectionTestService to discover actual tracker data for callsign mapping
+        from flask import current_app
+        stream_manager = getattr(current_app, 'stream_manager', None)
+        connection_service = ConnectionTestService(plugin_manager, stream_manager)
+        result = connection_service.discover_plugin_trackers_sync(plugin_type, plugin_config)
 
         if not result["success"]:
             return (
-                jsonify({"error": result.get("error", "Connection test failed")}),
+                jsonify({"error": result.get("error", "Failed to discover trackers")}),
                 400,
             )
 
-        # Extract tracker data from the successful connection test
+        # Extract tracker data from the successful discovery
         tracker_data = result.get("tracker_data", [])
 
         # Get available fields from plugin if it supports callsign mapping
@@ -862,10 +872,14 @@ def get_plugin_available_fields(plugin_type):
         from plugins.plugin_manager import get_plugin_manager
 
         plugin_manager = get_plugin_manager()
-        plugin = plugin_manager.get_plugin_instance(plugin_type)
-
-        if not plugin:
+        
+        # Check if plugin class exists
+        if plugin_type not in plugin_manager.plugins:
             return jsonify({"error": f"Plugin {plugin_type} not found"}), 404
+        
+        # Create temporary plugin instance with empty config for metadata only
+        plugin_class = plugin_manager.plugins[plugin_type]
+        plugin = plugin_class({})
 
         available_fields = []
         if hasattr(plugin, "get_available_fields"):

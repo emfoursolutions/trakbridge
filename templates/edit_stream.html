@@ -852,7 +852,7 @@ function populateTrackerMappingTableWithExisting(identifierField) {
     
     // Add discovered trackers
     currentTrackerData.forEach(tracker => {
-        const identifierValue = tracker[identifierField];
+        const identifierValue = extractIdentifierValue(tracker, identifierField);
         if (identifierValue) {
             allTrackers.set(identifierValue, {
                 identifier: identifierValue,
@@ -981,11 +981,32 @@ async function refreshTrackerDiscovery() {
 
 function showDiscoveryStatus(show, message = 'Discovering trackers...') {
     const status = document.getElementById('discovery-status');
+    if (!status) {
+        console.warn('Discovery status element not found');
+        return;
+    }
     if (show) {
         status.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${message}`;
         status.style.display = 'block';
     } else {
         status.style.display = 'none';
+    }
+}
+
+function extractIdentifierValue(tracker, identifierField) {
+    /**
+     * Extract identifier value from tracker data based on field type.
+     * Handles nested data structures for different identifier fields.
+     */
+    switch (identifierField) {
+        case 'imei':
+            return tracker.additional_data?.raw_placemark?.extended_data?.IMEI || 'Unknown';
+        case 'name':
+            return tracker.name || tracker.device_name || 'Unknown';
+        case 'uid':
+            return tracker.uid || 'Unknown';
+        default:
+            return tracker[identifierField] || 'Unknown';
     }
 }
 

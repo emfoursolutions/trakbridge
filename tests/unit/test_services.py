@@ -577,3 +577,326 @@ class TestStreamWorkerCallsignIntegration:
 
             # Should have applied callsign through plugin
             assert test_locations[0]["name"] == "Alpha-1"
+
+
+@pytest.mark.callsign
+class TestStreamOperationsServiceCallsign:
+    """Test StreamOperationsService callsign functionality - written with TDD approach."""
+
+    def test_create_stream_with_callsign_mappings(self, app, db_session):
+        """Test creating a stream with callsign mapping data - FAILING TEST FIRST"""
+        with app.app_context():
+            from services.stream_operations_service import StreamOperationsService
+            from models.tak_server import TakServer
+            from models.stream import Stream
+            from models.callsign_mapping import CallsignMapping
+
+            # Arrange: Create test TAK server
+            import uuid
+
+            tak_server = TakServer(
+                name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
+            )
+            db_session.add(tak_server)
+            db_session.commit()
+
+            # Mock stream manager
+            mock_stream_manager = Mock()
+
+            # Create service instance
+            service = StreamOperationsService(mock_stream_manager, db_session)
+
+            # Prepare stream data with callsign mapping
+            stream_data = {
+                "name": "Test Callsign Stream",
+                "plugin_type": "garmin",
+                "tak_server_id": tak_server.id,
+                "cot_type": "a-f-G-U-C",
+                "enable_callsign_mapping": True,
+                "callsign_identifier_field": "imei",
+                "callsign_error_handling": "fallback",
+                "enable_per_callsign_cot_types": True,
+                "callsign_mapping_0_identifier": "123456789",
+                "callsign_mapping_0_callsign": "Alpha-1",
+                "callsign_mapping_0_cot_type": "a-f-G-E-V-C",
+                "callsign_mapping_1_identifier": "987654321",
+                "callsign_mapping_1_callsign": "Bravo-2",
+                "plugin_username": "test_user",
+                "plugin_password": "test_pass",
+            }
+
+            # Act: Create stream with callsign data
+            result = service.create_stream(stream_data)
+
+            # Assert: Should successfully create stream with callsign mappings
+            assert result["success"] is True
+            assert "stream_id" in result
+
+            # Verify stream was created with correct callsign settings
+            stream = Stream.query.get(result["stream_id"])
+            assert stream.enable_callsign_mapping is True
+            assert stream.callsign_identifier_field == "imei"
+            assert stream.callsign_error_handling == "fallback"
+            assert stream.enable_per_callsign_cot_types is True
+
+            # Verify callsign mappings were created
+            mappings = CallsignMapping.query.filter_by(stream_id=stream.id).all()
+            assert len(mappings) == 2
+
+            # Check mapping details
+            mapping_dict = {m.identifier_value: m for m in mappings}
+            assert "123456789" in mapping_dict
+            assert mapping_dict["123456789"].custom_callsign == "Alpha-1"
+            assert mapping_dict["123456789"].cot_type == "a-f-G-E-V-C"
+            assert "987654321" in mapping_dict
+            assert mapping_dict["987654321"].custom_callsign == "Bravo-2"
+
+    def test_create_stream_without_callsign_mappings(self, app, db_session):
+        """Test creating a stream without callsign mapping - FAILING TEST FIRST"""
+        with app.app_context():
+            from services.stream_operations_service import StreamOperationsService
+            from models.tak_server import TakServer
+            from models.stream import Stream
+            from models.callsign_mapping import CallsignMapping
+
+            # Arrange: Create test TAK server
+            import uuid
+
+            tak_server = TakServer(
+                name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
+            )
+            db_session.add(tak_server)
+            db_session.commit()
+
+            # Mock stream manager
+            mock_stream_manager = Mock()
+
+            # Create service instance
+            service = StreamOperationsService(mock_stream_manager, db_session)
+
+            # Prepare stream data without callsign mapping
+            stream_data = {
+                "name": "Regular Stream",
+                "plugin_type": "garmin",
+                "tak_server_id": tak_server.id,
+                "cot_type": "a-f-G-U-C",
+                "enable_callsign_mapping": False,
+                "plugin_username": "test_user",
+                "plugin_password": "test_pass",
+            }
+
+            # Act: Create stream without callsign data
+            result = service.create_stream(stream_data)
+
+            # Assert: Should successfully create stream without callsign mappings
+            assert result["success"] is True
+            assert "stream_id" in result
+
+            # Verify stream was created with correct settings
+            stream = Stream.query.get(result["stream_id"])
+            assert stream.enable_callsign_mapping is False
+            assert stream.callsign_identifier_field is None
+
+            # Verify no callsign mappings were created
+            mappings = CallsignMapping.query.filter_by(stream_id=stream.id).all()
+            assert len(mappings) == 0
+
+    def test_update_stream_callsign_mappings(self, app, db_session):
+        """Test updating stream callsign mappings - FAILING TEST FIRST"""
+        with app.app_context():
+            from services.stream_operations_service import StreamOperationsService
+            from models.tak_server import TakServer
+            from models.stream import Stream
+            from models.callsign_mapping import CallsignMapping
+
+            # Arrange: Create test stream
+            import uuid
+
+            tak_server = TakServer(
+                name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
+            )
+            db_session.add(tak_server)
+            db_session.commit()
+
+            stream = Stream(
+                name="Test Stream",
+                plugin_type="garmin",
+                tak_server_id=tak_server.id,
+                enable_callsign_mapping=False,
+            )
+            db_session.add(stream)
+            db_session.commit()
+
+            # Mock stream manager
+            mock_stream_manager = Mock()
+            mock_stream_manager.get_stream_status.return_value = {"running": False}
+            mock_stream_manager.start_stream_sync.return_value = True
+            mock_stream_manager.stop_stream_sync.return_value = True
+
+            # Create service instance
+            service = StreamOperationsService(mock_stream_manager, db_session)
+
+            # Prepare update data with callsign mapping
+            update_data = {
+                "name": "Updated Stream",
+                "plugin_type": "garmin",
+                "tak_server_id": tak_server.id,
+                "cot_type": "a-f-G-U-C",
+                "enable_callsign_mapping": True,
+                "callsign_identifier_field": "imei",
+                "callsign_error_handling": "skip",
+                "enable_per_callsign_cot_types": False,
+                "callsign_mapping_0_identifier": "111222333",
+                "callsign_mapping_0_callsign": "Delta-4",
+                "callsign_mapping_1_identifier": "444555666",
+                "callsign_mapping_1_callsign": "Echo-5",
+            }
+
+            # Act: Update stream with callsign data
+            result = service.update_stream_safely(stream.id, update_data)
+
+            # Assert: Should successfully update stream with callsign mappings
+            assert result["success"] is True
+
+            # Verify stream was updated with correct callsign settings
+            updated_stream = Stream.query.get(stream.id)
+            assert updated_stream.enable_callsign_mapping is True
+            assert updated_stream.callsign_identifier_field == "imei"
+            assert updated_stream.callsign_error_handling == "skip"
+            assert updated_stream.enable_per_callsign_cot_types is False
+
+            # Verify callsign mappings were created
+            mappings = CallsignMapping.query.filter_by(stream_id=stream.id).all()
+            assert len(mappings) == 2
+
+            # Check mapping details
+            callsigns = [m.custom_callsign for m in mappings]
+            assert "Delta-4" in callsigns
+            assert "Echo-5" in callsigns
+
+    def test_create_callsign_mappings_helper(self, app, db_session):
+        """Test _create_callsign_mappings helper method - FAILING TEST FIRST"""
+        with app.app_context():
+            from services.stream_operations_service import StreamOperationsService
+            from models.tak_server import TakServer
+            from models.stream import Stream
+            from models.callsign_mapping import CallsignMapping
+
+            # Arrange: Create test stream
+            import uuid
+
+            tak_server = TakServer(
+                name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
+            )
+            db_session.add(tak_server)
+            db_session.commit()
+
+            stream = Stream(
+                name="Test Stream",
+                plugin_type="garmin",
+                tak_server_id=tak_server.id,
+                enable_callsign_mapping=True,
+                callsign_identifier_field="imei",
+            )
+            db_session.add(stream)
+            db_session.commit()
+
+            # Mock stream manager
+            mock_stream_manager = Mock()
+
+            # Create service instance
+            service = StreamOperationsService(mock_stream_manager, db_session)
+
+            # Prepare form data with callsign mappings
+            form_data = {
+                "callsign_mapping_0_identifier": "AAA111",
+                "callsign_mapping_0_callsign": "Unit-1",
+                "callsign_mapping_0_cot_type": "a-f-G-U-H",
+                "callsign_mapping_1_identifier": "BBB222",
+                "callsign_mapping_1_callsign": "Unit-2",
+                "callsign_mapping_2_identifier": "CCC333",
+                "callsign_mapping_2_callsign": "Unit-3",
+            }
+
+            # Act: Create callsign mappings using helper method
+            service._create_callsign_mappings(stream, form_data)
+            db_session.commit()
+
+            # Assert: Should create mappings from form data
+            mappings = CallsignMapping.query.filter_by(stream_id=stream.id).all()
+            assert len(mappings) == 3
+
+            # Verify mapping details
+            mapping_dict = {m.identifier_value: m for m in mappings}
+            assert "AAA111" in mapping_dict
+            assert mapping_dict["AAA111"].custom_callsign == "Unit-1"
+            assert mapping_dict["AAA111"].cot_type == "a-f-G-U-H"
+            assert "BBB222" in mapping_dict
+            assert mapping_dict["BBB222"].custom_callsign == "Unit-2"
+            assert mapping_dict["BBB222"].cot_type is None
+            assert "CCC333" in mapping_dict
+            assert mapping_dict["CCC333"].custom_callsign == "Unit-3"
+
+    def test_update_callsign_mappings_helper(self, app, db_session):
+        """Test _update_callsign_mappings helper method - FAILING TEST FIRST"""
+        with app.app_context():
+            from services.stream_operations_service import StreamOperationsService
+            from models.tak_server import TakServer
+            from models.stream import Stream
+            from models.callsign_mapping import CallsignMapping
+
+            # Arrange: Create test stream with existing mappings
+            import uuid
+
+            tak_server = TakServer(
+                name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
+            )
+            db_session.add(tak_server)
+            db_session.commit()
+
+            stream = Stream(
+                name="Test Stream",
+                plugin_type="garmin",
+                tak_server_id=tak_server.id,
+                enable_callsign_mapping=True,
+                callsign_identifier_field="imei",
+            )
+            db_session.add(stream)
+            db_session.commit()
+
+            # Create existing mappings
+            old_mapping = CallsignMapping(
+                stream_id=stream.id,
+                identifier_value="OLD123",
+                custom_callsign="OldUnit",
+            )
+            db_session.add(old_mapping)
+            db_session.commit()
+
+            # Mock stream manager
+            mock_stream_manager = Mock()
+
+            # Create service instance
+            service = StreamOperationsService(mock_stream_manager, db_session)
+
+            # Prepare new form data
+            form_data = {
+                "callsign_mapping_0_identifier": "NEW456",
+                "callsign_mapping_0_callsign": "NewUnit",
+            }
+
+            # Act: Update callsign mappings
+            service._update_callsign_mappings(stream, form_data)
+            db_session.commit()
+
+            # Assert: Should clear old mappings and create new ones
+            mappings = CallsignMapping.query.filter_by(stream_id=stream.id).all()
+            assert len(mappings) == 1
+            assert mappings[0].identifier_value == "NEW456"
+            assert mappings[0].custom_callsign == "NewUnit"
+
+            # Verify old mapping is gone
+            old_exists = CallsignMapping.query.filter_by(
+                stream_id=stream.id, identifier_value="OLD123"
+            ).first()
+            assert old_exists is None

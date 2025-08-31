@@ -57,6 +57,10 @@ class StreamOperationsService:
         self.stream_manager = stream_manager
         self.db = db
 
+    def _get_session(self):
+        """Get the database session, handling both scoped session and db.session patterns"""
+        return getattr(self.db, "session", self.db)
+
     def create_stream(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new stream with the provided data"""
         try:
@@ -87,14 +91,15 @@ class StreamOperationsService:
 
             stream.set_plugin_config(plugin_config)
 
-            self.db.session.add(stream)
-            self.db.session.flush()  # Flush to get stream.id for callsign mappings
+            session = self._get_session()
+            session.add(stream)
+            session.flush()  # Flush to get stream.id for callsign mappings
 
             # Handle callsign mappings if enabled
             if stream.enable_callsign_mapping:
                 self._create_callsign_mappings(stream, data)
 
-            self.db.session.commit()
+            session.commit()
 
             # Auto-start if requested
             if data.get("auto_start"):
@@ -137,7 +142,7 @@ class StreamOperationsService:
             # Enable the stream if it's not already enabled
             if not stream.is_active:
                 stream.is_active = True
-                self.db.session.commit()
+                self._get_session().commit()
                 logger.info(f"Enabled stream {stream_id} ({stream.name})")
 
             # Now start the stream through StreamManager using the sync wrapper
@@ -160,7 +165,7 @@ class StreamOperationsService:
             # Update database status
             stream = Stream.query.get_or_404(stream_id)
             stream.is_active = False
-            self.db.session.commit()
+            self._get_session().commit()
             logger.info(f"Disabled stream {stream_id} ({stream.name})")
 
             # Stop the stream through StreamManager using the sync wrapper
@@ -207,15 +212,16 @@ class StreamOperationsService:
                     logger.warning(f"Error stopping stream before deletion: {e}")
 
             # Delete from database
-            self.db.session.delete(stream)
-            self.db.session.commit()
+            session = self._get_session()
+            session.delete(stream)
+            session.commit()
 
             logger.info(f"Stream {stream_id} deleted successfully")
             return {"success": True, "message": "Stream deleted successfully"}
 
         except Exception as e:
             logger.error(f"Error deleting stream {stream_id}: {e}")
-            self.db.session.rollback()
+            self._get_session().rollback()
             return {"success": False, "error": str(e)}
 
     def update_stream_safely(
@@ -298,7 +304,7 @@ class StreamOperationsService:
             if stream.enable_callsign_mapping:
                 self._update_callsign_mappings(stream, data)
 
-            self.db.session.commit()
+            self._get_session().commit()
 
             # Restart the stream if it was running before
             if was_running:
@@ -311,7 +317,7 @@ class StreamOperationsService:
             }
 
         except Exception as e:
-            self.db.session.rollback()
+            self._get_session().rollback()
             logger.error(f"Error updating stream {stream_id}: {e}")
             return {"success": False, "error": str(e)}
 
@@ -448,7 +454,7 @@ class StreamOperationsService:
                     custom_callsign=custom_callsign,
                     cot_type=cot_type,
                 )
-                self.db.session.add(mapping)
+                self._get_session().add(mapping)
 
             mapping_index += 1
 

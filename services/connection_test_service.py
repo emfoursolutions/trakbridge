@@ -156,6 +156,119 @@ class ConnectionTestService:
                 "error": f"Test execution failed: {str(e)}",
             }
 
+    def discover_plugin_trackers_sync(self, plugin_type, plugin_config, timeout=30):
+        """Synchronous method to discover actual tracker data for callsign mapping"""
+        try:
+            # Use the stream manager's background loop to run the discovery
+            future = asyncio.run_coroutine_threadsafe(
+                self.discover_plugin_trackers(plugin_type, plugin_config),
+                self.stream_manager._loop,
+            )
+            result = future.result(timeout=timeout)
+            return result
+
+        except asyncio.TimeoutError:
+            logger.error(f"Tracker discovery timed out for plugin {plugin_type}")
+            return {
+                "success": False,
+                "tracker_data": [],
+                "device_count": 0,
+                "error": "Tracker discovery timed out",
+            }
+        except Exception as e:
+            logger.error(f"Error running sync tracker discovery for {plugin_type}: {e}")
+            return {
+                "success": False,
+                "tracker_data": [],
+                "device_count": 0,
+                "error": f"Tracker discovery failed: {str(e)}",
+            }
+
+    async def discover_plugin_trackers(self, plugin_type, plugin_config):
+        """Discover actual tracker data for callsign mapping configuration"""
+        try:
+            if not plugin_type:
+                return {
+                    "success": False,
+                    "tracker_data": [],
+                    "device_count": 0,
+                    "error": "Plugin type required"
+                }
+
+            # Get plugin instance
+            plugin_instance = self.plugin_manager.get_plugin(plugin_type, plugin_config)
+            if not plugin_instance:
+                return {
+                    "success": False,
+                    "tracker_data": [],
+                    "device_count": 0,
+                    "error": "Failed to create plugin instance"
+                }
+
+            # Fetch actual location data using the shared session manager
+            session = self.stream_manager.session_manager.session
+            if not session:
+                # If session not available, create a temporary one
+                timeout = aiohttp.ClientTimeout(total=30)
+                async with aiohttp.ClientSession(timeout=timeout) as temp_session:
+                    tracker_data = await plugin_instance.fetch_locations(temp_session)
+            else:
+                # Use shared session
+                tracker_data = await plugin_instance.fetch_locations(session)
+
+            # Handle None response from plugin
+            if tracker_data is None:
+                return {
+                    "success": False,
+                    "tracker_data": [],
+                    "device_count": 0,
+                    "error": "No data returned from plugin"
+                }
+                
+            # Empty list is valid (no trackers currently active)
+            if not tracker_data:
+                return {
+                    "success": True,
+                    "tracker_data": [],
+                    "device_count": 0,
+                    "error": None
+                }
+
+            # Check for error data from plugin
+            if len(tracker_data) == 1 and isinstance(tracker_data[0], dict) and tracker_data[0].get("_error"):
+                error_data = tracker_data[0]
+                return {
+                    "success": False,
+                    "tracker_data": [],
+                    "device_count": 0,
+                    "error": error_data.get("_error_message", f"Plugin error: {error_data.get('_error')}")
+                }
+
+            # Success - return the actual tracker data
+            return {
+                "success": True,
+                "tracker_data": tracker_data,
+                "device_count": len(tracker_data),
+                "error": None
+            }
+
+        except asyncio.TimeoutError:
+            logger.error(f"Tracker discovery timed out for plugin {plugin_type}")
+            return {
+                "success": False,
+                "tracker_data": [],
+                "device_count": 0,
+                "error": "Tracker discovery timed out"
+            }
+        except Exception as e:
+            logger.error(f"Error discovering trackers for {plugin_type}: {e}")
+            return {
+                "success": False,
+                "tracker_data": [],
+                "device_count": 0,
+                "error": str(e)
+            }
+
     def test_stream_connection_sync(self, stream_id, timeout=30):
         """Synchronous wrapper for testing stream connections"""
         try:
