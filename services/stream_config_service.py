@@ -129,6 +129,81 @@ class StreamConfigService:
 
         return plugin_config
 
+    def merge_plugin_config_with_existing(
+        self, 
+        new_config: Dict[str, Any], 
+        plugin_type: str, 
+        stream_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Merge new plugin configuration with existing encrypted values for sensitive fields.
+        
+        For edit operations, empty password fields should preserve existing encrypted values
+        rather than overwriting them with empty strings.
+        
+        Args:
+            new_config: New configuration from form/request
+            plugin_type: Plugin type to get metadata for sensitive field detection
+            stream_id: Stream ID to load existing config from (for edit mode)
+            
+        Returns:
+            Merged configuration with preserved sensitive field values
+        """
+        try:
+            merged_config = new_config.copy()
+            
+            # Only merge with existing if we have a stream ID (edit mode)
+            if not stream_id:
+                return merged_config
+                
+            # Load existing stream configuration
+            try:
+                from models.stream import Stream
+                existing_stream = Stream.query.get(stream_id)
+                if not existing_stream or existing_stream.plugin_type != plugin_type:
+                    logger.warning(f"Cannot merge config - stream {stream_id} not found or plugin type mismatch")
+                    return merged_config
+                    
+                existing_config = existing_stream.get_plugin_config()
+                logger.info(f"Loaded existing config for stream {stream_id}")
+                
+            except Exception as e:
+                logger.warning(f"Could not load existing config for stream {stream_id}: {e}")
+                return merged_config
+
+            # Get sensitive fields from plugin metadata
+            metadata = self.plugin_manager.get_plugin_metadata(plugin_type)
+            if not metadata:
+                logger.warning(f"No metadata found for plugin type: {plugin_type}")
+                return merged_config
+
+            sensitive_fields = []
+            for field_data in metadata.get("config_fields", []):
+                # Handle both dict and object field definitions
+                if isinstance(field_data, dict) and field_data.get("sensitive"):
+                    sensitive_fields.append(field_data["name"])
+                elif hasattr(field_data, "sensitive") and field_data.sensitive:
+                    sensitive_fields.append(field_data.name)
+
+            logger.info(f"Sensitive fields for {plugin_type}: {sensitive_fields}")
+
+            # Merge sensitive fields - use existing value if new value is empty
+            for field_name in sensitive_fields:
+                # If form field is empty/missing but existing config has value, use existing
+                if (
+                    field_name not in merged_config
+                    or not merged_config.get(field_name)
+                ) and existing_config.get(field_name):
+                    merged_config[field_name] = existing_config[field_name]
+                    logger.info(f"Preserved existing encrypted value for empty {field_name} field")
+
+            return merged_config
+            
+        except Exception as e:
+            logger.error(f"Error merging plugin config: {e}")
+            # Return original config on error to avoid breaking updates
+            return new_config
+
     @staticmethod
     def export_stream_config(
         stream_id: int, include_sensitive: bool = False

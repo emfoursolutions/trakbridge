@@ -408,60 +408,18 @@ def test_stream_config():
             )
 
         # Merge form config with existing config for empty password fields
-        merged_config = data["plugin_config"].copy()
+        from plugins.plugin_manager import get_plugin_manager
+        from services.stream_config_service import StreamConfigService
+        
+        plugin_manager = get_plugin_manager()
+        config_service = StreamConfigService(plugin_manager)
         stream_id = data.get("stream_id")
-
-        if stream_id:
-            try:
-                from models.stream import Stream
-
-                existing_stream = Stream.query.get(stream_id)
-                if (
-                    existing_stream
-                    and existing_stream.plugin_type == data["plugin_type"]
-                ):
-                    existing_config = existing_stream.get_plugin_config()
-                    logger.info(f"Loaded existing config for stream {stream_id}")
-
-                    # Get sensitive fields from plugin metadata using plugin manager
-                    from plugins.plugin_manager import get_plugin_manager
-
-                    temp_plugin_manager = get_plugin_manager()
-
-                    metadata = temp_plugin_manager.get_plugin_metadata(
-                        data["plugin_type"]
-                    )
-                    if metadata:
-                        sensitive_fields = []
-
-                        for field_data in metadata.get("config_fields", []):
-                            if (
-                                hasattr(field_data, "sensitive")
-                                and field_data.sensitive
-                            ):
-                                sensitive_fields.append(field_data.name)
-
-                        logger.info(
-                            f"Sensitive fields for {data['plugin_type']}: {sensitive_fields}"
-                        )
-
-                        for field_name in sensitive_fields:
-                            # If form field is empty but existing config has value, use existing
-                            if (
-                                field_name not in merged_config
-                                or not merged_config.get(field_name)
-                            ) and existing_config.get(field_name):
-                                merged_config[field_name] = existing_config[field_name]
-                                logger.info(
-                                    f"Using existing encrypted value for empty {field_name} field"
-                                )
-            except Exception as e:
-                logger.warning(f"Could not merge with existing config: {e}")
+        
+        merged_config = config_service.merge_plugin_config_with_existing(
+            data["plugin_config"], data["plugin_type"], stream_id
+        )
 
         # Test the connection using the plugin
-        from plugins.plugin_manager import get_plugin_manager
-
-        plugin_manager = get_plugin_manager()
 
         # Get plugin instance with merged config
         plugin_instance = plugin_manager.get_plugin(data["plugin_type"], merged_config)

@@ -515,7 +515,9 @@ function generateFormField(field, currentConfig) {
         case 'password':
             // For password fields, don't populate with encrypted values - leave empty with placeholder
             const passwordPlaceholder = currentValue ? 'Leave blank to keep current password' : field.placeholder || '';
-            inputHtml = `<input type="password" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} placeholder="${passwordPlaceholder}" value="" ${dataPluginAttr}>`;
+            // In edit mode, password fields should not be required if there's an existing value
+            const passwordRequired = currentValue ? '' : isRequired;
+            inputHtml = `<input type="password" class="form-control" id="${fieldId}" name="${fieldId}" ${passwordRequired} placeholder="${passwordPlaceholder}" value="" ${dataPluginAttr}>`;
             break;
         case 'url':
             inputHtml = `<input type="url" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} value="${currentValue}" ${dataPluginAttr}>`;

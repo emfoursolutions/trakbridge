@@ -267,17 +267,23 @@ class StreamOperationsService:
                 data.get("enable_per_callsign_cot_types", False)
             )
 
-            # Update plugin configuration
-            plugin_config: Dict[str, Any] = {}
-            for key, value in data.items():
-                if key.startswith("plugin_"):
-                    plugin_config[key[7:]] = value  # Remove 'plugin_' prefix
-
-            # Handle missing checkbox fields for all plugins
+            # Update plugin configuration with password preservation
             from plugins.plugin_manager import get_plugin_manager
+            from services.stream_config_service import StreamConfigService
 
             plugin_manager = get_plugin_manager()
+            config_service = StreamConfigService(plugin_manager)
             plugin_type = data.get("plugin_type")
+
+            # Extract plugin config from request data
+            plugin_config = config_service.extract_plugin_config_from_request(data)
+
+            # Merge with existing config to preserve encrypted password fields
+            merged_config = config_service.merge_plugin_config_with_existing(
+                plugin_config, plugin_type, stream_id
+            )
+
+            # Handle missing checkbox fields for all plugins
             if plugin_type:
                 metadata = plugin_manager.get_plugin_metadata(plugin_type)
                 if metadata:
@@ -295,10 +301,10 @@ class StreamOperationsService:
                                 if isinstance(field, dict)
                                 else getattr(field, "name")
                             )
-                            if field_name not in plugin_config:
-                                plugin_config[field_name] = False
+                            if field_name not in merged_config:
+                                merged_config[field_name] = False
 
-            stream.set_plugin_config(plugin_config)
+            stream.set_plugin_config(merged_config)
 
             # Update callsign mappings if enabled
             if stream.enable_callsign_mapping:
