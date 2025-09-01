@@ -121,12 +121,18 @@ class StreamConfigService:
         """Extract plugin configuration from request data"""
         plugin_config: Dict[str, Any] = {}
 
+        logger.debug(f"Extracting plugin config from request data: {list(data.keys())}")
+
         for key, value in data.items():
             if key.startswith("plugin_"):
                 # Remove 'plugin_' prefix
                 config_key = key[7:]
                 plugin_config[config_key] = value
+                logger.debug(
+                    f"Found plugin config field: {key} -> {config_key} = {value}"
+                )
 
+        logger.debug(f"Extracted plugin config: {plugin_config}")
         return plugin_config
 
     def merge_plugin_config_with_existing(

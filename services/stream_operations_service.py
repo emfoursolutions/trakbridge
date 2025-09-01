@@ -277,11 +277,21 @@ class StreamOperationsService:
 
             # Extract plugin config from request data
             plugin_config = config_service.extract_plugin_config_from_request(data)
+            logger.debug(f"Extracted plugin config for {plugin_type}: {plugin_config}")
 
             # Merge with existing config to preserve encrypted password fields
             merged_config = config_service.merge_plugin_config_with_existing(
                 plugin_config, plugin_type, stream_id
             )
+            logger.debug(f"Merged plugin config for {plugin_type}: {merged_config}")
+
+            # Copy certain plugin config values to stream-level fields
+            # This restores functionality that was removed in commit 48edfe59
+            if "cot_type_mode" in merged_config:
+                stream.cot_type_mode = merged_config["cot_type_mode"]
+                logger.debug(
+                    f"Set stream cot_type_mode to: {merged_config['cot_type_mode']}"
+                )
 
             # Handle missing checkbox fields for all plugins
             if plugin_type:

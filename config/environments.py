@@ -259,27 +259,31 @@ class TestingEnvironmentConfig(BaseConfig):
         # Use process-specific database file to avoid conflicts in parallel testing
         import os
         import tempfile
-        
+
         # Check if we're in CI environment
-        ci_project_dir = os.environ.get('CI_PROJECT_DIR')
+        ci_project_dir = os.environ.get("CI_PROJECT_DIR")
         if ci_project_dir:
             # In CI: Use predictable path in project directory for better debugging
             # Ensure the directory exists and is writable
             try:
                 os.makedirs(ci_project_dir, exist_ok=True)
-                db_file = os.path.join(ci_project_dir, 'test_db.sqlite')
+                db_file = os.path.join(ci_project_dir, "test_db.sqlite")
                 # Test write access by creating and removing a test file
-                test_file = os.path.join(ci_project_dir, '.write_test')
-                with open(test_file, 'w') as f:
-                    f.write('test')
+                test_file = os.path.join(ci_project_dir, ".write_test")
+                with open(test_file, "w") as f:
+                    f.write("test")
                 os.remove(test_file)
             except (OSError, PermissionError):
                 # Fallback to temp directory if CI directory isn't writable
-                db_file = os.path.join(tempfile.gettempdir(), f'trakbridge_ci_test_{os.getpid()}.sqlite')
+                db_file = os.path.join(
+                    tempfile.gettempdir(), f"trakbridge_ci_test_{os.getpid()}.sqlite"
+                )
         else:
             # Local: Use temporary file that gets cleaned up
-            db_file = os.path.join(tempfile.gettempdir(), f'trakbridge_test_{os.getpid()}.sqlite')
-        
+            db_file = os.path.join(
+                tempfile.gettempdir(), f"trakbridge_test_{os.getpid()}.sqlite"
+            )
+
         return f"sqlite:///{db_file}"
 
     @property
@@ -290,18 +294,20 @@ class TestingEnvironmentConfig(BaseConfig):
         if db_type == "sqlite":
             # Enhanced SQLite options for CI/testing compatibility
             import os
-            
+
             connect_args = {
                 "check_same_thread": False,
                 "timeout": 30,  # 30 second timeout for database locks
             }
-            
+
             # Add WAL mode for better concurrent access in CI
-            if os.environ.get('CI_PROJECT_DIR'):
-                connect_args.update({
-                    "isolation_level": None,  # Autocommit mode
-                })
-            
+            if os.environ.get("CI_PROJECT_DIR"):
+                connect_args.update(
+                    {
+                        "isolation_level": None,  # Autocommit mode
+                    }
+                )
+
             return {
                 "pool_pre_ping": False,
                 "connect_args": connect_args,

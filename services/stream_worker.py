@@ -24,7 +24,6 @@ Version: {{VERSION}}
 
 # Standard library imports
 import asyncio
-import json
 import logging
 from datetime import datetime, timezone
 from typing import Dict, List
@@ -87,6 +86,10 @@ class StreamWorker:
                 self.plugin = get_plugin_manager().get_plugin(
                     self.stream.plugin_type, self.stream.get_plugin_config()
                 )
+
+                # Provide stream reference to plugin for stream-level configuration access
+                if self.plugin:
+                    self.plugin.stream = self.stream
 
                 if not self.plugin:
                     self.logger.error("Failed to initialize plugin")
@@ -467,30 +470,49 @@ class StreamWorker:
                 )
                 return True  # Don't treat this as a failure
 
-            # Get COT type mode from stream configuration
-            # Use the stream's cot_type_mode field (not from plugin config)
-            cot_type_mode = getattr(self.stream, "cot_type_mode", "stream")
-
-            # Get fresh config for CoT type mode determination
+            # Get COT type mode from fresh stream configuration (avoid cached values)
             fresh_stream_config = await self._get_fresh_stream_config()
+            cot_type_mode = fresh_stream_config.get("cot_type_mode", "stream")
+
+            # Get per-callsign CoT type determination (reuse fresh config)
             enable_per_cot_types = fresh_stream_config.get(
                 "enable_per_callsign_cot_types", False
             )
 
-            # If per-callsign CoT types are enabled, use per_point mode
-            if bool(enable_per_cot_types):
+            # If either plugin wants per-point mode OR per-callsign CoT types are enabled, use per_point mode
+            # This ensures the COT service uses the cot_type field from each location instead of stream default
+            if cot_type_mode == "per_point" or bool(enable_per_cot_types):
                 cot_type_mode = "per_point"
-                self.logger.debug(
-                    f"Per-callsign CoT types enabled, using mode: {cot_type_mode}"
+                self.logger.info(
+                    f"Using per_point mode (fresh config mode: {fresh_stream_config.get('cot_type_mode', 'stream')}, "
+                    f"per-callsign CoT types enabled: {bool(enable_per_cot_types)})"
+                )
+            else:
+                self.logger.info(
+                    f"Using stream mode (fresh config mode: {fresh_stream_config.get('cot_type_mode', 'stream')}, "
+                    f"per-callsign CoT types enabled: {bool(enable_per_cot_types)})"
                 )
 
             # Create COT events directly
             from services.cot_service import EnhancedCOTService
 
             try:
+                stream_default_cot_type = self.stream.cot_type or "a-f-G-U-C"
+                self.logger.info(
+                    f"Creating COT events: mode='{cot_type_mode}', "
+                    f"stream_default_cot_type='{stream_default_cot_type}', "
+                    f"locations_count={len(locations)}"
+                )
+                # Log first location's cot_type for debugging
+                if locations:
+                    first_location_cot_type = locations[0].get("cot_type", "NOT_SET")
+                    self.logger.info(
+                        f"First location cot_type: {first_location_cot_type}"
+                    )
+
                 cot_events = await EnhancedCOTService().create_cot_events(
                     locations,
-                    self.stream.cot_type or "a-f-G-U-C",
+                    stream_default_cot_type,
                     self.stream.cot_stale_time or 300,
                     cot_type_mode,  # Pass the COT type mode
                 )
@@ -717,6 +739,7 @@ class StreamWorker:
                     "enable_per_callsign_cot_types": getattr(
                         fresh_stream, "enable_per_callsign_cot_types", False
                     ),
+                    "cot_type_mode": getattr(fresh_stream, "cot_type_mode", "stream"),
                 }
             else:
                 self.logger.warning(

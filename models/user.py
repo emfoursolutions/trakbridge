@@ -546,31 +546,31 @@ class UserSession(db.Model, TimestampMixin):
     def update_activity(self) -> bool:
         """
         Update last activity timestamp with 5-minute throttling
-        
+
         Returns:
             bool: True if activity was updated (DB commit needed), False if skipped
         """
         from datetime import timedelta
-        
+
         current_time = datetime.now(timezone.utc)
-        
+
         # Only update if more than 5 minutes have passed since last update
         if not self.last_activity:
             # No previous activity, update immediately
             self.last_activity = current_time
             return True
-        
+
         # Handle timezone-aware comparison (ensure both datetimes have timezone info)
         last_activity = self.last_activity
         if last_activity.tzinfo is None:
             # If last_activity is naive, assume it's UTC and make it timezone-aware
             last_activity = last_activity.replace(tzinfo=timezone.utc)
-        
+
         # Check if more than 5 minutes have passed
         if (current_time - last_activity) > timedelta(minutes=5):
             self.last_activity = current_time
             return True  # Signal that DB commit is needed
-        
+
         return False  # Skip DB update - not enough time has passed
 
     def to_dict(self) -> Dict[str, Any]:

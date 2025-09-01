@@ -290,7 +290,7 @@ class TestCallsignAPIRoutes:
 
         # Should return JSON error response with proper structure
         assert response.headers.get("content-type", "").startswith("application/json")
-        
+
         # Verify JSON error structure
         json_data = response.get_json()
         assert json_data is not None
@@ -483,14 +483,16 @@ class TestStreamRoutesCallsignIntegration:
             # Verify redirect location is reasonable (should redirect to create form)
             location = response.headers.get("Location", "")
             assert "create" in location or location == "/streams/create"
-            
+
         elif response.status_code == 200 and "text/html" in response.headers.get(
             "content-type", ""
         ):
             # Form response - should contain some indication of validation or form processing
             response_text = response.get_data(as_text=True)
-            assert len(response_text) > 100  # Basic check that we got a meaningful response
-            
+            assert (
+                len(response_text) > 100
+            )  # Basic check that we got a meaningful response
+
         elif response.status_code in [400, 401, 503]:
             # Error responses are acceptable for validation failures
             pass

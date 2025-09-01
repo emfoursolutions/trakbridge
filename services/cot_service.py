@@ -160,6 +160,9 @@ class EnhancedCOTService:
         Returns:
             List of COT events as XML bytes
         """
+        logger.info(
+            f"create_cot_events called with: cot_type_mode='{cot_type_mode}', cot_type='{cot_type}', locations={len(locations)}"
+        )
         if self.use_pytak:
             return await EnhancedCOTService._create_pytak_events(
                 locations, cot_type, stale_time, cot_type_mode
@@ -234,8 +237,14 @@ class EnhancedCOTService:
                 # Determine COT type based on mode
                 if cot_type_mode == "per_point" and "cot_type" in location:
                     point_cot_type = location["cot_type"]
+                    logger.debug(
+                        f"Using per-point CoT type: {point_cot_type} (mode: {cot_type_mode})"
+                    )
                 else:
                     point_cot_type = cot_type
+                    logger.debug(
+                        f"Using stream CoT type: {point_cot_type} (mode: {cot_type_mode}, has cot_type: {'cot_type' in location})"
+                    )
 
                 # Create COT event data dictionary with safe conversions
                 event_data = {
@@ -397,8 +406,14 @@ class EnhancedCOTService:
                 # Determine COT type based on mode
                 if cot_type_mode == "per_point" and "cot_type" in location:
                     point_cot_type = location["cot_type"]
+                    logger.debug(
+                        f"Custom: Using per-point CoT type: {point_cot_type} (mode: {cot_type_mode})"
+                    )
                 else:
                     point_cot_type = cot_type
+                    logger.debug(
+                        f"Custom: Using stream CoT type: {point_cot_type} (mode: {cot_type_mode}, has cot_type: {'cot_type' in location})"
+                    )
 
                 # Create COT event element
                 cot_event = etree.Element("event")

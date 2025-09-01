@@ -140,6 +140,8 @@ class Stream(db.Model, TimestampMixin):
                 logger.debug(
                     f"Set plugin config for stream {self.id}: {len(test_json)} bytes"
                 )
+                logger.debug(f"Plugin config content: {config_dict}")
+                logger.debug(f"Encrypted config content: {encrypted_config}")
 
             except (ValueError, TypeError) as e:
                 logger.error(f"Failed to set plugin config for stream {self.id}: {e}")

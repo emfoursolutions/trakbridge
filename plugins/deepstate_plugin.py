@@ -337,6 +337,10 @@ class DeepstatePlugin(BaseGPSPlugin):
                 "Accept": "application/json",
             }
             logger.info(f"API Url: {api_url}")
+            logger.info(f"Deepstate Plugin Config: {config}")
+            logger.info(
+                f"CoT Type Mode from config: {config.get('cot_type_mode', 'per_point')}"
+            )
 
             async with session.get(
                 api_url, timeout=timeout_config, headers=headers, ssl=ssl_context
@@ -397,18 +401,45 @@ class DeepstatePlugin(BaseGPSPlugin):
                 if features:
                     logger.info(f"First feature: {features[0]}")
 
-                # Get the stream's COT type from configuration
-                stream_cot_type = config.get("cot_type_mode", "per_point")
-                if stream_cot_type == "stream":
-                    # If using stream COT type, try to get it from the stream object if available
-                    # Otherwise, use a default or fallback
-                    if hasattr(self, "stream") and self.stream and self.stream.cot_type:
-                        default_cot_type = self.stream.cot_type
-                    else:
-                        default_cot_type = "a-f-G-U-C"  # Default fallback
+                # Get the CoT type mode and stream's default CoT type from stream object
+                logger.info(f"DEBUG: hasattr(self, 'stream')={hasattr(self, 'stream')}")
+                if hasattr(self, "stream"):
+                    logger.info(
+                        f"DEBUG: self.stream is not None={self.stream is not None}"
+                    )
+                    if self.stream:
+                        logger.info(
+                            f"DEBUG: stream.id={getattr(self.stream, 'id', 'No ID')}"
+                        )
+                        logger.info(
+                            f"DEBUG: stream.cot_type_mode (direct)={getattr(self.stream, 'cot_type_mode', 'NOT_FOUND')}"
+                        )
+                        logger.info(
+                            f"DEBUG: stream.cot_type (direct)={getattr(self.stream, 'cot_type', 'NOT_FOUND')}"
+                        )
+                        logger.info(
+                            f"DEBUG: stream attributes={[attr for attr in dir(self.stream) if not attr.startswith('_')]}"
+                        )
+
+                if hasattr(self, "stream") and self.stream:
+                    cot_type_mode = getattr(self.stream, "cot_type_mode", "per_point")
+                    stream_default_cot_type = getattr(
+                        self.stream, "cot_type", "a-f-G-U-C"
+                    )
+                    logger.info(
+                        f"Using stream-level configuration: cot_type_mode={cot_type_mode}, cot_type={stream_default_cot_type}"
+                    )
                 else:
-                    # If using per_point COT type, use the default from config
-                    default_cot_type = config.get("cot_type", "a-h-G-U-C")
+                    # Fallback to config if stream not available
+                    cot_type_mode = config.get("cot_type_mode", "per_point")
+                    stream_default_cot_type = config.get("cot_type", "a-f-G-U-C")
+                    logger.warning(
+                        f"No stream object available, using plugin config fallback: cot_type_mode={cot_type_mode}, cot_type={stream_default_cot_type}"
+                    )
+
+                logger.info(
+                    f"FINAL VALUES USED: cot_type_mode={cot_type_mode}, stream_default_cot_type={stream_default_cot_type}"
+                )
 
                 # Process features
                 locations = []
@@ -433,9 +464,12 @@ class DeepstatePlugin(BaseGPSPlugin):
                         continue
 
                     point_features += 1
-                    # Pass the stream's COT type as default
+                    # Pass the stream's CoT type and mode to the conversion function
+                    logger.info(
+                        f"Converting feature with mode={cot_type_mode}, default_cot={stream_default_cot_type}"
+                    )
                     location = self._convert_feature_to_location(
-                        feature, default_cot_type
+                        feature, stream_default_cot_type, cot_type_mode
                     )
                     if location:
                         locations.append(location)
@@ -466,7 +500,10 @@ class DeepstatePlugin(BaseGPSPlugin):
             return [{"_error": "unknown", "_error_message": str(e)}]
 
     def _convert_feature_to_location(
-        self, feature: Dict[str, Any], default_cot_type: str = "a-n-G"
+        self,
+        feature: Dict[str, Any],
+        default_cot_type: str = "a-n-G",
+        cot_type_mode: str = "per_point",
     ) -> Optional[Dict[str, Any]]:
         """
         Convert GeoJSON feature to standardized location format
@@ -474,6 +511,7 @@ class DeepstatePlugin(BaseGPSPlugin):
         Args:
             feature: GeoJSON feature from Deepstate API
             default_cot_type: Default COT type from stream configuration
+            cot_type_mode: Mode for COT type determination ("stream" or "per_point")
 
         Returns:
             Standardized location dictionary or None if invalid
@@ -496,12 +534,30 @@ class DeepstatePlugin(BaseGPSPlugin):
 
             # Extract English name using regex
             english_name = self._extract_english_name(raw_name)
+            logger.debug(f"English Name: {english_name}")
 
             # Generate unique ID
             event_id = self._generate_point_id(english_name)
 
-            # Get COT type with the stream's default
-            cot_type = self._get_cot_type(english_name, properties, default_cot_type)
+            # Get COT type based on the configured mode
+            logger.info(
+                f"DEBUG FEATURE: name='{english_name}', mode='{cot_type_mode}', default_cot='{default_cot_type}'"
+            )
+            if cot_type_mode == "stream":
+                # Use stream COT type for all points (no per-point analysis)
+                cot_type = default_cot_type
+                logger.info(
+                    f"DEBUG STREAM MODE: Using fixed COT type '{cot_type}' for '{english_name}'"
+                )
+            else:
+                # Use per-point COT type determination with stream COT type as fallback
+                cot_type = self._get_cot_type(
+                    english_name, properties, default_cot_type
+                )
+                logger.info(
+                    f"DEBUG PER-POINT MODE: Analyzed COT type '{cot_type}' for '{english_name}'"
+                )
+            logger.debug(f"COT Type: {cot_type}")
 
             # Build description
             description = (
@@ -528,6 +584,9 @@ class DeepstatePlugin(BaseGPSPlugin):
                     "raw_feature": feature,
                 },
             }
+            logger.info(
+                f"Processed Location CoT Type: {location.get('cot_type', 'UNKNOWN')} (Mode: {cot_type_mode})"
+            )
             logger.debug(f"Processed Location: {location}")
             return location
 
@@ -571,12 +630,12 @@ class DeepstatePlugin(BaseGPSPlugin):
         # Military unit classifications
         elif "motorized rifle" in name_id:
             cot_type = "a-h-G-U-C-I-M"  # Hostile ground unit combat infantry mechanized
+        elif "motor rifle" in name_id:
+            cot_type = "a-h-G-U-C-I-M"  # Hostile ground unit combat infantry mechanized
         elif "somalia" in name_id:
             cot_type = "a-h-G-U-C-A"  # Hostile ground unit combat armor
-            name_en = "1st Separate Tank Battalion Somalia (DPR)"
         elif "piatnashka" in name_id:
             cot_type = "a-h-G-U-C-I"  # Hostile ground unit combat infantry
-            name_en = "International Brigade Pyatnashka (DPR)"
         elif "rifle" in name_id:
             cot_type = "a-h-G-U-C-I"  # Hostile ground unit combat infantry
         elif "pmc" in name_id:
@@ -637,7 +696,6 @@ class DeepstatePlugin(BaseGPSPlugin):
             cot_type = (
                 "a-h-S-C-L-C-C"  # Hostile sea surface combatant line combatant cruiser
             )
-
         return cot_type
 
     def validate_config(self) -> bool:

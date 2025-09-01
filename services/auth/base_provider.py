@@ -346,7 +346,7 @@ class BaseAuthenticationProvider(ABC):
         if session and session.is_valid():
             # Only commit to database if activity was actually updated (5-minute throttling)
             activity_updated = session.update_activity()
-            
+
             if activity_updated:
                 try:
                     from database import db
@@ -359,7 +359,7 @@ class BaseAuthenticationProvider(ABC):
                         db.session.rollback()
                     except Exception:
                         pass  # Ignore rollback errors
-                        
+
             return session
 
         return None

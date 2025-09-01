@@ -900,3 +900,317 @@ class TestStreamOperationsServiceCallsign:
                 stream_id=stream.id, identifier_value="OLD123"
             ).first()
             assert old_exists is None
+
+
+@pytest.mark.integration
+class TestStreamWorkerConfiguration:
+    """Test stream worker stream object assignment to plugins."""
+
+    def test_stream_worker_assigns_stream_to_plugin(self, app, db_session):
+        """Test that stream worker assigns stream object to plugins for stream-level configuration access."""
+        with app.app_context():
+            from database import db
+            from models.stream import Stream
+            from models.tak_server import TakServer
+            from services.session_manager import SessionManager
+            from services.database_manager import DatabaseManager
+            from unittest.mock import Mock, patch
+
+            # Create test TAK server
+            tak_server = TakServer(
+                name="Test Server",
+                host="127.0.0.1",
+                port=8089,
+                protocol="tcp",
+                use_ssl=False,
+            )
+            db_session.add(tak_server)
+            db_session.commit()
+
+            # Create test stream with specific cot_type_mode
+            stream = Stream(
+                name="Test Stream",
+                plugin_type="deepstate",
+                tak_server_id=tak_server.id,
+                cot_type_mode="per_point",  # Stream-level setting
+                cot_type="a-f-G-U-C",  # Stream-level setting
+                plugin_config='{"api_url": "https://test.com"}',  # Plugin-specific config
+            )
+            db_session.add(stream)
+            db_session.commit()
+
+            # Mock dependencies
+            mock_session_manager = Mock(spec=SessionManager)
+            mock_db_manager = Mock(spec=DatabaseManager)
+
+            # Mock plugin manager to capture the plugin and verify stream assignment
+            created_plugin = Mock()
+            created_plugin.validate_config.return_value = True
+
+            def mock_get_plugin(plugin_type, config):
+                return created_plugin
+
+            with patch(
+                "services.stream_worker.get_plugin_manager"
+            ) as mock_plugin_manager:
+                mock_plugin_manager.return_value.get_plugin = mock_get_plugin
+
+                # Create stream worker
+                worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
+
+                # Start the worker (this initializes the plugin)
+                result = worker.start()
+
+                # Assert plugin was initialized and stream was assigned
+                assert result is True
+                assert worker.plugin is created_plugin
+                assert hasattr(created_plugin, "stream")
+                assert created_plugin.stream is stream
+
+    def test_stream_worker_handles_missing_stream_fields_gracefully(
+        self, app, db_session
+    ):
+        """Test that stream worker handles missing stream-level fields gracefully."""
+        with app.app_context():
+            from database import db
+            from models.stream import Stream
+            from models.tak_server import TakServer
+            from services.session_manager import SessionManager
+            from services.database_manager import DatabaseManager
+            from unittest.mock import Mock, patch
+
+            # Create test TAK server
+            tak_server = TakServer(
+                name="Test Server",
+                host="127.0.0.1",
+                port=8089,
+                protocol="tcp",
+                use_ssl=False,
+            )
+            db_session.add(tak_server)
+            db_session.commit()
+
+            # Create test stream without explicit cot_type_mode/cot_type (should use defaults)
+            stream = Stream(
+                name="Test Stream",
+                plugin_type="garmin",
+                tak_server_id=tak_server.id,
+                plugin_config='{"url": "https://test.com"}',
+            )
+            db_session.add(stream)
+            db_session.commit()
+
+            # Mock dependencies
+            mock_session_manager = Mock(spec=SessionManager)
+            mock_db_manager = Mock(spec=DatabaseManager)
+
+            # Mock plugin manager to capture the config passed to plugins
+            captured_config = {}
+
+            def mock_get_plugin(plugin_type, config):
+                captured_config.update(config)
+                mock_plugin = Mock()
+                mock_plugin.validate_config.return_value = True
+                return mock_plugin
+
+            with patch(
+                "services.stream_worker.get_plugin_manager"
+            ) as mock_plugin_manager:
+                mock_plugin_manager.return_value.get_plugin = mock_get_plugin
+
+                # Create stream worker
+                worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
+
+                # Start the worker (this initializes the plugin)
+                result = worker.start()
+
+                # Assert plugin was initialized with default values
+                assert result is True
+                assert "cot_type_mode" in captured_config
+                assert captured_config["cot_type_mode"] == "stream"  # Default value
+                assert "cot_type" in captured_config
+                assert captured_config["cot_type"] == "a-f-G-U-C"  # Default value
+
+    def test_stream_worker_preserves_plugin_specific_config(self, app, db_session):
+        """Test that stream worker preserves plugin-specific configuration when adding stream config."""
+        with app.app_context():
+            from database import db
+            from models.stream import Stream
+            from models.tak_server import TakServer
+            from services.session_manager import SessionManager
+            from services.database_manager import DatabaseManager
+            from unittest.mock import Mock, patch
+
+            # Create test TAK server
+            tak_server = TakServer(
+                name="Test Server",
+                host="127.0.0.1",
+                port=8089,
+                protocol="tcp",
+                use_ssl=False,
+            )
+            db_session.add(tak_server)
+            db_session.commit()
+
+            # Create test stream with complex plugin configuration
+            plugin_config = {
+                "api_url": "https://test.com",
+                "username": "testuser",
+                "password": "encrypted_password",
+                "timeout": 30,
+                "custom_field": "custom_value",
+            }
+
+            stream = Stream(
+                name="Test Stream",
+                plugin_type="traccar",
+                tak_server_id=tak_server.id,
+                cot_type_mode="stream",
+                cot_type="a-h-G-U-C",
+                plugin_config=str(plugin_config).replace(
+                    "'", '"'
+                ),  # Convert to JSON string
+            )
+            db_session.add(stream)
+            db_session.commit()
+
+            # Mock dependencies
+            mock_session_manager = Mock(spec=SessionManager)
+            mock_db_manager = Mock(spec=DatabaseManager)
+
+            # Mock plugin manager to capture the config passed to plugins
+            captured_config = {}
+
+            def mock_get_plugin(plugin_type, config):
+                captured_config.update(config)
+                mock_plugin = Mock()
+                mock_plugin.validate_config.return_value = True
+                return mock_plugin
+
+            with patch(
+                "services.stream_worker.get_plugin_manager"
+            ) as mock_plugin_manager:
+                mock_plugin_manager.return_value.get_plugin = mock_get_plugin
+
+                # Create stream worker
+                worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
+
+                # Start the worker (this initializes the plugin)
+                result = worker.start()
+
+                # Assert all configuration is preserved and stream config is added
+                assert result is True
+
+                # Stream-level configuration should be present
+                assert captured_config["cot_type_mode"] == "stream"
+                assert captured_config["cot_type"] == "a-h-G-U-C"
+
+                # Plugin-specific configuration should be preserved
+                assert "api_url" in captured_config
+                assert "username" in captured_config
+                assert "password" in captured_config
+                assert "timeout" in captured_config
+                assert "custom_field" in captured_config
+
+
+@pytest.mark.integration
+class TestStreamWorkerCotTypeModeIntegration:
+    """Test stream worker CoT type mode functionality with plugin integration."""
+
+    def test_stream_worker_deepstate_plugin_integration(self, app, db_session):
+        """Test that stream worker properly configures deepstate plugin with CoT type mode."""
+        with app.app_context():
+            from database import db
+            from models.stream import Stream
+            from models.tak_server import TakServer
+            from services.session_manager import SessionManager
+            from services.database_manager import DatabaseManager
+            from unittest.mock import Mock, patch
+
+            # Create test TAK server
+            tak_server = TakServer(
+                name="Test Server",
+                host="127.0.0.1",
+                port=8089,
+                protocol="tcp",
+                use_ssl=False,
+            )
+            db_session.add(tak_server)
+            db_session.commit()
+
+            # Test both CoT type modes
+            test_cases = [
+                {
+                    "name": "Stream Mode Test",
+                    "cot_type_mode": "stream",
+                    "cot_type": "a-f-G-U-C",
+                    "expected_mode": "stream",
+                },
+                {
+                    "name": "Per-Point Mode Test",
+                    "cot_type_mode": "per_point",
+                    "cot_type": "a-h-G-U-C",
+                    "expected_mode": "per_point",
+                },
+            ]
+
+            for case in test_cases:
+                # Create test stream
+                stream = Stream(
+                    name=case["name"],
+                    plugin_type="deepstate",
+                    tak_server_id=tak_server.id,
+                    cot_type_mode=case["cot_type_mode"],
+                    cot_type=case["cot_type"],
+                    plugin_config='{"api_url": "https://deepstatemap.live/api/history/last"}',
+                )
+                db_session.add(stream)
+                db_session.commit()
+
+                # Mock dependencies
+                mock_session_manager = Mock(spec=SessionManager)
+                mock_db_manager = Mock(spec=DatabaseManager)
+
+                # Test with actual deepstate plugin if available
+                try:
+                    from plugins.deepstate_plugin import DeepstatePlugin
+
+                    # Create real plugin to test actual integration
+                    def mock_get_plugin(plugin_type, config):
+                        if plugin_type == "deepstate":
+                            return DeepstatePlugin(config)
+                        return None
+
+                    with patch(
+                        "services.stream_worker.get_plugin_manager"
+                    ) as mock_plugin_manager:
+                        mock_plugin_manager.return_value.get_plugin = mock_get_plugin
+
+                        # Create stream worker
+                        worker = StreamWorker(
+                            stream, mock_session_manager, mock_db_manager
+                        )
+
+                        # Start the worker (this initializes the plugin)
+                        result = worker.start()
+
+                        # Assert plugin was initialized successfully
+                        assert result is True
+                        assert worker.plugin is not None
+
+                        # Verify plugin has correct configuration
+                        plugin_config = worker.plugin.get_decrypted_config()
+                        assert plugin_config["cot_type_mode"] == case["expected_mode"]
+                        assert plugin_config["cot_type"] == case["cot_type"]
+                        assert (
+                            plugin_config["api_url"]
+                            == "https://deepstatemap.live/api/history/last"
+                        )
+
+                except ImportError:
+                    # Skip if deepstate plugin not available
+                    pytest.skip("Deepstate plugin not available for integration test")
+
+                # Clean up for next test case
+                db_session.delete(stream)
+                db_session.commit()

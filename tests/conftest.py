@@ -38,16 +38,17 @@ def app():
 
     # Set environment variables for clean testing
     original_env = {}
-    
+
     # Use CI environment variables if available, otherwise use test defaults
     # This ensures compatibility between local testing and CI/CD environments
     ci_encryption_key = os.environ.get("TRAKBRIDGE_ENCRYPTION_KEY")
     ci_secret_key = os.environ.get("SECRET_KEY")
-    
+
     test_env_vars = {
         "FLASK_ENV": "testing",
         "DB_TYPE": "sqlite",
-        "TRAKBRIDGE_ENCRYPTION_KEY": ci_encryption_key or "test-encryption-key-for-testing-12345",
+        "TRAKBRIDGE_ENCRYPTION_KEY": ci_encryption_key
+        or "test-encryption-key-for-testing-12345",
         "SECRET_KEY": ci_secret_key or "test-secret-key-for-sessions",
     }
 
@@ -86,11 +87,11 @@ def db_session(app):
             # Close any existing connections to avoid lock issues
             db.session.close()
             db.engine.dispose()
-            
+
             # Drop and recreate tables for each test
             db.drop_all()
             db.create_all()
-            
+
             # Ensure clean session state
             db.session.commit()
 
@@ -580,12 +581,13 @@ def pytest_configure(config):
 def pytest_sessionstart(session):
     """Called after the Session object has been created"""
     import os
-    
+
     # Clean up any existing test database files in CI environment
-    ci_project_dir = os.environ.get('CI_PROJECT_DIR')
+    ci_project_dir = os.environ.get("CI_PROJECT_DIR")
     if ci_project_dir:
         import glob
-        test_db_files = glob.glob(os.path.join(ci_project_dir, 'test_db*.sqlite*'))
+
+        test_db_files = glob.glob(os.path.join(ci_project_dir, "test_db*.sqlite*"))
         for db_file in test_db_files:
             try:
                 os.remove(db_file)
@@ -597,12 +599,13 @@ def pytest_sessionstart(session):
 def pytest_sessionfinish(session, exitstatus):
     """Called after whole test run finished, right before returning the exit status"""
     import os
-    
+
     # Clean up test database files after session
-    ci_project_dir = os.environ.get('CI_PROJECT_DIR')
+    ci_project_dir = os.environ.get("CI_PROJECT_DIR")
     if ci_project_dir:
         import glob
-        test_db_files = glob.glob(os.path.join(ci_project_dir, 'test_db*.sqlite*'))
+
+        test_db_files = glob.glob(os.path.join(ci_project_dir, "test_db*.sqlite*"))
         for db_file in test_db_files:
             try:
                 os.remove(db_file)
