@@ -415,15 +415,77 @@ unit-tests:
   
   before_script:
     - *install_packages
-    - install_packages git curl build-essential
-    - pip install --upgrade pip
-    - pip install -e ".[dev]"
+    - install_packages git curl build-essential jq
+    - |
+      # Enhanced Git Setup for setuptools-scm compatibility
+      echo "Setting up git configuration for setuptools-scm..."
+      git config --global user.email "ci@trakbridge.test"
+      git config --global user.name "TrakBridge CI"
+      
+      # Verify git repository state
+      echo "=== Git Repository State ==="
+      git status || echo "Git status failed"
+      git log --oneline -5 || echo "Git log failed"
+      git describe --tags --long --dirty --always || echo "Git describe failed"
+      echo "Git fetch extra flags: ${GIT_FETCH_EXTRA_FLAGS:-none}"
+      echo "Git depth: ${GIT_DEPTH:-none}"
+      
+      # Ensure we have tags for setuptools-scm
+      if ! git tag -l | grep -q "v"; then
+        echo "No version tags found, creating fallback tag for CI"
+        git tag v0.1.0.dev0 2>/dev/null || echo "Tag creation failed (may already exist)"
+      fi
+      
+      # Set explicit version for setuptools-scm to prevent installation failures
+      export SETUPTOOLS_SCM_PRETEND_VERSION="${CI_COMMIT_TAG:-0.1.0.dev0+ci.${CI_COMMIT_SHORT_SHA:-unknown}}"
+      echo "Using setuptools-scm version: $SETUPTOOLS_SCM_PRETEND_VERSION"
+    - pip install --upgrade pip setuptools wheel
+    - |
+      # Enhanced Package Installation with Error Handling
+      echo "Installing TrakBridge package and dev dependencies..."
+      if ! pip install -e ".[dev]"; then
+        echo "=== Package installation failed, debugging ==="
+        echo "Python version: $(python --version)"
+        echo "Pip version: $(pip --version)"
+        echo "Current directory: $(pwd)"
+        echo "Directory contents:"
+        ls -la
+        echo "Git status:"
+        git status
+        echo "Environment variables:"
+        env | grep -E "(SETUPTOOLS|GIT|CI_)" | sort
+        echo "=== End debugging ==="
+        exit 1
+      fi
+      echo "Package installation completed successfully"
   
   script: |
     echo "Running comprehensive unit test suite..."
     
-    # Run tests with comprehensive coverage reporting
-
+    # Pre-test Environment Verification
+    echo "=== Pre-Test Environment Verification ==="
+    echo "Python version: $(python --version)"
+    echo "Current working directory: $(pwd)"
+    echo "Python path: $PYTHONPATH"
+    echo "Flask environment: $FLASK_ENV"
+    echo "Database type: $DB_TYPE"
+    
+    # Verify package installation
+    echo "=== Package Verification ==="
+    python -c "import app; print('✅ App module imports successfully')" || echo "❌ App module import failed"
+    python -c "import database; print('✅ Database module imports successfully')" || echo "❌ Database module import failed"
+    python -c "from tests.conftest import *; print('✅ Test fixtures available')" || echo "❌ Test fixtures unavailable"
+    
+    # Check configuration files
+    echo "=== Configuration File Check ==="
+    ls -la config/settings/ || echo "❌ Config directory missing"
+    
+    # Verify test discovery
+    echo "=== Test Discovery ==="
+    pytest --collect-only tests/unit/test_routes.py | head -20
+    
+    # Run tests with comprehensive coverage reporting and enhanced debugging
+    echo "=== Running Tests ==="
     pytest tests/unit/ -v \
       --cov=. \
       --cov-report=xml \
@@ -431,12 +493,28 @@ unit-tests:
       --cov-report=term-missing \
       --cov-fail-under=$COVERAGE_THRESHOLD \
       --cov-branch \
-      --tb=short \
-      --maxfail=10 \
+      --tb=long \
+      --maxfail=3 \
       --durations=10 \
-      --junitxml=unit-test-results.xml
+      --junitxml=unit-test-results.xml \
+      --capture=no \
+      -s
     
-    echo "Unit tests completed"
+    TEST_EXIT_CODE=$?
+    echo "Unit tests completed with exit code: $TEST_EXIT_CODE"
+    
+    # Post-test debugging if tests failed
+    if [ $TEST_EXIT_CODE -ne 0 ]; then
+      echo "=== Post-Test Debugging ==="
+      echo "Environment variables:"
+      env | grep -E "(FLASK|DB|TRAKBRIDGE|SECRET)" | sort
+      echo "SQLite database files:"
+      find . -name "*.db" -o -name "*.sqlite*" 2>/dev/null || echo "No database files found"
+      echo "Test artifacts:"
+      ls -la *.xml *.json 2>/dev/null || echo "No test artifacts found"
+    fi
+    
+    exit $TEST_EXIT_CODE
   
   artifacts:
     reports:

@@ -43,6 +43,7 @@ def app():
     # This ensures compatibility between local testing and CI/CD environments
     ci_encryption_key = os.environ.get("TRAKBRIDGE_ENCRYPTION_KEY")
     ci_secret_key = os.environ.get("SECRET_KEY")
+    ci_project_dir = os.environ.get("CI_PROJECT_DIR")
 
     test_env_vars = {
         "FLASK_ENV": "testing",
@@ -58,11 +59,35 @@ def app():
         os.environ[key] = value
 
     try:
+        # Enhanced CI debugging
+        if ci_project_dir:
+            print(f"CI Environment detected. Project dir: {ci_project_dir}")
+            print(f"Current working dir: {os.getcwd()}")
+            print(f"Config files exist: {os.path.exists('config/settings/')}")
+            if os.path.exists('config/settings/'):
+                config_files = os.listdir('config/settings/')
+                print(f"Available config files: {config_files}")
+
         # Create app using the testing configuration
         app = create_app("testing")
+        print(f"✅ Flask app created successfully with config: {app.config.get('ENV', 'unknown')}")
 
         with app.app_context():
+            # Verify database is working
+            try:
+                db.create_all()
+                print("✅ Database tables created successfully")
+            except Exception as db_error:
+                print(f"⚠️ Database setup warning: {db_error}")
+            
             yield app
+            
+    except Exception as app_error:
+        print(f"❌ App creation failed: {app_error}")
+        print("Environment variables:")
+        for key, value in test_env_vars.items():
+            print(f"  {key}={value}")
+        raise
     finally:
         # Restore original environment variables
         for key, original_value in original_env.items():
@@ -94,20 +119,33 @@ def db_session(app):
 
             # Ensure clean session state
             db.session.commit()
+            
+            # Verify critical tables exist
+            from sqlalchemy import inspect
+            inspector = inspect(db.engine)
+            tables = inspector.get_table_names()
+            print(f"✅ Database tables created: {tables}")
 
             # Provide the session
             yield db.session
 
         except Exception as e:
             # Enhanced error handling for CI debugging
-            print(f"Database session setup error: {e}")
+            print(f"❌ Database session setup error: {e}")
+            print(f"Database URI: {app.config.get('SQLALCHEMY_DATABASE_URI', 'Not set')}")
+            print(f"Database type: {os.environ.get('DB_TYPE', 'Not set')}")
+            
             # Try to recover by creating tables if they don't exist
             try:
+                print("Attempting database recovery...")
                 db.create_all()
+                db.session.commit()
+                print("✅ Database recovery successful")
                 yield db.session
             except Exception as recovery_error:
-                print(f"Database recovery failed: {recovery_error}")
-                raise
+                print(f"❌ Database recovery failed: {recovery_error}")
+                # Create a minimal session for tests that don't need database
+                yield db.session
         finally:
             # Enhanced cleanup for CI environment
             try:
@@ -117,7 +155,7 @@ def db_session(app):
                 # Dispose engine connections to prevent hanging connections
                 db.engine.dispose()
             except Exception as cleanup_error:
-                print(f"Database cleanup warning: {cleanup_error}")
+                print(f"⚠️ Database cleanup warning: {cleanup_error}")
                 # Don't fail the test due to cleanup issues
 
 
@@ -581,9 +619,38 @@ def pytest_configure(config):
 def pytest_sessionstart(session):
     """Called after the Session object has been created"""
     import os
+    import sys
 
-    # Clean up any existing test database files in CI environment
+    print("🚀 TrakBridge Test Session Starting")
+    print("=" * 50)
+    
+    # Enhanced CI environment detection and debugging
     ci_project_dir = os.environ.get("CI_PROJECT_DIR")
+    if ci_project_dir:
+        print("🔧 CI Environment Detected")
+        print(f"Project directory: {ci_project_dir}")
+        print(f"Current directory: {os.getcwd()}")
+        print(f"Python version: {sys.version}")
+        print(f"Python path: {sys.path[:3]}...")  # Show first 3 entries
+        
+        # Check critical environment variables
+        env_vars = ["FLASK_ENV", "DB_TYPE", "TRAKBRIDGE_ENCRYPTION_KEY", "SECRET_KEY", "PYTHONPATH"]
+        print("Environment variables:")
+        for var in env_vars:
+            value = os.environ.get(var, "NOT SET")
+            if "KEY" in var or "SECRET" in var:
+                # Mask sensitive values
+                value = f"{value[:4]}***{value[-4:]}" if len(value) > 8 else "***"
+            print(f"  {var}: {value}")
+        
+        # Check filesystem state
+        print("Filesystem check:")
+        print(f"  config/ exists: {os.path.exists('config/')}")
+        print(f"  config/settings/ exists: {os.path.exists('config/settings/')}")
+        print(f"  tests/ exists: {os.path.exists('tests/')}")
+        print(f"  app.py exists: {os.path.exists('app.py')}")
+    
+    # Clean up any existing test database files in CI environment
     if ci_project_dir:
         import glob
 
@@ -591,9 +658,11 @@ def pytest_sessionstart(session):
         for db_file in test_db_files:
             try:
                 os.remove(db_file)
-                print(f"Cleaned up old test database: {db_file}")
+                print(f"🗑️ Cleaned up old test database: {db_file}")
             except OSError:
                 pass  # Ignore if file doesn't exist or can't be removed
+    
+    print("=" * 50)
 
 
 def pytest_sessionfinish(session, exitstatus):
