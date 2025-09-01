@@ -417,7 +417,7 @@ unit-tests:
     - *install_packages
     - install_packages git curl build-essential jq
     - |
-      # Enhanced Git Setup for setuptools-scm compatibility
+      # Git Setup for setuptools-scm compatibility
       echo "Setting up git configuration for setuptools-scm..."
       git config --global user.email "ci@trakbridge.test"
       git config --global user.name "TrakBridge CI"
@@ -441,7 +441,7 @@ unit-tests:
       echo "Using setuptools-scm version: $SETUPTOOLS_SCM_PRETEND_VERSION"
     - pip install --upgrade pip setuptools wheel
     - |
-      # Enhanced Package Installation with Error Handling
+      # Package Installation with Error Handling
       echo "Installing TrakBridge package and dev dependencies..."
       if ! pip install -e ".[dev]"; then
         echo "=== Package installation failed, debugging ==="
@@ -472,13 +472,13 @@ unit-tests:
     
     # Verify package installation
     echo "=== Package Verification ==="
-    python -c "import app; print('✅ App module imports successfully')" || echo "❌ App module import failed"
-    python -c "import database; print('✅ Database module imports successfully')" || echo "❌ Database module import failed"
-    python -c "from tests.conftest import *; print('✅ Test fixtures available')" || echo "❌ Test fixtures unavailable"
+    python -c "import app; print('App module imports successfully')" || echo "❌ App module import failed"
+    python -c "import database; print('Database module imports successfully')" || echo "❌ Database module import failed"
+    python -c "from tests.conftest import *; print('Test fixtures available')" || echo "❌ Test fixtures unavailable"
     
     # Check configuration files
     echo "=== Configuration File Check ==="
-    ls -la config/settings/ || echo "❌ Config directory missing"
+    ls -la config/settings/ || echo "Config directory missing"
     
     # Verify test discovery
     echo "=== Test Discovery ==="
@@ -493,12 +493,10 @@ unit-tests:
       --cov-report=term-missing \
       --cov-fail-under=$COVERAGE_THRESHOLD \
       --cov-branch \
-      --tb=long \
-      --maxfail=3 \
+      --tb=short \
+      --maxfail=10 \
       --durations=10 \
-      --junitxml=unit-test-results.xml \
-      --capture=no \
-      -s
+      --junitxml=unit-test-results.xml
     
     TEST_EXIT_CODE=$?
     echo "Unit tests completed with exit code: $TEST_EXIT_CODE"
