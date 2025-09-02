@@ -28,6 +28,7 @@ lxml
 Mako
 MarkupSafe
 multidict
+paho-mqtt
 propcache
 psutil
 psycopg2-binary

@@ -19,8 +19,9 @@ from typing import Any, Dict
 
 # Local application imports
 from .base import BaseConfig
+from services.logging_service import get_module_logger
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class DevelopmentConfig(BaseConfig):

@@ -239,9 +239,23 @@ def log_full_startup_info(app):
     """Log comprehensive startup information for the primary process"""
     try:
         from services.version import format_version, get_build_info, get_version_info
+        from services.logging_service import log_primary_startup_banner
 
-        # Log startup banner
-        log_startup_banner(app)
+        # Get worker count from environment (Hypercorn sets HYPERCORN_WORKER_COUNT)
+        worker_count = None
+        try:
+            worker_count = int(os.getenv('HYPERCORN_WORKER_COUNT', '1'))
+        except (ValueError, TypeError):
+            # Check for other common worker count environment variables
+            for env_var in ['WORKERS', 'WEB_CONCURRENCY', 'GUNICORN_WORKERS']:
+                try:
+                    worker_count = int(os.getenv(env_var, '1'))
+                    break
+                except (ValueError, TypeError):
+                    continue
+            
+        # Log enhanced startup banner with worker coordination info
+        log_primary_startup_banner(app, worker_count)
 
         # Log detailed version information
         version_info = get_version_info()
@@ -283,14 +297,8 @@ def log_full_startup_info(app):
 
 def log_simple_worker_init(app):
     """Log simple initialization message for worker processes"""
-    try:
-        from services.version import format_version
-
-        app.logger.info(f"Worker process initialized - PID: {os.getpid()}")
-        app.logger.debug(f"Application: {format_version(include_build_info=False)}")
-    except Exception as e:
-        app.logger.info(f"Worker process initialized - PID: {os.getpid()}")
-        app.logger.debug(f"Could not log version info: {e}")
+    from services.logging_service import log_worker_initialization
+    log_worker_initialization(app)
 
 
 def should_run_delayed_startup() -> bool:

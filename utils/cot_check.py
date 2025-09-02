@@ -11,7 +11,8 @@ import logging
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from services.logging_service import get_module_logger
+logger = get_module_logger(__name__)
 
 app = Flask(__name__)
 app.secret_key = "your-secret-key-here"

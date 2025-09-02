@@ -4,7 +4,7 @@ dynamic = ["version"]
 description = "TrakBridge Feed Streaming Platform"
 authors = [{ name = "Emfour Solutions", email = "support@emfoursolutions.com.au" }]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 
 dependencies = [
     "aiohappyeyeballs",
@@ -39,6 +39,7 @@ dependencies = [
     "Mako",
     "MarkupSafe",
     "multidict",
+    "paho-mqtt",
     "propcache",
     "psutil",
     "psycopg2-binary",
