@@ -722,7 +722,7 @@ start_server() {
                 --max-requests-jitter "$max_requests_jitter" \
                 --log-level "$log_level" \
                 --timeout "$timeout" \
-                --graceful-timeout "$graceful_timeout" \
+                --graceful_timeout "$graceful_timeout" \
                 --preload_app "$preload_app" \
                 --max_concurrent_connections "$max_concurrent_connections" \
                 --enable_http2 "$enable_http2" \
