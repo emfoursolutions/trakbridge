@@ -144,7 +144,8 @@ class TestTakServerService:
 class TestStreamWorkerCallsignIntegration:
     """Test stream worker callsign mapping functionality - integrated with existing service tests"""
 
-    def test_stream_worker_callsign_application_disabled(self, app, db_session):
+    @pytest.mark.asyncio
+    async def test_stream_worker_callsign_application_disabled(self, app, db_session):
         """Test stream worker applies callsigns correctly when feature is disabled"""
         with app.app_context():
             from database import db
@@ -185,17 +186,13 @@ class TestStreamWorkerCallsignIntegration:
             assert hasattr(worker, "_apply_callsign_mapping")
 
             # Apply callsign mapping (should be early exit when disabled)
-            import asyncio
-
-            async def test_apply():
-                await worker._apply_callsign_mapping(test_locations)
-
-            asyncio.run(test_apply())
+            await worker._apply_callsign_mapping(test_locations)
 
             # Location name should remain unchanged when feature disabled
             assert test_locations[0]["name"] == "Original Name"
 
-    def test_stream_worker_callsign_application_enabled(self, app, db_session):
+    @pytest.mark.asyncio
+    async def test_stream_worker_callsign_application_enabled(self, app, db_session):
         """Test stream worker applies callsigns correctly when feature is enabled"""
         with app.app_context():
             from database import db
@@ -244,17 +241,13 @@ class TestStreamWorkerCallsignIntegration:
             ]
 
             # Test that _apply_callsign_mapping method applies mapping
-            import asyncio
-
-            async def test_apply():
-                await worker._apply_callsign_mapping(test_locations)
-
-            asyncio.run(test_apply())
+            await worker._apply_callsign_mapping(test_locations)
 
             # Location name should be updated with custom callsign
             assert test_locations[0]["name"] == "Alpha-1"
 
-    def test_stream_worker_per_callsign_cot_types(self, app, db_session):
+    @pytest.mark.asyncio
+    async def test_stream_worker_per_callsign_cot_types(self, app, db_session):
         """Test stream worker applies per-callsign CoT type overrides"""
         with app.app_context():
             from database import db
@@ -304,18 +297,16 @@ class TestStreamWorkerCallsignIntegration:
             ]
 
             # Apply callsign mapping with CoT type override
-            import asyncio
-
-            async def test_apply():
-                await worker._apply_callsign_mapping(test_locations)
-
-            asyncio.run(test_apply())
+            await worker._apply_callsign_mapping(test_locations)
 
             # Should have both callsign and CoT type applied
             assert test_locations[0]["name"] == "Alpha-1"
             assert test_locations[0]["cot_type"] == "a-f-G-E-V-C"
 
-    def test_stream_worker_callsign_error_handling_fallback(self, app, db_session):
+    @pytest.mark.asyncio
+    async def test_stream_worker_callsign_error_handling_fallback(
+        self, app, db_session
+    ):
         """Test stream worker fallback behavior when callsign mapping fails"""
         with app.app_context():
             from database import db
@@ -354,17 +345,13 @@ class TestStreamWorkerCallsignIntegration:
             ]
 
             # Apply callsign mapping (should fallback to original name)
-            import asyncio
-
-            async def test_apply():
-                await worker._apply_callsign_mapping(test_locations)
-
-            asyncio.run(test_apply())
+            await worker._apply_callsign_mapping(test_locations)
 
             # Should use fallback behavior (keep original name)
             assert test_locations[0]["name"] == "Original Name"
 
-    def test_stream_worker_callsign_error_handling_skip(self, app, db_session):
+    @pytest.mark.asyncio
+    async def test_stream_worker_callsign_error_handling_skip(self, app, db_session):
         """Test stream worker skip behavior when callsign mapping fails"""
         with app.app_context():
             from database import db
@@ -412,18 +399,14 @@ class TestStreamWorkerCallsignIntegration:
             ]
 
             # Apply callsign mapping (should skip problematic locations)
-            import asyncio
-
-            async def test_apply():
-                await worker._apply_callsign_mapping(test_locations)
-
-            asyncio.run(test_apply())
+            await worker._apply_callsign_mapping(test_locations)
 
             # With skip mode, unmapped locations should be removed or marked
             # Implementation will determine exact behavior
             assert hasattr(worker, "_apply_callsign_mapping")
 
-    def test_stream_worker_load_callsign_mappings(self, app, db_session):
+    @pytest.mark.asyncio
+    async def test_stream_worker_load_callsign_mappings(self, app, db_session):
         """Test stream worker loads callsign mappings efficiently from database"""
         with app.app_context():
             from database import db
@@ -473,13 +456,7 @@ class TestStreamWorkerCallsignIntegration:
             assert hasattr(worker, "_load_callsign_mappings")
 
             # Load callsign mappings
-            import asyncio
-
-            async def test_load():
-                mappings_dict = await worker._load_callsign_mappings()
-                return mappings_dict
-
-            result = asyncio.run(test_load())
+            result = await worker._load_callsign_mappings()
 
             # Should return dictionary mapping identifiers to mappings
             assert isinstance(result, dict)
@@ -489,7 +466,8 @@ class TestStreamWorkerCallsignIntegration:
             assert "333333333" in result
             assert result["111111111"].custom_callsign == "Alpha-1"
 
-    def test_stream_worker_plugin_integration(self, app, db_session):
+    @pytest.mark.asyncio
+    async def test_stream_worker_plugin_integration(self, app, db_session):
         """Test stream worker integrates with plugin CallsignMappable interface"""
         with app.app_context():
             from database import db
@@ -568,12 +546,7 @@ class TestStreamWorkerCallsignIntegration:
             ]
 
             # Apply callsign mapping through plugin interface
-            import asyncio
-
-            async def test_apply():
-                await worker._apply_callsign_mapping(test_locations)
-
-            asyncio.run(test_apply())
+            await worker._apply_callsign_mapping(test_locations)
 
             # Should have applied callsign through plugin
             assert test_locations[0]["name"] == "Alpha-1"
@@ -906,7 +879,8 @@ class TestStreamOperationsServiceCallsign:
 class TestStreamWorkerConfiguration:
     """Test stream worker stream object assignment to plugins."""
 
-    def test_stream_worker_assigns_stream_to_plugin(self, app, db_session):
+    @pytest.mark.asyncio
+    async def test_stream_worker_assigns_stream_to_plugin(self, app, db_session):
         """Test that stream worker assigns stream object to plugins for stream-level configuration access."""
         with app.app_context():
             from database import db
@@ -922,7 +896,7 @@ class TestStreamWorkerConfiguration:
                 host="127.0.0.1",
                 port=8089,
                 protocol="tcp",
-                use_ssl=False,
+                verify_ssl=False,
             )
             db_session.add(tak_server)
             db_session.commit()
@@ -959,7 +933,7 @@ class TestStreamWorkerConfiguration:
                 worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
 
                 # Start the worker (this initializes the plugin)
-                result = worker.start()
+                result = await worker.start()
 
                 # Assert plugin was initialized and stream was assigned
                 assert result is True
@@ -967,7 +941,8 @@ class TestStreamWorkerConfiguration:
                 assert hasattr(created_plugin, "stream")
                 assert created_plugin.stream is stream
 
-    def test_stream_worker_handles_missing_stream_fields_gracefully(
+    @pytest.mark.asyncio
+    async def test_stream_worker_handles_missing_stream_fields_gracefully(
         self, app, db_session
     ):
         """Test that stream worker handles missing stream-level fields gracefully."""
@@ -985,7 +960,7 @@ class TestStreamWorkerConfiguration:
                 host="127.0.0.1",
                 port=8089,
                 protocol="tcp",
-                use_ssl=False,
+                verify_ssl=False,
             )
             db_session.add(tak_server)
             db_session.commit()
@@ -1022,7 +997,7 @@ class TestStreamWorkerConfiguration:
                 worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
 
                 # Start the worker (this initializes the plugin)
-                result = worker.start()
+                result = await worker.start()
 
                 # Assert plugin was initialized with default values
                 assert result is True
@@ -1031,7 +1006,10 @@ class TestStreamWorkerConfiguration:
                 assert "cot_type" in captured_config
                 assert captured_config["cot_type"] == "a-f-G-U-C"  # Default value
 
-    def test_stream_worker_preserves_plugin_specific_config(self, app, db_session):
+    @pytest.mark.asyncio
+    async def test_stream_worker_preserves_plugin_specific_config(
+        self, app, db_session
+    ):
         """Test that stream worker preserves plugin-specific configuration when adding stream config."""
         with app.app_context():
             from database import db
@@ -1047,7 +1025,7 @@ class TestStreamWorkerConfiguration:
                 host="127.0.0.1",
                 port=8089,
                 protocol="tcp",
-                use_ssl=False,
+                verify_ssl=False,
             )
             db_session.add(tak_server)
             db_session.commit()
@@ -1096,7 +1074,7 @@ class TestStreamWorkerConfiguration:
                 worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
 
                 # Start the worker (this initializes the plugin)
-                result = worker.start()
+                result = await worker.start()
 
                 # Assert all configuration is preserved and stream config is added
                 assert result is True
@@ -1117,7 +1095,8 @@ class TestStreamWorkerConfiguration:
 class TestStreamWorkerCotTypeModeIntegration:
     """Test stream worker CoT type mode functionality with plugin integration."""
 
-    def test_stream_worker_deepstate_plugin_integration(self, app, db_session):
+    @pytest.mark.asyncio
+    async def test_stream_worker_deepstate_plugin_integration(self, app, db_session):
         """Test that stream worker properly configures deepstate plugin with CoT type mode."""
         with app.app_context():
             from database import db
@@ -1133,7 +1112,7 @@ class TestStreamWorkerCotTypeModeIntegration:
                 host="127.0.0.1",
                 port=8089,
                 protocol="tcp",
-                use_ssl=False,
+                verify_ssl=False,
             )
             db_session.add(tak_server)
             db_session.commit()
@@ -1192,7 +1171,7 @@ class TestStreamWorkerCotTypeModeIntegration:
                         )
 
                         # Start the worker (this initializes the plugin)
-                        result = worker.start()
+                        result = await worker.start()
 
                         # Assert plugin was initialized successfully
                         assert result is True

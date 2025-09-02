@@ -64,13 +64,15 @@ def app():
             print(f"CI Environment detected. Project dir: {ci_project_dir}")
             print(f"Current working dir: {os.getcwd()}")
             print(f"Config files exist: {os.path.exists('config/settings/')}")
-            if os.path.exists('config/settings/'):
-                config_files = os.listdir('config/settings/')
+            if os.path.exists("config/settings/"):
+                config_files = os.listdir("config/settings/")
                 print(f"Available config files: {config_files}")
 
         # Create app using the testing configuration
         app = create_app("testing")
-        print(f"✅ Flask app created successfully with config: {app.config.get('ENV', 'unknown')}")
+        print(
+            f"✅ Flask app created successfully with config: {app.config.get('ENV', 'unknown')}"
+        )
 
         with app.app_context():
             # Verify database is working
@@ -79,9 +81,9 @@ def app():
                 print("✅ Database tables created successfully")
             except Exception as db_error:
                 print(f"⚠️ Database setup warning: {db_error}")
-            
+
             yield app
-            
+
     except Exception as app_error:
         print(f"❌ App creation failed: {app_error}")
         print("Environment variables:")
@@ -119,9 +121,10 @@ def db_session(app):
 
             # Ensure clean session state
             db.session.commit()
-            
+
             # Verify critical tables exist
             from sqlalchemy import inspect
+
             inspector = inspect(db.engine)
             tables = inspector.get_table_names()
             print(f"✅ Database tables created: {tables}")
@@ -132,9 +135,11 @@ def db_session(app):
         except Exception as e:
             # Enhanced error handling for CI debugging
             print(f"❌ Database session setup error: {e}")
-            print(f"Database URI: {app.config.get('SQLALCHEMY_DATABASE_URI', 'Not set')}")
+            print(
+                f"Database URI: {app.config.get('SQLALCHEMY_DATABASE_URI', 'Not set')}"
+            )
             print(f"Database type: {os.environ.get('DB_TYPE', 'Not set')}")
-            
+
             # Try to recover by creating tables if they don't exist
             try:
                 print("Attempting database recovery...")
@@ -623,7 +628,7 @@ def pytest_sessionstart(session):
 
     print("🚀 TrakBridge Test Session Starting")
     print("=" * 50)
-    
+
     # Enhanced CI environment detection and debugging
     ci_project_dir = os.environ.get("CI_PROJECT_DIR")
     if ci_project_dir:
@@ -632,9 +637,15 @@ def pytest_sessionstart(session):
         print(f"Current directory: {os.getcwd()}")
         print(f"Python version: {sys.version}")
         print(f"Python path: {sys.path[:3]}...")  # Show first 3 entries
-        
+
         # Check critical environment variables
-        env_vars = ["FLASK_ENV", "DB_TYPE", "TRAKBRIDGE_ENCRYPTION_KEY", "SECRET_KEY", "PYTHONPATH"]
+        env_vars = [
+            "FLASK_ENV",
+            "DB_TYPE",
+            "TRAKBRIDGE_ENCRYPTION_KEY",
+            "SECRET_KEY",
+            "PYTHONPATH",
+        ]
         print("Environment variables:")
         for var in env_vars:
             value = os.environ.get(var, "NOT SET")
@@ -642,14 +653,14 @@ def pytest_sessionstart(session):
                 # Mask sensitive values
                 value = f"{value[:4]}***{value[-4:]}" if len(value) > 8 else "***"
             print(f"  {var}: {value}")
-        
+
         # Check filesystem state
         print("Filesystem check:")
         print(f"  config/ exists: {os.path.exists('config/')}")
         print(f"  config/settings/ exists: {os.path.exists('config/settings/')}")
         print(f"  tests/ exists: {os.path.exists('tests/')}")
         print(f"  app.py exists: {os.path.exists('app.py')}")
-    
+
     # Clean up any existing test database files in CI environment
     if ci_project_dir:
         import glob
@@ -661,7 +672,7 @@ def pytest_sessionstart(session):
                 print(f"🗑️ Cleaned up old test database: {db_file}")
             except OSError:
                 pass  # Ignore if file doesn't exist or can't be removed
-    
+
     print("=" * 50)
 
 

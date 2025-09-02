@@ -12,7 +12,7 @@ from config.base import BaseConfig
 from config.environments import (
     DevelopmentConfig,
     ProductionConfig,
-    TestingEnvironmentConfig,
+    TestingConfig,
     get_config,
 )
 from utils.config_manager import ConfigManager, ConfigValidationError
@@ -39,7 +39,7 @@ class TestConfigurationSystem:
         """Test getting testing configuration."""
         config = get_config("testing")
         assert config is not None
-        assert isinstance(config, TestingEnvironmentConfig)
+        assert isinstance(config, TestingConfig)
         assert config.TESTING is True
 
     def test_base_config_properties(self):
@@ -97,7 +97,7 @@ class TestTestEnvironmentConfig:
 
     def test_testing_config_properties(self):
         """Test testing configuration properties."""
-        config = TestingEnvironmentConfig()
+        config = TestingConfig()
 
         assert config.TESTING is True
         assert config.DEBUG is False  # Testing config disables debug for cleaner output
