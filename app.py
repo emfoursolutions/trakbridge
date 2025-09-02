@@ -1170,11 +1170,23 @@ def setup_startup_routes(app):
         return None
 
 
-# Create the application instance
-app = create_app()
+# Create the application instance (only when running directly)
+if __name__ == "__main__":
+    app = create_app()
+else:
+    app = None
 
 
 # Delayed startup function that runs in a separate thread
+def safe_log(level_func, message):
+    """Safe logging that handles closed log files during shutdown"""
+    try:
+        level_func(message)
+    except (ValueError, OSError):
+        # Handle cases where logging files are closed during shutdown
+        pass
+
+
 def delayed_startup():
     """
     Run startup tasks after Flask is fully initialized.
@@ -1184,7 +1196,7 @@ def delayed_startup():
 
     # Check if we should run startup tasks
     if not should_run_delayed_startup():
-        logger.info("Delayed startup tasks will be handled by another process")
+        safe_log(logger.info, "Delayed startup tasks will be handled by another process")
         return
 
     startup_start_time = dt.now()
@@ -1195,26 +1207,26 @@ def delayed_startup():
         time.sleep(5)
 
         with app.app_context():
-            logger.info("Running delayed startup tasks (PRIMARY PROCESS)...")
+            safe_log(logger.info, "Running delayed startup tasks (PRIMARY PROCESS)...")
             add_startup_progress("Checking system components...")
 
             # Log system status
             try:
-                logger.info("System Status Check:")
-                logger.info(
+                safe_log(logger.info, "System Status Check:")
+                safe_log(logger.info,
                     f"Stream Manager: {'Ready' if hasattr(app, 'stream_manager') else 'Not Ready'}"
                 )
-                logger.info(
+                safe_log(logger.info,
                     f"Plugin Manager: {'Ready' if hasattr(app, 'plugin_manager') else 'Not Ready'}"
                 )
-                logger.info(f"Database: {'Ready' if db.engine else 'Not Ready'}")
-                logger.info(
+                safe_log(logger.info, f"Database: {'Ready' if db.engine else 'Not Ready'}")
+                safe_log(logger.info,
                     f"Encryption Service: {'Ready' if hasattr(app, 'encryption_service') else 'Not Ready'}"
                 )
 
                 add_startup_progress("System components verified")
             except Exception as e:
-                logger.warning(f"Could not log system status: {e}")
+                safe_log(logger.warning, f"Could not log system status: {e}")
                 add_startup_progress(
                     f"Warning: Could not verify all system components: {e}"
                 )
@@ -1231,15 +1243,11 @@ def delayed_startup():
             startup_time = (dt.now() - startup_start_time).total_seconds()
 
             # Log startup completion with safe logging
-            try:
-                logger.info("=" * 60)
-                logger.info("TrakBridge Application Startup Complete!")
-                logger.info(f"Total Startup Time: {startup_time:.2f} seconds")
-                logger.info(f"Ready at: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                logger.info("=" * 60)
-            except (ValueError, OSError):
-                # Handle cases where logging files are closed during shutdown
-                pass
+            safe_log(logger.info, "=" * 60)
+            safe_log(logger.info, "TrakBridge Application Startup Complete!")
+            safe_log(logger.info, f"Total Startup Time: {startup_time:.2f} seconds")
+            safe_log(logger.info, f"Ready at: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            safe_log(logger.info, "=" * 60)
 
             add_startup_progress(
                 f"Startup complete! Ready in {startup_time:.2f} seconds"
@@ -1247,11 +1255,7 @@ def delayed_startup():
             set_startup_complete(True)
 
     except Exception as e:
-        try:
-            logger.error(f"Error during startup: {e}", exc_info=True)
-        except (ValueError, OSError):
-            # Handle cases where logging files are closed during shutdown
-            pass
+        safe_log(logger.error, f"Error during startup: {e}")
         add_startup_progress(f"Startup failed: {str(e)}")
         set_startup_complete(False, str(e))
 
@@ -1281,6 +1285,6 @@ if __name__ == "__main__":
         initialize_database_safely()
 
     app.run(debug=False, port=8080, threaded=True)
-else:
-    # For production/WSGI deployment
+elif app is not None:
+    # For production/WSGI deployment (only if app was created)
     ensure_startup_thread()
