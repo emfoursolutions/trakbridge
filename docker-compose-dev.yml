@@ -32,7 +32,7 @@ services:
     # Development environment configuration
     environment:
       # Flask environment - Development mode
-      FLASK_ENV: "development"
+      FLASK_ENV: "production"
       FLASK_APP: "app.py"
       
       # Dynamic user creation for runtime
