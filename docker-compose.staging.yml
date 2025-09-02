@@ -55,6 +55,15 @@ x-environment: &staging-environment
   HTTP_MAX_CONNECTIONS: "150"
   HTTP_MAX_CONNECTIONS_PER_HOST: "15"
   
+  # Hypercorn Settings
+  HYPERCORN_WORKERS: "4"
+  HYPERCORN_WORKER_CLASS: "asyncio"
+  HYPERCORN_BIND: "0.0.0.0:5000"
+  HYPERCORN_KEEP_ALIVE: "5"
+  HYPERCORN_MAX_REQUESTS: "1000"
+  HYPERCORN_MAX_REQUESTS_JITTER: "100"
+  HYPERCORN_LOG_LEVEL: "info"
+
   # Security Settings
   TRAKBRIDGE_APPLICATION_URL: "https://staging.trakbridge.local"  # Update for your staging domain
   SECURE_COOKIES: "true"

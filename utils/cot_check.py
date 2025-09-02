@@ -12,6 +12,7 @@ import logging
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 from services.logging_service import get_module_logger
+
 logger = get_module_logger(__name__)
 
 app = Flask(__name__)

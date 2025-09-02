@@ -502,12 +502,6 @@ setup_logging() {
     # Ensure log directory exists and is writable
     mkdir -p /app/logs
 
-    # Create log files if they don't exist
-    #touch /app/logs/app.log 2>/dev/null || log_warn "Cannot create app.log"
-    #touch /app/logs/error.log 2>/dev/null || log_warn "Cannot create error.log"
-    touch /app/logs/hypercorn-access.log 2>/dev/null || log_warn "Cannot create hypercorn-access.log"
-    touch /app/logs/hypercorn-error.log 2>/dev/null || log_warn "Cannot create hypercorn-error.log"
-
     # Set appropriate permissions if possible
     chmod 644 /app/logs/*.log 2>/dev/null || log_debug "Could not set log file permissions"
 }
@@ -645,97 +639,85 @@ trap cleanup SIGTERM SIGINT
 start_server() {
     # Ensure we're in the correct directory
     cd /app
-    
+
     case "$FLASK_ENV" in
         "development")
             log_info "Using Flask development server"
             exec python -m flask run --host=0.0.0.0 --port=5000 --debug
             ;;
         "production"|"staging")
-            # Check if hypercorn.toml exists
-            if [[ -f "/app/hypercorn.toml" ]]; then
-                log_info "Using Hypercorn production server with config file"
-                
-                # SQLite concurrency check: Override workers for SQLite even with config file
-                if [[ "${DB_TYPE:-}" == "sqlite" ]] || [[ -z "${DB_TYPE:-}" && -z "${DATABASE_URL:-}" ]]; then
-                    log_warn "SQLite detected: Overriding config file to use single worker (--workers 1)"
+            # Sanitize and validate environment variables
+            local workers=${HYPERCORN_WORKERS:-4}
+            local worker_class=${HYPERCORN_WORKER_CLASS:-asyncio}
+            local bind=${HYPERCORN_BIND:-0.0.0.0:5000}
+            local keep_alive=${HYPERCORN_KEEP_ALIVE:-5}
+            local max_requests=${HYPERCORN_MAX_REQUESTS:-1000}
+            local max_requests_jitter=${HYPERCORN_MAX_REQUESTS_JITTER:-100}
+            local log_level=${HYPERCORN_LOG_LEVEL:-info}
+
+            log_info "Using Hypercorn production server with inline configuration"
+
+            # SQLite concurrency check: Force single worker for SQLite to avoid file locking issues
+            if [[ "${DB_TYPE:-}" == "sqlite" ]] || [[ -z "${DB_TYPE:-}" && -z "${DATABASE_URL:-}" ]]; then
+                if [[ "$workers" -gt 1 ]]; then
+                    log_warn "SQLite detected: Forcing single worker (workers=1) to avoid database file locking issues"
                     log_warn "For better performance with multiple workers, consider using PostgreSQL or MySQL"
-                    exec hypercorn --config /app/hypercorn.toml --workers 1 app:app
-                else
-                    exec hypercorn --config /app/hypercorn.toml app:app
+                    workers=1
                 fi
-            else
-                log_info "Using Hypercorn production server with inline configuration"
-                # Sanitize and validate environment variables
-                local workers=${HYPERCORN_WORKERS:-4}
-                local worker_class=${HYPERCORN_WORKER_CLASS:-asyncio}
-                local bind=${HYPERCORN_BIND:-0.0.0.0:5000}
-                local keep_alive=${HYPERCORN_KEEP_ALIVE:-5}
-                local max_requests=${HYPERCORN_MAX_REQUESTS:-1000}
-                local max_requests_jitter=${HYPERCORN_MAX_REQUESTS_JITTER:-100}
-                local log_level=${HYPERCORN_LOG_LEVEL:-info}
+            fi
 
-                # SQLite concurrency check: Force single worker for SQLite to avoid file locking issues
-                if [[ "${DB_TYPE:-}" == "sqlite" ]] || [[ -z "${DB_TYPE:-}" && -z "${DATABASE_URL:-}" ]]; then
-                    if [[ "$workers" -gt 1 ]]; then
-                        log_warn "SQLite detected: Forcing single worker (workers=1) to avoid database file locking issues"
-                        log_warn "For better performance with multiple workers, consider using PostgreSQL or MySQL"
-                        workers=1
-                    fi
-                fi
+            # Validate numeric values to prevent injection
+            if ! [[ "$workers" =~ ^[0-9]+$ ]] || [[ "$workers" -lt 1 ]] || [[ "$workers" -gt 16 ]]; then
+                log_warn "Invalid HYPERCORN_WORKERS value '$workers', using default: 4"
+                workers=4
+            fi
+            
+            if ! [[ "$keep_alive" =~ ^[0-9]+$ ]] || [[ "$keep_alive" -lt 1 ]] || [[ "$keep_alive" -gt 300 ]]; then
+                log_warn "Invalid HYPERCORN_KEEP_ALIVE value '$keep_alive', using default: 5"
+                keep_alive=5
+            fi
+            
+            if ! [[ "$max_requests" =~ ^[0-9]+$ ]] || [[ "$max_requests" -lt 100 ]] || [[ "$max_requests" -gt 10000 ]]; then
+                log_warn "Invalid HYPERCORN_MAX_REQUESTS value '$max_requests', using default: 1000"
+                max_requests=1000
+            fi
+            
+            # Validate worker class
+            case "$worker_class" in
+                "asyncio"|"trio"|"uvloop") ;;
+                *) 
+                    log_warn "Invalid HYPERCORN_WORKER_CLASS value '$worker_class', using default: asyncio"
+                    worker_class="asyncio"
+                    ;;
+            esac
+            
+            # Validate log level
+            case "$log_level" in
+                "critical"|"error"|"warning"|"info"|"debug") ;;
+                *)
+                    log_warn "Invalid HYPERCORN_LOG_LEVEL value '$log_level', using default: info"
+                    log_level="info"
+                    ;;
+            esac
+            
+            # Validate bind address (basic validation)
+            if ! [[ "$bind" =~ ^[0-9a-zA-Z\.:_-]+$ ]]; then
+                log_warn "Invalid HYPERCORN_BIND value '$bind', using default: 0.0.0.0:5000"
+                bind="0.0.0.0:5000"
+            fi
 
-                # Validate numeric values to prevent injection
-                if ! [[ "$workers" =~ ^[0-9]+$ ]] || [[ "$workers" -lt 1 ]] || [[ "$workers" -gt 16 ]]; then
-                    log_warn "Invalid HYPERCORN_WORKERS value '$workers', using default: 4"
-                    workers=4
-                fi
-                
-                if ! [[ "$keep_alive" =~ ^[0-9]+$ ]] || [[ "$keep_alive" -lt 1 ]] || [[ "$keep_alive" -gt 300 ]]; then
-                    log_warn "Invalid HYPERCORN_KEEP_ALIVE value '$keep_alive', using default: 5"
-                    keep_alive=5
-                fi
-                
-                if ! [[ "$max_requests" =~ ^[0-9]+$ ]] || [[ "$max_requests" -lt 100 ]] || [[ "$max_requests" -gt 10000 ]]; then
-                    log_warn "Invalid HYPERCORN_MAX_REQUESTS value '$max_requests', using default: 1000"
-                    max_requests=1000
-                fi
-                
-                # Validate worker class
-                case "$worker_class" in
-                    "asyncio"|"trio"|"uvloop") ;;
-                    *) 
-                        log_warn "Invalid HYPERCORN_WORKER_CLASS value '$worker_class', using default: asyncio"
-                        worker_class="asyncio"
-                        ;;
-                esac
-                
-                # Validate log level
-                case "$log_level" in
-                    "critical"|"error"|"warning"|"info"|"debug") ;;
-                    *)
-                        log_warn "Invalid HYPERCORN_LOG_LEVEL value '$log_level', using default: info"
-                        log_level="info"
-                        ;;
-                esac
-                
-                # Validate bind address (basic validation)
-                if ! [[ "$bind" =~ ^[0-9a-zA-Z\.:_-]+$ ]]; then
-                    log_warn "Invalid HYPERCORN_BIND value '$bind', using default: 0.0.0.0:5000"
-                    bind="0.0.0.0:5000"
-                fi
-
-                log_info "Starting Hypercorn with: workers=$workers, bind=$bind, worker-class=$worker_class"
-                exec hypercorn \
-                    --bind "$bind" \
-                    --workers "$workers" \
-                    --worker-class "$worker_class" \
-                    --keep-alive "$keep_alive" \
-                    --max-requests "$max_requests" \
-                    --max-requests-jitter "$max_requests_jitter" \
-                    --log-level "$log_level" \
-                    --access-logfile /app/logs/hypercorn-access.log \
-                    --error-logfile /app/logs/hypercorn-error.log \
-                    app:app
+            log_info "Starting Hypercorn with: workers=$workers, bind=$bind, worker-class=$worker_class"
+            exec hypercorn \
+                --bind "$bind" \
+                --workers "$workers" \
+                --worker-class "$worker_class" \
+                --keep-alive "$keep_alive" \
+                --max-requests "$max_requests" \
+                --max-requests-jitter "$max_requests_jitter" \
+                --log-level "$log_level" \
+                --access-logfile /app/logs/hypercorn-access.log \
+                --error-logfile /app/logs/hypercorn-error.log \
+                app:app
             fi
             ;;
         *)

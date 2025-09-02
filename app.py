@@ -179,7 +179,7 @@ def initialize_database_safely():
 def is_primary_process() -> bool:
     """
     Determine if this is the primary process that should handle full startup logging.
-    Uses file-based coordination with proper locking.
+    Uses file-based coordination with proper locking and stale lock cleanup.
     """
     global _is_primary_process
 
@@ -190,6 +190,33 @@ def is_primary_process() -> bool:
     lock_file_path = Path(tempfile.gettempdir()) / "trakbridge_startup.lock"
 
     try:
+        # Check for stale lock files and clean them up
+        if lock_file_path.exists():
+            try:
+                with open(lock_file_path, "r") as existing_lock:
+                    content = existing_lock.read().strip().split("\n")
+                    if len(content) >= 2:
+                        pid = int(content[0])
+                        timestamp = float(content[1])
+
+                        # If lock is older than 60 seconds, consider it stale
+                        if time.time() - timestamp > 60:
+                            try:
+                                # Check if process still exists
+                                os.kill(
+                                    pid, 0
+                                )  # Signal 0 just checks if process exists
+                            except (OSError, ProcessLookupError):
+                                # Process doesn't exist, remove stale lock
+                                lock_file_path.unlink()
+                                print(f"Removed stale lock file (PID {pid} not found)")
+            except (ValueError, FileNotFoundError, PermissionError):
+                # Invalid lock file format or permission issues, try to remove
+                try:
+                    lock_file_path.unlink()
+                except OSError:
+                    pass
+
         # Try to create and lock the file
         lock_file = open(lock_file_path, "w")
 
@@ -197,7 +224,7 @@ def is_primary_process() -> bool:
             # Try to acquire exclusive lock (non-blocking)
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
-            # Write our PID to the lock file
+            # Write our PID and timestamp to the lock file
             lock_file.write(f"{os.getpid()}\n{time.time()}\n")
             lock_file.flush()
 
@@ -217,9 +244,9 @@ def is_primary_process() -> bool:
             _is_primary_process = False
             return False
 
-    except (IOError, OSError):
+    except (IOError, OSError) as e:
         # Couldn't create lock file - default to simple logging
-        logger.warning("Could not create startup coordination lock file")
+        print(f"Warning: Could not create startup coordination lock file: {e}")
         _is_primary_process = False
         return False
 
@@ -235,25 +262,49 @@ def cleanup_startup_coordination(lock_file=None, lock_file_path=None):
         logger.debug(f"Error during startup coordination cleanup: {e}")
 
 
+def get_worker_count() -> int:
+    """
+    Get the number of workers from environment variable or hypercorn.toml.
+    Returns the worker count for proper startup banner coordination.
+    """
+    try:
+        # Check HYPERCORN_WORKERS environment variable first (from docker-compose.yml)
+        env_workers = os.environ.get("HYPERCORN_WORKERS")
+        if env_workers and env_workers.isdigit():
+            workers = int(env_workers)
+            if 1 <= workers <= 16:  # Validate safe range
+                return workers
+
+        # Fall back to hypercorn.toml (always exists per user confirmation)
+        config_file = os.path.join(os.path.dirname(__file__), "hypercorn.toml")
+        if os.path.exists(config_file):
+            with open(config_file, "r") as f:
+                content = f.read()
+                import re
+
+                match = re.search(r"^workers\s*=\s*(\d+)", content, re.MULTILINE)
+                if match:
+                    workers = int(match.group(1))
+                    if 1 <= workers <= 16:  # Validate safe range
+                        return workers
+
+    except (ValueError, FileNotFoundError, IOError) as e:
+        # Use basic logging since logger may not be fully initialized yet
+        print(f"Warning: Error detecting worker count: {e}")
+
+    # Default to 4 (matches hypercorn.toml default)
+    return 4
+
+
 def log_full_startup_info(app):
     """Log comprehensive startup information for the primary process"""
     try:
         from services.version import format_version, get_build_info, get_version_info
         from services.logging_service import log_primary_startup_banner
 
-        # Get worker count from environment (Hypercorn sets HYPERCORN_WORKER_COUNT)
-        worker_count = None
-        try:
-            worker_count = int(os.getenv('HYPERCORN_WORKER_COUNT', '1'))
-        except (ValueError, TypeError):
-            # Check for other common worker count environment variables
-            for env_var in ['WORKERS', 'WEB_CONCURRENCY', 'GUNICORN_WORKERS']:
-                try:
-                    worker_count = int(os.getenv(env_var, '1'))
-                    break
-                except (ValueError, TypeError):
-                    continue
-            
+        # Get worker count from multiple sources
+        worker_count = get_worker_count()
+
         # Log enhanced startup banner with worker coordination info
         log_primary_startup_banner(app, worker_count)
 
@@ -298,6 +349,7 @@ def log_full_startup_info(app):
 def log_simple_worker_init(app):
     """Log simple initialization message for worker processes"""
     from services.logging_service import log_worker_initialization
+
     log_worker_initialization(app)
 
 

@@ -69,19 +69,38 @@ class AuthenticationManager:
 
         # Load security settings from config (handle both old and new format)
         config_helper = ConfigHelper(self.config)
-        
+
         if "authentication" in self.config:
             # Old format: authentication.session.*
-            self.max_login_attempts = config_helper.get_int("authentication.session.max_login_attempts", 5)
-            self.lockout_duration = config_helper.get_int("authentication.session.lockout_duration_minutes", 30)
-            self.session_timeout = config_helper.get_int("authentication.session.lifetime_hours", 8)
-            self.cleanup_interval = config_helper.get_int("authentication.session.cleanup_interval_minutes", 60) / 60  # Convert to hours
+            self.max_login_attempts = config_helper.get_int(
+                "authentication.session.max_login_attempts", 5
+            )
+            self.lockout_duration = config_helper.get_int(
+                "authentication.session.lockout_duration_minutes", 30
+            )
+            self.session_timeout = config_helper.get_int(
+                "authentication.session.lifetime_hours", 8
+            )
+            self.cleanup_interval = (
+                config_helper.get_int(
+                    "authentication.session.cleanup_interval_minutes", 60
+                )
+                / 60
+            )  # Convert to hours
         else:
             # New format: default.security.*
-            self.max_login_attempts = config_helper.get_int("default.security.max_login_attempts", 5)
-            self.lockout_duration = config_helper.get_int("default.security.lockout_duration_minutes", 30)
-            self.session_timeout = config_helper.get_int("default.security.session_timeout_hours", 8)
-            self.cleanup_interval = config_helper.get_int("default.security.cleanup_interval_hours", 24)
+            self.max_login_attempts = config_helper.get_int(
+                "default.security.max_login_attempts", 5
+            )
+            self.lockout_duration = config_helper.get_int(
+                "default.security.lockout_duration_minutes", 30
+            )
+            self.session_timeout = config_helper.get_int(
+                "default.security.session_timeout_hours", 8
+            )
+            self.cleanup_interval = config_helper.get_int(
+                "default.security.cleanup_interval_hours", 24
+            )
 
         # Rate limiting
         self._login_attempts = {}
