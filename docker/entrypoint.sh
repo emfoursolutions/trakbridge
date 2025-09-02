@@ -710,7 +710,7 @@ start_server() {
                 --bind "$bind" \
                 --workers "$workers" \
                 --worker-class "$worker_class" \
-                --keep-alive-timeout "$keep_alive" \
+                --keep-alive "$keep_alive" \
                 --log-level "$log_level" \
                 --graceful-timeout "$graceful_timeout" \
                 --access-logfile /app/logs/hypercorn-access.log \
