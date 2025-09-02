@@ -653,7 +653,13 @@ start_server() {
             local keep_alive=${HYPERCORN_KEEP_ALIVE:-5}
             local max_requests=${HYPERCORN_MAX_REQUESTS:-1000}
             local max_requests_jitter=${HYPERCORN_MAX_REQUESTS_JITTER:-100}
-            local log_level=${HYPERCORN_LOG_LEVEL:-info}
+            local log_level=${HYPERCORN_LOG_LEVEL:-warning}
+            local timeout=${HYPERCORN_TIMEOUT:-60}
+            local graceful_timeout=${HYPERCORN_GRACEFUL_TIMEOUT:-30}
+            local preload_app=${HYPERCORN_PRELOAD_APP:-true}
+            local max_concurrent_connections=${HYPERCORN_MAX_CONCURRENT_CONNECTIONS:-1000}
+            local enable_http2=${HYPERCORN_ENABLE_HTTP2:-true}
+            local enable_websockets=${HYPERCORN_ENABLE_WEBSOCKETS:-true}
 
             log_info "Using Hypercorn production server with inline configuration"
 
@@ -715,10 +721,15 @@ start_server() {
                 --max-requests "$max_requests" \
                 --max-requests-jitter "$max_requests_jitter" \
                 --log-level "$log_level" \
+                --timeout "$timeout" \
+                --graceful-timeout "$graceful_timeout" \
+                --preload_app "$preload_app" \
+                --max_concurrent_connections "$max_concurrent_connections" \
+                --enable_http2 "$enable_http2" \
+                --enable_websockets "$enable_websockets" \
                 --access-logfile /app/logs/hypercorn-access.log \
                 --error-logfile /app/logs/hypercorn-error.log \
                 app:app
-            fi
             ;;
         *)
             # Default to production settings with Hypercorn

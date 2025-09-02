@@ -65,12 +65,9 @@ x-environment: &common-environment
   
   # Hypercorn Settings
   HYPERCORN_WORKERS: "4"
-  HYPERCORN_WORKER_CLASS: "asyncio"
-  HYPERCORN_BIND: "0.0.0.0:5000"
   HYPERCORN_KEEP_ALIVE: "5"
   HYPERCORN_MAX_REQUESTS: "1000"
   HYPERCORN_MAX_REQUESTS_JITTER: "100"
-  HYPERCORN_LOG_LEVEL: "info"
 
   # Authentication Configuration
   # LDAP Settings (set LDAP_ENABLED to "true" and configure for your environment)
