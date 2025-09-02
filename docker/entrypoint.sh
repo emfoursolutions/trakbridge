@@ -654,7 +654,6 @@ start_server() {
             local max_requests=${HYPERCORN_MAX_REQUESTS:-1000}
             local max_requests_jitter=${HYPERCORN_MAX_REQUESTS_JITTER:-100}
             local log_level=${HYPERCORN_LOG_LEVEL:-warning}
-            local timeout=${HYPERCORN_TIMEOUT:-60}
             local graceful_timeout=${HYPERCORN_GRACEFUL_TIMEOUT:-30}
             local preload_app=${HYPERCORN_PRELOAD_APP:-true}
             local max_concurrent_connections=${HYPERCORN_MAX_CONCURRENT_CONNECTIONS:-1000}
@@ -716,19 +715,19 @@ start_server() {
             exec hypercorn \
                 --bind "$bind" \
                 --workers "$workers" \
-                --worker-class "$worker_class" \
-                --keep-alive "$keep_alive" \
-                --max-requests "$max_requests" \
-                --max-requests-jitter "$max_requests_jitter" \
-                --log-level "$log_level" \
-                --timeout "$timeout" \
+                --worker_class "$worker_class" \
+                --keep_alive "$keep_alive" \
+                --max_requests "$max_requests" \
+                --max_requests_jitter "$max_requests_jitter" \
+                --log_level "$log_level" \
+                --timeout 30 \
                 --graceful_timeout "$graceful_timeout" \
                 --preload_app "$preload_app" \
                 --max_concurrent_connections "$max_concurrent_connections" \
                 --enable_http2 "$enable_http2" \
                 --enable_websockets "$enable_websockets" \
-                --access-logfile /app/logs/hypercorn-access.log \
-                --error-logfile /app/logs/hypercorn-error.log \
+                --access_logfile /app/logs/hypercorn-access.log \
+                --error_logfile /app/logs/hypercorn-error.log \
                 app:app
             ;;
         *)
@@ -737,7 +736,7 @@ start_server() {
             if [[ -f "/app/hypercorn.toml" ]]; then
                 exec hypercorn --config /app/hypercorn.toml app:app
             else
-                exec hypercorn --bind 0.0.0.0:5000 --workers 4 --worker-class asyncio app:app
+                exec hypercorn --bind 0.0.0.0:5000 --workers 4 --worker_class asyncio app:app
             fi
             ;;
     esac
