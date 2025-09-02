@@ -14,15 +14,15 @@ License: GNU General Public License v3.0 (GPLv3)
 
 # Standard library imports
 import atexit
-import fcntl  # Add this import
 import logging
 import os
 import signal
-import tempfile  # Add this import
+import sys
+import tempfile
 import threading
 import time
 from datetime import datetime as dt
-from pathlib import Path  # Add this import
+from pathlib import Path
 from typing import Optional
 
 # Third-party imports
@@ -52,12 +52,7 @@ _startup_error = None
 _startup_progress = []
 
 # Global flags to prevent duplicate startup - UPDATED
-_startup_banner_logged = False
 _startup_thread_started = False
-_is_primary_process = None
-
-# Lock for thread safety
-_startup_lock = threading.Lock()
 
 load_dotenv()
 
@@ -176,90 +171,6 @@ def initialize_database_safely():
             raise db_error
 
 
-def is_primary_process() -> bool:
-    """
-    Determine if this is the primary process that should handle full startup logging.
-    Uses file-based coordination with proper locking and stale lock cleanup.
-    """
-    global _is_primary_process
-
-    if _is_primary_process is not None:
-        return _is_primary_process
-
-    # Create a lock file in the system temp directory
-    lock_file_path = Path(tempfile.gettempdir()) / "trakbridge_startup.lock"
-
-    try:
-        # Check for stale lock files and clean them up
-        if lock_file_path.exists():
-            try:
-                with open(lock_file_path, "r") as existing_lock:
-                    content = existing_lock.read().strip().split("\n")
-                    if len(content) >= 2:
-                        pid = int(content[0])
-                        timestamp = float(content[1])
-
-                        # If lock is older than 60 seconds, consider it stale
-                        if time.time() - timestamp > 60:
-                            try:
-                                # Check if process still exists
-                                os.kill(
-                                    pid, 0
-                                )  # Signal 0 just checks if process exists
-                            except (OSError, ProcessLookupError):
-                                # Process doesn't exist, remove stale lock
-                                lock_file_path.unlink()
-                                print(f"Removed stale lock file (PID {pid} not found)")
-            except (ValueError, FileNotFoundError, PermissionError):
-                # Invalid lock file format or permission issues, try to remove
-                try:
-                    lock_file_path.unlink()
-                except OSError:
-                    pass
-
-        # Try to create and lock the file
-        lock_file = open(lock_file_path, "w")
-
-        try:
-            # Try to acquire exclusive lock (non-blocking)
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-            # Write our PID and timestamp to the lock file
-            lock_file.write(f"{os.getpid()}\n{time.time()}\n")
-            lock_file.flush()
-
-            # We got the lock - we're the primary process
-            _is_primary_process = True
-
-            # Register cleanup on exit
-            atexit.register(
-                lambda: cleanup_startup_coordination(lock_file, lock_file_path)
-            )
-
-            return True
-
-        except (IOError, OSError):
-            # Lock is already held by another process
-            lock_file.close()
-            _is_primary_process = False
-            return False
-
-    except (IOError, OSError) as e:
-        # Couldn't create lock file - default to simple logging
-        print(f"Warning: Could not create startup coordination lock file: {e}")
-        _is_primary_process = False
-        return False
-
-
-def cleanup_startup_coordination(lock_file=None, lock_file_path=None):
-    """Clean up startup coordination resources"""
-    try:
-        if lock_file:
-            lock_file.close()
-        if lock_file_path and lock_file_path.exists():
-            lock_file_path.unlink()
-    except Exception as e:
-        logger.debug(f"Error during startup coordination cleanup: {e}")
 
 
 def get_worker_count() -> int:
@@ -353,35 +264,67 @@ def log_simple_worker_init(app):
     log_worker_initialization(app)
 
 
+def is_hypercorn_environment() -> bool:
+    """
+    Detect if we're running under Hypercorn ASGI server.
+    Hypercorn has its own worker management, so we don't need coordination.
+    """
+    return (
+        # Check environment variables set by docker-compose or entrypoint
+        os.environ.get('HYPERCORN_WORKERS') is not None or
+        # Check command line arguments
+        any('hypercorn' in arg for arg in sys.argv) or
+        # Check server software environment variable
+        os.environ.get('SERVER_SOFTWARE', '').startswith('hypercorn')
+    )
+
+
 def should_run_delayed_startup() -> bool:
     """
     Determine if this process should run the delayed startup tasks.
-    Uses a separate coordination mechanism from the logging.
+    Uses environment-aware coordination that works optimally with different servers.
     """
-    startup_task_file = Path(tempfile.gettempdir()) / "trakbridge_startup_tasks.lock"
-
+    # For Hypercorn environments - let each worker handle its own startup
+    # Hypercorn already provides process coordination via the master process
+    if is_hypercorn_environment():
+        logger.debug("Hypercorn environment detected - allowing worker startup without coordination")
+        return True
+    
+    # For other environments (Flask dev server, etc.) - use coordination
+    # to prevent multiple processes from running startup tasks simultaneously
+    startup_task_file = Path(tempfile.gettempdir()) / "trakbridge_startup_tasks.flag"
+    
     try:
-        # Try to create and lock the file
-        with open(startup_task_file, "w") as f:
-            try:
-                # Try to acquire exclusive lock (non-blocking)
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-                # Write our PID and timestamp
-                f.write(f"{os.getpid()}\n{time.time()}\n")
-                f.flush()
-
-                # We got the lock - we should run startup tasks
-                return True
-
-            except (IOError, OSError):
-                # Lock is already held by another process
+        # Check if startup tasks have been completed recently
+        if startup_task_file.exists():
+            # Check if the file is recent (within last 30 seconds)
+            file_age = time.time() - startup_task_file.stat().st_mtime
+            if file_age < 30:
+                # Recent startup completion, don't run again
+                logger.debug("Recent startup completion detected - skipping startup tasks")
                 return False
-
-    except (IOError, OSError):
-        # Couldn't create lock file - default to not running
-        logger.warning("Could not create startup tasks coordination lock file")
+            else:
+                # Old file, remove it and run startup tasks
+                try:
+                    startup_task_file.unlink()
+                    logger.debug("Cleaned up stale startup coordination file")
+                except OSError:
+                    pass
+        
+        # Try atomic file creation - only first process succeeds
+        startup_task_file.touch(exist_ok=False)
+        logger.debug("Acquired startup coordination - running startup tasks")
+        return True
+        
+    except FileExistsError:
+        # Another process is handling it right now
+        logger.debug("Another process is handling startup tasks")
         return False
+        
+    except (IOError, OSError) as e:
+        # Couldn't create file - be more permissive and allow startup
+        logger.warning(f"Could not create startup tasks coordination file: {e}, allowing startup anyway")
+        return True
 
 
 def cleanup_all_startup_resources():
@@ -538,19 +481,40 @@ def create_app(config_name=None):
 
 
 def setup_version_context_processor(app):
-    """Set up version context processor with proper process coordination."""
-    global _startup_banner_logged
-
-    with _startup_lock:
-        # Only log startup banner once per process
-        if not _startup_banner_logged:
-            _startup_banner_logged = True
-
-            # Check if we're the primary process
-            if is_primary_process():
-                log_full_startup_info(app)
-            else:
-                log_simple_worker_init(app)
+    """Set up version context processor and after-request banner system."""
+    
+    # Set up banner to log after first request via middleware
+    banner_logged = False
+    
+    @app.before_request
+    def maybe_log_ready_banner():
+        """Log comprehensive banner on first request (when app is fully operational)"""
+        nonlocal banner_logged
+        
+        if not banner_logged:
+            banner_file = Path(tempfile.gettempdir()) / "trakbridge_ready_banner.flag"
+            try:
+                # Atomic file creation - only first worker succeeds
+                banner_file.touch(exist_ok=False)
+                banner_logged = True
+                
+                # Log comprehensive "Application Ready" banner
+                from services.logging_service import log_primary_startup_banner
+                worker_count = get_worker_count()
+                
+                app.logger.info("="*80)
+                app.logger.info("🚀 TrakBridge Application Ready - Now Serving Requests")
+                app.logger.info("="*80)
+                
+                # Include all the useful system information  
+                log_primary_startup_banner(app, worker_count)
+                
+                app.logger.info("✅ Application fully operational and handling traffic")
+                app.logger.info("="*80)
+                
+            except FileExistsError:
+                # Another worker already logged the banner
+                banner_logged = True
 
     @app.context_processor
     def inject_version_info():
@@ -1297,16 +1261,15 @@ def ensure_startup_thread():
     """Ensure startup thread is only created once per process"""
     global _startup_thread_started
 
-    with _startup_lock:
-        if not _startup_thread_started:
-            _startup_thread_started = True
+    if not _startup_thread_started:
+        _startup_thread_started = True
 
-            # Run startup in a separate thread to avoid blocking Flask initialization
-            startup_thread = threading.Thread(
-                target=delayed_startup, daemon=True, name=f"StartupThread-{os.getpid()}"
-            )
-            startup_thread.start()
-            logger.info(f"Startup thread initiated for PID {os.getpid()}")
+        # Run startup in a separate thread to avoid blocking Flask initialization
+        startup_thread = threading.Thread(
+            target=delayed_startup, daemon=True, name=f"StartupThread-{os.getpid()}"
+        )
+        startup_thread.start()
+        logger.info(f"Startup thread initiated for PID {os.getpid()}")
 
 
 # Only start the startup thread if running directly or in production
