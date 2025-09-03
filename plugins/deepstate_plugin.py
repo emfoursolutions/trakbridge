@@ -26,6 +26,7 @@ import asyncio
 import hashlib
 import json
 import logging
+from services.logging_service import get_module_logger
 import re
 import ssl
 from datetime import datetime, timezone
@@ -39,7 +40,7 @@ import certifi
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class DeepstatePlugin(BaseGPSPlugin):

@@ -13,6 +13,7 @@ Version: 2.0.0
 
 import asyncio
 import logging
+from services.logging_service import get_module_logger
 import ssl
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -29,7 +30,7 @@ from plugins.base_plugin import (
     FieldMetadata,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class GarminPlugin(BaseGPSPlugin, CallsignMappable):

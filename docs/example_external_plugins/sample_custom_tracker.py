@@ -13,6 +13,7 @@ To use this plugin:
 """
 
 import logging
+from services.logging_service import get_module_logger
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -20,7 +21,7 @@ import aiohttp
 
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class SampleCustomTrackerPlugin(BaseGPSPlugin):

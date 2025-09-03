@@ -33,6 +33,7 @@ Version: 1.0.0
 import asyncio
 import json
 import logging
+from services.logging_service import get_module_logger
 import ssl
 from datetime import datetime, timezone
 
@@ -51,7 +52,7 @@ from plugins.base_plugin import (
 )
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class TraccarPlugin(BaseGPSPlugin, CallsignMappable):

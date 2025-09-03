@@ -16,6 +16,7 @@ Version: 1.0.0
 
 # Standard library imports
 import logging
+from services.logging_service import get_module_logger
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -24,7 +25,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 @dataclass

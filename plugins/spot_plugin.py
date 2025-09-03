@@ -24,6 +24,7 @@ Version: 1.0.0
 
 # Standard library imports
 import logging
+from services.logging_service import get_module_logger
 import ssl
 from datetime import datetime
 from typing import Any, Dict, List
@@ -41,7 +42,7 @@ from plugins.base_plugin import (
 )
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class SpotPlugin(BaseGPSPlugin, CallsignMappable):
