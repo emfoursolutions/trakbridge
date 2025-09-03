@@ -1170,11 +1170,14 @@ def setup_startup_routes(app):
         return None
 
 
-# Create the application instance (only when running directly)
-if __name__ == "__main__":
-    app = create_app()
-else:
+# Create the application instance 
+# Always create app except when TESTING environment variable is set
+if os.environ.get('TESTING') == '1':
+    # For tests, don't create app at module level to avoid startup issues
     app = None
+else:
+    # For direct execution and server imports (like Hypercorn)
+    app = create_app()
 
 
 # Delayed startup function that runs in a separate thread
