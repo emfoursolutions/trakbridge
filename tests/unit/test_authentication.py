@@ -22,17 +22,12 @@ Last Modified: 2025-07-27
 Version: 1.0.0
 """
 
-import json
 import os
-import tempfile
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
-import bcrypt
 import pytest
-from flask import Flask, session
-import jwt
-from ldap3 import ALL, Connection, Server
+from flask import Flask
 
 from database import db
 from models.user import User, UserRole, UserSession
@@ -41,7 +36,6 @@ from models.user import User, UserRole, UserSession
 from services.auth.auth_manager import AuthenticationManager
 from services.auth.decorators import (
     admin_required,
-    get_current_user,
     operator_required,
     require_auth,
     require_permission,
@@ -131,70 +125,6 @@ def auth_config():
     }
 
 
-@pytest.fixture
-def test_users(app):
-    """Create test users"""
-    with app.app_context():
-        users = {}
-
-        # Admin user
-        admin = User(
-            username="admin",
-            email="admin@test.com",
-            first_name="Admin",
-            last_name="User",
-            role=UserRole.ADMIN,
-            auth_provider="local",
-            is_active=True,
-        )
-        admin.set_password("AdminPass123")
-        db.session.add(admin)
-        users["admin"] = admin
-
-        # Operator user
-        operator = User(
-            username="operator",
-            email="operator@test.com",
-            first_name="Operator",
-            last_name="User",
-            role=UserRole.OPERATOR,
-            auth_provider="local",
-            is_active=True,
-        )
-        operator.set_password("OperatorPass123")
-        db.session.add(operator)
-        users["operator"] = operator
-
-        # Regular user
-        user = User(
-            username="user",
-            email="user@test.com",
-            first_name="Regular",
-            last_name="User",
-            role=UserRole.USER,
-            auth_provider="local",
-            is_active=True,
-        )
-        user.set_password("UserPass123")
-        db.session.add(user)
-        users["user"] = user
-
-        # Inactive user
-        inactive = User(
-            username="inactive",
-            email="inactive@test.com",
-            first_name="Inactive",
-            last_name="User",
-            role=UserRole.USER,
-            auth_provider="local",
-            is_active=False,
-        )
-        inactive.set_password("InactivePass123")
-        db.session.add(inactive)
-        users["inactive"] = inactive
-
-        db.session.commit()
-        return users
 
 
 class TestUserModel:
