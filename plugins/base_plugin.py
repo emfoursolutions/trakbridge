@@ -16,7 +16,6 @@ Version: 1.0.0
 
 # Standard library imports
 import logging
-from services.logging_service import get_module_logger
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -24,8 +23,29 @@ from typing import Any, Dict, List, Optional
 # Third-party imports
 import aiohttp
 
-# Module-level logger
-logger = get_module_logger(__name__)
+# Lazy import to avoid circular dependency
+_logger_instance = None
+
+
+def get_logger():
+    """Get the module logger, initializing lazily to avoid circular imports"""
+    global _logger_instance
+    if _logger_instance is None:
+        from services.logging_service import get_module_logger
+
+        _logger_instance = get_module_logger(__name__)
+    return _logger_instance
+
+
+# For backwards compatibility - provide logger as module attribute
+class _LoggerProxy:
+    """Proxy that forwards all attribute access to the lazy logger"""
+
+    def __getattr__(self, name):
+        return getattr(get_logger(), name)
+
+
+logger = _LoggerProxy()
 
 
 @dataclass
@@ -199,7 +219,9 @@ class BaseGPSPlugin(ABC):
                             self.encryption_service.decrypt_value(str(value))
                         )
                     except Exception as e:
-                        logger.error(f"Failed to decrypt field '{field_name}': {e}")
+                        get_logger().error(
+                            f"Failed to decrypt field '{field_name}': {e}"
+                        )
                         # Keep original value if decryption fails
 
         return decrypted_config
@@ -314,7 +336,7 @@ class BaseGPSPlugin(ABC):
                 self.apply_callsign_mapping(tracker_data, field_name, callsign_map)
                 return True
             except Exception as e:
-                logger.error(
+                get_logger().error(
                     f"[{self.plugin_name}] Failed to apply callsign mapping: {e}"
                 )
                 return False
@@ -353,7 +375,7 @@ class BaseGPSPlugin(ABC):
             stream: Stream model instance (must have tak_server_id, cot_type, cot_stale_time)
         """
         if not locations:
-            logger.debug("No locations to process")
+            get_logger().debug("No locations to process")
             return
 
         try:
@@ -378,17 +400,17 @@ class BaseGPSPlugin(ABC):
                     cot_service.enqueue_event(event, stream.tak_server_id)
                     enqueued_count += 1
                 else:
-                    logger.warning(
+                    get_logger().warning(
                         f"Stream {getattr(stream, 'id', 'unknown')} has no TAK server ID"
                     )
 
-            logger.info(
+            get_logger().info(
                 f"[{self.plugin_name}] Enqueued {enqueued_count} "
                 f"COT events for stream {getattr(stream, 'id', 'unknown')}"
             )
 
         except Exception as e:
-            logger.error(
+            get_logger().error(
                 f"[{self.plugin_name}] Error processing and enqueuing locations: {e}",
                 exc_info=True,
             )
@@ -406,7 +428,9 @@ class BaseGPSPlugin(ABC):
 
             # Check required fields
             if field.required and (field_value is None or field_value == ""):
-                logger.error(f"Missing required configuration field: {field_name}")
+                get_logger().error(
+                    f"Missing required configuration field: {field_name}"
+                )
                 return False
 
             # Type-specific validation
@@ -414,28 +438,32 @@ class BaseGPSPlugin(ABC):
                 if field.field_type in ["url"] and not str(field_value).startswith(
                     ("http://", "https://")
                 ):
-                    logger.error(f"Field '{field_name}' must be a valid URL")
+                    get_logger().error(f"Field '{field_name}' must be a valid URL")
                     return False
 
                 if field.field_type == "number":
                     try:
                         num_value = float(field_value)
                         if field.min_value is not None and num_value < field.min_value:
-                            logger.error(
+                            get_logger().error(
                                 f"Field '{field_name}' must be at least {field.min_value}"
                             )
                             return False
                         if field.max_value is not None and num_value > field.max_value:
-                            logger.error(
+                            get_logger().error(
                                 f"Field '{field_name}' must be at most {field.max_value}"
                             )
                             return False
                     except (ValueError, TypeError):
-                        logger.error(f"Field '{field_name}' must be a valid number")
+                        get_logger().error(
+                            f"Field '{field_name}' must be a valid number"
+                        )
                         return False
 
                 if field.field_type == "email" and "@" not in str(field_value):
-                    logger.error(f"Field '{field_name}' must be a valid email address")
+                    get_logger().error(
+                        f"Field '{field_name}' must be a valid email address"
+                    )
                     return False
 
         return True
@@ -453,7 +481,7 @@ class BaseGPSPlugin(ABC):
                 return {"status": status, "details": result}
             return {"status": "unknown", "details": "No health check implemented"}
         except Exception as e:
-            logger.error(
+            get_logger().error(
                 f"[{self.__class__.__name__}] health_check failed: {e}", exc_info=True
             )
             return {"status": "unhealthy", "details": str(e)}
@@ -571,7 +599,7 @@ class BaseGPSPlugin(ABC):
                 }
 
         except Exception as e:
-            logger.error(
+            get_logger().error(
                 f"[{self.__class__.__name__}] Connection test failed: {e}",
                 exc_info=True,
                 extra={
