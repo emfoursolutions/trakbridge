@@ -240,21 +240,80 @@ class ConfigHelper:
 
     def get_str(self, key: str, default: str = "") -> str:
         """Get string config value."""
-        return config_get_typed(self.config, key, str, default)
+        if "." in key:
+            value = nested_config_get(self.config, key, default)
+        else:
+            value = self.config.get(key, default)
+
+        if value is None:
+            return default
+
+        try:
+            return str(value)
+        except (ValueError, TypeError):
+            logger.warning(f"Failed to convert config value {key}={value} to str")
+            return default
 
     def get_int(self, key: str, default: int = 0) -> int:
         """Get integer config value."""
-        return config_get_typed(self.config, key, int, default)
+        if "." in key:
+            value = nested_config_get(self.config, key, default)
+        else:
+            value = self.config.get(key, default)
+
+        if value is None:
+            return default
+
+        # Handle type conversion
+        try:
+            if not isinstance(value, int):
+                return int(value)
+            return value
+        except (ValueError, TypeError):
+            logger.warning(f"Failed to convert config value {key}={value} to int")
+            return default
 
     def get_bool(self, key: str, default: bool = False) -> bool:
         """Get boolean config value."""
-        return config_get_typed(self.config, key, bool, default)
+        if "." in key:
+            value = nested_config_get(self.config, key, default)
+        else:
+            value = self.config.get(key, default)
+
+        if value is None:
+            return default
+
+        # Handle boolean string conversion
+        if isinstance(value, str):
+            return value.lower() in ("true", "1", "yes", "on")
+
+        try:
+            return bool(value)
+        except (ValueError, TypeError):
+            logger.warning(f"Failed to convert config value {key}={value} to bool")
+            return default
 
     def get_list(self, key: str, default: Optional[List] = None) -> List:
         """Get list config value."""
         if default is None:
             default = []
-        return config_get_typed(self.config, key, list, default)
+
+        if "." in key:
+            value = nested_config_get(self.config, key, default)
+        else:
+            value = self.config.get(key, default)
+
+        if value is None:
+            return default
+
+        try:
+            if isinstance(value, list):
+                return value
+            else:
+                return list(value)
+        except (ValueError, TypeError):
+            logger.warning(f"Failed to convert config value {key}={value} to list")
+            return default
 
     def set(self, key: str, value: Any) -> None:
         """Set config value with dot notation support."""

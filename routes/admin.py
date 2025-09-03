@@ -27,8 +27,7 @@ Version: {{VERSION}}
 # Standard library imports
 import datetime
 
-# Module-level logger
-import logging
+# Third-party imports
 import platform
 import time
 
@@ -51,7 +50,10 @@ from services.auth import admin_required
 from services.key_rotation_service import get_key_rotation_service
 from services.version import get_version
 
-logger = logging.getLogger(__name__)
+# Module-level logger
+from services.logging_service import get_module_logger
+
+logger = get_module_logger(__name__)
 
 bp = Blueprint("admin", __name__)
 

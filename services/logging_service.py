@@ -123,7 +123,7 @@ def setup_logging(app):
     )
     logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
 
-    app.logger.info(f"Enhanced logging configured - Version: {version}")
+    app.logger.info(f"Logging Service Started - Version: {version}")
 
 
 def log_startup_banner(app):

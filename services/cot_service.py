@@ -161,7 +161,7 @@ class EnhancedCOTService:
         Returns:
             List of COT events as XML bytes
         """
-        logger.info(
+        logger.debug(
             f"create_cot_events called with: cot_type_mode='{cot_type_mode}', cot_type='{cot_type}', locations={len(locations)}"
         )
         if self.use_pytak:

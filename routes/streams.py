@@ -30,7 +30,6 @@ Version: {{VERSION}}
 """
 
 # Standard library imports
-import logging
 
 # Third-party imports
 from flask import (
@@ -59,7 +58,9 @@ from services.stream_status_service import StreamStatusService
 from utils.app_helpers import get_plugin_manager
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+from services.logging_service import get_module_logger
+
+logger = get_module_logger(__name__)
 
 bp = Blueprint("streams", __name__)
 

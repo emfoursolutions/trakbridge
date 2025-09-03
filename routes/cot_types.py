@@ -21,7 +21,6 @@ Version: {{VERSION}}
 """
 
 # Standard library imports
-import logging
 
 # Third-party imports
 from flask import Blueprint, jsonify, render_template
@@ -30,7 +29,9 @@ from flask import Blueprint, jsonify, render_template
 from services.auth import require_auth, require_permission
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+from services.logging_service import get_module_logger
+
+logger = get_module_logger(__name__)
 
 bp = Blueprint("cot_types", __name__)
 

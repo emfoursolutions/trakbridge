@@ -337,9 +337,9 @@ class DeepstatePlugin(BaseGPSPlugin):
                 "User-Agent": "TAK-GPS-Bridge/1.0",
                 "Accept": "application/json",
             }
-            logger.info(f"API Url: {api_url}")
-            logger.info(f"Deepstate Plugin Config: {config}")
-            logger.info(
+            logger.debug(f"API Url: {api_url}")
+            logger.debug(f"Deepstate Plugin Config: {config}")
+            logger.debug(
                 f"CoT Type Mode from config: {config.get('cot_type_mode', 'per_point')}"
             )
 
@@ -359,7 +359,7 @@ class DeepstatePlugin(BaseGPSPlugin):
                     ]
 
                 data = await response.json()
-                logger.info(f"Raw API response type: {type(data)}")
+                logger.debug(f"Raw API response type: {type(data)}")
                 # logger.info(f"Raw API response: {data}")
 
                 # Handle different response formats
@@ -368,12 +368,12 @@ class DeepstatePlugin(BaseGPSPlugin):
                     # Try different possible structures
                     if "map" in data and isinstance(data["map"], dict):
                         features = data["map"].get("features", [])
-                        logger.info(
+                        logger.debug(
                             f"Found {len(features)} features in nested map structure"
                         )
                     elif "features" in data:
                         features = data.get("features", [])
-                        logger.info(
+                        logger.debug(
                             f"Found {len(features)} features in direct structure"
                         )
                     else:
@@ -388,7 +388,7 @@ class DeepstatePlugin(BaseGPSPlugin):
                         ]
                 elif isinstance(data, list):
                     features = data
-                    logger.info(f"Found {len(features)} features in list response")
+                    logger.debug(f"Found {len(features)} features in list response")
                 else:
                     logger.error(f"Unexpected data format: {type(data)}")
                     return [
@@ -400,25 +400,25 @@ class DeepstatePlugin(BaseGPSPlugin):
 
                 logger.info(f"Features to process: {len(features)}")
                 if features:
-                    logger.info(f"First feature: {features[0]}")
+                    logger.debug(f"First feature: {features[0]}")
 
                 # Get the CoT type mode and stream's default CoT type from stream object
-                logger.info(f"DEBUG: hasattr(self, 'stream')={hasattr(self, 'stream')}")
+                logger.debug(f"DEBUG: hasattr(self, 'stream')={hasattr(self, 'stream')}")
                 if hasattr(self, "stream"):
-                    logger.info(
+                    logger.debug(
                         f"DEBUG: self.stream is not None={self.stream is not None}"
                     )
                     if self.stream:
-                        logger.info(
+                        logger.debug(
                             f"DEBUG: stream.id={getattr(self.stream, 'id', 'No ID')}"
                         )
-                        logger.info(
+                        logger.debug(
                             f"DEBUG: stream.cot_type_mode (direct)={getattr(self.stream, 'cot_type_mode', 'NOT_FOUND')}"
                         )
-                        logger.info(
+                        logger.debug(
                             f"DEBUG: stream.cot_type (direct)={getattr(self.stream, 'cot_type', 'NOT_FOUND')}"
                         )
-                        logger.info(
+                        logger.debug(
                             f"DEBUG: stream attributes={[attr for attr in dir(self.stream) if not attr.startswith('_')]}"
                         )
 
@@ -427,7 +427,7 @@ class DeepstatePlugin(BaseGPSPlugin):
                     stream_default_cot_type = getattr(
                         self.stream, "cot_type", "a-f-G-U-C"
                     )
-                    logger.info(
+                    logger.debug(
                         f"Using stream-level configuration: cot_type_mode={cot_type_mode}, cot_type={stream_default_cot_type}"
                     )
                 else:
@@ -438,7 +438,7 @@ class DeepstatePlugin(BaseGPSPlugin):
                         f"No stream object available, using plugin config fallback: cot_type_mode={cot_type_mode}, cot_type={stream_default_cot_type}"
                     )
 
-                logger.info(
+                logger.debug(
                     f"FINAL VALUES USED: cot_type_mode={cot_type_mode}, stream_default_cot_type={stream_default_cot_type}"
                 )
 
@@ -466,7 +466,7 @@ class DeepstatePlugin(BaseGPSPlugin):
 
                     point_features += 1
                     # Pass the stream's CoT type and mode to the conversion function
-                    logger.info(
+                    logger.debug(
                         f"Converting feature with mode={cot_type_mode}, default_cot={stream_default_cot_type}"
                     )
                     location = self._convert_feature_to_location(
@@ -541,13 +541,13 @@ class DeepstatePlugin(BaseGPSPlugin):
             event_id = self._generate_point_id(english_name)
 
             # Get COT type based on the configured mode
-            logger.info(
+            logger.debug(
                 f"DEBUG FEATURE: name='{english_name}', mode='{cot_type_mode}', default_cot='{default_cot_type}'"
             )
             if cot_type_mode == "stream":
                 # Use stream COT type for all points (no per-point analysis)
                 cot_type = default_cot_type
-                logger.info(
+                logger.debug(
                     f"DEBUG STREAM MODE: Using fixed COT type '{cot_type}' for '{english_name}'"
                 )
             else:
@@ -555,7 +555,7 @@ class DeepstatePlugin(BaseGPSPlugin):
                 cot_type = self._get_cot_type(
                     english_name, properties, default_cot_type
                 )
-                logger.info(
+                logger.debug(
                     f"DEBUG PER-POINT MODE: Analyzed COT type '{cot_type}' for '{english_name}'"
                 )
             logger.debug(f"COT Type: {cot_type}")
@@ -585,7 +585,7 @@ class DeepstatePlugin(BaseGPSPlugin):
                     "raw_feature": feature,
                 },
             }
-            logger.info(
+            logger.debug(
                 f"Processed Location CoT Type: {location.get('cot_type', 'UNKNOWN')} (Mode: {cot_type_mode})"
             )
             logger.debug(f"Processed Location: {location}")

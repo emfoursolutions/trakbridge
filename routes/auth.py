@@ -29,7 +29,6 @@ Version: 1.0.0
 """
 
 # Standard library imports
-import logging
 from datetime import datetime, timezone
 
 # Third-party imports
@@ -60,7 +59,9 @@ from services.auth import (
 )
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+from services.logging_service import get_module_logger
+
+logger = get_module_logger(__name__)
 
 # Create blueprint
 bp = Blueprint("auth", __name__, url_prefix="/auth")
