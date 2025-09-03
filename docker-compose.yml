@@ -182,7 +182,7 @@ services:
   # PostgreSQL Database (Optional)
   # =============================================================================
   postgres:
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     container_name: trakbridge-postgres
     restart: unless-stopped
     profiles: ["postgres"]
@@ -212,7 +212,7 @@ services:
   # MySQL Database (Optional)
   # =============================================================================
   mysql:
-    image: mysql:8.0
+    image: mysql:11.0
     container_name: trakbridge-mysql
     restart: unless-stopped
     profiles: ["mysql"]

@@ -183,7 +183,7 @@ services:
   # PostgreSQL Database - Staging Configuration
   # =============================================================================
   postgres:
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     container_name: trakbridge-postgres-staging
     restart: unless-stopped
     profiles: ["postgres", "db"]
@@ -223,7 +223,7 @@ services:
   # MySQL Database - Staging Configuration
   # =============================================================================
   mysql:
-    image: mysql:8.0
+    image: mysql:11.0
     container_name: trakbridge-mysql-staging
     restart: unless-stopped
     profiles: ["mysql", "db"]
