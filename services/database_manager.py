@@ -24,6 +24,7 @@ Version: {{VERSION}}
 
 # Standard library imports
 import logging
+from services.logging_service import get_module_logger
 import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
     from models.stream import Stream
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class DatabaseManager:

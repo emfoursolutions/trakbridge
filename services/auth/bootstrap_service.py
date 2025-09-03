@@ -27,6 +27,8 @@ Version: 1.0.0
 
 import fcntl
 import logging
+from services.logging_service import get_module_logger
+from utils.database_helpers import create_record, find_by_field
 import os
 import sys
 import time
@@ -41,7 +43,7 @@ from database import db
 from models.user import AccountStatus, AuthProvider, User, UserRole
 from sqlalchemy.exc import IntegrityError
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class BootstrapService:

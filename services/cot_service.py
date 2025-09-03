@@ -32,6 +32,7 @@ Version: {{VERSION}}
 # Standard library imports
 import asyncio
 import logging
+from services.logging_service import get_module_logger
 import os
 import ssl
 import tempfile
@@ -54,7 +55,7 @@ except ImportError:
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class EnhancedCOTService:

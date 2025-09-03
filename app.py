@@ -171,8 +171,6 @@ def initialize_database_safely():
             raise db_error
 
 
-
-
 def get_worker_count() -> int:
     """
     Get the number of workers from environment variable or hypercorn.toml.
@@ -271,11 +269,13 @@ def is_hypercorn_environment() -> bool:
     """
     return (
         # Check environment variables set by docker-compose or entrypoint
-        os.environ.get('HYPERCORN_WORKERS') is not None or
+        os.environ.get("HYPERCORN_WORKERS") is not None
+        or
         # Check command line arguments
-        any('hypercorn' in arg for arg in sys.argv) or
+        any("hypercorn" in arg for arg in sys.argv)
+        or
         # Check server software environment variable
-        os.environ.get('SERVER_SOFTWARE', '').startswith('hypercorn')
+        os.environ.get("SERVER_SOFTWARE", "").startswith("hypercorn")
     )
 
 
@@ -287,13 +287,15 @@ def should_run_delayed_startup() -> bool:
     # For Hypercorn environments - let each worker handle its own startup
     # Hypercorn already provides process coordination via the master process
     if is_hypercorn_environment():
-        logger.debug("Hypercorn environment detected - allowing worker startup without coordination")
+        logger.debug(
+            "Hypercorn environment detected - allowing worker startup without coordination"
+        )
         return True
-    
+
     # For other environments (Flask dev server, etc.) - use coordination
     # to prevent multiple processes from running startup tasks simultaneously
     startup_task_file = Path(tempfile.gettempdir()) / "trakbridge_startup_tasks.flag"
-    
+
     try:
         # Check if startup tasks have been completed recently
         if startup_task_file.exists():
@@ -301,7 +303,9 @@ def should_run_delayed_startup() -> bool:
             file_age = time.time() - startup_task_file.stat().st_mtime
             if file_age < 30:
                 # Recent startup completion, don't run again
-                logger.debug("Recent startup completion detected - skipping startup tasks")
+                logger.debug(
+                    "Recent startup completion detected - skipping startup tasks"
+                )
                 return False
             else:
                 # Old file, remove it and run startup tasks
@@ -310,20 +314,22 @@ def should_run_delayed_startup() -> bool:
                     logger.debug("Cleaned up stale startup coordination file")
                 except OSError:
                     pass
-        
+
         # Try atomic file creation - only first process succeeds
         startup_task_file.touch(exist_ok=False)
         logger.debug("Acquired startup coordination - running startup tasks")
         return True
-        
+
     except FileExistsError:
         # Another process is handling it right now
         logger.debug("Another process is handling startup tasks")
         return False
-        
+
     except (IOError, OSError) as e:
         # Couldn't create file - be more permissive and allow startup
-        logger.warning(f"Could not create startup tasks coordination file: {e}, allowing startup anyway")
+        logger.warning(
+            f"Could not create startup tasks coordination file: {e}, allowing startup anyway"
+        )
         return True
 
 
@@ -482,36 +488,39 @@ def create_app(config_name=None):
 
 def setup_version_context_processor(app):
     """Set up version context processor and after-request banner system."""
-    
+
     # Set up banner to log after first request via middleware
     banner_logged = False
-    
+
     @app.before_request
     def maybe_log_ready_banner():
         """Log comprehensive banner on first request (when app is fully operational)"""
         nonlocal banner_logged
-        
+
         if not banner_logged:
             banner_file = Path(tempfile.gettempdir()) / "trakbridge_ready_banner.flag"
             try:
                 # Atomic file creation - only first worker succeeds
                 banner_file.touch(exist_ok=False)
                 banner_logged = True
-                
+
                 # Log comprehensive "Application Ready" banner
                 from services.logging_service import log_primary_startup_banner
+
                 worker_count = get_worker_count()
-                
-                app.logger.info("="*80)
-                app.logger.info("🚀 TrakBridge Application Ready - Now Serving Requests")
-                app.logger.info("="*80)
-                
-                # Include all the useful system information  
+
+                app.logger.info("=" * 80)
+                app.logger.info(
+                    "🚀 TrakBridge Application Ready - Now Serving Requests"
+                )
+                app.logger.info("=" * 80)
+
+                # Include all the useful system information
                 log_primary_startup_banner(app, worker_count)
-                
+
                 app.logger.info("✅ Application fully operational and handling traffic")
-                app.logger.info("="*80)
-                
+                app.logger.info("=" * 80)
+
             except FileExistsError:
                 # Another worker already logged the banner
                 banner_logged = True
@@ -1170,9 +1179,9 @@ def setup_startup_routes(app):
         return None
 
 
-# Create the application instance 
+# Create the application instance
 # Always create app except when TESTING environment variable is set
-if os.environ.get('TESTING') == '1':
+if os.environ.get("TESTING") == "1":
     # For tests, don't create app at module level to avoid startup issues
     app = None
 else:
@@ -1199,7 +1208,9 @@ def delayed_startup():
 
     # Check if we should run startup tasks
     if not should_run_delayed_startup():
-        safe_log(logger.info, "Delayed startup tasks will be handled by another process")
+        safe_log(
+            logger.info, "Delayed startup tasks will be handled by another process"
+        )
         return
 
     startup_start_time = dt.now()
@@ -1216,15 +1227,20 @@ def delayed_startup():
             # Log system status
             try:
                 safe_log(logger.info, "System Status Check:")
-                safe_log(logger.info,
-                    f"Stream Manager: {'Ready' if hasattr(app, 'stream_manager') else 'Not Ready'}"
+                safe_log(
+                    logger.info,
+                    f"Stream Manager: {'Ready' if hasattr(app, 'stream_manager') else 'Not Ready'}",
                 )
-                safe_log(logger.info,
-                    f"Plugin Manager: {'Ready' if hasattr(app, 'plugin_manager') else 'Not Ready'}"
+                safe_log(
+                    logger.info,
+                    f"Plugin Manager: {'Ready' if hasattr(app, 'plugin_manager') else 'Not Ready'}",
                 )
-                safe_log(logger.info, f"Database: {'Ready' if db.engine else 'Not Ready'}")
-                safe_log(logger.info,
-                    f"Encryption Service: {'Ready' if hasattr(app, 'encryption_service') else 'Not Ready'}"
+                safe_log(
+                    logger.info, f"Database: {'Ready' if db.engine else 'Not Ready'}"
+                )
+                safe_log(
+                    logger.info,
+                    f"Encryption Service: {'Ready' if hasattr(app, 'encryption_service') else 'Not Ready'}",
                 )
 
                 add_startup_progress("System components verified")

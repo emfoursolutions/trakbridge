@@ -441,7 +441,7 @@ def get_user_helper():
 
 
 def get_tak_server_helper():
-    """Get DatabaseHelper for TAKServer model."""
-    from models.tak_server import TAKServer
+    """Get DatabaseHelper for TakServer model."""
+    from models.tak_server import TakServer
 
-    return DatabaseHelper(TAKServer)
+    return DatabaseHelper(TakServer)

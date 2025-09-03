@@ -42,6 +42,8 @@ from .base_provider import (
 # Standard library imports
 import importlib.util
 import logging
+from services.logging_service import get_module_logger
+from utils.config_helpers import ConfigHelper
 import re
 import ssl
 from datetime import datetime, timezone
@@ -59,7 +61,7 @@ else:
 
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class LDAPAuthProvider(BaseAuthenticationProvider):
@@ -105,22 +107,18 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
         self.bind_dn = config.get("bind_dn", "")
         self.bind_password = config.get("bind_password", "")
 
-        # User search configuration - handle both old nested and new flat formats
-        user_search_config = config.get("user_search", {})
-        if user_search_config:
-            # Old nested format: user_search: { base_dn: ..., search_filter: ... }
-            self.user_base_dn = user_search_config.get("base_dn", "")
-            self.user_search_filter = user_search_config.get(
-                "search_filter", "(sAMAccountName={username})"
-            )
-            self.user_attributes = user_search_config.get("attributes", {})
-        else:
-            # New flat format: user_search_base, user_search_filter, attributes at top level
-            self.user_base_dn = config.get("user_search_base", "")
-            self.user_search_filter = config.get(
-                "user_search_filter", "(sAMAccountName={username})"
-            )
-            self.user_attributes = config.get("attributes", {})
+        # User search configuration - using ConfigHelper for cleaner access
+        helper = ConfigHelper(config)
+        self.user_base_dn = helper.get(
+            "user_search.base_dn", helper.get("user_search_base", "")
+        )
+        self.user_search_filter = helper.get(
+            "user_search.search_filter",
+            helper.get("user_search_filter", "(sAMAccountName={username})"),
+        )
+        self.user_attributes = helper.get(
+            "user_search.attributes", helper.get("attributes", {})
+        )
 
         # Attribute mapping
         self.username_attr = self.user_attributes.get("username", "sAMAccountName")

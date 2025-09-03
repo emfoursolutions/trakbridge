@@ -40,6 +40,7 @@ Version: {{VERSION}}
 # Standard library imports
 import asyncio
 import logging
+from services.logging_service import get_module_logger
 import threading
 import time
 from datetime import datetime, timezone
@@ -61,7 +62,7 @@ _stream_manager_instance = None
 _stream_manager_lock = threading.Lock()
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class StreamManager:
