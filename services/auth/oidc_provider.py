@@ -96,17 +96,20 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
                 "cryptography library is not available. Install with: pip install cryptography"
             )
 
-        super().__init__(AuthProvider.OIDC, config)
-
+        # Initialize config and determine active provider before base class validation
+        if config is None:
+            config = {}
+        self.config = config
+        
         # Provider configuration using ConfigHelper
-        helper = ConfigHelper(self.config)
+        helper = ConfigHelper(config)
         self.providers_config = helper.get("providers", {})
         self.active_provider = self._determine_active_provider()
 
         if not self.active_provider:
             raise ProviderConfigurationException("No OIDC provider is enabled")
 
-        # Current provider config with cleaner access
+        # Set up provider-specific properties before base class validation
         provider_helper = ConfigHelper(
             self.providers_config.get(self.active_provider, {})
         )
@@ -114,6 +117,8 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
         self.client_secret = provider_helper.get("client_secret", "")
         self.discovery_url = provider_helper.get("discovery_url", "")
         self.scope = provider_helper.get("scope", "openid profile email")
+        
+        super().__init__(AuthProvider.OIDC, config)
 
         # Role mapping
         self.role_mappings = self.config.get("role_mappings", {})

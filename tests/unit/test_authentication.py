@@ -31,7 +31,7 @@ from unittest.mock import MagicMock, Mock, patch
 import bcrypt
 import pytest
 from flask import Flask, session
-from jose import jwt
+import jwt
 from ldap3 import ALL, Connection, Server
 
 from database import db
@@ -47,9 +47,9 @@ from services.auth.decorators import (
     require_permission,
     require_role,
 )
-from services.auth.providers.ldap_provider import LDAPAuthProvider
-from services.auth.providers.local_provider import LocalAuthProvider
-from services.auth.providers.oidc_provider import OIDCAuthProvider
+from services.auth.ldap_provider import LDAPAuthProvider
+from services.auth.local_provider import LocalAuthProvider
+from services.auth.oidc_provider import OIDCAuthProvider
 
 
 @pytest.fixture
@@ -510,9 +510,13 @@ class TestOIDCAuthProvider:
         assert state is not None
 
     @patch("requests.post")
-    @patch("jose.jwt.decode")
-    def test_token_validation(self, mock_jwt_decode, mock_post, auth_config):
+    @patch("jwt.decode")
+    @patch.object(OIDCAuthProvider, "validate_configuration", return_value=[])
+    @patch.object(OIDCAuthProvider, "_load_discovery_document")
+    def test_token_validation(self, mock_discovery, mock_validate, mock_jwt_decode, mock_post, auth_config):
         """Test OIDC token validation"""
+        # Enable OIDC for this test
+        auth_config["providers"]["oidc"]["enabled"] = True
         # Mock token exchange
         mock_response = Mock()
         mock_response.json.return_value = {
@@ -530,9 +534,15 @@ class TestOIDCAuthProvider:
             "groups": ["users"],
         }
 
-        provider = OIDCAuthProvider(auth_config["providers"]["oidc"])
+        # Create config with providers structure for OIDC
+        oidc_config = {
+            "providers": {
+                "test_provider": auth_config["providers"]["oidc"]
+            }
+        }
+        provider = OIDCAuthProvider(oidc_config)
 
-        with patch.object(provider, "validate_token", return_value=True):
+        with patch.object(provider, "_validate_and_decode_token", return_value={"sub": "user123", "email": "user@test.com", "name": "Test User", "groups": ["users"]}):
             user_data = provider.handle_callback("auth_code", "state")
 
         assert user_data is not None

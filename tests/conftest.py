@@ -375,7 +375,7 @@ def mock_oidc_provider():
     with (
         patch("requests.get") as mock_get,
         patch("requests.post") as mock_post,
-        patch("jose.jwt.decode") as mock_jwt_decode,
+        patch("jwt.decode") as mock_jwt_decode,
     ):
 
         # Mock discovery document
