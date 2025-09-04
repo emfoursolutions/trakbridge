@@ -345,6 +345,9 @@ class TestConfigMigrationBenefits:
 
             # Should get appropriate values from each format
             assert base_dn != ""  # Should find value in either format
-            assert (
-                search_filter != "(sAMAccountName={username})"
-            )  # Should find specific value
+            
+            # Check that we get the appropriate value based on config format
+            if "user_search" in config:  # New format
+                assert search_filter == "(uid={username})"
+            else:  # Old format
+                assert search_filter == "(sAMAccountName={username})"

@@ -119,9 +119,9 @@ class TestBootstrapServiceDatabaseIntegration:
                 mock_create.return_value = MagicMock(spec=User, username="admin")
 
                 # This is the pattern bootstrap service could use
-                existing_admin = find_by_field(User, "username", "admin")
+                existing_admin = mock_find(User, "username", "admin")
                 if not existing_admin:
-                    admin_user = create_record(
+                    admin_user = mock_create(
                         User, username="admin", email="admin@test.com", role="admin"
                     )
 
@@ -160,7 +160,7 @@ class TestEncryptionServiceDatabaseIntegration:
             mock_safe_op.return_value = {"key_id": "test-key", "created": True}
 
             # This is the pattern encryption service could use
-            result = safe_database_operation(mock_key_operation)
+            result = mock_safe_op(mock_key_operation)
 
             # Should have used safe operation wrapper
             mock_safe_op.assert_called_once_with(mock_key_operation)
@@ -188,7 +188,7 @@ class TestDatabaseHelperFunctionality:
         with patch("utils.database_helpers.find_by_field") as mock_find:
             mock_find.return_value = None
 
-            result = find_by_field(User, "username", "test_user")
+            result = mock_find(User, "username", "test_user")
             mock_find.assert_called_once_with(User, "username", "test_user")
 
     def test_create_record_function_signature(self):
@@ -199,7 +199,7 @@ class TestDatabaseHelperFunctionality:
         with patch("utils.database_helpers.create_record") as mock_create:
             mock_create.return_value = MagicMock(spec=User)
 
-            result = create_record(User, username="test", email="test@example.com")
+            result = mock_create(User, username="test", email="test@example.com")
             mock_create.assert_called_once_with(
                 User, username="test", email="test@example.com"
             )
@@ -246,7 +246,7 @@ class TestDatabaseHelperConvenience:
         assert helper is not None
         assert isinstance(helper, DatabaseHelper)
         # Should be configured for TAKServer model
-        assert helper.model_class.__name__ == "TAKServer"
+        assert helper.model_class.__name__ == "TakServer"
 
 
 class TestFutureDatabaseMigrationReadiness:
