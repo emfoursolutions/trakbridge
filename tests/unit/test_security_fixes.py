@@ -69,30 +69,30 @@ class TestHostHeaderInjectionPrevention:
                 patch("routes.auth.redirect") as mock_redirect,
             ):
 
-            # Set up mocks
-            mock_token.return_value = "test_state"
-            mock_auth_manager_instance = Mock()
-            mock_oidc_provider = Mock()
-            mock_oidc_provider.get_authorization_url.return_value = (
-                "http://auth.url",
-                "state",
-            )
-            mock_auth_manager_instance.get_oidc_provider.return_value = (
-                mock_oidc_provider
-            )
+                # Set up mocks
+                mock_token.return_value = "test_state"
+                mock_auth_manager_instance = Mock()
+                mock_oidc_provider = Mock()
+                mock_oidc_provider.get_authorization_url.return_value = (
+                    "http://auth.url",
+                    "state",
+                )
+                mock_auth_manager_instance.get_oidc_provider.return_value = (
+                    mock_oidc_provider
+                )
 
-            # The redirect_uri should use the configured APPLICATION_URL
-            expected_redirect_uri = "https://secure.example.com/auth/oidc/callback"
+                # The redirect_uri should use the configured APPLICATION_URL
+                expected_redirect_uri = "https://secure.example.com/auth/oidc/callback"
 
-            # Mock the method call to capture the redirect_uri parameter
-            mock_oidc_provider.get_authorization_url.return_value = (
-                "http://mock.auth.url",
-                "mock_state",
-            )
+                # Mock the method call to capture the redirect_uri parameter
+                mock_oidc_provider.get_authorization_url.return_value = (
+                    "http://mock.auth.url",
+                    "mock_state",
+                )
 
-            # This test verifies the fix is in place by checking the code imports correctly
-            # The actual logic test would require full Flask app context
-            assert True  # Placeholder - the import succeeding means the fix is applied
+                # This test verifies the fix is in place by checking the code imports correctly
+                # The actual logic test would require full Flask app context
+                assert True  # Placeholder - the import succeeding means the fix is applied
 
     def test_malicious_host_header_ignored(self):
         """Test that malicious host headers don't affect URL generation"""
