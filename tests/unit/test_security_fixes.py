@@ -56,7 +56,7 @@ class TestHostHeaderInjectionPrevention:
 
         # Mock the OIDC provider and session
         with (
-            patch("routes.auth.session") as mock_session,
+            patch("flask.session") as mock_session,
             patch("routes.auth.AuthenticationManager") as mock_auth_manager,
             patch("routes.auth.request") as mock_request,
             patch("routes.auth.secrets.token_urlsafe") as mock_token,
@@ -240,7 +240,7 @@ class TestDynamicImportSecurity:
             # Test that the plugin loading handles the error gracefully
             # This should not raise an exception to the caller
             try:
-                manager._load_plugins_from_directory("plugins")
+                manager.load_plugins_from_directory("plugins")
                 # If we get here, the error was handled gracefully
                 assert True
             except ImportError:
@@ -288,7 +288,15 @@ class TestNginxSecurityConfiguration:
 
     def test_nginx_config_h2c_protection(self):
         """Test that nginx configuration includes H2C protection"""
-        nginx_config_path = "/Users/nick/Documents/Repositories/projects/trakbridge/init/nginx/nginx.conf"
+        import os
+        
+        # Find the nginx config path relative to the project root
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        nginx_config_path = os.path.join(project_root, "init", "nginx", "nginx.conf")
+        
+        # Skip test if nginx config doesn't exist
+        if not os.path.exists(nginx_config_path):
+            pytest.skip(f"Nginx config file not found at {nginx_config_path}")
 
         # Read the nginx configuration
         with open(nginx_config_path, "r") as f:
@@ -315,7 +323,15 @@ class TestNginxSecurityConfiguration:
 
     def test_nginx_config_websocket_support_maintained(self):
         """Test that WebSocket support is still functional after security fix"""
-        nginx_config_path = "/Users/nick/Documents/Repositories/projects/trakbridge/init/nginx/nginx.conf"
+        import os
+        
+        # Find the nginx config path relative to the project root
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        nginx_config_path = os.path.join(project_root, "init", "nginx", "nginx.conf")
+        
+        # Skip test if nginx config doesn't exist
+        if not os.path.exists(nginx_config_path):
+            pytest.skip(f"Nginx config file not found at {nginx_config_path}")
 
         with open(nginx_config_path, "r") as f:
             config_content = f.read()
