@@ -107,13 +107,13 @@ class TestStandardizedModelMethods:
             user_dict_safe = user.to_dict(include_sensitive=False)
             user_dict_full = user.to_dict(include_sensitive=True)
 
-            # This will fail initially - we need to standardize this behavior
+            # Password hash should never be serialized for security reasons
             assert (
                 "password_hash" not in user_dict_safe
             ), "Safe dict should not include password_hash"
             assert (
-                "password_hash" in user_dict_full
-            ), "Full dict should include password_hash for admin use"
+                "password_hash" not in user_dict_full
+            ), "Password hash should never be serialized for security"
 
             # Test Stream model - should support include_sensitive parameter
             stream_dict_safe = stream.to_dict(include_sensitive=False)
@@ -408,6 +408,10 @@ class TestModelValidationPatterns:
             session = UserSession.create_session(
                 user=local_user, ip_address="192.168.1.1", user_agent="TestAgent"
             )
+            # Add session to database session so relationships can be resolved
+            db_session.add(session)
+            db_session.flush()
+            
             assert session.user == local_user
             assert session.ip_address == "192.168.1.1"
 

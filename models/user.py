@@ -360,7 +360,6 @@ class User(db.Model, TimestampMixin):
                         if self.password_changed_at
                         else None
                     ),
-                    "password_hash": self.password_hash,
                 }
             )
 
