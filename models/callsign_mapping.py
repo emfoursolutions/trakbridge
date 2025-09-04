@@ -33,7 +33,9 @@ class CallsignMapping(db.Model, TimestampMixin):
     __tablename__ = "callsign_mappings"
 
     id = db.Column(db.Integer, primary_key=True)
-    stream_id = db.Column(db.Integer, db.ForeignKey("streams.id"), nullable=False, index=True)
+    stream_id = db.Column(
+        db.Integer, db.ForeignKey("streams.id"), nullable=False, index=True
+    )
     identifier_value = db.Column(
         db.String(255), nullable=False
     )  # Raw identifier (IMEI, device_name, etc.)
@@ -50,7 +52,9 @@ class CallsignMapping(db.Model, TimestampMixin):
         db.UniqueConstraint(
             "stream_id", "identifier_value", name="unique_stream_identifier"
         ),
-        db.Index("ix_callsign_mappings_stream_identifier", "stream_id", "identifier_value"),
+        db.Index(
+            "ix_callsign_mappings_stream_identifier", "stream_id", "identifier_value"
+        ),
     )
 
     def __init__(

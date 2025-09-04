@@ -13,7 +13,6 @@ Version: 2.0.0
 
 import asyncio
 import logging
-from services.logging_service import get_module_logger
 import ssl
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -23,12 +22,9 @@ import certifi
 import defusedxml.ElementTree as ET
 from fastkml import kml
 
-from plugins.base_plugin import (
-    BaseGPSPlugin,
-    PluginConfigField,
-    CallsignMappable,
-    FieldMetadata,
-)
+from plugins.base_plugin import (BaseGPSPlugin, CallsignMappable,
+                                 FieldMetadata, PluginConfigField)
+from services.logging_service import get_module_logger
 
 logger = get_module_logger(__name__)
 

@@ -25,8 +25,10 @@ Version: 1.0.0
 import logging
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Type, TypeVar, Union
+
 from flask import current_app, has_app_context
 from sqlalchemy.exc import SQLAlchemyError
+
 from database import db
 from services.logging_service import get_module_logger
 

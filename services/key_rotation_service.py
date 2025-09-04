@@ -26,7 +26,6 @@ Version: {{VERSION}}
 """
 
 import logging
-
 # Standard library imports
 import os
 import shutil
@@ -40,15 +39,14 @@ from typing import Any, Dict, List, Optional
 from flask import current_app
 
 # Local application imports
-from services.encryption_service import EncryptionService, get_encryption_service
-from utils.security_helpers import (
-    SecureSubprocessRunner,
-    create_secure_backup_path,
-    secure_file_permissions,
-    validate_backup_directory,
-    validate_database_params,
-    validate_safe_path,
-)
+from services.encryption_service import (EncryptionService,
+                                         get_encryption_service)
+from utils.security_helpers import (SecureSubprocessRunner,
+                                    create_secure_backup_path,
+                                    secure_file_permissions,
+                                    validate_backup_directory,
+                                    validate_database_params,
+                                    validate_safe_path)
 
 # Module level logging
 logger = logging.getLogger(__name__)

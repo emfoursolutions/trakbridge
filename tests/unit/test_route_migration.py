@@ -230,8 +230,8 @@ class TestPhase3CRouteMigration:
         """Test that route logging integrates properly with Phase 3A services"""
         # Import a Phase 3A service and a Phase 3C route to test integration
         try:
-            from services.logging_service import get_module_logger
             from routes.main import logger as main_logger
+            from services.logging_service import get_module_logger
 
             # Both should use the same logging service
             test_logger = get_module_logger("test.integration")
@@ -254,10 +254,9 @@ class TestPhase3CRouteMigration:
     def test_integration_with_phase3b_plugins(self):
         """Test that route logging integrates properly with Phase 3B plugins"""
         try:
-            from routes.streams import logger as streams_logger
-
             # Try to import a Phase 3B plugin to test integration
             from plugins.base_plugin import logger as plugin_logger
+            from routes.streams import logger as streams_logger
 
             # Both should be Logger instances (plugin_logger might be a proxy)
             assert isinstance(streams_logger, logging.Logger)
@@ -333,9 +332,9 @@ class TestPhase3CIntegration:
         """Test that loggers across all phases use consistent naming"""
         try:
             # Import loggers from different phases
-            from services.logging_service import get_module_logger  # Phase 3A
             from plugins.base_plugin import logger as plugin_logger  # Phase 3B
             from routes.main import logger as route_logger  # Phase 3C
+            from services.logging_service import get_module_logger  # Phase 3A
 
             # Create test logger
             test_logger = get_module_logger("test.cross_phase")
@@ -355,9 +354,9 @@ class TestPhase3CIntegration:
         """Test that all migrated phases work together without conflicts"""
         try:
             # Import from all phases
-            from services.logging_service import get_module_logger  # Phase 3A
             from plugins.spot_plugin import logger as plugin_logger  # Phase 3B
             from routes.api import logger as api_logger  # Phase 3C
+            from services.logging_service import get_module_logger  # Phase 3A
 
             # All should be functioning
             assert get_module_logger is not None

@@ -20,20 +20,15 @@ Author: Emfour Solutions
 Created: 2025-09-03
 """
 
-import pytest
 import importlib
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from utils.database_helpers import (
-    safe_database_operation,
-    find_by_id,
-    find_by_field,
-    create_record,
-    DatabaseHelper,
-    get_stream_helper,
-    get_user_helper,
-    get_tak_server_helper,
-)
+import pytest
+
+from utils.database_helpers import (DatabaseHelper, create_record,
+                                    find_by_field, find_by_id,
+                                    get_stream_helper, get_tak_server_helper,
+                                    get_user_helper, safe_database_operation)
 
 
 class TestDatabaseHelperImports:
@@ -281,7 +276,8 @@ class TestFutureDatabaseMigrationReadiness:
         assert db is not None  # Existing pattern
 
         # New patterns should also be available
-        from utils.database_helpers import database_transaction, safe_database_operation
+        from utils.database_helpers import (database_transaction,
+                                            safe_database_operation)
 
         assert callable(database_transaction)
         assert callable(safe_database_operation)

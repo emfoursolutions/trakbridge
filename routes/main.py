@@ -31,7 +31,6 @@ from flask import Blueprint, render_template
 
 # Authentication imports
 from services.auth import require_auth
-
 # Module-level logger
 from services.logging_service import get_module_logger
 

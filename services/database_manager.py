@@ -24,13 +24,14 @@ Version: {{VERSION}}
 
 # Standard library imports
 import logging
-from services.logging_service import get_module_logger
 import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
 
 # Third-party imports
 from sqlalchemy.exc import SQLAlchemyError
+
+from services.logging_service import get_module_logger
 
 # Local application imports
 if TYPE_CHECKING:

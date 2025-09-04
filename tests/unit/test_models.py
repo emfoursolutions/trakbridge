@@ -178,8 +178,9 @@ class TestCallsignMappingModel:
     def test_callsign_mapping_uniqueness(self, app, db_session):
         """Test unique constraint on stream_id + identifier_value"""
         with app.app_context():
-            from models.callsign_mapping import CallsignMapping
             from sqlalchemy.exc import IntegrityError
+
+            from models.callsign_mapping import CallsignMapping
 
             # Create test stream
             stream = Stream(name="Test Stream", plugin_type="garmin")
@@ -246,6 +247,7 @@ class TestCallsignMigrationIntegration:
         """Test that the callsign_mappings table and stream fields exist in database schema"""
         with app.app_context():
             from sqlalchemy import inspect
+
             from database import db
 
             inspector = inspect(db.engine)
@@ -289,6 +291,7 @@ class TestCallsignMigrationIntegration:
         """Test that database constraints are properly created"""
         with app.app_context():
             from sqlalchemy import inspect
+
             from database import db
 
             inspector = inspect(db.engine)

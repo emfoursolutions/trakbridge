@@ -33,10 +33,8 @@ Version: 1.0.0
 import asyncio
 import json
 import logging
-from services.logging_service import get_module_logger
 import ssl
 from datetime import datetime, timezone
-
 # Third-party imports
 from typing import Any, Dict, List
 
@@ -44,12 +42,9 @@ import aiohttp
 import certifi
 
 # Local application imports
-from plugins.base_plugin import (
-    BaseGPSPlugin,
-    PluginConfigField,
-    CallsignMappable,
-    FieldMetadata,
-)
+from plugins.base_plugin import (BaseGPSPlugin, CallsignMappable,
+                                 FieldMetadata, PluginConfigField)
+from services.logging_service import get_module_logger
 
 # Module-level logger
 logger = get_module_logger(__name__)

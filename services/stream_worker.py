@@ -720,8 +720,8 @@ class StreamWorker:
     async def _get_fresh_stream_config(self) -> dict:
         """Get fresh stream configuration from database"""
         try:
-            from models.stream import Stream
             from database import db
+            from models.stream import Stream
 
             # Query fresh configuration from database
             fresh_stream = db.session.query(Stream).filter_by(id=self.stream.id).first()
@@ -755,8 +755,8 @@ class StreamWorker:
         """Load callsign mappings from database for this stream"""
         try:
             # Import here to avoid circular imports
-            from models.callsign_mapping import CallsignMapping
             from database import db
+            from models.callsign_mapping import CallsignMapping
 
             # Direct database query (same pattern as other services in codebase)
             mappings = (

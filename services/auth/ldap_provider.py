@@ -27,27 +27,23 @@ Last Modified: 2025-07-26
 Version: 1.0.0
 """
 
-# Local application imports
-from models.user import AuthProvider, User, UserRole
-
-from .base_provider import (
-    AuthenticationException,
-    AuthenticationResponse,
-    AuthenticationResult,
-    BaseAuthenticationProvider,
-    ProviderConfigurationException,
-    ProviderConnectionException,
-)
-
 # Standard library imports
 import importlib.util
 import logging
-from services.logging_service import get_module_logger
-from utils.config_helpers import ConfigHelper
 import re
 import ssl
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
+
+# Local application imports
+from models.user import AuthProvider, User, UserRole
+from services.logging_service import get_module_logger
+from utils.config_helpers import ConfigHelper
+
+from .base_provider import (AuthenticationException, AuthenticationResponse,
+                            AuthenticationResult, BaseAuthenticationProvider,
+                            ProviderConfigurationException,
+                            ProviderConnectionException)
 
 # Third-party imports
 LDAP3_AVAILABLE = importlib.util.find_spec("ldap3") is not None

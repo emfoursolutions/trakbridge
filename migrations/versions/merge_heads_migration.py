@@ -13,8 +13,8 @@ while new deployments can use the faster consolidated migration path.
 No actual database operations are performed - this just unifies the migration graph.
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "merge_heads_migration"

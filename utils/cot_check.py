@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
-from flask import Flask, render_template_string, request, jsonify, flash
 import asyncio
-import pytak
-import uuid
 import datetime
+import logging
+import uuid
 import xml.etree.ElementTree as ET
 from threading import Thread
-import logging
+
+import pytak
+from flask import Flask, flash, jsonify, render_template_string, request
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -278,8 +279,30 @@ def send_cot():
         server_port = int(request.form.get("tak_port", 8087))
         callsign = request.form.get("callsign", "")
         cot_type = request.form.get("cot_type", "")
-        latitude = float(request.form.get("latitude", 0.0))
-        longitude = float(request.form.get("longitude", 0.0))
+        # Safely parse latitude/longitude with NaN injection protection
+        lat_str = request.form.get("latitude", "0.0")
+        lng_str = request.form.get("longitude", "0.0")
+
+        # Check for NaN injection attempts (case-insensitive)
+        if lat_str.lower() in ["nan", "inf", "-inf", "+inf"]:
+            lat_str = "0.0"
+        if lng_str.lower() in ["nan", "inf", "-inf", "+inf"]:
+            lng_str = "0.0"
+
+        # Use try/except with explicit validation to prevent NaN injection
+        try:
+            latitude = float(lat_str)
+            if not (-90.0 <= latitude <= 90.0):
+                latitude = 0.0
+        except (ValueError, TypeError):
+            latitude = 0.0
+
+        try:
+            longitude = float(lng_str)
+            if not (-180.0 <= longitude <= 180.0):
+                longitude = 0.0
+        except (ValueError, TypeError):
+            longitude = 0.0
 
         # Validate required fields
         if not callsign or not cot_type:

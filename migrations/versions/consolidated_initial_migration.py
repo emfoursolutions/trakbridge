@@ -18,15 +18,11 @@ from enum import Enum
 
 import sqlalchemy as sa
 from alembic import op
-from migrations.migration_utils import (
-    table_exists,
-    column_exists,
-    safe_execute,
-    safe_create_index,
-    get_dialect,
-    get_enum_column,
-    add_enum_check_constraint,
-)
+
+from migrations.migration_utils import (add_enum_check_constraint,
+                                        column_exists, get_dialect,
+                                        get_enum_column, safe_create_index,
+                                        safe_execute, table_exists)
 
 # revision identifiers, used by Alembic.
 revision = "consolidated_initial_migration"

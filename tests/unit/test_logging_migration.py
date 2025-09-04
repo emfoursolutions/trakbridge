@@ -19,12 +19,13 @@ Author: Emfour Solutions
 Created: 2025-09-03
 """
 
-import logging
-import pytest
 import importlib
-from unittest.mock import patch, MagicMock
+import logging
+from unittest.mock import MagicMock, patch
 
-from services.logging_service import get_module_logger, create_logger
+import pytest
+
+from services.logging_service import create_logger, get_module_logger
 
 
 class TestCentralizedLoggingMigration:
@@ -183,12 +184,12 @@ class TestLoggingFunctionality:
     def test_logger_formatting_works(self):
         """Test that logger formatting works correctly"""
         logger = get_module_logger("test_formatting")
-        
+
         # In test environment, handle might not be called if no handlers
         # So we'll just verify the logger exists and is callable
         assert logger is not None
         assert callable(logger.info)
-        
+
         # Test that logger can handle formatting without errors
         try:
             logger.info("Test message with %s formatting", "string")

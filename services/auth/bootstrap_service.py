@@ -27,8 +27,6 @@ Version: 1.0.0
 
 import fcntl
 import logging
-from services.logging_service import get_module_logger
-from utils.database_helpers import create_record, find_by_field
 import os
 import sys
 import time
@@ -37,11 +35,14 @@ from typing import Any, Dict, Optional
 
 from alembic import command
 from alembic.config import Config
-from alembic.script import ScriptDirectory
 from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from sqlalchemy.exc import IntegrityError
+
 from database import db
 from models.user import AccountStatus, AuthProvider, User, UserRole
-from sqlalchemy.exc import IntegrityError
+from services.logging_service import get_module_logger
+from utils.database_helpers import create_record, find_by_field
 
 logger = get_module_logger(__name__)
 

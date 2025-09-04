@@ -29,11 +29,8 @@ Version: 1.0.0
 
 import base64
 import json
-
 # Standard library imports
 import logging
-from services.logging_service import get_module_logger
-from utils.config_helpers import ConfigHelper
 import secrets
 import time
 import urllib.parse
@@ -43,13 +40,13 @@ from typing import Any, Dict, List, Optional, Tuple
 # Third-party imports
 import requests
 
+from services.logging_service import get_module_logger
+from utils.config_helpers import ConfigHelper
+
 try:
     import jwt
-    from jwt.exceptions import (
-        ExpiredSignatureError,
-        InvalidSignatureError,
-        InvalidTokenError,
-    )
+    from jwt.exceptions import (ExpiredSignatureError, InvalidSignatureError,
+                                InvalidTokenError)
 
     JWT_AVAILABLE = True
 except ImportError:
@@ -67,14 +64,10 @@ except ImportError:
 # Local application imports
 from models.user import AuthProvider, User, UserRole
 
-from .base_provider import (
-    AuthenticationException,
-    AuthenticationResponse,
-    AuthenticationResult,
-    BaseAuthenticationProvider,
-    ProviderConfigurationException,
-    ProviderConnectionException,
-)
+from .base_provider import (AuthenticationException, AuthenticationResponse,
+                            AuthenticationResult, BaseAuthenticationProvider,
+                            ProviderConfigurationException,
+                            ProviderConnectionException)
 
 # Module-level logger
 logger = get_module_logger(__name__)

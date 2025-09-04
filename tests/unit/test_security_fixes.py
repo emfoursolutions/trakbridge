@@ -47,19 +47,20 @@ class TestHostHeaderInjectionPrevention:
         """Test that OIDC callback URL generation uses configured APPLICATION_URL"""
         # This test verifies that the authentication system is configured to use
         # APPLICATION_URL instead of host headers for callback URL generation
-        
+
         # Test that the configuration approach is used
         config = BaseConfig()
         app_url = config.APPLICATION_URL
-        
+
         # Should have a default value that's not vulnerable to host header injection
         assert app_url is not None
         assert isinstance(app_url, str)
         assert app_url.startswith(("http://", "https://"))
-        
+
         # Test that the fix pattern exists in the code by importing the auth module
         try:
             from routes.auth import auth_bp
+
             # If import succeeds, the security fix is in place
             assert auth_bp is not None
         except ImportError:
@@ -267,11 +268,11 @@ class TestNginxSecurityConfiguration:
     def test_nginx_config_h2c_protection(self):
         """Test that nginx configuration includes H2C protection"""
         import os
-        
+
         # Find the nginx config path relative to the project root
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         nginx_config_path = os.path.join(project_root, "init", "nginx", "nginx.conf")
-        
+
         # Skip test if nginx config doesn't exist
         if not os.path.exists(nginx_config_path):
             pytest.skip(f"Nginx config file not found at {nginx_config_path}")
@@ -302,11 +303,11 @@ class TestNginxSecurityConfiguration:
     def test_nginx_config_websocket_support_maintained(self):
         """Test that WebSocket support is still functional after security fix"""
         import os
-        
+
         # Find the nginx config path relative to the project root
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         nginx_config_path = os.path.join(project_root, "init", "nginx", "nginx.conf")
-        
+
         # Skip test if nginx config doesn't exist
         if not os.path.exists(nginx_config_path):
             pytest.skip(f"Nginx config file not found at {nginx_config_path}")
@@ -327,9 +328,9 @@ class TestNginxSecurityConfiguration:
         # Check for the WebSocket upgrade logic pattern
         websocket_logic_parts = [
             'set $upgrade_header "";',
-            'if ($http_upgrade ~* ^websocket$) {',
-            'set $upgrade_header $http_upgrade;',
-            '}'
+            "if ($http_upgrade ~* ^websocket$) {",
+            "set $upgrade_header $http_upgrade;",
+            "}",
         ]
 
         # Check that all parts of the WebSocket logic are present
@@ -366,19 +367,20 @@ class TestSecurityConfigurationIntegration:
         # Should have plugins loaded (use available methods)
         # Check if any plugins are available - use a different approach
         plugin_categories = manager.get_plugin_categories()
-        
+
         # If no plugins are loaded, skip the detailed test
         if len(plugin_categories) == 0:
             # At least verify the manager was created successfully
             assert manager is not None
             return
-            
+
         # Test that available plugins can be accessed
         for category in plugin_categories:
             plugins_in_category = manager.get_plugins_by_category(category)
             for plugin_name in plugins_in_category:
-                assert manager.get_plugin(plugin_name) is not None, f"Plugin should be available: {plugin_name}"
-
+                assert (
+                    manager.get_plugin(plugin_name) is not None
+                ), f"Plugin should be available: {plugin_name}"
 
     def test_security_logging_on_validation_failures(self):
         """Test that security validation failures are properly logged"""

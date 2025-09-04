@@ -30,17 +30,13 @@ import pytest
 from flask import Flask
 
 from database import db
-from models.user import AuthProvider, User, UserRole, UserSession, AccountStatus
-
+from models.user import (AccountStatus, AuthProvider, User, UserRole,
+                         UserSession)
 # Import authentication components
 from services.auth.auth_manager import AuthenticationManager
-from services.auth.decorators import (
-    admin_required,
-    operator_required,
-    require_auth,
-    require_permission,
-    require_role,
-)
+from services.auth.decorators import (admin_required, operator_required,
+                                      require_auth, require_permission,
+                                      require_role)
 from services.auth.ldap_provider import LDAPAuthProvider
 from services.auth.local_provider import LocalAuthProvider
 from services.auth.oidc_provider import OIDCAuthProvider
@@ -58,26 +54,27 @@ def app():
 
     # Initialize database
     db.init_app(app)
-    
+
     # Register auth blueprint
     from routes.auth import bp as auth_bp
+
     app.register_blueprint(auth_bp)
-    
+
     # Register main blueprint for URL building
     from routes.main import bp as main_bp
+
     app.register_blueprint(main_bp)
 
     with app.app_context():
         db.create_all()
-        
+
         # Add auth_manager for route tests
         from services.auth.auth_manager import AuthenticationManager
-        app.auth_manager = AuthenticationManager({
-            "providers": {
-                "local": {"enabled": True}
-            }
-        })
-        
+
+        app.auth_manager = AuthenticationManager(
+            {"providers": {"local": {"enabled": True}}}
+        )
+
         yield app
         db.drop_all()
 
@@ -208,7 +205,7 @@ class TestUserModel:
     def test_user_serialization(self, app):
         """Test user to_dict method"""
         with app.app_context():
-            from models.user import AuthProvider, AccountStatus
+            from models.user import AccountStatus, AuthProvider
 
             user = User(
                 username="testuser",
@@ -271,8 +268,8 @@ class TestUserSession:
     def test_session_cleanup(self, app, test_users):
         """Test expired session cleanup"""
         with app.app_context():
-            from services.auth.local_provider import LocalAuthProvider
             from models.user import AuthProvider
+            from services.auth.local_provider import LocalAuthProvider
 
             user = test_users["user"]
 
@@ -397,7 +394,7 @@ class TestLDAPAuthProvider:
             config = auth_config["providers"]["ldap"].copy()
             config["enabled"] = True
             provider = LDAPAuthProvider(config)
-            
+
             # Mock the _search_user method directly to return user data
             user_data = {
                 "dn": "CN=testuser,OU=Users,DC=test,DC=com",
@@ -406,11 +403,11 @@ class TestLDAPAuthProvider:
                 "full_name": "Test User",
                 "first_name": "Test",
                 "last_name": "User",
-                "groups": ["CN=Users,DC=test,DC=com"]
+                "groups": ["CN=Users,DC=test,DC=com"],
             }
-            
-            with patch.object(provider, '_search_user', return_value=user_data):
-                with patch.object(provider, '_authenticate_user', return_value=True):
+
+            with patch.object(provider, "_search_user", return_value=user_data):
+                with patch.object(provider, "_authenticate_user", return_value=True):
                     response = provider.authenticate("testuser", "password")
 
             assert response.success is True
@@ -426,7 +423,7 @@ class TestLDAPAuthProvider:
             config = auth_config["providers"]["ldap"].copy()
             config["enabled"] = True
             provider = LDAPAuthProvider(config)
-            
+
             # Mock the _search_user to find user but _authenticate_user to fail
             user_data = {
                 "dn": "CN=testuser,OU=Users,DC=test,DC=com",
@@ -435,11 +432,11 @@ class TestLDAPAuthProvider:
                 "full_name": "Test User",
                 "first_name": "Test",
                 "last_name": "User",
-                "groups": ["CN=Users,DC=test,DC=com"]
+                "groups": ["CN=Users,DC=test,DC=com"],
             }
-            
-            with patch.object(provider, '_search_user', return_value=user_data):
-                with patch.object(provider, '_authenticate_user', return_value=False):
+
+            with patch.object(provider, "_search_user", return_value=user_data):
+                with patch.object(provider, "_authenticate_user", return_value=False):
                     response = provider.authenticate("testuser", "wrongpassword")
 
             assert response.success is False
@@ -477,12 +474,14 @@ class TestOIDCAuthProvider:
         # Enable OIDC for this test - need to wrap in providers structure
         oidc_config = auth_config["providers"]["oidc"].copy()
         oidc_config["enabled"] = True
-        oidc_config["discovery_url"] = oidc_config["issuer"] + "/.well-known/openid_configuration"
+        oidc_config["discovery_url"] = (
+            oidc_config["issuer"] + "/.well-known/openid_configuration"
+        )
         config = {"providers": {"test_provider": oidc_config}}
         provider = OIDCAuthProvider(config)
-        
+
         # Mock the discovery document loading
-        with patch.object(provider, '_get_discovery_document') as mock_discovery:
+        with patch.object(provider, "_get_discovery_document") as mock_discovery:
             mock_discovery.return_value = {
                 "authorization_endpoint": "https://test-issuer.com/auth",
                 "token_endpoint": "https://test-issuer.com/token",
@@ -500,12 +499,14 @@ class TestOIDCAuthProvider:
         # Enable OIDC for this test - need to wrap in providers structure
         oidc_config = auth_config["providers"]["oidc"].copy()
         oidc_config["enabled"] = True
-        oidc_config["discovery_url"] = oidc_config["issuer"] + "/.well-known/openid_configuration"
+        oidc_config["discovery_url"] = (
+            oidc_config["issuer"] + "/.well-known/openid_configuration"
+        )
         config = {"providers": {"test_provider": oidc_config}}
         provider = OIDCAuthProvider(config)
 
         # Mock the discovery document to avoid network calls
-        with patch.object(provider, '_get_discovery_document') as mock_discovery:
+        with patch.object(provider, "_get_discovery_document") as mock_discovery:
             mock_discovery.return_value = {
                 "authorization_endpoint": "https://test-issuer.com/auth"
             }
@@ -524,23 +525,26 @@ class TestOIDCAuthProvider:
             # Enable OIDC for this test - need to wrap in providers structure
             oidc_config = auth_config["providers"]["oidc"].copy()
             oidc_config["enabled"] = True
-            oidc_config["discovery_url"] = oidc_config["issuer"] + "/.well-known/openid_configuration"
+            oidc_config["discovery_url"] = (
+                oidc_config["issuer"] + "/.well-known/openid_configuration"
+            )
             config = {"providers": {"test_provider": oidc_config}}
             provider = OIDCAuthProvider(config)
-            
+
             # Mock the _handle_authorization_code method to return successful response
             user_data = {
                 "sub": "user123",
                 "email": "user@test.com",
                 "name": "Test User",
-                "groups": ["users"]
+                "groups": ["users"],
             }
-            
+
             # Import required classes
-            from models.user import User, AuthProvider, UserRole
-            from services.auth.base_provider import AuthenticationResponse, AuthenticationResult
-            
-            with patch.object(provider, '_handle_authorization_code') as mock_handle:
+            from models.user import AuthProvider, User, UserRole
+            from services.auth.base_provider import (AuthenticationResponse,
+                                                     AuthenticationResult)
+
+            with patch.object(provider, "_handle_authorization_code") as mock_handle:
                 # Mock the response to return a successful authentication
                 mock_response = AuthenticationResponse(
                     result=AuthenticationResult.SUCCESS,
@@ -549,12 +553,14 @@ class TestOIDCAuthProvider:
                         provider=AuthProvider.OIDC,
                         provider_user_id="user123",
                         provider_data=user_data,
-                        role=UserRole.USER
-                    )
+                        role=UserRole.USER,
+                    ),
                 )
                 mock_handle.return_value = mock_response
-                
-                response = provider.authenticate(authorization_code="auth_code", state="state")
+
+                response = provider.authenticate(
+                    authorization_code="auth_code", state="state"
+                )
 
             assert response.success is True
             assert response.user is not None
@@ -574,6 +580,7 @@ class TestAuthenticationManager:
             # Check that providers were initialized
             # Only LOCAL provider should be enabled in the test config
             from models.user import AuthProvider
+
             assert AuthProvider.LOCAL in manager.providers
             # LDAP and OIDC are disabled in test config, so they shouldn't be in providers
             assert len(manager.providers) >= 1  # At least LOCAL provider
@@ -602,15 +609,18 @@ class TestAuthenticationManager:
             manager = AuthenticationManager(config)
 
             # Should try LDAP first, then fall back to local
-            from services.auth.base_provider import AuthenticationResponse, AuthenticationResult
             from models.user import AuthProvider
+            from services.auth.base_provider import (AuthenticationResponse,
+                                                     AuthenticationResult)
+
             failed_response = AuthenticationResponse(
-                result=AuthenticationResult.USER_NOT_FOUND,
-                message="User not found"
+                result=AuthenticationResult.USER_NOT_FOUND, message="User not found"
             )
-            
+
             with patch.object(
-                manager.providers[AuthProvider.LDAP], "authenticate", return_value=failed_response
+                manager.providers[AuthProvider.LDAP],
+                "authenticate",
+                return_value=failed_response,
             ):
                 response = manager.authenticate("admin", "AdminPass123")
                 assert response.success is True  # Found via local provider
@@ -653,7 +663,9 @@ class TestAuthenticationDecorators:
 
             with app.test_request_context():
                 # Mock url_for to avoid route resolution errors
-                with patch("services.auth.decorators.url_for", return_value="/auth/login"):
+                with patch(
+                    "services.auth.decorators.url_for", return_value="/auth/login"
+                ):
                     # No user in session
                     with patch(
                         "services.auth.decorators.get_current_user", return_value=None
@@ -818,7 +830,9 @@ class TestAuthenticationRoutes:
                 with patch("routes.auth.url_for") as mock_url_for:
                     with patch("routes.auth.redirect") as mock_redirect:
                         mock_url_for.return_value = "/auth/login"
-                        mock_redirect.return_value = app.response_class("Login Failed", 200)
+                        mock_redirect.return_value = app.response_class(
+                            "Login Failed", 200
+                        )
                         response = client.post(
                             "/auth/login",
                             data={
@@ -844,7 +858,9 @@ class TestAuthenticationRoutes:
                         mock_auth_manager = Mock()
                         mock_auth_manager.get_providers_info.return_value = {}
                         mock_app.auth_manager = mock_auth_manager
-                        mock_redirect.return_value = app.response_class("Logged out", 200)
+                        mock_redirect.return_value = app.response_class(
+                            "Logged out", 200
+                        )
 
                         response = client.get("/auth/logout", follow_redirects=True)
                         assert response.status_code == 200
@@ -859,9 +875,9 @@ class TestAuthenticationSecurity:
         """Test password hashing security"""
         with app.app_context():
             user = User(
-                username="testuser", 
+                username="testuser",
                 email="test@example.com",
-                auth_provider=AuthProvider.LOCAL
+                auth_provider=AuthProvider.LOCAL,
             )
 
             # Test that same password produces different hashes
@@ -901,16 +917,16 @@ class TestAuthenticationSecurity:
             # Create a new user to avoid lockout (the admin user got locked in previous attempts)
             clean_user = User(
                 username="testclean",
-                email="testclean@example.com", 
+                email="testclean@example.com",
                 full_name="Clean User",
                 auth_provider=AuthProvider.LOCAL,
                 role=UserRole.USER,
-                status=AccountStatus.ACTIVE
+                status=AccountStatus.ACTIVE,
             )
             clean_user.set_password("TestPass123")
             db.session.add(clean_user)
             db.session.commit()
-            
+
             # Should allow correct password for non-locked user
             response = manager.authenticate("testclean", "TestPass123")
             assert response.success is True
@@ -926,24 +942,24 @@ class TestAuthenticationSecurity:
 
             # Test session was created correctly
             assert session.session_id is not None
-            
+
             # Test session with the user properly linked
             db.session.add(session)
             db.session.commit()
-            
+
             # Should be valid when user is active and session not expired
             assert session.is_valid() is True
-            
+
             # Test expired session behavior
             expired_session = UserSession(
                 user_id=user.id,
                 session_id="expired_session_id",
                 expires_at=datetime.now(timezone.utc) - timedelta(hours=1),  # Expired
-                is_active=True
+                is_active=True,
             )
             db.session.add(expired_session)
             db.session.commit()
-            
+
             # Should be invalid due to expiration
             assert expired_session.is_valid() is False
 
@@ -974,7 +990,7 @@ class TestAuthenticationConfiguration:
             provider = LocalAuthProvider(invalid_config["providers"]["local"])
             # Provider should either fix invalid values or use defaults
             # Test that it doesn't crash with invalid config
-            assert hasattr(provider, 'password_policy')
+            assert hasattr(provider, "password_policy")
 
     def test_missing_config_defaults(self):
         """Test default configuration values"""
@@ -998,7 +1014,7 @@ class TestAuthenticationIntegration:
             with patch("routes.auth.render_template", return_value="Login Page"):
                 with patch("routes.auth.url_for") as mock_url_for:
                     mock_url_for.return_value = "/dashboard"
-                    
+
                     # 1. Login with correct credentials
                     response = client.post(
                         "/auth/login",
@@ -1008,7 +1024,7 @@ class TestAuthenticationIntegration:
                             "auth_method": "local",
                         },
                     )
-                    
+
                     # Should get a successful response (redirect or success page)
                     assert response.status_code in [200, 302]
 
@@ -1056,12 +1072,12 @@ class TestAuthenticationPerformance:
 
         with app.app_context():
             user = User(
-                username="testuser", 
+                username="testuser",
                 email="test@example.com",
                 full_name="Test User",
                 auth_provider=AuthProvider.LOCAL,
                 role=UserRole.USER,
-                status=AccountStatus.ACTIVE
+                status=AccountStatus.ACTIVE,
             )
 
             start_time = time.time()

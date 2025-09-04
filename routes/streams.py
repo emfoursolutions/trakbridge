@@ -32,33 +32,23 @@ Version: {{VERSION}}
 # Standard library imports
 
 # Third-party imports
-from flask import (
-    Blueprint,
-    current_app,
-    flash,
-    jsonify,
-    redirect,
-    render_template,
-    request,
-    url_for,
-)
+from flask import (Blueprint, current_app, flash, jsonify, redirect,
+                   render_template, request, url_for)
 
 # Local application imports
 from database import db
 from models.tak_server import TakServer
-
 # Authentication imports
 from services.auth import operator_required, require_auth, require_permission
 from services.connection_test_service import ConnectionTestService
 from services.cot_type_service import cot_type_service
+# Module-level logger
+from services.logging_service import get_module_logger
 from services.stream_config_service import StreamConfigService
 from services.stream_display_service import StreamDisplayService
 from services.stream_operations_service import StreamOperationsService
 from services.stream_status_service import StreamStatusService
 from utils.app_helpers import get_plugin_manager
-
-# Module-level logger
-from services.logging_service import get_module_logger
 
 logger = get_module_logger(__name__)
 

@@ -29,13 +29,10 @@ import logging
 import re
 from typing import Dict, List, Optional, Tuple, Union
 
-from services.exceptions import (
-    DatabaseAuthenticationError,
-    DatabaseConfigurationError,
-    DatabaseConnectionError,
-    DatabaseError,
-    DatabaseNotFoundError,
-)
+from services.exceptions import (DatabaseAuthenticationError,
+                                 DatabaseConfigurationError,
+                                 DatabaseConnectionError, DatabaseError,
+                                 DatabaseNotFoundError)
 
 logger = logging.getLogger(__name__)
 

@@ -822,8 +822,9 @@ class TestDeepstatePluginCotTypeMode:
     def test_deepstate_plugin_config_mode_handling(self):
         """Test Deepstate plugin properly reads configuration from plugin config."""
         try:
-            from plugins.deepstate_plugin import DeepstatePlugin
             from unittest.mock import MagicMock
+
+            from plugins.deepstate_plugin import DeepstatePlugin
 
             # Mock a stream with CoT type
             mock_stream = MagicMock()

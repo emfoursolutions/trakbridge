@@ -32,7 +32,6 @@ Version: {{VERSION}}
 # Standard library imports
 import asyncio
 import logging
-from services.logging_service import get_module_logger
 import os
 import ssl
 import tempfile
@@ -41,6 +40,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # Third-party imports
 from lxml import etree
+
+from services.logging_service import get_module_logger
 
 # PyTAK imports
 try:

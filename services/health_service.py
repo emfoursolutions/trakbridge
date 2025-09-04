@@ -26,20 +26,19 @@ Version: {{VERSION}}
 
 # Standard library imports
 import logging
-from services.logging_service import get_module_logger
-from utils.config_helpers import ConfigHelper
 import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict
 
 from flask import current_app
-
 # Third-party imports
 from sqlalchemy import text
 
 # Local application imports
 from database import db
+from services.logging_service import get_module_logger
+from utils.config_helpers import ConfigHelper
 
 logger = get_module_logger(__name__)
 

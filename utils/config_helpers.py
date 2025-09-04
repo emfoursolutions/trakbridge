@@ -24,7 +24,8 @@ Version: 1.0.0
 """
 
 import os
-from typing import Any, Dict, List, Optional, Union, Type, TypeVar
+from typing import Any, Dict, List, Optional, Type, TypeVar, Union
+
 from services.logging_service import get_module_logger
 
 logger = get_module_logger(__name__)

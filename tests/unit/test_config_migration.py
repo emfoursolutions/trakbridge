@@ -19,9 +19,10 @@ Author: Emfour Solutions
 Created: 2025-09-03
 """
 
-import pytest
 import importlib
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from utils.config_helpers import ConfigHelper, nested_config_get
 
@@ -345,7 +346,7 @@ class TestConfigMigrationBenefits:
 
             # Should get appropriate values from each format
             assert base_dn != ""  # Should find value in either format
-            
+
             # Check that we get the appropriate value based on config format
             if "user_search" in config:  # New format
                 assert search_filter == "(uid={username})"

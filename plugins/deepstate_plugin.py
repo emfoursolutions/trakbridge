@@ -26,7 +26,6 @@ import asyncio
 import hashlib
 import json
 import logging
-from services.logging_service import get_module_logger
 import re
 import ssl
 from datetime import datetime, timezone
@@ -38,6 +37,7 @@ import certifi
 
 # Local application imports
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
+from services.logging_service import get_module_logger
 
 # Module-level logger
 logger = get_module_logger(__name__)
@@ -621,9 +621,9 @@ class DeepstatePlugin(BaseGPSPlugin):
         )
 
         # Check properties first for specific markers
-        if properties and properties.get("description") == "{icon=enemy}":
-            cot_type = "a-h-G-U-C-I"  # Hostile ground unit combat infantry
-        elif properties and properties.get("description") == "{icon=headquarter}":
+        # if properties and properties.get("description") == "{icon=enemy}":
+        #    cot_type = "a-h-G-U-C-I"  # Hostile ground unit combat infantry
+        if properties and properties.get("description") == "{icon=headquarter}":
             cot_type = "a-h-G-U-H"  # Hostile ground unit combat infantry
         # Location-based classifications
         elif "kyiv" in name_id:

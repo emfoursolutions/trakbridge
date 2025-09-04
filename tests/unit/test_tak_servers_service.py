@@ -28,7 +28,8 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from services.tak_servers_service import TakServerConnectionTester, TakServerService
+from services.tak_servers_service import (TakServerConnectionTester,
+                                          TakServerService)
 
 
 class TestTakServerService:

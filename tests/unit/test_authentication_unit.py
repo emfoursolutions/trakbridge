@@ -67,7 +67,8 @@ class TestAuthenticationServices:
     def test_auth_providers_import(self):
         """Test that auth providers can be imported."""
         try:
-            from services.auth.providers.local_provider import LocalAuthProvider
+            from services.auth.providers.local_provider import \
+                LocalAuthProvider
 
             assert LocalAuthProvider is not None
         except ImportError:
@@ -144,7 +145,8 @@ class TestPasswordSecurity:
             assert bcrypt is not None
         except ImportError:
             # Fallback to werkzeug
-            from werkzeug.security import check_password_hash, generate_password_hash
+            from werkzeug.security import (check_password_hash,
+                                           generate_password_hash)
 
             assert generate_password_hash is not None
             assert check_password_hash is not None

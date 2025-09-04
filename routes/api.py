@@ -27,7 +27,6 @@ Version: {{VERSION}}
 
 # Third-party imports
 import asyncio
-
 # Standard library imports
 import threading
 import time
@@ -38,16 +37,13 @@ from flask import Blueprint, current_app, jsonify, request
 
 # Local application imports
 from database import db
-
 # Authentication imports
-from services.auth import (
-    api_key_or_auth_required,
-    optional_auth,
-    require_auth,
-    require_permission,
-)
+from services.auth import (api_key_or_auth_required, optional_auth,
+                           require_auth, require_permission)
 from services.connection_test_service import ConnectionTestService
 from services.health_service import health_service
+# Module-level logger
+from services.logging_service import get_module_logger
 from services.plugin_category_service import get_category_service
 from services.stream_config_service import StreamConfigService
 from services.stream_display_service import StreamDisplayService
@@ -55,9 +51,6 @@ from services.stream_operations_service import StreamOperationsService
 from services.stream_status_service import StreamStatusService
 from services.version import format_version, get_version
 from utils.app_helpers import get_plugin_manager
-
-# Module-level logger
-from services.logging_service import get_module_logger
 
 logger = get_module_logger(__name__)
 
@@ -792,8 +785,8 @@ def discover_trackers():
 def get_callsign_mappings(stream_id):
     """Get callsign mappings for a stream"""
     try:
-        from models.stream import Stream
         from models.callsign_mapping import CallsignMapping
+        from models.stream import Stream
 
         stream = Stream.query.get_or_404(stream_id)
         mappings = CallsignMapping.query.filter_by(stream_id=stream_id).all()
@@ -820,8 +813,8 @@ def get_callsign_mappings(stream_id):
 def update_callsign_mappings(stream_id):
     """Create or update callsign mappings for a stream"""
     try:
-        from models.stream import Stream
         from models.callsign_mapping import CallsignMapping
+        from models.stream import Stream
 
         data = request.get_json()
         if not data:

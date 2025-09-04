@@ -10,14 +10,16 @@ These tests verify the complete plugin categorization system including:
 """
 
 import json
-import pytest
 import uuid
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
+
+import pytest
 from flask import Flask
+
 from database import db
 from models.stream import Stream
 from models.tak_server import TakServer
-from models.user import User, UserRole, AuthProvider
+from models.user import AuthProvider, User, UserRole
 from services.plugin_category_service import initialize_category_service
 from utils.app_helpers import get_plugin_manager
 
@@ -492,9 +494,10 @@ class TestCategorySystemIntegration:
     def test_category_system_performance(self, mock_app_with_categories):
         """Test that category operations perform reasonably"""
         with mock_app_with_categories.app_context():
+            import time
+
             from services.plugin_category_service import get_category_service
             from utils.app_helpers import get_plugin_manager
-            import time
 
             category_service = get_category_service(get_plugin_manager())
 
@@ -557,7 +560,7 @@ class TestBackwardCompatibility:
 
         # Authentication redirect or success are both valid
         assert response.status_code in [200, 302]
-        
+
         if response.status_code == 200:
             data = response.get_json()
             # Should still have plugin metadata
