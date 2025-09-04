@@ -28,15 +28,15 @@ class Stream(db.Model, TimestampMixin):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    plugin_type = db.Column(db.String(50), nullable=False)
+    plugin_type = db.Column(db.String(50), nullable=False, index=True)
     plugin_config = db.Column(db.Text)  # JSON string of plugin configuration
     tak_server_id = db.Column(
-        db.Integer, db.ForeignKey("tak_servers.id"), nullable=True
+        db.Integer, db.ForeignKey("tak_servers.id"), nullable=True, index=True
     )
     poll_interval = db.Column(db.Integer, default=120)  # seconds
     cot_type = db.Column(db.String(50), default="a-f-G-U-C")  # COT type identifier
     cot_stale_time = db.Column(db.Integer, default=300)  # seconds until stale
-    is_active = db.Column(db.Boolean, default=False)
+    is_active = db.Column(db.Boolean, default=False, index=True)
     last_poll = db.Column(db.DateTime)
     last_error = db.Column(db.Text)  # Last error message
     total_messages_sent = db.Column(db.Integer, default=0)  # Statistics
