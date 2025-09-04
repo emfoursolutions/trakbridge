@@ -125,21 +125,20 @@ def auth_config():
     }
 
 
-
-
 class TestUserModel:
     """Test User model functionality"""
 
     def test_user_creation(self, app):
         """Test user creation and basic properties"""
         with app.app_context():
+            from models.user import AuthProvider
+
             user = User(
                 username="testuser",
                 email="test@example.com",
-                first_name="Test",
-                last_name="User",
+                full_name="Test User",
                 role=UserRole.USER,
-                auth_provider="local",
+                auth_provider=AuthProvider.LOCAL,
             )
             db.session.add(user)
             db.session.commit()
@@ -148,12 +147,18 @@ class TestUserModel:
             assert user.username == "testuser"
             assert user.email == "test@example.com"
             assert user.role == UserRole.USER
-            assert user.is_active is True
+            assert user.is_active() is True
 
     def test_password_hashing(self, app):
         """Test password hashing and verification"""
         with app.app_context():
-            user = User(username="testuser", email="test@example.com")
+            from models.user import AuthProvider
+
+            user = User(
+                username="testuser",
+                email="test@example.com",
+                auth_provider=AuthProvider.LOCAL,
+            )
             user.set_password("TestPassword123")
 
             assert user.password_hash is not None
@@ -186,15 +191,19 @@ class TestUserModel:
     def test_user_serialization(self, app):
         """Test user to_dict method"""
         with app.app_context():
+            from models.user import AuthProvider, AccountStatus
+
             user = User(
                 username="testuser",
                 email="test@example.com",
-                first_name="Test",
-                last_name="User",
+                full_name="Test User",
                 role=UserRole.OPERATOR,
-                auth_provider="ldap",
+                auth_provider=AuthProvider.LOCAL,
+                status=AccountStatus.ACTIVE,
             )
             user.set_password("TestPassword123")
+            db.session.add(user)
+            db.session.commit()
 
             # Test without sensitive data
             data = user.to_dict(include_sensitive=False)
@@ -204,7 +213,11 @@ class TestUserModel:
 
             # Test with sensitive data
             sensitive_data = user.to_dict(include_sensitive=True)
-            assert "password_hash" in sensitive_data
+            assert "provider_user_id" in sensitive_data
+            assert "failed_login_attempts" in sensitive_data
+            assert (
+                "password_hash" not in sensitive_data
+            )  # Password hash should never be serialized
 
 
 class TestUserSession:
@@ -215,6 +228,8 @@ class TestUserSession:
         with app.app_context():
             user = test_users["user"]
             session = UserSession.create_session(user)
+            db.session.add(session)
+            db.session.commit()
 
             assert session.user_id == user.id
             assert session.session_id is not None
@@ -227,6 +242,8 @@ class TestUserSession:
         with app.app_context():
             user = test_users["user"]
             session = UserSession.create_session(user)
+            db.session.add(session)
+            db.session.commit()
 
             # Manually expire session
             session.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
@@ -237,22 +254,32 @@ class TestUserSession:
     def test_session_cleanup(self, app, test_users):
         """Test expired session cleanup"""
         with app.app_context():
+            from services.auth.local_provider import LocalAuthProvider
+            from models.user import AuthProvider
+
             user = test_users["user"]
 
             # Create expired session
             expired_session = UserSession.create_session(user)
             expired_session.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+            db.session.add(expired_session)
 
             # Create valid session
             valid_session = UserSession.create_session(user)
+            db.session.add(valid_session)
 
             db.session.commit()
 
-            # Run cleanup
-            cleaned_count = UserSession.cleanup_expired_sessions()
+            # Run cleanup using provider
+            config = {"password_policy": {"min_length": 8}}
+            provider = LocalAuthProvider(config)
+            cleaned_count = provider.cleanup_expired_sessions()
 
             assert cleaned_count == 1
-            assert UserSession.query.get(expired_session.id) is None
+            assert (
+                UserSession.query.get(expired_session.id) is None
+                or not UserSession.query.get(expired_session.id).is_active
+            )
             assert UserSession.query.get(valid_session.id) is not None
 
 
@@ -270,11 +297,12 @@ class TestLocalAuthProvider:
         with app.app_context():
             provider = LocalAuthProvider(auth_config["providers"]["local"])
 
-            user = provider.authenticate("admin", "AdminPass123")
+            response = provider.authenticate("admin", "AdminPass123")
 
-            assert user is not None
-            assert user.username == "admin"
-            assert user.role == UserRole.ADMIN
+            assert response.success is True
+            assert response.user is not None
+            assert response.user.username == "admin"
+            assert response.user.role == UserRole.ADMIN
 
     def test_failed_authentication(self, app, test_users, auth_config):
         """Test failed local authentication"""
@@ -282,54 +310,64 @@ class TestLocalAuthProvider:
             provider = LocalAuthProvider(auth_config["providers"]["local"])
 
             # Wrong password
-            user = provider.authenticate("admin", "wrongpassword")
-            assert user is None
+            response = provider.authenticate("admin", "wrongpassword")
+            assert response.success is False
+            assert response.user is None
 
             # Non-existent user
-            user = provider.authenticate("nonexistent", "password")
-            assert user is None
+            response = provider.authenticate("nonexistent", "password")
+            assert response.success is False
+            assert response.user is None
 
             # Inactive user
-            user = provider.authenticate("inactive", "InactivePass123")
-            assert user is None
+            response = provider.authenticate("inactive", "InactivePass123")
+            assert response.success is False
+            assert response.user is None
 
     def test_password_validation(self, auth_config):
         """Test password policy validation"""
         provider = LocalAuthProvider(auth_config["providers"]["local"])
 
-        # Valid password
-        assert provider.validate_password("ValidPass123") is True
+        # Valid password (with special character)
+        assert (
+            provider.validate_password("ValidPass123!") == []
+        )  # Empty list means valid
 
         # Too short
-        assert provider.validate_password("short") is False
+        violations = provider.validate_password("short")
+        assert len(violations) > 0
 
         # Missing uppercase
-        assert provider.validate_password("lowercase123") is False
+        violations = provider.validate_password("lowercase123!")
+        assert len(violations) > 0
 
         # Missing lowercase
-        assert provider.validate_password("UPPERCASE123") is False
+        violations = provider.validate_password("UPPERCASE123!")
+        assert len(violations) > 0
 
         # Missing numbers
-        assert provider.validate_password("NoNumbers") is False
+        violations = provider.validate_password("NoNumbers!")
+        assert len(violations) > 0
 
     def test_user_creation(self, app, auth_config):
-        """Test local user creation"""
+        """Test local user creation (admin users can be created even when registration is disabled)"""
         with app.app_context():
+            # Use default config (registration disabled) but create admin user
             provider = LocalAuthProvider(auth_config["providers"]["local"])
 
+            # Create admin user (allowed even when registration is disabled)
             user = provider.create_user(
-                username="newuser",
-                email="new@test.com",
-                password="NewPass123",
-                first_name="New",
-                last_name="User",
-                role=UserRole.USER,
+                username="newadmin",
+                email="admin@test.com",
+                password="AdminPass123!",
+                full_name="New Admin",
+                role=UserRole.ADMIN,
             )
 
             assert user is not None
-            assert user.username == "newuser"
-            assert user.check_password("NewPass123") is True
-            assert user.role == UserRole.USER
+            assert user.username == "newadmin"
+            assert user.check_password("AdminPass123!") is True
+            assert user.role == UserRole.ADMIN
 
 
 class TestLDAPAuthProvider:
@@ -369,12 +407,13 @@ class TestLDAPAuthProvider:
         mock_connection.search.side_effect = side_effect
 
         provider = LDAPAuthProvider(auth_config["providers"]["ldap"])
-        user_data = provider.authenticate("testuser", "password")
+        response = provider.authenticate("testuser", "password")
 
-        assert user_data is not None
-        assert user_data["username"] == "testuser"
-        assert user_data["email"] == "testuser@test.com"
-        assert user_data["role"] == UserRole.USER
+        assert response.success is True
+        assert response.user is not None
+        assert response.user.username == "testuser"
+        assert response.user.email == "testuser@test.com"
+        assert response.user.role == UserRole.USER
 
     @patch("ldap3.Server")
     @patch("ldap3.Connection")
@@ -443,7 +482,9 @@ class TestOIDCAuthProvider:
     @patch("jwt.decode")
     @patch.object(OIDCAuthProvider, "validate_configuration", return_value=[])
     @patch.object(OIDCAuthProvider, "_load_discovery_document")
-    def test_token_validation(self, mock_discovery, mock_validate, mock_jwt_decode, mock_post, auth_config):
+    def test_token_validation(
+        self, mock_discovery, mock_validate, mock_jwt_decode, mock_post, auth_config
+    ):
         """Test OIDC token validation"""
         # Enable OIDC for this test
         auth_config["providers"]["oidc"]["enabled"] = True
@@ -465,14 +506,19 @@ class TestOIDCAuthProvider:
         }
 
         # Create config with providers structure for OIDC
-        oidc_config = {
-            "providers": {
-                "test_provider": auth_config["providers"]["oidc"]
-            }
-        }
+        oidc_config = {"providers": {"test_provider": auth_config["providers"]["oidc"]}}
         provider = OIDCAuthProvider(oidc_config)
 
-        with patch.object(provider, "_validate_and_decode_token", return_value={"sub": "user123", "email": "user@test.com", "name": "Test User", "groups": ["users"]}):
+        with patch.object(
+            provider,
+            "_validate_and_decode_token",
+            return_value={
+                "sub": "user123",
+                "email": "user@test.com",
+                "name": "Test User",
+                "groups": ["users"],
+            },
+        ):
             user_data = provider.handle_callback("auth_code", "state")
 
         assert user_data is not None

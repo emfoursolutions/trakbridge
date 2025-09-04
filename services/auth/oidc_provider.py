@@ -100,7 +100,7 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
         if config is None:
             config = {}
         self.config = config
-        
+
         # Provider configuration using ConfigHelper
         helper = ConfigHelper(config)
         self.providers_config = helper.get("providers", {})
@@ -117,7 +117,7 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
         self.client_secret = provider_helper.get("client_secret", "")
         self.discovery_url = provider_helper.get("discovery_url", "")
         self.scope = provider_helper.get("scope", "openid profile email")
-        
+
         super().__init__(AuthProvider.OIDC, config)
 
         # Role mapping

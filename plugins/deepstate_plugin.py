@@ -403,7 +403,9 @@ class DeepstatePlugin(BaseGPSPlugin):
                     logger.debug(f"First feature: {features[0]}")
 
                 # Get the CoT type mode and stream's default CoT type from stream object
-                logger.debug(f"DEBUG: hasattr(self, 'stream')={hasattr(self, 'stream')}")
+                logger.debug(
+                    f"DEBUG: hasattr(self, 'stream')={hasattr(self, 'stream')}"
+                )
                 if hasattr(self, "stream"):
                     logger.debug(
                         f"DEBUG: self.stream is not None={self.stream is not None}"
