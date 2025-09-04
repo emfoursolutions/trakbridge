@@ -63,6 +63,12 @@ x-environment: &common-environment
   DEFAULT_POLL_INTERVAL: "120"
   HTTP_TIMEOUT: "30"
   
+  # Hypercorn Settings
+  HYPERCORN_WORKERS: "4"
+  HYPERCORN_KEEP_ALIVE: "5"
+  HYPERCORN_MAX_REQUESTS: "1000"
+  HYPERCORN_MAX_REQUESTS_JITTER: "100"
+
   # Authentication Configuration
   # LDAP Settings (set LDAP_ENABLED to "true" and configure for your environment)
   LDAP_ENABLED: "false"
@@ -176,7 +182,7 @@ services:
   # PostgreSQL Database (Optional)
   # =============================================================================
   postgres:
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     container_name: trakbridge-postgres
     restart: unless-stopped
     profiles: ["postgres"]
@@ -206,7 +212,7 @@ services:
   # MySQL Database (Optional)
   # =============================================================================
   mysql:
-    image: mysql:8.0
+    image: mysql:11.0
     container_name: trakbridge-mysql
     restart: unless-stopped
     profiles: ["mysql"]

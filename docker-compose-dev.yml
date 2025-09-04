@@ -32,7 +32,7 @@ services:
     # Development environment configuration
     environment:
       # Flask environment - Development mode
-      FLASK_ENV: "development"
+      FLASK_ENV: "production"
       FLASK_APP: "app.py"
       
       # Dynamic user creation for runtime
@@ -182,7 +182,7 @@ services:
 
   # PostgreSQL database (optional)
   postgres:
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-trakbridge}-postgres
     restart: unless-stopped
     profiles:
@@ -215,7 +215,7 @@ services:
 
   # MySQL database (optional)
   mysql:
-    image: mysql:8.0
+    image: mysql:11.0
     container_name: ${COMPOSE_PROJECT_NAME:-trakbridge}-mysql
     restart: unless-stopped
     profiles:

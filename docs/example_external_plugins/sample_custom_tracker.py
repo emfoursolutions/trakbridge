@@ -19,8 +19,9 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
+from services.logging_service import get_module_logger
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class SampleCustomTrackerPlugin(BaseGPSPlugin):

@@ -35,7 +35,6 @@ import json
 import logging
 import ssl
 from datetime import datetime, timezone
-
 # Third-party imports
 from typing import Any, Dict, List
 
@@ -43,15 +42,12 @@ import aiohttp
 import certifi
 
 # Local application imports
-from plugins.base_plugin import (
-    BaseGPSPlugin,
-    PluginConfigField,
-    CallsignMappable,
-    FieldMetadata,
-)
+from plugins.base_plugin import (BaseGPSPlugin, CallsignMappable,
+                                 FieldMetadata, PluginConfigField)
+from services.logging_service import get_module_logger
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class TraccarPlugin(BaseGPSPlugin, CallsignMappable):

@@ -22,14 +22,11 @@ import certifi
 import defusedxml.ElementTree as ET
 from fastkml import kml
 
-from plugins.base_plugin import (
-    BaseGPSPlugin,
-    PluginConfigField,
-    CallsignMappable,
-    FieldMetadata,
-)
+from plugins.base_plugin import (BaseGPSPlugin, CallsignMappable,
+                                 FieldMetadata, PluginConfigField)
+from services.logging_service import get_module_logger
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class GarminPlugin(BaseGPSPlugin, CallsignMappable):

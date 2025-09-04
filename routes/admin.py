@@ -26,32 +26,23 @@ Version: {{VERSION}}
 
 # Standard library imports
 import datetime
-
-# Module-level logger
-import logging
+# Third-party imports
 import platform
 import time
 
 # Third-party imports
-from flask import (
-    Blueprint,
-    current_app,
-    flash,
-    jsonify,
-    redirect,
-    render_template,
-    request,
-    url_for,
-)
+from flask import (Blueprint, current_app, flash, jsonify, redirect,
+                   render_template, request, url_for)
 
 # Authentication imports
 from services.auth import admin_required
-
 # Local application imports
 from services.key_rotation_service import get_key_rotation_service
+# Module-level logger
+from services.logging_service import get_module_logger
 from services.version import get_version
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 bp = Blueprint("admin", __name__)
 

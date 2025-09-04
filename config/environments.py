@@ -13,14 +13,15 @@ Version: {{VERSION}}
 # Standard library imports
 import logging
 import os
-
 # Third-party imports
 from typing import Any, Dict
+
+from services.logging_service import get_module_logger
 
 # Local application imports
 from .base import BaseConfig
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class DevelopmentConfig(BaseConfig):

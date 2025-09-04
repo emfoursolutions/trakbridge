@@ -35,13 +35,16 @@ from typing import Any, Dict, Optional
 
 from alembic import command
 from alembic.config import Config
-from alembic.script import ScriptDirectory
 from alembic.migration import MigrationContext
-from database import db
-from models.user import AccountStatus, AuthProvider, User, UserRole
+from alembic.script import ScriptDirectory
 from sqlalchemy.exc import IntegrityError
 
-logger = logging.getLogger(__name__)
+from database import db
+from models.user import AccountStatus, AuthProvider, User, UserRole
+from services.logging_service import get_module_logger
+from utils.database_helpers import create_record, find_by_field
+
+logger = get_module_logger(__name__)
 
 
 class BootstrapService:

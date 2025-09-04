@@ -48,11 +48,9 @@ from typing import Dict, List
 # Local application imports
 from services.cot_service import cot_service
 from services.database_manager import DatabaseManager
-from services.exceptions import (
-    StreamConfigurationError,
-    StreamManagerError,
-    StreamNotFoundError,
-)
+from services.exceptions import (StreamConfigurationError, StreamManagerError,
+                                 StreamNotFoundError)
+from services.logging_service import get_module_logger
 from services.session_manager import SessionManager
 from services.stream_worker import StreamWorker
 
@@ -61,7 +59,7 @@ _stream_manager_instance = None
 _stream_manager_lock = threading.Lock()
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class StreamManager:

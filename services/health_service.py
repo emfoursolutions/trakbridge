@@ -32,14 +32,15 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 
 from flask import current_app
-
 # Third-party imports
 from sqlalchemy import text
 
 # Local application imports
 from database import db
+from services.logging_service import get_module_logger
+from utils.config_helpers import ConfigHelper
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class HealthService:
@@ -367,12 +368,13 @@ class HealthService:
 
             # Check for potential issues
             warnings = []
-            if results.get("error_streams", {}).get("count", 0) > 0:
+            helper = ConfigHelper(results)
+            if helper.get_int("error_streams.count", 0) > 0:
                 warnings.append(
                     f"{results['error_streams']['count']} streams with errors"
                 )
 
-            if results.get("active_streams", {}).get("count", 0) == 0:
+            if helper.get_int("active_streams.count", 0) == 0:
                 warnings.append("No active streams")
 
             status = "warning" if warnings else "healthy"

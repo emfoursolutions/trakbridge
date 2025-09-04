@@ -305,10 +305,11 @@ class TestStreamRoutesCallsignIntegration:
     def test_create_stream_form_with_callsign_data(self, client, app, db_session):
         """Test creating stream via form with callsign mapping data - FAILING TEST FIRST"""
         with app.app_context():
-            from models.tak_server import TakServer
-            from models.stream import Stream
-            from models.callsign_mapping import CallsignMapping
             import uuid
+
+            from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
+            from models.tak_server import TakServer
 
             # Arrange: Create test TAK server
             tak_server = TakServer(
@@ -364,10 +365,11 @@ class TestStreamRoutesCallsignIntegration:
         client = authenticated_client("admin")
 
         with app.app_context():
-            from models.tak_server import TakServer
-            from models.stream import Stream
-            from models.callsign_mapping import CallsignMapping
             import uuid
+
+            from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
+            from models.tak_server import TakServer
 
             # Arrange: Create test stream
             tak_server = TakServer(
@@ -418,9 +420,10 @@ class TestStreamRoutesCallsignIntegration:
     def test_create_stream_form_without_callsign_mapping(self, client, app, db_session):
         """Test creating stream via form without callsign mapping - FAILING TEST FIRST"""
         with app.app_context():
-            from models.tak_server import TakServer
-            from models.stream import Stream
             import uuid
+
+            from models.stream import Stream
+            from models.tak_server import TakServer
 
             # Arrange: Create test TAK server
             tak_server = TakServer(
@@ -505,10 +508,11 @@ class TestStreamRoutesCallsignIntegration:
         client = authenticated_client("admin")
 
         with app.app_context():
-            from models.tak_server import TakServer
-            from models.stream import Stream
-            from models.callsign_mapping import CallsignMapping
             import uuid
+
+            from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
+            from models.tak_server import TakServer
 
             # Arrange: Create test stream with callsign mappings
             tak_server = TakServer(

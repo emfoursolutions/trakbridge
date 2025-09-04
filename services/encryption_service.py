@@ -28,14 +28,12 @@ import base64
 import binascii
 import hashlib
 import logging
-
 # Standard library imports
 import os
 import secrets
 from typing import Any, Dict, Optional
 
 from cryptography.exceptions import InvalidKey
-
 # Third-party imports
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -43,9 +41,11 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 # Local application imports
 from services.exceptions import EncryptionDataError, EncryptionError
+from services.logging_service import get_module_logger
+from utils.database_helpers import safe_database_operation
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class EncryptionService:

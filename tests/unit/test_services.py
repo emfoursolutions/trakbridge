@@ -8,7 +8,8 @@ from services.encryption_service import EncryptionService
 from services.logging_service import setup_logging
 from services.stream_manager import StreamManager
 from services.stream_worker import StreamWorker
-from services.tak_servers_service import TakServerService, TakServerConnectionTester
+from services.tak_servers_service import (TakServerConnectionTester,
+                                          TakServerService)
 from services.version import get_version, get_version_info
 
 
@@ -149,8 +150,8 @@ class TestStreamWorkerCallsignIntegration:
         """Test stream worker applies callsigns correctly when feature is disabled"""
         with app.app_context():
             from database import db
-            from models.stream import Stream
             from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
 
             # Create test stream without callsign mapping enabled
             stream = Stream(
@@ -196,8 +197,8 @@ class TestStreamWorkerCallsignIntegration:
         """Test stream worker applies callsigns correctly when feature is enabled"""
         with app.app_context():
             from database import db
-            from models.stream import Stream
             from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
 
             # Create test stream with callsign mapping enabled
             stream = Stream(
@@ -251,8 +252,8 @@ class TestStreamWorkerCallsignIntegration:
         """Test stream worker applies per-callsign CoT type overrides"""
         with app.app_context():
             from database import db
-            from models.stream import Stream
             from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
 
             # Create test stream with per-callsign CoT types enabled
             stream = Stream(
@@ -410,8 +411,8 @@ class TestStreamWorkerCallsignIntegration:
         """Test stream worker loads callsign mappings efficiently from database"""
         with app.app_context():
             from database import db
-            from models.stream import Stream
             from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
 
             # Create test stream
             stream = Stream(
@@ -471,8 +472,8 @@ class TestStreamWorkerCallsignIntegration:
         """Test stream worker integrates with plugin CallsignMappable interface"""
         with app.app_context():
             from database import db
-            from models.stream import Stream
             from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
 
             # Create test stream
             stream = Stream(
@@ -559,13 +560,14 @@ class TestStreamOperationsServiceCallsign:
     def test_create_stream_with_callsign_mappings(self, app, db_session):
         """Test creating a stream with callsign mapping data - FAILING TEST FIRST"""
         with app.app_context():
-            from services.stream_operations_service import StreamOperationsService
-            from models.tak_server import TakServer
-            from models.stream import Stream
-            from models.callsign_mapping import CallsignMapping
-
             # Arrange: Create test TAK server
             import uuid
+
+            from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
+            from models.tak_server import TakServer
+            from services.stream_operations_service import \
+                StreamOperationsService
 
             tak_server = TakServer(
                 name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
@@ -627,13 +629,14 @@ class TestStreamOperationsServiceCallsign:
     def test_create_stream_without_callsign_mappings(self, app, db_session):
         """Test creating a stream without callsign mapping - FAILING TEST FIRST"""
         with app.app_context():
-            from services.stream_operations_service import StreamOperationsService
-            from models.tak_server import TakServer
-            from models.stream import Stream
-            from models.callsign_mapping import CallsignMapping
-
             # Arrange: Create test TAK server
             import uuid
+
+            from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
+            from models.tak_server import TakServer
+            from services.stream_operations_service import \
+                StreamOperationsService
 
             tak_server = TakServer(
                 name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
@@ -677,13 +680,14 @@ class TestStreamOperationsServiceCallsign:
     def test_update_stream_callsign_mappings(self, app, db_session):
         """Test updating stream callsign mappings - FAILING TEST FIRST"""
         with app.app_context():
-            from services.stream_operations_service import StreamOperationsService
-            from models.tak_server import TakServer
-            from models.stream import Stream
-            from models.callsign_mapping import CallsignMapping
-
             # Arrange: Create test stream
             import uuid
+
+            from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
+            from models.tak_server import TakServer
+            from services.stream_operations_service import \
+                StreamOperationsService
 
             tak_server = TakServer(
                 name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
@@ -750,13 +754,14 @@ class TestStreamOperationsServiceCallsign:
     def test_create_callsign_mappings_helper(self, app, db_session):
         """Test _create_callsign_mappings helper method - FAILING TEST FIRST"""
         with app.app_context():
-            from services.stream_operations_service import StreamOperationsService
-            from models.tak_server import TakServer
-            from models.stream import Stream
-            from models.callsign_mapping import CallsignMapping
-
             # Arrange: Create test stream
             import uuid
+
+            from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
+            from models.tak_server import TakServer
+            from services.stream_operations_service import \
+                StreamOperationsService
 
             tak_server = TakServer(
                 name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
@@ -813,13 +818,14 @@ class TestStreamOperationsServiceCallsign:
     def test_update_callsign_mappings_helper(self, app, db_session):
         """Test _update_callsign_mappings helper method - FAILING TEST FIRST"""
         with app.app_context():
-            from services.stream_operations_service import StreamOperationsService
-            from models.tak_server import TakServer
-            from models.stream import Stream
-            from models.callsign_mapping import CallsignMapping
-
             # Arrange: Create test stream with existing mappings
             import uuid
+
+            from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
+            from models.tak_server import TakServer
+            from services.stream_operations_service import \
+                StreamOperationsService
 
             tak_server = TakServer(
                 name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
@@ -883,12 +889,13 @@ class TestStreamWorkerConfiguration:
     async def test_stream_worker_assigns_stream_to_plugin(self, app, db_session):
         """Test that stream worker assigns stream object to plugins for stream-level configuration access."""
         with app.app_context():
+            from unittest.mock import AsyncMock, Mock, patch
+
             from database import db
             from models.stream import Stream
             from models.tak_server import TakServer
-            from services.session_manager import SessionManager
             from services.database_manager import DatabaseManager
-            from unittest.mock import Mock, AsyncMock, patch
+            from services.session_manager import SessionManager
 
             # Create test TAK server
             tak_server = TakServer(
@@ -921,22 +928,27 @@ class TestStreamWorkerConfiguration:
             # Mock plugin manager to capture the plugin and verify stream assignment
             created_plugin = AsyncMock()
             created_plugin.validate_config.return_value = True
-            created_plugin.fetch_locations.return_value = []  # Return empty list for async method
+            created_plugin.fetch_locations.return_value = (
+                []
+            )  # Return empty list for async method
 
             def mock_get_plugin(plugin_type, config):
                 return created_plugin
 
-            with patch(
-                "services.stream_worker.get_plugin_manager"
-            ) as mock_plugin_manager, patch(
-                "services.stream_worker.cot_service"
-            ) as mock_cot_service:
+            with (
+                patch(
+                    "services.stream_worker.get_plugin_manager"
+                ) as mock_plugin_manager,
+                patch("services.stream_worker.cot_service") as mock_cot_service,
+            ):
                 mock_plugin_manager.return_value.get_plugin = mock_get_plugin
-                
+
                 # Mock COT service to prevent TAK server connections
                 mock_cot_service.start_worker = AsyncMock(return_value=True)
                 mock_cot_service.is_worker_running.return_value = True
-                mock_cot_service.get_worker_status.return_value = {"worker_running": True}
+                mock_cot_service.get_worker_status.return_value = {
+                    "worker_running": True
+                }
                 mock_cot_service.enqueue_event = AsyncMock(return_value=True)
 
                 # Create stream worker
@@ -957,12 +969,13 @@ class TestStreamWorkerConfiguration:
     ):
         """Test that stream worker handles missing stream-level fields gracefully."""
         with app.app_context():
+            from unittest.mock import AsyncMock, Mock, patch
+
             from database import db
             from models.stream import Stream
             from models.tak_server import TakServer
-            from services.session_manager import SessionManager
             from services.database_manager import DatabaseManager
-            from unittest.mock import Mock, AsyncMock, patch
+            from services.session_manager import SessionManager
 
             # Create test TAK server
             tak_server = TakServer(
@@ -981,7 +994,7 @@ class TestStreamWorkerConfiguration:
                 plugin_type="garmin",
                 tak_server_id=tak_server.id,
                 cot_type_mode="stream",  # Add default stream mode
-                cot_type="a-f-G-U-C",   # Add default CoT type
+                cot_type="a-f-G-U-C",  # Add default CoT type
                 plugin_config='{"url": "https://test.com"}',
             )
             db_session.add(stream)
@@ -1000,24 +1013,31 @@ class TestStreamWorkerConfiguration:
                 captured_config.clear()
                 captured_config.update(config)
                 mock_plugin = AsyncMock()
+
                 # Make validate_config synchronous
                 def sync_validate_config():
                     return True
+
                 mock_plugin.validate_config = sync_validate_config
-                mock_plugin.fetch_locations.return_value = []  # Return empty list for async method
+                mock_plugin.fetch_locations.return_value = (
+                    []
+                )  # Return empty list for async method
                 return mock_plugin
 
-            with patch(
-                "services.stream_worker.get_plugin_manager"
-            ) as mock_plugin_manager, patch(
-                "services.stream_worker.cot_service"
-            ) as mock_cot_service:
+            with (
+                patch(
+                    "services.stream_worker.get_plugin_manager"
+                ) as mock_plugin_manager,
+                patch("services.stream_worker.cot_service") as mock_cot_service,
+            ):
                 mock_plugin_manager.return_value.get_plugin = mock_get_plugin
-                
+
                 # Mock COT service to prevent TAK server connections
                 mock_cot_service.start_worker = AsyncMock(return_value=True)
                 mock_cot_service.is_worker_running.return_value = True
-                mock_cot_service.get_worker_status.return_value = {"worker_running": True}
+                mock_cot_service.get_worker_status.return_value = {
+                    "worker_running": True
+                }
                 mock_cot_service.enqueue_event = AsyncMock(return_value=True)
 
                 # Create stream worker
@@ -1028,11 +1048,11 @@ class TestStreamWorkerConfiguration:
 
                 # Assert plugin was initialized with plugin config (not stream config)
                 assert result is True
-# Debug: captured_config should contain plugin-specific config
+                # Debug: captured_config should contain plugin-specific config
                 # Plugin config should contain the original plugin configuration
                 assert "url" in captured_config
                 assert captured_config["url"] == "https://test.com"
-                
+
                 # Stream-level config should be accessible through the worker's stream object
                 assert worker.stream.cot_type_mode == "stream"
                 assert worker.stream.cot_type == "a-f-G-U-C"
@@ -1043,12 +1063,13 @@ class TestStreamWorkerConfiguration:
     ):
         """Test that stream worker preserves plugin-specific configuration when adding stream config."""
         with app.app_context():
+            from unittest.mock import AsyncMock, Mock, patch
+
             from database import db
             from models.stream import Stream
             from models.tak_server import TakServer
-            from services.session_manager import SessionManager
             from services.database_manager import DatabaseManager
-            from unittest.mock import Mock, AsyncMock, patch
+            from services.session_manager import SessionManager
 
             # Create test TAK server
             tak_server = TakServer(
@@ -1094,24 +1115,31 @@ class TestStreamWorkerConfiguration:
             def mock_get_plugin(plugin_type, config):
                 captured_config.update(config)
                 mock_plugin = AsyncMock()
+
                 # Make validate_config synchronous
                 def sync_validate_config():
                     return True
+
                 mock_plugin.validate_config = sync_validate_config
-                mock_plugin.fetch_locations.return_value = []  # Return empty list for async method
+                mock_plugin.fetch_locations.return_value = (
+                    []
+                )  # Return empty list for async method
                 return mock_plugin
 
-            with patch(
-                "services.stream_worker.get_plugin_manager"
-            ) as mock_plugin_manager, patch(
-                "services.stream_worker.cot_service"
-            ) as mock_cot_service:
+            with (
+                patch(
+                    "services.stream_worker.get_plugin_manager"
+                ) as mock_plugin_manager,
+                patch("services.stream_worker.cot_service") as mock_cot_service,
+            ):
                 mock_plugin_manager.return_value.get_plugin = mock_get_plugin
-                
+
                 # Mock COT service to prevent TAK server connections
                 mock_cot_service.start_worker = AsyncMock(return_value=True)
                 mock_cot_service.is_worker_running.return_value = True
-                mock_cot_service.get_worker_status.return_value = {"worker_running": True}
+                mock_cot_service.get_worker_status.return_value = {
+                    "worker_running": True
+                }
                 mock_cot_service.enqueue_event = AsyncMock(return_value=True)
 
                 # Create stream worker
@@ -1124,7 +1152,7 @@ class TestStreamWorkerConfiguration:
                 assert result is True
 
                 # Plugin-specific configuration should be preserved in plugin config
-# Debug: captured_config should contain plugin-specific config
+                # Debug: captured_config should contain plugin-specific config
                 assert "api_url" in captured_config
                 assert captured_config["api_url"] == "https://test.com"
                 assert "timeout" in captured_config
@@ -1145,12 +1173,13 @@ class TestStreamWorkerCotTypeModeIntegration:
     async def test_stream_worker_deepstate_plugin_integration(self, app, db_session):
         """Test that stream worker properly configures deepstate plugin with CoT type mode."""
         with app.app_context():
+            from unittest.mock import AsyncMock, Mock, patch
+
             from database import db
             from models.stream import Stream
             from models.tak_server import TakServer
-            from services.session_manager import SessionManager
             from services.database_manager import DatabaseManager
-            from unittest.mock import Mock, AsyncMock, patch
+            from services.session_manager import SessionManager
 
             # Create test TAK server
             tak_server = TakServer(
@@ -1205,30 +1234,37 @@ class TestStreamWorkerCotTypeModeIntegration:
                     def mock_get_plugin(plugin_type, config):
                         if plugin_type == "deepstate":
                             plugin = DeepstatePlugin(config)
+
                             # Mock the get_decrypted_config to include stream-level config
                             def get_decrypted_config():
                                 result = config.copy()
-                                result["cot_type_mode"] = case["cot_type_mode"] 
+                                result["cot_type_mode"] = case["cot_type_mode"]
                                 result["cot_type"] = case["cot_type"]
                                 return result
+
                             plugin.get_decrypted_config = get_decrypted_config
+
                             # Make validate_config synchronous
                             def sync_validate_config():
                                 return True
+
                             plugin.validate_config = sync_validate_config
                             return plugin
                         return None
 
-                    with patch(
-                        "services.stream_worker.get_plugin_manager"
-                    ) as mock_plugin_manager, patch(
-                        "services.stream_worker.cot_service"
-                    ) as mock_cot_service:
+                    with (
+                        patch(
+                            "services.stream_worker.get_plugin_manager"
+                        ) as mock_plugin_manager,
+                        patch("services.stream_worker.cot_service") as mock_cot_service,
+                    ):
                         mock_plugin_manager.return_value.get_plugin = mock_get_plugin
-                        
+
                         # Mock COT service to prevent TAK server connections
                         mock_cot_service.return_value.start_worker.return_value = True
-                        mock_cot_service.return_value.is_worker_running.return_value = True
+                        mock_cot_service.return_value.is_worker_running.return_value = (
+                            True
+                        )
 
                         # Create stream worker
                         worker = StreamWorker(

@@ -29,7 +29,6 @@ Version: 1.0.0
 
 import base64
 import json
-
 # Standard library imports
 import logging
 import secrets
@@ -41,13 +40,13 @@ from typing import Any, Dict, List, Optional, Tuple
 # Third-party imports
 import requests
 
+from services.logging_service import get_module_logger
+from utils.config_helpers import ConfigHelper
+
 try:
     import jwt
-    from jwt.exceptions import (
-        ExpiredSignatureError,
-        InvalidSignatureError,
-        InvalidTokenError,
-    )
+    from jwt.exceptions import (ExpiredSignatureError, InvalidSignatureError,
+                                InvalidTokenError)
 
     JWT_AVAILABLE = True
 except ImportError:
@@ -65,17 +64,13 @@ except ImportError:
 # Local application imports
 from models.user import AuthProvider, User, UserRole
 
-from .base_provider import (
-    AuthenticationException,
-    AuthenticationResponse,
-    AuthenticationResult,
-    BaseAuthenticationProvider,
-    ProviderConfigurationException,
-    ProviderConnectionException,
-)
+from .base_provider import (AuthenticationException, AuthenticationResponse,
+                            AuthenticationResult, BaseAuthenticationProvider,
+                            ProviderConfigurationException,
+                            ProviderConnectionException)
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class OIDCAuthProvider(BaseAuthenticationProvider):
@@ -94,21 +89,29 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
                 "cryptography library is not available. Install with: pip install cryptography"
             )
 
-        super().__init__(AuthProvider.OIDC, config)
+        # Initialize config and determine active provider before base class validation
+        if config is None:
+            config = {}
+        self.config = config
 
-        # Provider configuration
-        self.providers_config = self.config.get("providers", {})
+        # Provider configuration using ConfigHelper
+        helper = ConfigHelper(config)
+        self.providers_config = helper.get("providers", {})
         self.active_provider = self._determine_active_provider()
 
         if not self.active_provider:
             raise ProviderConfigurationException("No OIDC provider is enabled")
 
-        # Current provider config
-        self.provider_config = self.providers_config.get(self.active_provider, {})
-        self.client_id = self.provider_config.get("client_id", "")
-        self.client_secret = self.provider_config.get("client_secret", "")
-        self.discovery_url = self.provider_config.get("discovery_url", "")
-        self.scope = self.provider_config.get("scope", "openid profile email")
+        # Set up provider-specific properties before base class validation
+        provider_helper = ConfigHelper(
+            self.providers_config.get(self.active_provider, {})
+        )
+        self.client_id = provider_helper.get("client_id", "")
+        self.client_secret = provider_helper.get("client_secret", "")
+        self.discovery_url = provider_helper.get("discovery_url", "")
+        self.scope = provider_helper.get("scope", "openid profile email")
+
+        super().__init__(AuthProvider.OIDC, config)
 
         # Role mapping
         self.role_mappings = self.config.get("role_mappings", {})

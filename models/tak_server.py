@@ -22,7 +22,7 @@ class TakServer(db.Model, TimestampMixin):
     name = db.Column(db.String(100), nullable=False, unique=True)
     host = db.Column(db.String(255), nullable=False)
     port = db.Column(db.Integer, nullable=False)
-    protocol = db.Column(db.String(10), nullable=False, default="tls")
+    protocol = db.Column(db.String(10), nullable=False, default="tls", index=True)
 
     # TLS Configuration - Updated for P12 support
     cert_p12 = db.Column(db.LargeBinary)  # Store P12 certificate file as binary

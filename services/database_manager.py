@@ -31,12 +31,14 @@ from typing import TYPE_CHECKING, List, Optional
 # Third-party imports
 from sqlalchemy.exc import SQLAlchemyError
 
+from services.logging_service import get_module_logger
+
 # Local application imports
 if TYPE_CHECKING:
     from models.stream import Stream
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class DatabaseManager:

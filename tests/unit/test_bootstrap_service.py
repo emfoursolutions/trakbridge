@@ -18,13 +18,14 @@ Version: 1.0.0
 import os
 import tempfile
 from datetime import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from database import db
-from models.user import User, UserRole, AccountStatus, AuthProvider
-from services.auth.bootstrap_service import BootstrapService, get_bootstrap_service
+from models.user import AccountStatus, AuthProvider, User, UserRole
+from services.auth.bootstrap_service import (BootstrapService,
+                                             get_bootstrap_service)
 
 
 class TestBootstrapServiceCore:

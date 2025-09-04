@@ -6,15 +6,14 @@ and category-based filtering functionality. The tests mock the plugin manager to
 dependencies on actual plugins and focus on testing the category service logic.
 """
 
+from unittest.mock import MagicMock, Mock
+
 import pytest
-from unittest.mock import Mock, MagicMock
-from services.plugin_category_service import (
-    PluginCategoryService,
-    CategoryInfo,
-    PluginInfo,
-    get_category_service,
-    initialize_category_service,
-)
+
+from services.plugin_category_service import (CategoryInfo,
+                                              PluginCategoryService,
+                                              PluginInfo, get_category_service,
+                                              initialize_category_service)
 
 
 class TestPluginCategoryService:

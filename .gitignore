@@ -54,6 +54,7 @@ local_*.yaml
 
 # Dev related documents
 dev/
+CLAUDE.md
 
 # Database init scripts - track base files but ignore local customizations
 docker/init-scripts/*.local.sql

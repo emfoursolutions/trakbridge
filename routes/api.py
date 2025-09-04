@@ -27,9 +27,7 @@ Version: {{VERSION}}
 
 # Third-party imports
 import asyncio
-
 # Standard library imports
-import logging
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -39,16 +37,13 @@ from flask import Blueprint, current_app, jsonify, request
 
 # Local application imports
 from database import db
-
 # Authentication imports
-from services.auth import (
-    api_key_or_auth_required,
-    optional_auth,
-    require_auth,
-    require_permission,
-)
+from services.auth import (api_key_or_auth_required, optional_auth,
+                           require_auth, require_permission)
 from services.connection_test_service import ConnectionTestService
 from services.health_service import health_service
+# Module-level logger
+from services.logging_service import get_module_logger
 from services.plugin_category_service import get_category_service
 from services.stream_config_service import StreamConfigService
 from services.stream_display_service import StreamDisplayService
@@ -57,8 +52,7 @@ from services.stream_status_service import StreamStatusService
 from services.version import format_version, get_version
 from utils.app_helpers import get_plugin_manager
 
-# Module-level logger
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 bp = Blueprint("api", __name__)
 
@@ -701,9 +695,12 @@ def discover_trackers():
         if not data:
             return jsonify({"error": "No data provided"}), 400
 
-        plugin_type = data.get("plugin_type")
-        plugin_config = data.get("plugin_config", {})
-        stream_id = data.get("stream_id")  # Optional for edit mode
+        from utils.config_helpers import ConfigHelper
+
+        helper = ConfigHelper(data)
+        plugin_type = helper.get("plugin_type")
+        plugin_config = helper.get("plugin_config", {})
+        stream_id = helper.get("stream_id")  # Optional for edit mode
 
         if not plugin_type:
             return jsonify({"error": "Plugin type is required"}), 400
@@ -788,8 +785,8 @@ def discover_trackers():
 def get_callsign_mappings(stream_id):
     """Get callsign mappings for a stream"""
     try:
-        from models.stream import Stream
         from models.callsign_mapping import CallsignMapping
+        from models.stream import Stream
 
         stream = Stream.query.get_or_404(stream_id)
         mappings = CallsignMapping.query.filter_by(stream_id=stream_id).all()
@@ -816,8 +813,8 @@ def get_callsign_mappings(stream_id):
 def update_callsign_mappings(stream_id):
     """Create or update callsign mappings for a stream"""
     try:
-        from models.stream import Stream
         from models.callsign_mapping import CallsignMapping
+        from models.stream import Stream
 
         data = request.get_json()
         if not data:
@@ -826,15 +823,22 @@ def update_callsign_mappings(stream_id):
         stream = Stream.query.get_or_404(stream_id)
 
         # Update stream callsign configuration
-        stream.enable_callsign_mapping = data.get("enable_callsign_mapping", False)
-        stream.callsign_identifier_field = data.get("callsign_identifier_field")
-        stream.callsign_error_handling = data.get("callsign_error_handling", "fallback")
-        stream.enable_per_callsign_cot_types = data.get(
+        from utils.config_helpers import ConfigHelper
+
+        helper = ConfigHelper(data)
+        stream.enable_callsign_mapping = helper.get_bool(
+            "enable_callsign_mapping", False
+        )
+        stream.callsign_identifier_field = helper.get("callsign_identifier_field")
+        stream.callsign_error_handling = helper.get(
+            "callsign_error_handling", "fallback"
+        )
+        stream.enable_per_callsign_cot_types = helper.get_bool(
             "enable_per_callsign_cot_types", False
         )
 
         # Handle mappings if provided
-        mappings_data = data.get("mappings", [])
+        mappings_data = helper.get_list("mappings", [])
 
         if mappings_data:
             # Clear existing mappings

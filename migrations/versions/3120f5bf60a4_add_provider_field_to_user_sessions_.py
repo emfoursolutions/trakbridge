@@ -6,20 +6,17 @@ Create Date: 2025-07-28 09:51:48.726581
 
 """
 
+from enum import Enum
+
 import sqlalchemy as sa
 from alembic import op
-from enum import Enum
-from migrations.migration_utils import (
-    table_exists,
-    column_exists,
-    safe_add_column,
-    safe_drop_column,
-    safe_execute,
-    get_dialect,
-    get_enum_column,
-    add_enum_check_constraint,
-    drop_enum_check_constraint,
-)
+
+from migrations.migration_utils import (add_enum_check_constraint,
+                                        column_exists,
+                                        drop_enum_check_constraint,
+                                        get_dialect, get_enum_column,
+                                        safe_add_column, safe_drop_column,
+                                        safe_execute, table_exists)
 
 
 class AuthProvider(Enum):

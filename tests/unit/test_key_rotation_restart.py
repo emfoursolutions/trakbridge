@@ -12,9 +12,10 @@ Created: 2025-08-12
 
 import os
 import subprocess
-import pytest
-from unittest.mock import patch, MagicMock, mock_open
 from pathlib import Path
+from unittest.mock import MagicMock, mock_open, patch
+
+import pytest
 
 from services.key_rotation_service import KeyRotationService
 
@@ -278,8 +279,9 @@ class TestRestartInfoEndpoint:
         # Test the endpoint logic directly (without decorator)
         with app.test_request_context():
             # Import and get the underlying function logic
-            from routes.admin import get_key_rotation_service
             from flask import jsonify
+
+            from routes.admin import get_key_rotation_service
 
             # Replicate the endpoint logic without the decorator
             try:
@@ -312,8 +314,9 @@ class TestRestartInfoEndpoint:
         # Test the endpoint logic directly (without decorator)
         with app.test_request_context():
             # Import and get the underlying function logic
-            from routes.admin import get_key_rotation_service
             from flask import jsonify
+
+            from routes.admin import get_key_rotation_service
 
             # Replicate the endpoint logic without the decorator
             try:

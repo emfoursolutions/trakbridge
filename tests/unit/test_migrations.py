@@ -24,14 +24,15 @@ Last Modified: 2025-08-14
 Version: 1.0.0
 """
 
+from enum import Enum
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
 import sqlalchemy as sa
-from enum import Enum
-from unittest.mock import Mock, patch, MagicMock
 from alembic import op
 
 # Import the migration utilities and test enums
-from migrations.migration_utils import get_enum_column, get_dialect
+from migrations.migration_utils import get_dialect, get_enum_column
 
 
 class MockProperEnum(Enum):

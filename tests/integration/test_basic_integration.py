@@ -1,9 +1,10 @@
 """Basic integration tests for TrakBridge."""
 
 import pytest
+
+from app import create_app
 from database import db
 from models.stream import Stream
-from app import create_app
 
 
 @pytest.fixture

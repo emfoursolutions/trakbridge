@@ -40,12 +40,8 @@ import bcrypt
 # Local application imports
 from models.user import AccountStatus, AuthProvider, User, UserRole
 
-from .base_provider import (
-    AuthenticationException,
-    AuthenticationResponse,
-    AuthenticationResult,
-    BaseAuthenticationProvider,
-)
+from .base_provider import (AuthenticationException, AuthenticationResponse,
+                            AuthenticationResult, BaseAuthenticationProvider)
 
 # Module-level logger
 logger = logging.getLogger(__name__)

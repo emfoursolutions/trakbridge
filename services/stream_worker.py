@@ -217,7 +217,7 @@ class StreamWorker:
             # Check if worker is already running
             worker_status = cot_service.get_worker_status(tak_server.id)
             if worker_status and worker_status.get("worker_running", False):
-                self.logger.info(
+                self.logger.debug(
                     f"Persistent worker already running for TAK server {tak_server.name}"
                 )
                 self._tak_worker_ensured = True
@@ -243,7 +243,7 @@ class StreamWorker:
             await self._test_persistent_connection()
 
             self._tak_worker_ensured = True
-            self.logger.info(
+            self.logger.debug(
                 f"Persistent worker ensured for TAK server {tak_server.name}"
             )
             return True
@@ -483,12 +483,12 @@ class StreamWorker:
             # This ensures the COT service uses the cot_type field from each location instead of stream default
             if cot_type_mode == "per_point" or bool(enable_per_cot_types):
                 cot_type_mode = "per_point"
-                self.logger.info(
+                self.logger.debug(
                     f"Using per_point mode (fresh config mode: {fresh_stream_config.get('cot_type_mode', 'stream')}, "
                     f"per-callsign CoT types enabled: {bool(enable_per_cot_types)})"
                 )
             else:
-                self.logger.info(
+                self.logger.debug(
                     f"Using stream mode (fresh config mode: {fresh_stream_config.get('cot_type_mode', 'stream')}, "
                     f"per-callsign CoT types enabled: {bool(enable_per_cot_types)})"
                 )
@@ -498,7 +498,7 @@ class StreamWorker:
 
             try:
                 stream_default_cot_type = self.stream.cot_type or "a-f-G-U-C"
-                self.logger.info(
+                self.logger.debug(
                     f"Creating COT events: mode='{cot_type_mode}', "
                     f"stream_default_cot_type='{stream_default_cot_type}', "
                     f"locations_count={len(locations)}"
@@ -506,7 +506,7 @@ class StreamWorker:
                 # Log first location's cot_type for debugging
                 if locations:
                     first_location_cot_type = locations[0].get("cot_type", "NOT_SET")
-                    self.logger.info(
+                    self.logger.debug(
                         f"First location cot_type: {first_location_cot_type}"
                     )
 
@@ -720,8 +720,8 @@ class StreamWorker:
     async def _get_fresh_stream_config(self) -> dict:
         """Get fresh stream configuration from database"""
         try:
-            from models.stream import Stream
             from database import db
+            from models.stream import Stream
 
             # Query fresh configuration from database
             fresh_stream = db.session.query(Stream).filter_by(id=self.stream.id).first()
@@ -755,8 +755,8 @@ class StreamWorker:
         """Load callsign mappings from database for this stream"""
         try:
             # Import here to avoid circular imports
-            from models.callsign_mapping import CallsignMapping
             from database import db
+            from models.callsign_mapping import CallsignMapping
 
             # Direct database query (same pattern as other services in codebase)
             mappings = (

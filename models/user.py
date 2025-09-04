@@ -27,7 +27,6 @@ Version: 1.0.0
 """
 
 import uuid
-
 # Standard library imports
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -86,7 +85,7 @@ class User(db.Model, TimestampMixin):
 
     # Authentication provider information
     auth_provider = Column(
-        SQLEnum(AuthProvider), nullable=False, default=AuthProvider.LOCAL
+        SQLEnum(AuthProvider), nullable=False, default=AuthProvider.LOCAL, index=True
     )
     provider_user_id = Column(
         String(255), nullable=True, index=True
@@ -99,7 +98,7 @@ class User(db.Model, TimestampMixin):
     # Authorization and status
     role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.USER)
     status = Column(
-        SQLEnum(AccountStatus), nullable=False, default=AccountStatus.ACTIVE
+        SQLEnum(AccountStatus), nullable=False, default=AccountStatus.ACTIVE, index=True
     )
 
     # Security and session management
@@ -445,7 +444,7 @@ class UserSession(db.Model, TimestampMixin):
 
     id = Column(Integer, primary_key=True)
     session_id = Column(String(255), unique=True, nullable=False, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     # Session information
     ip_address = Column(String(45), nullable=True)  # IPv6 compatible
@@ -453,13 +452,13 @@ class UserSession(db.Model, TimestampMixin):
     provider = Column(SQLEnum(AuthProvider), nullable=False, default=AuthProvider.LOCAL)
 
     # Session lifecycle
-    expires_at = Column(DateTime(timezone=True), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     last_activity = Column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True, index=True)
 
     # Provider-specific session data
     provider_session_data = Column(Text, nullable=True)  # JSON data from provider
@@ -586,4 +585,5 @@ class UserSession(db.Model, TimestampMixin):
             "is_active": self.is_active,
             "is_valid": self.is_valid(),
             "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
         }

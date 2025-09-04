@@ -1,10 +1,11 @@
 """Integration tests for callsign mapping functionality."""
 
-import pytest
 from unittest.mock import Mock
 
-from models.stream import Stream
+import pytest
+
 from models.callsign_mapping import CallsignMapping
+from models.stream import Stream
 from services.stream_worker import StreamWorker
 
 
@@ -327,12 +328,14 @@ class TestPhase5ApiServiceIntegration:
     def test_api_to_service_to_database_workflow(self, app, db_session):
         """Test complete API → Service → Database workflow - FAILING TEST FIRST"""
         with app.app_context():
-            from services.stream_operations_service import StreamOperationsService
-            from models.tak_server import TakServer
-            from models.stream import Stream
-            from models.callsign_mapping import CallsignMapping
-            from unittest.mock import Mock
             import uuid
+            from unittest.mock import Mock
+
+            from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
+            from models.tak_server import TakServer
+            from services.stream_operations_service import \
+                StreamOperationsService
 
             # Arrange: Create test TAK server
             tak_server = TakServer(
@@ -434,12 +437,14 @@ class TestPhase5ApiServiceIntegration:
     def test_service_error_handling_integration(self, app, db_session):
         """Test service error handling and rollback behavior - FAILING TEST FIRST"""
         with app.app_context():
-            from services.stream_operations_service import StreamOperationsService
-            from models.tak_server import TakServer
-            from models.stream import Stream
-            from models.callsign_mapping import CallsignMapping
-            from unittest.mock import Mock
             import uuid
+            from unittest.mock import Mock
+
+            from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
+            from models.tak_server import TakServer
+            from services.stream_operations_service import \
+                StreamOperationsService
 
             # Arrange: Create test setup
             tak_server = TakServer(
@@ -485,12 +490,14 @@ class TestPhase5ApiServiceIntegration:
     def test_callsign_mapping_crud_integration(self, app, db_session):
         """Test CRUD operations integration for callsign mappings - FAILING TEST FIRST"""
         with app.app_context():
-            from services.stream_operations_service import StreamOperationsService
-            from models.tak_server import TakServer
-            from models.stream import Stream
-            from models.callsign_mapping import CallsignMapping
-            from unittest.mock import Mock
             import uuid
+            from unittest.mock import Mock
+
+            from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
+            from models.tak_server import TakServer
+            from services.stream_operations_service import \
+                StreamOperationsService
 
             # Arrange: Create test stream
             tak_server = TakServer(
@@ -578,12 +585,14 @@ class TestPhase5ApiServiceIntegration:
     def test_cross_stream_isolation_integration(self, app, db_session):
         """Test that callsign mappings are properly isolated between streams - FAILING TEST FIRST"""
         with app.app_context():
-            from services.stream_operations_service import StreamOperationsService
-            from models.tak_server import TakServer
-            from models.stream import Stream
-            from models.callsign_mapping import CallsignMapping
-            from unittest.mock import Mock
             import uuid
+            from unittest.mock import Mock
+
+            from models.callsign_mapping import CallsignMapping
+            from models.stream import Stream
+            from models.tak_server import TakServer
+            from services.stream_operations_service import \
+                StreamOperationsService
 
             # Arrange: Create two separate streams
             tak_server = TakServer(

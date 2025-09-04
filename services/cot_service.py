@@ -41,6 +41,8 @@ from typing import Any, Dict, List, Optional, Tuple
 # Third-party imports
 from lxml import etree
 
+from services.logging_service import get_module_logger
+
 # PyTAK imports
 try:
     import pytak
@@ -54,7 +56,7 @@ except ImportError:
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class EnhancedCOTService:
@@ -160,7 +162,7 @@ class EnhancedCOTService:
         Returns:
             List of COT events as XML bytes
         """
-        logger.info(
+        logger.debug(
             f"create_cot_events called with: cot_type_mode='{cot_type_mode}', cot_type='{cot_type}', locations={len(locations)}"
         )
         if self.use_pytak:
