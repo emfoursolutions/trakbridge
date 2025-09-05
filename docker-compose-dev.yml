@@ -215,7 +215,7 @@ services:
 
   # MySQL database (optional)
   mysql:
-    image: mysql:11.0
+    image: mariadb:11.8
     container_name: ${COMPOSE_PROJECT_NAME:-trakbridge}-mysql
     restart: unless-stopped
     profiles:

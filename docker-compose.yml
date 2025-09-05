@@ -212,7 +212,7 @@ services:
   # MySQL Database (Optional)
   # =============================================================================
   mysql:
-    image: mysql:11.0
+    image: mariadb:11.8
     container_name: trakbridge-mysql
     restart: unless-stopped
     profiles: ["mysql"]
