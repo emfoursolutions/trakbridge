@@ -49,7 +49,6 @@
 - **Meaningful identifiers** instead of raw IMEIs or serial numbers
 - **Per-callsign COT types** for operational flexibility
 - **Live tracker discovery** with auto-assignment and refresh capabilities
-- **Zero performance impact** when feature disabled
 
 ### Code Quality & Refactoring
 **Systematic Codebase Optimization - Planning Complete**
