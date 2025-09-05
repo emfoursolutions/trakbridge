@@ -11,14 +11,19 @@ Last Modified: 2025-07-27
 """
 
 import datetime
+
 # Standard library imports
 import logging
 import os
 from typing import Optional
 
 # Local application imports
-from services.version import (get_build_info, get_version, get_version_info,
-                              is_development_build)
+from services.version import (
+    get_build_info,
+    get_version,
+    get_version_info,
+    is_development_build,
+)
 
 logger = logging.getLogger(__name__)
 

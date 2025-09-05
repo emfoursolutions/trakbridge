@@ -30,13 +30,17 @@ import pytest
 from flask import Flask
 
 from database import db
-from models.user import (AccountStatus, AuthProvider, User, UserRole,
-                         UserSession)
+from models.user import AccountStatus, AuthProvider, User, UserRole, UserSession
+
 # Import authentication components
 from services.auth.auth_manager import AuthenticationManager
-from services.auth.decorators import (admin_required, operator_required,
-                                      require_auth, require_permission,
-                                      require_role)
+from services.auth.decorators import (
+    admin_required,
+    operator_required,
+    require_auth,
+    require_permission,
+    require_role,
+)
 from services.auth.ldap_provider import LDAPAuthProvider
 from services.auth.local_provider import LocalAuthProvider
 from services.auth.oidc_provider import OIDCAuthProvider
@@ -541,8 +545,10 @@ class TestOIDCAuthProvider:
 
             # Import required classes
             from models.user import AuthProvider, User, UserRole
-            from services.auth.base_provider import (AuthenticationResponse,
-                                                     AuthenticationResult)
+            from services.auth.base_provider import (
+                AuthenticationResponse,
+                AuthenticationResult,
+            )
 
             with patch.object(provider, "_handle_authorization_code") as mock_handle:
                 # Mock the response to return a successful authentication
@@ -610,8 +616,10 @@ class TestAuthenticationManager:
 
             # Should try LDAP first, then fall back to local
             from models.user import AuthProvider
-            from services.auth.base_provider import (AuthenticationResponse,
-                                                     AuthenticationResult)
+            from services.auth.base_provider import (
+                AuthenticationResponse,
+                AuthenticationResult,
+            )
 
             failed_response = AuthenticationResponse(
                 result=AuthenticationResult.USER_NOT_FOUND, message="User not found"

@@ -48,8 +48,11 @@ from typing import Dict, List
 # Local application imports
 from services.cot_service import cot_service
 from services.database_manager import DatabaseManager
-from services.exceptions import (StreamConfigurationError, StreamManagerError,
-                                 StreamNotFoundError)
+from services.exceptions import (
+    StreamConfigurationError,
+    StreamManagerError,
+    StreamNotFoundError,
+)
 from services.logging_service import get_module_logger
 from services.session_manager import SessionManager
 from services.stream_worker import StreamWorker

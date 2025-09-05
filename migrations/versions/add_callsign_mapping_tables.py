@@ -18,10 +18,15 @@ Cross-database compatible with MySQL, PostgreSQL, and SQLite.
 import sqlalchemy as sa
 from alembic import op
 
-from migrations.migration_utils import (column_exists, safe_add_column,
-                                        safe_create_index, safe_create_table,
-                                        safe_drop_column, safe_drop_table,
-                                        table_exists)
+from migrations.migration_utils import (
+    column_exists,
+    safe_add_column,
+    safe_create_index,
+    safe_create_table,
+    safe_drop_column,
+    safe_drop_table,
+    table_exists,
+)
 
 # revision identifiers, used by Alembic.
 revision = "add_callsign_mapping_tables"

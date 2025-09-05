@@ -36,6 +36,7 @@ from datetime import datetime, timezone
 
 import defusedxml.ElementTree as DefusedET
 import pytak
+
 # Third-party imports
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes

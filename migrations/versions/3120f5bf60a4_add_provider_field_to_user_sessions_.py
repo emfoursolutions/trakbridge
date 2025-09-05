@@ -11,12 +11,17 @@ from enum import Enum
 import sqlalchemy as sa
 from alembic import op
 
-from migrations.migration_utils import (add_enum_check_constraint,
-                                        column_exists,
-                                        drop_enum_check_constraint,
-                                        get_dialect, get_enum_column,
-                                        safe_add_column, safe_drop_column,
-                                        safe_execute, table_exists)
+from migrations.migration_utils import (
+    add_enum_check_constraint,
+    column_exists,
+    drop_enum_check_constraint,
+    get_dialect,
+    get_enum_column,
+    safe_add_column,
+    safe_drop_column,
+    safe_execute,
+    table_exists,
+)
 
 
 class AuthProvider(Enum):

@@ -21,8 +21,7 @@ from database import db
 from models.callsign_mapping import CallsignMapping
 from models.stream import Stream
 from models.tak_server import TakServer
-from models.user import (AccountStatus, AuthProvider, User, UserRole,
-                         UserSession)
+from models.user import AccountStatus, AuthProvider, User, UserRole, UserSession
 
 
 class TestDatabaseRelationships:

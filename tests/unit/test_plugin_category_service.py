@@ -10,10 +10,13 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
-from services.plugin_category_service import (CategoryInfo,
-                                              PluginCategoryService,
-                                              PluginInfo, get_category_service,
-                                              initialize_category_service)
+from services.plugin_category_service import (
+    CategoryInfo,
+    PluginCategoryService,
+    PluginInfo,
+    get_category_service,
+    initialize_category_service,
+)
 
 
 class TestPluginCategoryService:

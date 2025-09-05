@@ -24,8 +24,7 @@ import pytest
 
 from database import db
 from models.user import AccountStatus, AuthProvider, User, UserRole
-from services.auth.bootstrap_service import (BootstrapService,
-                                             get_bootstrap_service)
+from services.auth.bootstrap_service import BootstrapService, get_bootstrap_service
 
 
 class TestBootstrapServiceCore:

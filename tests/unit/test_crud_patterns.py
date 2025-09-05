@@ -32,9 +32,11 @@ class TestServiceDatabasePatterns:
             service = StreamOperationsService(mock_stream_manager, db)
 
             # Check that service has proper database session access
-            assert hasattr(service, 'db'), "Service should have database access"
-            assert hasattr(service, '_get_session'), "Service should have session accessor method"
-            
+            assert hasattr(service, "db"), "Service should have database access"
+            assert hasattr(
+                service, "_get_session"
+            ), "Service should have session accessor method"
+
             # Verify the service can get database session
             session = service._get_session()
             assert session is not None, "Service should be able to get database session"
@@ -48,27 +50,27 @@ class TestServiceDatabasePatterns:
                 plugin_type="garmin",
                 poll_interval=120,
                 cot_type="a-f-G-U-C",
-                cot_stale_time=300
+                cot_stale_time=300,
             )
-            
+
             # Test model can be created and saved
             db.session.add(stream)
             db.session.commit()
-            
+
             # Test model can be retrieved
             retrieved = Stream.query.filter_by(name="Test Stream").first()
             assert retrieved is not None
             assert retrieved.name == "Test Stream"
             assert retrieved.plugin_type == "garmin"
-            
+
             # Test model can be updated
             retrieved.poll_interval = 180
             db.session.commit()
-            
+
             # Verify update
             updated = Stream.query.filter_by(name="Test Stream").first()
             assert updated.poll_interval == 180
-            
+
             # Clean up
             db.session.delete(updated)
             db.session.commit()
@@ -82,15 +84,13 @@ class TestDatabaseIntegrity:
         with app.app_context():
             # Test that we can create and rollback transactions
             stream = Stream(
-                name="Rollback Test",
-                plugin_type="garmin", 
-                poll_interval=120
+                name="Rollback Test", plugin_type="garmin", poll_interval=120
             )
-            
+
             db.session.add(stream)
             # Don't commit - test rollback
             db.session.rollback()
-            
+
             # Should not exist after rollback
             found = Stream.query.filter_by(name="Rollback Test").first()
             assert found is None, "Stream should not exist after rollback"
@@ -103,13 +103,13 @@ class TestDatabaseIntegrity:
                 name="Validation Test",
                 plugin_type="garmin",
                 poll_interval=60,  # Valid value
-                cot_stale_time=300
+                cot_stale_time=300,
             )
-            
+
             # Should be able to create valid model
             db.session.add(stream)
             db.session.commit()
-            
+
             # Clean up
             db.session.delete(stream)
             db.session.commit()

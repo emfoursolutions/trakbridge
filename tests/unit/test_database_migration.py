@@ -25,10 +25,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from utils.database_helpers import (DatabaseHelper, create_record,
-                                    find_by_field, find_by_id,
-                                    get_stream_helper, get_tak_server_helper,
-                                    get_user_helper, safe_database_operation)
+from utils.database_helpers import (
+    DatabaseHelper,
+    create_record,
+    find_by_field,
+    find_by_id,
+    get_stream_helper,
+    get_tak_server_helper,
+    get_user_helper,
+    safe_database_operation,
+)
 
 
 class TestDatabaseHelperImports:
@@ -276,8 +282,7 @@ class TestFutureDatabaseMigrationReadiness:
         assert db is not None  # Existing pattern
 
         # New patterns should also be available
-        from utils.database_helpers import (database_transaction,
-                                            safe_database_operation)
+        from utils.database_helpers import database_transaction, safe_database_operation
 
         assert callable(database_transaction)
         assert callable(safe_database_operation)

@@ -9,8 +9,12 @@ import pytest
 import yaml
 
 from config.base import BaseConfig
-from config.environments import (DevelopmentConfig, ProductionConfig,
-                                 TestingConfig, get_config)
+from config.environments import (
+    DevelopmentConfig,
+    ProductionConfig,
+    TestingConfig,
+    get_config,
+)
 from utils.config_manager import ConfigManager, ConfigValidationError
 
 

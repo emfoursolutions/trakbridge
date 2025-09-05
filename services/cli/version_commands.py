@@ -19,8 +19,7 @@ from flask import current_app
 from flask.cli import with_appcontext
 
 # Import unified version module
-from services.version import (_get_version_instance, get_development_version,
-                              get_version)
+from services.version import _get_version_instance, get_development_version, get_version
 
 
 @click.group()

@@ -19,8 +19,7 @@ from database import db
 from models.callsign_mapping import CallsignMapping
 from models.stream import Stream
 from models.tak_server import TakServer
-from models.user import (AccountStatus, AuthProvider, User, UserRole,
-                         UserSession)
+from models.user import AccountStatus, AuthProvider, User, UserRole, UserSession
 
 
 class TestStandardizedModelMethods:
@@ -122,14 +121,19 @@ class TestStandardizedModelMethods:
             # Plugin config should be masked in safe version, full in sensitive version
             safe_config_str = str(stream_dict_safe.get("plugin_config", {}))
             full_config_str = str(stream_dict_full.get("plugin_config", {}))
-            
-            assert "••••••••" in safe_config_str, "Safe dict should mask sensitive config values"
-            
+
+            assert (
+                "••••••••" in safe_config_str
+            ), "Safe dict should mask sensitive config values"
+
             # In sensitive mode, should either show decrypted value OR encrypted value (if decryption fails in CI)
             # The key test is that it's different from the masked version and contains some form of the password
-            assert safe_config_str != full_config_str, "Full dict should differ from safe dict"
-            assert ("secret_password" in full_config_str or "ENC:v1:" in full_config_str), \
-                "Full dict should include either decrypted password or encrypted value"
+            assert (
+                safe_config_str != full_config_str
+            ), "Full dict should differ from safe dict"
+            assert (
+                "secret_password" in full_config_str or "ENC:v1:" in full_config_str
+            ), "Full dict should include either decrypted password or encrypted value"
 
     def test_standardized_model_repr_methods(self, app, db_session):
         """Test that all models have consistent and informative __repr__ methods."""
@@ -415,7 +419,7 @@ class TestModelValidationPatterns:
             # Add session to database session so relationships can be resolved
             db_session.add(session)
             db_session.flush()
-            
+
             assert session.user == local_user
             assert session.ip_address == "192.168.1.1"
 

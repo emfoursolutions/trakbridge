@@ -35,6 +35,7 @@ import json
 import logging
 import ssl
 from datetime import datetime, timezone
+
 # Third-party imports
 from typing import Any, Dict, List
 
@@ -42,8 +43,12 @@ import aiohttp
 import certifi
 
 # Local application imports
-from plugins.base_plugin import (BaseGPSPlugin, CallsignMappable,
-                                 FieldMetadata, PluginConfigField)
+from plugins.base_plugin import (
+    BaseGPSPlugin,
+    CallsignMappable,
+    FieldMetadata,
+    PluginConfigField,
+)
 from services.logging_service import get_module_logger
 
 # Module-level logger

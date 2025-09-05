@@ -18,19 +18,35 @@ Version: 1.0.0
 
 # Authentication manager
 from .auth_manager import AuthenticationManager
+
 # Base authentication components
-from .base_provider import (AuthenticationException, AuthenticationResponse,
-                            AuthenticationResult, BaseAuthenticationProvider,
-                            ProviderConfigurationException,
-                            ProviderConnectionException)
+from .base_provider import (
+    AuthenticationException,
+    AuthenticationResponse,
+    AuthenticationResult,
+    BaseAuthenticationProvider,
+    ProviderConfigurationException,
+    ProviderConnectionException,
+)
+
 # Authentication decorators
-from .decorators import (admin_required, api_key_or_auth_required,
-                         create_auth_context_processor, get_current_user,
-                         get_user_permissions, is_authenticated,
-                         login_required_json, logout_user, operator_required,
-                         optional_auth, require_auth, require_permission,
-                         require_role)
+from .decorators import (
+    admin_required,
+    api_key_or_auth_required,
+    create_auth_context_processor,
+    get_current_user,
+    get_user_permissions,
+    is_authenticated,
+    login_required_json,
+    logout_user,
+    operator_required,
+    optional_auth,
+    require_auth,
+    require_permission,
+    require_role,
+)
 from .ldap_provider import LDAPAuthProvider
+
 # Authentication providers
 from .local_provider import LocalAuthProvider, PasswordPolicyViolation
 from .oidc_provider import OIDCAuthProvider

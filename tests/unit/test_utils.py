@@ -72,8 +72,7 @@ class TestSecurityUtilities:
             assert bcrypt is not None
         except ImportError:
             # If bcrypt not available, ensure werkzeug security is available
-            from werkzeug.security import (check_password_hash,
-                                           generate_password_hash)
+            from werkzeug.security import check_password_hash, generate_password_hash
 
             test_password = "testpassword123"
             hashed = generate_password_hash(test_password)

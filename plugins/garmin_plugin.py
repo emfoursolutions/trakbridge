@@ -22,8 +22,12 @@ import certifi
 import defusedxml.ElementTree as ET
 from fastkml import kml
 
-from plugins.base_plugin import (BaseGPSPlugin, CallsignMappable,
-                                 FieldMetadata, PluginConfigField)
+from plugins.base_plugin import (
+    BaseGPSPlugin,
+    CallsignMappable,
+    FieldMetadata,
+    PluginConfigField,
+)
 from services.logging_service import get_module_logger
 
 logger = get_module_logger(__name__)

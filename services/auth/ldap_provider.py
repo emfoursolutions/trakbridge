@@ -40,10 +40,14 @@ from models.user import AuthProvider, User, UserRole
 from services.logging_service import get_module_logger
 from utils.config_helpers import ConfigHelper
 
-from .base_provider import (AuthenticationException, AuthenticationResponse,
-                            AuthenticationResult, BaseAuthenticationProvider,
-                            ProviderConfigurationException,
-                            ProviderConnectionException)
+from .base_provider import (
+    AuthenticationException,
+    AuthenticationResponse,
+    AuthenticationResult,
+    BaseAuthenticationProvider,
+    ProviderConfigurationException,
+    ProviderConnectionException,
+)
 
 # Third-party imports
 LDAP3_AVAILABLE = importlib.util.find_spec("ldap3") is not None

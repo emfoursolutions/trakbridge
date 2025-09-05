@@ -334,8 +334,7 @@ class TestPhase5ApiServiceIntegration:
             from models.callsign_mapping import CallsignMapping
             from models.stream import Stream
             from models.tak_server import TakServer
-            from services.stream_operations_service import \
-                StreamOperationsService
+            from services.stream_operations_service import StreamOperationsService
 
             # Arrange: Create test TAK server
             tak_server = TakServer(
@@ -443,8 +442,7 @@ class TestPhase5ApiServiceIntegration:
             from models.callsign_mapping import CallsignMapping
             from models.stream import Stream
             from models.tak_server import TakServer
-            from services.stream_operations_service import \
-                StreamOperationsService
+            from services.stream_operations_service import StreamOperationsService
 
             # Arrange: Create test setup
             tak_server = TakServer(
@@ -496,8 +494,7 @@ class TestPhase5ApiServiceIntegration:
             from models.callsign_mapping import CallsignMapping
             from models.stream import Stream
             from models.tak_server import TakServer
-            from services.stream_operations_service import \
-                StreamOperationsService
+            from services.stream_operations_service import StreamOperationsService
 
             # Arrange: Create test stream
             tak_server = TakServer(
@@ -591,8 +588,7 @@ class TestPhase5ApiServiceIntegration:
             from models.callsign_mapping import CallsignMapping
             from models.stream import Stream
             from models.tak_server import TakServer
-            from services.stream_operations_service import \
-                StreamOperationsService
+            from services.stream_operations_service import StreamOperationsService
 
             # Arrange: Create two separate streams
             tak_server = TakServer(

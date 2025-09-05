@@ -11,8 +11,12 @@ from datetime import datetime, timezone
 import sqlalchemy as sa
 from alembic import op
 
-from migrations.migration_utils import (safe_create_index, safe_drop_table,
-                                        safe_execute, table_exists)
+from migrations.migration_utils import (
+    safe_create_index,
+    safe_drop_table,
+    safe_execute,
+    table_exists,
+)
 
 # revision identifiers, used by Alembic.
 revision = "add_timezone_to_user_sessions"

@@ -13,6 +13,7 @@ Version: {{VERSION}}
 # Standard library imports
 from dataclasses import dataclass, field
 from enum import Enum
+
 # Third-party imports
 from typing import Any, Dict, List, Optional
 

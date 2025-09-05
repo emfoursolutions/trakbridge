@@ -27,6 +27,7 @@ Version: {{VERSION}}
 
 # Third-party imports
 import asyncio
+
 # Standard library imports
 import threading
 import time
@@ -37,11 +38,17 @@ from flask import Blueprint, current_app, jsonify, request
 
 # Local application imports
 from database import db
+
 # Authentication imports
-from services.auth import (api_key_or_auth_required, optional_auth,
-                           require_auth, require_permission)
+from services.auth import (
+    api_key_or_auth_required,
+    optional_auth,
+    require_auth,
+    require_permission,
+)
 from services.connection_test_service import ConnectionTestService
 from services.health_service import health_service
+
 # Module-level logger
 from services.logging_service import get_module_logger
 from services.plugin_category_service import get_category_service

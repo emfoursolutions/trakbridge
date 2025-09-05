@@ -13,8 +13,12 @@ Phase 4: Database Model Optimization - Performance Indexes
 import sqlalchemy as sa
 from alembic import op
 
-from migrations.migration_utils import (column_exists, index_exists,
-                                        safe_create_index, table_exists)
+from migrations.migration_utils import (
+    column_exists,
+    index_exists,
+    safe_create_index,
+    table_exists,
+)
 
 # revision identifiers, used by Alembic.
 revision = "add_database_performance_indexes"

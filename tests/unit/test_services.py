@@ -8,8 +8,7 @@ from services.encryption_service import EncryptionService
 from services.logging_service import setup_logging
 from services.stream_manager import StreamManager
 from services.stream_worker import StreamWorker
-from services.tak_servers_service import (TakServerConnectionTester,
-                                          TakServerService)
+from services.tak_servers_service import TakServerConnectionTester, TakServerService
 from services.version import get_version, get_version_info
 
 
@@ -566,8 +565,7 @@ class TestStreamOperationsServiceCallsign:
             from models.callsign_mapping import CallsignMapping
             from models.stream import Stream
             from models.tak_server import TakServer
-            from services.stream_operations_service import \
-                StreamOperationsService
+            from services.stream_operations_service import StreamOperationsService
 
             tak_server = TakServer(
                 name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
@@ -635,8 +633,7 @@ class TestStreamOperationsServiceCallsign:
             from models.callsign_mapping import CallsignMapping
             from models.stream import Stream
             from models.tak_server import TakServer
-            from services.stream_operations_service import \
-                StreamOperationsService
+            from services.stream_operations_service import StreamOperationsService
 
             tak_server = TakServer(
                 name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
@@ -686,8 +683,7 @@ class TestStreamOperationsServiceCallsign:
             from models.callsign_mapping import CallsignMapping
             from models.stream import Stream
             from models.tak_server import TakServer
-            from services.stream_operations_service import \
-                StreamOperationsService
+            from services.stream_operations_service import StreamOperationsService
 
             tak_server = TakServer(
                 name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
@@ -760,8 +756,7 @@ class TestStreamOperationsServiceCallsign:
             from models.callsign_mapping import CallsignMapping
             from models.stream import Stream
             from models.tak_server import TakServer
-            from services.stream_operations_service import \
-                StreamOperationsService
+            from services.stream_operations_service import StreamOperationsService
 
             tak_server = TakServer(
                 name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
@@ -824,8 +819,7 @@ class TestStreamOperationsServiceCallsign:
             from models.callsign_mapping import CallsignMapping
             from models.stream import Stream
             from models.tak_server import TakServer
-            from services.stream_operations_service import \
-                StreamOperationsService
+            from services.stream_operations_service import StreamOperationsService
 
             tak_server = TakServer(
                 name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087

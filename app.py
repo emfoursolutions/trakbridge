@@ -94,8 +94,10 @@ def initialize_database_safely():
 
     from flask_migrate import current, stamp, upgrade
 
-    from utils.database_error_formatter import (create_database_exception,
-                                                log_database_error)
+    from utils.database_error_formatter import (
+        create_database_exception,
+        log_database_error,
+    )
 
     try:
         # Check if migrations directory exists
@@ -208,8 +210,7 @@ def log_full_startup_info(app):
     """Log comprehensive startup information for the primary process"""
     try:
         from services.logging_service import log_primary_startup_banner
-        from services.version import (format_version, get_build_info,
-                                      get_version_info)
+        from services.version import format_version, get_build_info, get_version_info
 
         # Get worker count from multiple sources
         worker_count = get_worker_count()
@@ -388,8 +389,10 @@ def create_app(config_name=None):
         db.init_app(app)
         migrate.init_app(app, db)
     except Exception as db_init_error:
-        from utils.database_error_formatter import (create_database_exception,
-                                                    log_database_error)
+        from utils.database_error_formatter import (
+            create_database_exception,
+            log_database_error,
+        )
 
         log_database_error(db_init_error, "Database extension initialization")
         db_error = create_database_exception(db_init_error)
@@ -982,10 +985,13 @@ def setup_error_handlers(app):
     """Set up error handlers"""
 
     # Import database exception classes
-    from services.exceptions import (DatabaseAuthenticationError,
-                                     DatabaseConfigurationError,
-                                     DatabaseConnectionError, DatabaseError,
-                                     DatabaseNotFoundError)
+    from services.exceptions import (
+        DatabaseAuthenticationError,
+        DatabaseConfigurationError,
+        DatabaseConnectionError,
+        DatabaseError,
+        DatabaseNotFoundError,
+    )
     from utils.database_error_formatter import format_error_response
 
     @app.errorhandler(DatabaseConnectionError)
@@ -1098,7 +1104,9 @@ def setup_error_handlers(app):
         ):
             # This looks like a database error - convert it to user-friendly format
             from utils.database_error_formatter import (
-                create_database_exception, format_error_response)
+                create_database_exception,
+                format_error_response,
+            )
 
             try:
                 db_error = create_database_exception(e)

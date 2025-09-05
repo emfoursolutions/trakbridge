@@ -39,12 +39,15 @@ from typing import Any, Dict, List, Optional, Tuple
 from flask import current_app, request
 
 # Local application imports
-from models.user import (AccountStatus, AuthProvider, User, UserRole,
-                         UserSession)
+from models.user import AccountStatus, AuthProvider, User, UserRole, UserSession
 from utils.config_helpers import ConfigHelper, nested_config_get
 
-from .base_provider import (AuthenticationException, AuthenticationResponse,
-                            AuthenticationResult, BaseAuthenticationProvider)
+from .base_provider import (
+    AuthenticationException,
+    AuthenticationResponse,
+    AuthenticationResult,
+    BaseAuthenticationProvider,
+)
 
 # Module-level logger
 logger = logging.getLogger(__name__)
