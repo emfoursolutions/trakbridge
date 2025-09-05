@@ -149,6 +149,7 @@ def api_status():
         running_workers = len(stream_manager.workers)
     except ImportError:
         from services.stream_manager import stream_manager
+
         running_workers = 0
 
     return jsonify(
@@ -278,17 +279,19 @@ def readiness_check():
         result = get_cached_health_check(check_name, check_func)
 
         if result.get("status") != "healthy":
-            return jsonify({
-                "status": "not_ready",
-                "failed_check": check_name,
-                "error": result.get("error", "Unknown error"),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }), 503
+            return (
+                jsonify(
+                    {
+                        "status": "not_ready",
+                        "failed_check": check_name,
+                        "error": result.get("error", "Unknown error"),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                ),
+                503,
+            )
 
-    return jsonify({
-        "status": "ready",
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    })
+    return jsonify({"status": "ready", "timestamp": datetime.now(timezone.utc).isoformat()})
 
 
 @bp.route("/health/live")
