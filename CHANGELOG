@@ -1,3 +1,89 @@
+## [v1.0.0-rc.4] - 2025-09-05
+
+### Added
+- **Enhanced Plugin Architecture**
+  - Eliminated plugin warnings during health checks with defensive configuration access methods
+  - Added `get_stream_config_value()` and `log_config_source()` helper methods to BaseGPSPlugin
+  - Automatic production context detection for appropriate log levels
+  - Improved plugin lifecycle management with StreamWorker context marking
+
+- **Tracker Callsign Mapping System**
+  - Custom callsign assignment for individual GPS trackers (Garmin, SPOT, Traccar)
+  - Per-tracker COT type overrides for advanced operational flexibility
+  - Stream-isolated configurations with immediate tracker discovery
+  - Live tracker discovery with auto-assignment and refresh capabilities
+
+- **Code Quality & Refactoring Planning**
+  - Comprehensive analysis of logging rationalization opportunities (56+ files)
+  - Configuration pattern standardization plan (19 files)
+  - Database operation pattern extraction (24+ files)
+  - Import optimization and dependency consolidation planning
+
+### Changed
+- **Database Concurrency Improvements**
+  - Resolved MySQL 11 concurrency errors with session activity throttling
+  - Enhanced database connection management to prevent race conditions
+  - Improved session handling for multi-worker deployments
+
+### Fixed
+- Fixed bare except statements in database error handlers (app.py)
+- Eliminated "No stream object available" warnings in Deepstate plugin
+- Improved error handling and logging consistency across plugins
+- Fixed startup logging banner spam from worker processes
+
+## [v1.0.0-rc.3] - 2025-08-26
+
+### Added
+- **Reverse Proxy Support**
+  - ProxyFix middleware for proper handling of X-Forwarded-* headers
+  - Enhanced proxy documentation with comprehensive setup examples
+  - Production deployment compatibility with Apache/Nginx
+
+### Fixed
+- **Certificate Configuration Improvements**
+  - Disabled ConfigParser interpolation for P12 certificate passwords
+  - Support for special characters (%, $, etc.) in certificate passwords
+  - Fixed TAK server configuration interpolation syntax errors
+- Fixed authentication redirects when deployed behind reverse proxies
+
+### Changed
+- Enhanced COT service configuration with robust password handling
+- Improved reverse proxy documentation and troubleshooting guides
+
+## [v1.0.0-rc.2] - 2025-08-26
+
+### Added
+- **Database Reliability Enhancements**
+  - WAL mode implementation for SQLite concurrent access
+  - Enhanced error messages for database connection troubleshooting
+  - Migration system robustness with better state detection
+  - Multi-process SQLite concurrency support
+
+- **Authentication System Improvements**
+  - LDAP role mapping debug logging for enhanced troubleshooting
+  - Active Directory group resolution with `memberOf` attribute handling
+  - Multi-provider fallback system for robust authentication
+  - Enhanced session management and cross-provider tracking
+
+### Fixed
+- **Critical Database Fixes**
+  - Fixed SQLite database initialization loop causing 120+ second hangs
+  - SQLite production optimization with automatic worker reduction
+  - Bootstrap coordination preventing duplicate admin user creation
+  - Fixed "cannot access local variable 'db'" error in bootstrap logic
+- **Authentication & Session Fixes**
+  - Corrected LDAP role assignment for proper user roles
+  - Fixed environment variable loading differences between dev/production
+  - Improved cross-provider session tracking and lifecycle
+- **Maritime CoT Types** - Fixed display in ATAK and WinTAK clients
+- Variable scoping errors in database initialization resolved
+- Test suite reliability improvements in bootstrap service coordination
+
+### Changed
+- **SQLite Production Support** - Reliable SQLite deployment with appropriate optimizations
+- Docker vs local environment LDAP role mapping discrepancies resolved
+- Bootstrap loop prevention for missing database files
+
 ## [v1.0.0-rc.1] - 2025-08-09
 
 ### Added

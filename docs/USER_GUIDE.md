@@ -142,11 +142,28 @@ Refresh Interval: Data polling frequency (default: 300 seconds)
 - Valid user account with device access
 - Server configured for API access
 
-#### Step 4: Test and Validate
+#### Step 4: Configure Custom Callsigns (Tracker Plugins Only)
+*Available for: Garmin InReach, SPOT Tracker, Traccar*
+
+1. **Enable Callsign Mapping** (optional): Check "Enable custom callsign mapping" to assign meaningful names to individual trackers
+2. **Select Identifier Field**: Choose which field to use for tracker identification (IMEI, device name, etc.)
+3. **Discover Trackers**: System automatically discovers available trackers and displays them in a table
+4. **Assign Callsigns**: Edit the "Assigned Callsign" field for each tracker with meaningful names (e.g., "Alpha-1", "Bravo-Team-Lead")
+5. **Set Per-Tracker COT Types** (optional): Override the stream COT type for specific trackers if needed
+6. **Configure Error Handling**: Choose fallback behavior for unmapped trackers
+
+**Callsign Mapping Benefits**:
+- **Meaningful Identifiers**: Use "Alpha-1" instead of "IMEI:123456789"
+- **Flexible COT Types**: Different tracker types can have different COT classifications
+- **Auto-Discovery**: New trackers automatically detected and can be assigned callsigns
+- ⚡ **Zero Performance Impact**: When disabled, works exactly like before
+
+#### Step 5: Test and Validate
 1. **Click "Test Connection"** to verify configuration
 2. **Review test results** for any error messages
-3. **Correct any configuration issues** before saving
-4. **Save stream** once test passes successfully
+3. **Test callsign discovery** if callsign mapping is enabled
+4. **Correct any configuration issues** before saving
+5. **Save stream** once test passes successfully
 
 ### Stream Configuration Best Practices
 
@@ -201,6 +218,39 @@ Click any stream to view detailed information:
 3. **Test connection** if credentials or endpoints changed  
 4. **Save changes** - stream will restart automatically if active
 
+#### Managing Callsign Mappings (Tracker Streams)
+*Available for GPS tracker streams with callsign mapping enabled*
+
+**Viewing Current Callsigns**:
+- Stream detail page shows current callsign assignments
+- Table displays: Identifier → Assigned Callsign → COT Type (if overridden)
+- Status indicators show which trackers are currently active
+
+**Adding New Trackers**:
+1. **Click "Refresh Trackers"** to discover new devices
+2. **Review new tracker list** - existing assignments are preserved
+3. **Assign callsigns** to new trackers using meaningful names
+4. **Set COT types** if different from stream default
+5. **Save changes** to update mappings
+
+**Modifying Existing Callsigns**:
+1. **Navigate to stream edit page**
+2. **Scroll to callsign mapping section**
+3. **Edit callsign fields** directly in the table
+4. **Update COT types** as needed for operational changes
+5. **Save stream** to apply changes
+
+**Removing Tracker Mappings**:
+- **Clear callsign field** to remove custom assignment (uses default name)
+- **Delete mapping** if tracker is no longer in use
+- **Bulk operations** available for managing multiple trackers
+
+**Troubleshooting Callsign Issues**:
+- **Missing trackers**: Use "Refresh Trackers" to rediscover devices
+- **Incorrect names**: Verify identifier field selection matches your devices
+- **Mapping failures**: Check error handling setting (fallback vs skip mode)
+- **COT type conflicts**: Ensure per-tracker COT types are valid TAK identifiers
+
 #### Stream Troubleshooting
 Common issues and solutions:
 
@@ -223,6 +273,14 @@ Common issues and solutions:
 - Verify TAK server is operational and accepting connections
 - Check network connectivity between TrakBridge and TAK server
 - Confirm TAK server certificates are valid and trusted
+
+**Callsign Mapping Issues**:
+- **Callsigns not applying**: Verify callsign mapping is enabled and saved
+- **Wrong identifier field**: Check selected field matches your tracker setup
+- **Missing new trackers**: Use "Refresh Trackers" to rediscover devices
+- **COT type errors**: Ensure per-tracker COT types use valid military identifiers
+- **Duplicate callsigns**: Each callsign should be unique within the stream
+- **Performance impact**: Disable callsign mapping if experiencing slowdowns
 
 ## Monitoring and Maintenance
 
@@ -350,6 +408,14 @@ Different plugins provide different types of location data:
 - **Documentation**: Maintain records of stream purposes and configurations
 - **Change Management**: Coordinate configuration changes with team
 
+### Callsign Management (GPS Tracker Streams)
+- **Consistent Naming**: Use standardized callsign patterns (e.g., "Alpha-1", "Bravo-2", "Charlie-Lead")
+- **Meaningful Identifiers**: Choose callsigns that reflect operational roles or positions
+- **Regular Updates**: Keep callsign mappings current as team composition changes
+- **Backup Documentation**: Maintain separate record of callsign assignments for reference
+- **COT Type Planning**: Use appropriate COT types that reflect actual unit/equipment types
+- **Performance Monitoring**: Monitor system performance when using many callsign mappings
+
 ### Security Practices
 - **Credential Security**: Protect login credentials and device passwords
 - **Regular Updates**: Keep passwords current according to policy
@@ -391,6 +457,7 @@ Contact your system administrator for:
 
 ---
 
-**User Guide Version**: 1.2.0  
-**Last Updated**: 2025-08-08  
-**Applies To**: TrakBridge v1.0.0 and later
+**User Guide Version**: 1.3.0  
+**Last Updated**: 2025-09-05  
+**Applies To**: TrakBridge v1.0.0-rc.4 and later  
+**New Features**: Callsign mapping for GPS tracker streams
