@@ -308,50 +308,313 @@ wait_for_database() {
 
 # Function to run database migrations
 
-run_migrations() {
-    log_info "Checking database initialization..."
+# Function to perform basic table existence check (fast path)
+basic_table_check() {
+    log_debug "Performing basic table existence check..."
     
-    if command -v flask >/dev/null 2>&1; then
-        if flask db current >/dev/null 2>&1; then
-            log_info "Flask-Migrate is configured"
-            
-            current_rev=$(flask db current 2>/dev/null || echo "")
-            
-            if [[ -z "$current_rev" ]] || [[ "$current_rev" == *"None"* ]]; then
-                log_info "No current migration revision found"
-                
-                if [[ "$DB_TYPE" == "sqlite" ]]; then
-                    db_path="${SQLALCHEMY_DATABASE_URI#sqlite:///}"
-                    if [[ -f "$db_path" ]]; then
-                        log_info "Database file exists, stamping with current revision"
-                        flask db stamp head || log_warn "Could not stamp database"
-                    else
-                        log_info "New database - will be handled by application"
-                    fi
-                else
-                    log_info "Database initialization will be handled by application"
-                fi
+    if [[ "$DB_TYPE" == "sqlite" ]]; then
+        local db_path="${SQLALCHEMY_DATABASE_URI#sqlite:///}"
+        if [[ ! -f "$db_path" ]]; then
+            log_error "SQLite database file does not exist: $db_path"
+            return 1
+        fi
+        
+        if command -v sqlite3 >/dev/null 2>&1; then
+            # Check for core tables
+            local tables=$(echo ".tables" | sqlite3 "$db_path" 2>/dev/null || echo "")
+            if [[ "$tables" == *"streams"* ]] && [[ "$tables" == *"tak_servers"* ]]; then
+                log_debug "Basic SQLite table check passed"
+                return 0
             else
-                log_info "Current migration revision: $current_rev"
-                
-                if flask db heads >/dev/null 2>&1; then
-                    head_rev=$(flask db heads 2>/dev/null | head -n1 | awk '{print $1}')
-                    if [[ -n "$head_rev" ]] && [[ "$current_rev" != "$head_rev" ]]; then
-                        log_info "Pending migrations found, running upgrade..."
-                        flask db upgrade || log_warn "Migration failed, will retry in application"
-                    else
-                        log_info "Database is up to date, no migrations needed"
-                    fi
-                else
-                    log_info "Could not check migration heads, skipping migrations"
-                fi
+                log_debug "Basic SQLite table check failed: missing core tables"
+                return 1
             fi
         else
-            log_info "Flask-Migrate not configured - database initialization handled by application"
+            log_debug "sqlite3 not available, assuming basic check passed"
+            return 0
         fi
     else
-        log_warn "Flask CLI not available - database initialization handled by application"
+        # For PostgreSQL/MySQL, just check if we can connect and basic tables exist
+        local table_check_script="
+import sys
+try:
+    from database import db
+    from config.environments import get_config
+    from flask import Flask
+    
+    app = Flask(__name__)
+    config = get_config()
+    app.config.from_object(config)
+    db.init_app(app)
+    
+    with app.app_context():
+        from sqlalchemy import text
+        with db.engine.connect() as connection:
+            result = connection.execute(text(\"SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ('streams', 'tak_servers')\"))
+            table_count = result.scalar()
+        if table_count >= 2:
+            print('BASIC_CHECK_OK')
+            sys.exit(0)
+        else:
+            print('BASIC_CHECK_FAILED: Core tables missing')
+            sys.exit(1)
+except Exception as e:
+    print(f'BASIC_CHECK_FAILED: {str(e)}')
+    sys.exit(1)
+"
+        local result=$(python -c "$table_check_script" 2>&1)
+        if [[ "$result" == *"BASIC_CHECK_OK"* ]]; then
+            log_debug "Basic table check passed"
+            return 0
+        else
+            log_debug "Basic table check failed: $result"
+            return 1
+        fi
     fi
+}
+
+# Function to perform comprehensive model validation (comprehensive path)
+comprehensive_model_validation() {
+    log_info "Performing comprehensive model validation..."
+    
+    local model_check_script="
+import sys
+try:
+    from app import create_app
+    
+    # Create Flask application with full context
+    app = create_app()
+    
+    with app.app_context():
+        # Import and test all critical models
+        from models.stream import Stream
+        from models.tak_server import TakServer
+        from models.user import User
+        
+        # Perform basic queries that will fail if schema is incomplete
+        # Using limit(1) to minimize performance impact
+        try:
+            Stream.query.limit(1).all()
+        except Exception as e:
+            print(f'MODEL_ERROR: Stream model validation failed: {str(e)}')
+            sys.exit(1)
+            
+        try:
+            TakServer.query.limit(1).all()
+        except Exception as e:
+            print(f'MODEL_ERROR: TakServer model validation failed: {str(e)}')
+            sys.exit(1)
+            
+        try:
+            User.query.limit(1).all()
+        except Exception as e:
+            print(f'MODEL_ERROR: User model validation failed: {str(e)}')
+            sys.exit(1)
+        
+        print('MODEL_VALIDATION_OK: All models validated successfully')
+        sys.exit(0)
+        
+except ImportError as e:
+    print(f'MODEL_ERROR: Failed to import required modules: {str(e)}')
+    sys.exit(1)
+except Exception as e:
+    print(f'MODEL_ERROR: Unexpected validation error: {str(e)}')
+    sys.exit(1)
+"
+    
+    local result=$(python -c "$model_check_script" 2>&1)
+    local exit_code=$?
+    
+    if [[ $exit_code -eq 0 ]] && [[ "$result" == *"MODEL_VALIDATION_OK"* ]]; then
+        log_info "✅ Comprehensive model validation passed"
+        return 0
+    else
+        log_error "❌ Comprehensive model validation failed: $result"
+        return 1
+    fi
+}
+
+# Function to validate database schema after migrations (hybrid approach)
+validate_schema() {
+    local validation_mode=${SCHEMA_VALIDATION_MODE:-hybrid}
+    
+    log_info "Validating database schema (mode: $validation_mode)..."
+    
+    # Skip validation if explicitly disabled
+    if [[ "${STRICT_SCHEMA_VALIDATION:-true}" == "false" ]]; then
+        log_warn "Schema validation disabled via STRICT_SCHEMA_VALIDATION=false"
+        return 0
+    fi
+    
+    # Handle different validation modes
+    case "$validation_mode" in
+        "fast")
+            log_info "Using fast validation mode (basic checks only)"
+            if basic_table_check; then
+                log_info "✅ Fast schema validation passed"
+                return 0
+            else
+                log_error "❌ Fast schema validation failed"
+                return 1
+            fi
+            ;;
+        "full")
+            log_info "Using full validation mode (comprehensive model validation)"
+            if comprehensive_model_validation; then
+                return 0
+            else
+                return 1
+            fi
+            ;;
+        "hybrid"|*)
+            log_info "Using hybrid validation mode (intelligent path selection)"
+            
+            # Check if Flask CLI is available for migration state comparison
+            if command -v flask >/dev/null 2>&1; then
+                # Fast path: Check if migration state is consistent
+                log_debug "Checking migration state consistency..."
+                local current_rev=$(flask db current 2>/dev/null || echo "unknown")
+                local head_rev=$(flask db heads 2>/dev/null | head -n1 | awk '{print $1}' || echo "unknown")
+                
+                log_debug "Current revision: $current_rev"
+                log_debug "Latest revision: $head_rev"
+                
+                if [[ -n "$current_rev" ]] && [[ -n "$head_rev" ]] && [[ "$current_rev" == "$head_rev" ]] && [[ "$current_rev" != "unknown" ]]; then
+                    log_info "Migration state consistent, using fast validation path"
+                    if basic_table_check; then
+                        log_info "✅ Hybrid schema validation passed (fast path)"
+                        return 0
+                    else
+                        log_warn "Fast validation failed, falling back to comprehensive validation"
+                        if comprehensive_model_validation; then
+                            return 0
+                        else
+                            return 1
+                        fi
+                    fi
+                else
+                    log_info "Migration state inconsistent or unknown, using comprehensive validation"
+                    if comprehensive_model_validation; then
+                        return 0
+                    else
+                        return 1
+                    fi
+                fi
+            else
+                log_warn "Flask CLI not available, falling back to basic table check"
+                if basic_table_check; then
+                    log_info "✅ Schema validation passed (basic mode)"
+                    return 0
+                else
+                    log_error "❌ Schema validation failed (basic mode)"
+                    return 1
+                fi
+            fi
+            ;;
+    esac
+}
+
+run_migrations() {
+    local timeout=${MIGRATION_TIMEOUT:-60}
+    local start_time=$(date +%s)
+    
+    log_info "Running database migrations (migration-first startup pattern)..."
+    
+    if ! command -v flask >/dev/null 2>&1; then
+        log_error "Flask CLI not available - cannot run migrations"
+        return 1
+    fi
+    
+    if ! flask db current >/dev/null 2>&1; then
+        log_error "Flask-Migrate not configured properly"
+        return 1
+    fi
+    
+    log_info "Flask-Migrate is configured, proceeding with migration check..."
+    
+    # Get current migration state
+    local current_rev=$(flask db current 2>/dev/null || echo "")
+    log_info "Current migration revision: ${current_rev:-none}"
+    
+    # Handle initial database setup
+    if [[ -z "$current_rev" ]] || [[ "$current_rev" == *"None"* ]]; then
+        log_info "No current migration revision found - initializing database"
+        
+        if [[ "$DB_TYPE" == "sqlite" ]]; then
+            db_path="${SQLALCHEMY_DATABASE_URI#sqlite:///}"
+            if [[ -f "$db_path" ]]; then
+                log_info "Existing SQLite database found, stamping with current revision"
+                if ! flask db stamp head; then
+                    log_error "Failed to stamp existing database"
+                    return 1
+                fi
+            else
+                log_info "New SQLite database will be created during migration"
+            fi
+        else
+            log_info "Initializing ${DB_TYPE} database schema"
+        fi
+    fi
+    
+    # Check for pending migrations and run them
+    if flask db heads >/dev/null 2>&1; then
+        local head_rev=$(flask db heads 2>/dev/null | head -n1 | awk '{print $1}')
+        log_info "Latest available migration revision: ${head_rev:-unknown}"
+        
+        # Get current revision again after potential stamping
+        current_rev=$(flask db current 2>/dev/null || echo "")
+        
+        if [[ -n "$head_rev" ]] && [[ "$current_rev" != "$head_rev" ]]; then
+            log_info "Pending migrations detected, running flask db upgrade..."
+            
+            # Run migrations with retry logic
+            local migration_attempts=0
+            local max_attempts=3
+            
+            while [[ $migration_attempts -lt $max_attempts ]]; do
+                local current_time=$(date +%s)
+                local elapsed=$((current_time - start_time))
+                
+                if [[ $elapsed -ge $timeout ]]; then
+                    log_error "Migration timeout reached after ${timeout} seconds"
+                    return 1
+                fi
+                
+                migration_attempts=$((migration_attempts + 1))
+                log_info "Migration attempt $migration_attempts/$max_attempts"
+                
+                if flask db upgrade; then
+                    log_info "✅ Database migrations completed successfully"
+                    break
+                else
+                    log_warn "Migration attempt $migration_attempts failed"
+                    if [[ $migration_attempts -eq $max_attempts ]]; then
+                        log_error "❌ All migration attempts failed"
+                        return 1
+                    fi
+                    log_info "Retrying migration in 5 seconds..."
+                    sleep 5
+                fi
+            done
+        else
+            log_info "✅ Database is already up to date (revision: $current_rev)"
+        fi
+    else
+        log_error "Could not determine migration heads"
+        return 1
+    fi
+    
+    # Validate schema after migrations
+    log_info "Migrations complete, validating database schema..."
+    if ! validate_schema; then
+        log_error "❌ Schema validation failed after migrations"
+        log_error "This indicates the migrations may not have completed properly"
+        log_error "Check the migration files and database state"
+        return 1
+    fi
+    
+    log_info "✅ Database migrations and schema validation completed successfully"
+    return 0
 }
 
 # Function to validate configuration
@@ -793,9 +1056,17 @@ main() {
         fi
     fi
 
-    # Run migrations
+    # Run migrations (blocking - application will not start if migrations fail)
     if [[ "${RUN_MIGRATIONS:-true}" == "true" ]]; then
-        run_migrations
+        log_info "=== Running Database Migrations (Required for Startup) ==="
+        if ! run_migrations; then
+            log_error "❌ Database migrations failed - cannot start application"
+            log_error "Application startup blocked until migrations complete successfully"
+            log_error "Check database connectivity and migration files"
+            exit 1
+        fi
+    else
+        log_warn "Migrations disabled via RUN_MIGRATIONS=false - application may fail if schema is incomplete"
     fi
 
     log_info "=== Starting Application ==="

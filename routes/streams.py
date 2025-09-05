@@ -316,10 +316,14 @@ def edit_stream(stream_id):
         if request.is_json:
             return jsonify(result), 200 if result["success"] else 400
         else:
-            flash(result["message"], "success" if result["success"] else "error")
+            # Handle both success and error messages properly
             if result["success"]:
+                flash(result.get("message", "Stream updated successfully"), "success")
                 return redirect(url_for("streams.view_stream", stream_id=stream_id))
             else:
+                # Use error field if available, otherwise fall back to message
+                error_msg = result.get("error", result.get("message", "Unknown error occurred"))
+                flash(f"Error updating stream: {error_msg}", "error")
                 return redirect(url_for("streams.edit_stream", stream_id=stream_id))
 
     except Exception as e:

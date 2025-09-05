@@ -122,6 +122,10 @@ def setup_logging(app):
         logging.INFO if app.config.get("SQLALCHEMY_RECORD_QUERIES") else logging.WARNING
     )
     logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
+    
+    # Configure PyTAK logging level
+    pytak_log_level = app.config.get("PYTAK_LOG_LEVEL", "WARNING")
+    logging.getLogger("pytak").setLevel(getattr(logging, pytak_log_level, logging.WARNING))
 
     app.logger.info(f"Logging Service Started - Version: {version}")
 

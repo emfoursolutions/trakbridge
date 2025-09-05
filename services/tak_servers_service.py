@@ -77,8 +77,8 @@ class TakServerService:
 
             # Check if certificate is currently valid
             now = datetime.now(timezone.utc)
-            is_expired = certificate.not_valid_after.replace(tzinfo=timezone.utc) < now
-            is_not_yet_valid = certificate.not_valid_before.replace(tzinfo=timezone.utc) > now
+            is_expired = certificate.not_valid_after_utc < now
+            is_not_yet_valid = certificate.not_valid_before_utc > now
 
             cert_info = {
                 "subject": subject,

@@ -59,6 +59,71 @@ class StreamOperationsService:
         """Get the database session, handling both scoped session and db.session patterns"""
         return getattr(self.db, "session", self.db)
 
+    def _is_concurrency_error(self, e: Exception) -> bool:
+        """
+        Universal concurrency error detection for all database types.
+        
+        Detects optimistic locking conflicts, deadlocks, and other concurrency issues
+        that can occur when multiple processes try to update the same record.
+        """
+        from sqlalchemy.exc import IntegrityError, OperationalError
+        
+        error_str = str(e).lower()
+        error_type = type(e).__name__
+        
+        # MariaDB/MySQL specific errors
+        if "1020" in error_str or "record has changed since last read" in error_str:
+            return True
+        
+        # PostgreSQL specific errors  
+        if isinstance(e, OperationalError):
+            postgres_patterns = [
+                "could not serialize access due to concurrent update",
+                "deadlock detected", 
+                "tuple concurrently updated",
+                "could not obtain lock on row"
+            ]
+            if any(pattern in error_str for pattern in postgres_patterns):
+                return True
+        
+        # SQLite specific errors
+        if isinstance(e, OperationalError):
+            sqlite_patterns = [
+                "database is locked",
+                "database table is locked", 
+                "cannot start a transaction within a transaction",
+                "disk i/o error"  # Can indicate lock contention
+            ]
+            if any(pattern in error_str for pattern in sqlite_patterns):
+                return True
+        
+        # Generic IntegrityError that might indicate concurrency issues
+        if isinstance(e, IntegrityError):
+            # Some integrity errors are actually concurrency-related
+            integrity_patterns = [
+                "concurrent", "deadlock", "lock", "transaction"
+            ]
+            if any(pattern in error_str for pattern in integrity_patterns):
+                return True
+        
+        # Generic OperationalError during UPDATE operations (safe fallback)
+        if isinstance(e, OperationalError):
+            # If it's an OperationalError during what should be a simple UPDATE,
+            # it's likely a concurrency issue worth retrying
+            update_patterns = ["update", "set", "where"]
+            if any(pattern in error_str for pattern in update_patterns):
+                return True
+                
+        return False
+
+    def _get_database_type(self) -> str:
+        """Get the current database type for logging purposes"""
+        try:
+            engine = self._get_session().bind or self.db.engine
+            return engine.dialect.name.lower()
+        except Exception:
+            return "unknown"
+
     def create_stream(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new stream with the provided data"""
         try:
@@ -221,104 +286,146 @@ class StreamOperationsService:
             return {"success": False, "error": str(e)}
 
     def update_stream_safely(self, stream_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Update stream with proper stop/restart handling"""
-        try:
-            from sqlalchemy.orm import joinedload
+        """Update stream with universal optimistic locking for all database types"""
+        import time
+        from sqlalchemy.orm import joinedload
+        
+        max_retries = 3
+        retry_delay = 0.1  # 100ms initial delay
+        db_type = self._get_database_type()
+        
+        for attempt in range(max_retries):
+            try:
+                # Get stream with eager loading - fresh copy for each attempt
+                stream = (
+                    Stream.query.options(joinedload(Stream.tak_server))
+                    .filter_by(id=stream_id)
+                    .first_or_404()
+                )
 
-            # Get stream with eager loading
-            stream = (
-                Stream.query.options(joinedload(Stream.tak_server))
-                .filter_by(id=stream_id)
-                .first_or_404()
-            )
+                # Check if the stream is currently running
+                stream_status = self._safe_get_stream_status(stream_id)
+                was_running = stream_status.get("running", False)
 
-            # Check if the stream is currently running
-            stream_status = self._safe_get_stream_status(stream_id)
-            was_running = stream_status.get("running", False)
+                # Stop the stream if it's running (we'll restart it after update)
+                if was_running:
+                    self.stream_manager.stop_stream_sync(stream_id)
+                    # Give the stream worker a moment to finish any pending operations
+                    time.sleep(0.1)
+                    
+                # Re-fetch the stream after stopping to get the latest state
+                # This prevents race conditions with the stream worker's final updates
+                if was_running:
+                    self._get_session().refresh(stream)
 
-            # Stop the stream if it's running (we'll restart it after update)
-            if was_running:
-                self.stream_manager.stop_stream_sync(stream_id)
+                # Update stream properties
+                stream.name = data["name"]
+                stream.plugin_type = data["plugin_type"]
+                stream.poll_interval = int(data.get("poll_interval", 120))
+                stream.cot_type = data.get("cot_type", "a-f-G-U-C")
+                stream.cot_stale_time = int(data.get("cot_stale_time", 300))
+                stream.tak_server_id = int(data["tak_server_id"])
+                stream.cot_type_mode = data.get("cot_type_mode", "stream")
 
-            # Update stream properties
-            stream.name = data["name"]
-            stream.plugin_type = data["plugin_type"]
-            stream.poll_interval = int(data.get("poll_interval", 120))
-            stream.cot_type = data.get("cot_type", "a-f-G-U-C")
-            stream.cot_stale_time = int(data.get("cot_stale_time", 300))
-            stream.tak_server_id = int(data["tak_server_id"])
-            stream.cot_type_mode = data.get("cot_type_mode", "stream")
+                # Update callsign mapping fields
+                stream.enable_callsign_mapping = bool(data.get("enable_callsign_mapping", False))
+                stream.callsign_identifier_field = data.get("callsign_identifier_field")
+                stream.callsign_error_handling = data.get("callsign_error_handling", "fallback")
+                stream.enable_per_callsign_cot_types = bool(
+                    data.get("enable_per_callsign_cot_types", False)
+                )
 
-            # Update callsign mapping fields
-            stream.enable_callsign_mapping = bool(data.get("enable_callsign_mapping", False))
-            stream.callsign_identifier_field = data.get("callsign_identifier_field")
-            stream.callsign_error_handling = data.get("callsign_error_handling", "fallback")
-            stream.enable_per_callsign_cot_types = bool(
-                data.get("enable_per_callsign_cot_types", False)
-            )
+                # Update plugin configuration with password preservation
+                from plugins.plugin_manager import get_plugin_manager
+                from services.stream_config_service import StreamConfigService
 
-            # Update plugin configuration with password preservation
-            from plugins.plugin_manager import get_plugin_manager
-            from services.stream_config_service import StreamConfigService
+                plugin_manager = get_plugin_manager()
+                config_service = StreamConfigService(plugin_manager)
+                plugin_type = data.get("plugin_type")
 
-            plugin_manager = get_plugin_manager()
-            config_service = StreamConfigService(plugin_manager)
-            plugin_type = data.get("plugin_type")
+                # Extract plugin config from request data
+                plugin_config = config_service.extract_plugin_config_from_request(data)
+                logger.debug(f"Extracted plugin config for {plugin_type}: {plugin_config}")
 
-            # Extract plugin config from request data
-            plugin_config = config_service.extract_plugin_config_from_request(data)
-            logger.debug(f"Extracted plugin config for {plugin_type}: {plugin_config}")
+                # Merge with existing config to preserve encrypted password fields
+                merged_config = config_service.merge_plugin_config_with_existing(
+                    plugin_config, plugin_type, stream_id
+                )
+                logger.debug(f"Merged plugin config for {plugin_type}: {merged_config}")
 
-            # Merge with existing config to preserve encrypted password fields
-            merged_config = config_service.merge_plugin_config_with_existing(
-                plugin_config, plugin_type, stream_id
-            )
-            logger.debug(f"Merged plugin config for {plugin_type}: {merged_config}")
+                # Copy certain plugin config values to stream-level fields
+                # This restores functionality that was removed in commit 48edfe59
+                if "cot_type_mode" in merged_config:
+                    stream.cot_type_mode = merged_config["cot_type_mode"]
+                    logger.debug(f"Set stream cot_type_mode to: {merged_config['cot_type_mode']}")
 
-            # Copy certain plugin config values to stream-level fields
-            # This restores functionality that was removed in commit 48edfe59
-            if "cot_type_mode" in merged_config:
-                stream.cot_type_mode = merged_config["cot_type_mode"]
-                logger.debug(f"Set stream cot_type_mode to: {merged_config['cot_type_mode']}")
+                # Handle missing checkbox fields for all plugins
+                if plugin_type:
+                    metadata = plugin_manager.get_plugin_metadata(plugin_type)
+                    if metadata:
+                        for field in metadata.get("config_fields", []):
+                            # Handle both dict and object (e.g., PluginConfigField)
+                            if (isinstance(field, dict) and field.get("field_type") == "checkbox") or (
+                                hasattr(field, "field_type")
+                                and getattr(field, "field_type") == "checkbox"
+                            ):
+                                field_name = (
+                                    field["name"] if isinstance(field, dict) else getattr(field, "name")
+                                )
+                                if field_name not in merged_config:
+                                    merged_config[field_name] = False
 
-            # Handle missing checkbox fields for all plugins
-            if plugin_type:
-                metadata = plugin_manager.get_plugin_metadata(plugin_type)
-                if metadata:
-                    for field in metadata.get("config_fields", []):
-                        # Handle both dict and object (e.g., PluginConfigField)
-                        if (isinstance(field, dict) and field.get("field_type") == "checkbox") or (
-                            hasattr(field, "field_type")
-                            and getattr(field, "field_type") == "checkbox"
-                        ):
-                            field_name = (
-                                field["name"] if isinstance(field, dict) else getattr(field, "name")
-                            )
-                            if field_name not in merged_config:
-                                merged_config[field_name] = False
+                stream.set_plugin_config(merged_config)
 
-            stream.set_plugin_config(merged_config)
+                # Update callsign mappings if enabled
+                if stream.enable_callsign_mapping:
+                    self._update_callsign_mappings(stream, data)
 
-            # Update callsign mappings if enabled
-            if stream.enable_callsign_mapping:
-                self._update_callsign_mappings(stream, data)
+                # Attempt to commit the transaction
+                self._get_session().commit()
+                
+                logger.debug(f"Stream {stream_id} updated successfully on {db_type} (attempt {attempt + 1})")
 
-            self._get_session().commit()
+                # Restart the stream if it was running before
+                if was_running:
+                    self.stream_manager.start_stream_sync(stream_id)
 
-            # Restart the stream if it was running before
-            if was_running:
-                self.stream_manager.start_stream_sync(stream_id)
-
-            return {
-                "success": True,
-                "stream_id": stream.id,
-                "message": "Stream updated successfully",
-            }
-
-        except Exception as e:
-            self._get_session().rollback()
-            logger.error(f"Error updating stream {stream_id}: {e}")
-            return {"success": False, "error": str(e)}
+                return {
+                    "success": True,
+                    "stream_id": stream.id,
+                    "message": "Stream updated successfully",
+                }
+                
+            except Exception as e:
+                # Check if this is a concurrency error using universal detection
+                if self._is_concurrency_error(e):
+                    self._get_session().rollback()
+                    if attempt < max_retries - 1:
+                        retry_delay_with_jitter = retry_delay * (2 ** attempt) + (attempt * 0.05)
+                        logger.warning(
+                            f"Concurrency conflict on {db_type} updating stream {stream_id} "
+                            f"(attempt {attempt + 1}/{max_retries}), retrying in {retry_delay_with_jitter:.2f}s"
+                        )
+                        time.sleep(retry_delay_with_jitter)
+                        continue
+                    else:
+                        logger.error(
+                            f"Failed to update stream {stream_id} on {db_type} after {max_retries} attempts "
+                            f"due to concurrency conflicts"
+                        )
+                        return {
+                            "success": False, 
+                            "error": "Stream update failed due to concurrent modifications. Please try again.",
+                            "error_type": "concurrency_conflict"
+                        }
+                else:
+                    # Non-concurrency error, don't retry
+                    self._get_session().rollback()
+                    logger.error(f"Non-retryable error updating stream {stream_id} on {db_type}: {e}")
+                    return {"success": False, "error": str(e)}
+        
+        # This should never be reached, but just in case
+        return {"success": False, "error": "Unexpected error in update retry logic"}
 
     def run_health_check(self) -> Dict[str, Any]:
         """Trigger a health check on all streams"""
