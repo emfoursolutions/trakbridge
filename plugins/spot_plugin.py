@@ -157,9 +157,7 @@ class SpotPlugin(BaseGPSPlugin, CallsignMappable):
             if field_name == "messenger_name":
                 # Extract messenger name from additional_data
                 identifier_value = (
-                    location.get("additional_data", {})
-                    .get("raw_message", {})
-                    .get("messengerName")
+                    location.get("additional_data", {}).get("raw_message", {}).get("messengerName")
                 )
                 # Fallback to name field if raw message not available
                 if not identifier_value:
@@ -181,9 +179,7 @@ class SpotPlugin(BaseGPSPlugin, CallsignMappable):
                     f"[SPOT] Applied callsign mapping: {identifier_value} -> {custom_callsign}"
                 )
 
-    async def fetch_locations(
-        self, session: aiohttp.ClientSession
-    ) -> List[Dict[str, Any]]:
+    async def fetch_locations(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
         """
         Fetch location data from SPOT API
 
@@ -221,11 +217,7 @@ class SpotPlugin(BaseGPSPlugin, CallsignMappable):
                         # Check if this was due to a JSON error (like feed not found)
                         if "response" in data and "errors" in data.get("response", {}):
                             # Extract the actual error code from the response
-                            errors = (
-                                data.get("response", {})
-                                .get("errors", {})
-                                .get("error", {})
-                            )
+                            errors = data.get("response", {}).get("errors", {}).get("error", {})
                             if isinstance(errors, dict):
                                 error_code = errors.get("code", "Unknown")
                                 error_text = errors.get("text", "Unknown error")
@@ -246,9 +238,7 @@ class SpotPlugin(BaseGPSPlugin, CallsignMappable):
                                     ]
 
                                 # Map other error codes
-                                mapped_error_code = self._map_spot_error_code(
-                                    error_code
-                                )
+                                mapped_error_code = self._map_spot_error_code(error_code)
                                 return [
                                     {
                                         "_error": mapped_error_code,
@@ -282,9 +272,7 @@ class SpotPlugin(BaseGPSPlugin, CallsignMappable):
                             f"{newest_message.get('messengerName', f'SPOT-{feed_id[:8]}')}"
                             f"-{newest_message['id']}"
                         ),
-                        "name": newest_message.get(
-                            "messengerName", f"SPOT-{feed_id[:8]}"
-                        ),
+                        "name": newest_message.get("messengerName", f"SPOT-{feed_id[:8]}"),
                         "lat": float(newest_message["latitude"]),
                         "lon": float(newest_message["longitude"]),
                         "timestamp": datetime.fromisoformat(
@@ -306,9 +294,7 @@ class SpotPlugin(BaseGPSPlugin, CallsignMappable):
                     return [location]
 
                 elif response.status == 401:
-                    logger.error(
-                        "Unauthorized access to SPOT feed. Check feed password."
-                    )
+                    logger.error("Unauthorized access to SPOT feed. Check feed password.")
                     return [{"_error": "401", "_error_message": "Unauthorized access"}]
                 elif response.status == 404:
                     logger.error("SPOT feed not found. Check feed ID.")
@@ -372,16 +358,12 @@ class SpotPlugin(BaseGPSPlugin, CallsignMappable):
                         error_code = error.get("code", "Unknown")
                         error_text = error.get("text", "Unknown error")
                         error_desc = error.get("description", "Unknown error")
-                        logger.error(
-                            f"SPOT API error {error_code}: {error_text} - {error_desc}"
-                        )
+                        logger.error(f"SPOT API error {error_code}: {error_text} - {error_desc}")
                 else:
                     error_code = errors.get("code", "Unknown")
                     error_text = errors.get("text", "Unknown error")
                     error_desc = errors.get("description", "Unknown error")
-                    logger.error(
-                        f"SPOT API error {error_code}: {error_text} - {error_desc}"
-                    )
+                    logger.error(f"SPOT API error {error_code}: {error_text} - {error_desc}")
 
                     # Handle E-0195 as success (no devices found)
                     if error_code == "E-0195":

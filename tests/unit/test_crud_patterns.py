@@ -33,9 +33,7 @@ class TestServiceDatabasePatterns:
 
             # Check that service has proper database session access
             assert hasattr(service, "db"), "Service should have database access"
-            assert hasattr(
-                service, "_get_session"
-            ), "Service should have session accessor method"
+            assert hasattr(service, "_get_session"), "Service should have session accessor method"
 
             # Verify the service can get database session
             session = service._get_session()
@@ -83,9 +81,7 @@ class TestDatabaseIntegrity:
         """Test proper database session management."""
         with app.app_context():
             # Test that we can create and rollback transactions
-            stream = Stream(
-                name="Rollback Test", plugin_type="garmin", poll_interval=120
-            )
+            stream = Stream(name="Rollback Test", plugin_type="garmin", poll_interval=120)
 
             db.session.add(stream)
             # Don't commit - test rollback

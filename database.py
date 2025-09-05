@@ -32,9 +32,7 @@ db = SQLAlchemy(session_options={"expire_on_commit": False})
 class TimestampMixin:
     """Mixin to add created_at and updated_at timestamps to models"""
 
-    created_at = db.Column(
-        db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
-    )
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(
         db.DateTime,
         nullable=False,

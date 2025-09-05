@@ -277,9 +277,7 @@ def log_primary_startup_banner(app, worker_count: Optional[int] = None):
     except Exception as e:
         app.logger.error(f"Failed to log primary startup banner: {e}")
         # Fallback to basic logging
-        app.logger.info(
-            f"TrakBridge Primary Process starting - Version: {get_version()}"
-        )
+        app.logger.info(f"TrakBridge Primary Process starting - Version: {get_version()}")
         if worker_count:
             app.logger.info(f"Starting with {worker_count} worker processes")
 
@@ -302,6 +300,4 @@ def log_worker_initialization(app, worker_pid: Optional[int] = None):
             f"Worker process initialized - PID: {worker_pid} - Version: {get_version()}"
         )
     except Exception as e:
-        app.logger.info(
-            f"Worker process initialized - PID: {worker_pid} - Version: unknown"
-        )
+        app.logger.info(f"Worker process initialized - PID: {worker_pid} - Version: unknown")

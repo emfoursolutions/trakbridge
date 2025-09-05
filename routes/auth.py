@@ -89,9 +89,7 @@ def login():
 
     # Get available providers
     providers_info = auth_manager.get_provider_info()
-    enabled_providers = {
-        k: v for k, v in providers_info.items() if v.get("enabled", False)
-    }
+    enabled_providers = {k: v for k, v in providers_info.items() if v.get("enabled", False)}
 
     if request.method == "GET":
         return render_template("auth/login.html", providers=enabled_providers)
@@ -145,17 +143,13 @@ def _handle_local_login(auth_manager: AuthenticationManager):
             return redirect(url_for("auth.force_password_change"))
 
         # Create session
-        user_session = auth_manager.create_session(
-            response.user, AuthProvider.LOCAL, request_info
-        )
+        user_session = auth_manager.create_session(response.user, AuthProvider.LOCAL, request_info)
 
         # Store session ID in Flask session
         session["session_id"] = user_session.session_id
         session.permanent = True
 
-        flash(
-            f"Welcome, {response.user.full_name or response.user.username}!", "success"
-        )
+        flash(f"Welcome, {response.user.full_name or response.user.username}!", "success")
 
         # Redirect to next URL or dashboard
         next_url = session.pop("next_url", url_for("main.index"))
@@ -181,23 +175,17 @@ def _handle_ldap_login(auth_manager: AuthenticationManager):
     }
 
     # Authenticate user with provider hint
-    response = auth_manager.authenticate(
-        username, password, provider_hint=AuthProvider.LDAP
-    )
+    response = auth_manager.authenticate(username, password, provider_hint=AuthProvider.LDAP)
 
     if response.success:
         # Create session
-        user_session = auth_manager.create_session(
-            response.user, AuthProvider.LDAP, request_info
-        )
+        user_session = auth_manager.create_session(response.user, AuthProvider.LDAP, request_info)
 
         # Store session ID in Flask session
         session["session_id"] = user_session.session_id
         session.permanent = True
 
-        flash(
-            f"Welcome, {response.user.full_name or response.user.username}!", "success"
-        )
+        flash(f"Welcome, {response.user.full_name or response.user.username}!", "success")
 
         # Redirect to next URL or dashboard
         next_url = session.pop("next_url", url_for("main.index"))
@@ -295,9 +283,7 @@ def oidc_callback():
         if response.success:
             # Get request info for session creation
             request_info = {
-                "ip_address": request.environ.get(
-                    "HTTP_X_FORWARDED_FOR", request.remote_addr
-                ),
+                "ip_address": request.environ.get("HTTP_X_FORWARDED_FOR", request.remote_addr),
                 "user_agent": request.headers.get("User-Agent", ""),
                 "provider_session_data": response.session_data,
             }
@@ -442,9 +428,7 @@ def change_password():
             return redirect(url_for("auth.profile"))
 
         # Change password
-        success = local_provider.change_password(
-            user.username, current_password, new_password
-        )
+        success = local_provider.change_password(user.username, current_password, new_password)
 
         if success:
             flash("Password changed successfully", "success")
@@ -630,9 +614,7 @@ def admin_create_user():
         db.session.commit()
 
         current_user = get_current_user()
-        logger.info(
-            f"Admin {current_user.username} created user {username} with role {role.value}"
-        )
+        logger.info(f"Admin {current_user.username} created user {username} with role {role.value}")
         flash(f'User "{username}" created successfully', "success")
 
         return redirect(url_for("auth.admin_users"))
@@ -757,9 +739,7 @@ def admin_reset_password(user_id):
 
         db.session.commit()
 
-        logger.info(
-            f"Admin {current_user.username} reset password for user {user.username}"
-        )
+        logger.info(f"Admin {current_user.username} reset password for user {user.username}")
         flash(
             f'Password reset for "{user.username}". Temporary password: {temp_password}',
             "warning",
@@ -784,24 +764,18 @@ def force_password_change():
     """
     user_id = session.get("password_change_user_id")
     if not user_id:
-        logger.warning(
-            "force_password_change accessed without password_change_user_id in session"
-        )
+        logger.warning("force_password_change accessed without password_change_user_id in session")
         flash("No password change required", "info")
         return redirect(url_for("auth.login"))
 
     user = User.query.get(user_id)
     if not user:
         session.pop("password_change_user_id", None)
-        logger.error(
-            f"force_password_change: User with ID {user_id} not found in database"
-        )
+        logger.error(f"force_password_change: User with ID {user_id} not found in database")
         flash("User not found", "error")
         return redirect(url_for("auth.login"))
 
-    logger.info(
-        f"force_password_change: Loading password change form for user {user.username}"
-    )
+    logger.info(f"force_password_change: Loading password change form for user {user.username}")
 
     if request.method == "GET":
         return render_template("auth/force_password_change.html", user=user)
@@ -844,15 +818,11 @@ def force_password_change():
         auth_manager = get_auth_manager()
         if auth_manager:
             request_info = {
-                "ip_address": request.environ.get(
-                    "HTTP_X_FORWARDED_FOR", request.remote_addr
-                ),
+                "ip_address": request.environ.get("HTTP_X_FORWARDED_FOR", request.remote_addr),
                 "user_agent": request.headers.get("User-Agent", ""),
             }
 
-            user_session = auth_manager.create_session(
-                user, AuthProvider.LOCAL, request_info
-            )
+            user_session = auth_manager.create_session(user, AuthProvider.LOCAL, request_info)
 
             session["session_id"] = user_session.session_id
             session.permanent = True

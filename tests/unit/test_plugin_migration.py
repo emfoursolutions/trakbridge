@@ -61,20 +61,13 @@ class TestPhase3BPluginLoggingMigration:
 
             except ImportError as e:
                 # Some plugins might have optional dependencies
-                if (
-                    plugin_module
-                    == "docs.example_external_plugins.sample_custom_tracker"
-                ):
+                if plugin_module == "docs.example_external_plugins.sample_custom_tracker":
                     pytest.skip(f"Example plugin not available: {e}")
                 else:
-                    pytest.fail(
-                        f"Core plugin {plugin_module} should be importable: {e}"
-                    )
+                    pytest.fail(f"Core plugin {plugin_module} should be importable: {e}")
 
         # Should be able to import most plugins
-        assert (
-            len(importable_plugins) >= 4
-        ), "Should be able to import at least 4 plugins"
+        assert len(importable_plugins) >= 4, "Should be able to import at least 4 plugins"
 
     def test_plugin_files_import_centralized_logging(self):
         """Test that plugin files import get_module_logger after migration"""
@@ -87,8 +80,7 @@ class TestPhase3BPluginLoggingMigration:
 
                         # Should import centralized logging
                         assert (
-                            "from services.logging_service import get_module_logger"
-                            in content
+                            "from services.logging_service import get_module_logger" in content
                         ), f"{plugin_module} should import get_module_logger"
 
             except ImportError:
@@ -130,9 +122,7 @@ class TestPhase3BPluginLoggingMigration:
                 module = importlib.import_module(plugin_module)
 
                 # Should have module-level logger
-                assert hasattr(
-                    module, "logger"
-                ), f"{plugin_module} should have logger attribute"
+                assert hasattr(module, "logger"), f"{plugin_module} should have logger attribute"
 
                 # Logger should be proper Logger instance or proxy
                 import logging
@@ -368,10 +358,7 @@ class TestPluginMigrationBenefits:
                         content = f.read()
 
                         # Should have centralized logging import
-                        if (
-                            "from services.logging_service import get_module_logger"
-                            in content
-                        ):
+                        if "from services.logging_service import get_module_logger" in content:
                             import_improvements += 1
 
             except ImportError:
@@ -527,8 +514,7 @@ class TestPhase3BCompleteness:
 
                         # Should have new logging pattern
                         if (
-                            "from services.logging_service import get_module_logger"
-                            in content
+                            "from services.logging_service import get_module_logger" in content
                             and "logger = get_module_logger(__name__)" in content
                         ):
                             migrated_count += 1
@@ -537,9 +523,7 @@ class TestPhase3BCompleteness:
                 continue
 
         # Should have migrated most plugins
-        assert (
-            migrated_count >= 3
-        ), f"Should have migrated at least 3 plugins, got {migrated_count}"
+        assert migrated_count >= 3, f"Should have migrated at least 3 plugins, got {migrated_count}"
 
     def test_no_old_logging_patterns_remain_in_plugins(self):
         """Test that no old logging patterns remain in migrated plugins"""

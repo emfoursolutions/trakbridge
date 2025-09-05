@@ -139,9 +139,7 @@ def require_auth(f: Callable) -> Callable:
     return decorated_function
 
 
-def require_role(
-    required_role: Union[UserRole, str, List[Union[UserRole, str]]]
-) -> Callable:
+def require_role(required_role: Union[UserRole, str, List[Union[UserRole, str]]]) -> Callable:
     """
     Decorator to require specific role(s) for a route
 
@@ -191,10 +189,7 @@ def require_role(
                         normalized_roles.append(UserRole(role))
                     except ValueError:
                         logger.error(f"Invalid role specified in decorator: {role}")
-                        if (
-                            request.is_json
-                            or request.content_type == "application/json"
-                        ):
+                        if request.is_json or request.content_type == "application/json":
                             return (
                                 jsonify(
                                     {
@@ -281,9 +276,7 @@ def require_permission(resource: str, action: str = "read") -> Callable:
 
             # Check permission
             if not user.can_access(resource, action):
-                logger.warning(
-                    f"Permission denied for user {user.username} to {action} {resource}"
-                )
+                logger.warning(f"Permission denied for user {user.username} to {action} {resource}")
 
                 if request.is_json or request.content_type == "application/json":
                     return (

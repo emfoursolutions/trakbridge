@@ -73,9 +73,7 @@ class StreamOperationsService:
                 tak_server_id=int(data["tak_server_id"]),
                 cot_type_mode=data.get("cot_type_mode", "stream"),
                 # Callsign mapping fields
-                enable_callsign_mapping=bool(
-                    data.get("enable_callsign_mapping", False)
-                ),
+                enable_callsign_mapping=bool(data.get("enable_callsign_mapping", False)),
                 callsign_identifier_field=data.get("callsign_identifier_field"),
                 callsign_error_handling=data.get("callsign_error_handling", "fallback"),
                 enable_per_callsign_cot_types=bool(
@@ -224,9 +222,7 @@ class StreamOperationsService:
             self._get_session().rollback()
             return {"success": False, "error": str(e)}
 
-    def update_stream_safely(
-        self, stream_id: int, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def update_stream_safely(self, stream_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
         """Update stream with proper stop/restart handling"""
         try:
             from sqlalchemy.orm import joinedload
@@ -256,13 +252,9 @@ class StreamOperationsService:
             stream.cot_type_mode = data.get("cot_type_mode", "stream")
 
             # Update callsign mapping fields
-            stream.enable_callsign_mapping = bool(
-                data.get("enable_callsign_mapping", False)
-            )
+            stream.enable_callsign_mapping = bool(data.get("enable_callsign_mapping", False))
             stream.callsign_identifier_field = data.get("callsign_identifier_field")
-            stream.callsign_error_handling = data.get(
-                "callsign_error_handling", "fallback"
-            )
+            stream.callsign_error_handling = data.get("callsign_error_handling", "fallback")
             stream.enable_per_callsign_cot_types = bool(
                 data.get("enable_per_callsign_cot_types", False)
             )
@@ -289,9 +281,7 @@ class StreamOperationsService:
             # This restores functionality that was removed in commit 48edfe59
             if "cot_type_mode" in merged_config:
                 stream.cot_type_mode = merged_config["cot_type_mode"]
-                logger.debug(
-                    f"Set stream cot_type_mode to: {merged_config['cot_type_mode']}"
-                )
+                logger.debug(f"Set stream cot_type_mode to: {merged_config['cot_type_mode']}")
 
             # Handle missing checkbox fields for all plugins
             if plugin_type:
@@ -299,17 +289,12 @@ class StreamOperationsService:
                 if metadata:
                     for field in metadata.get("config_fields", []):
                         # Handle both dict and object (e.g., PluginConfigField)
-                        if (
-                            isinstance(field, dict)
-                            and field.get("field_type") == "checkbox"
-                        ) or (
+                        if (isinstance(field, dict) and field.get("field_type") == "checkbox") or (
                             hasattr(field, "field_type")
                             and getattr(field, "field_type") == "checkbox"
                         ):
                             field_name = (
-                                field["name"]
-                                if isinstance(field, dict)
-                                else getattr(field, "name")
+                                field["name"] if isinstance(field, dict) else getattr(field, "name")
                             )
                             if field_name not in merged_config:
                                 merged_config[field_name] = False

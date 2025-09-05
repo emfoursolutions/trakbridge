@@ -78,9 +78,7 @@ class TestDatabaseHelperImports:
                         ]
 
                         has_db_import = any(imp in content for imp in db_helper_imports)
-                        assert (
-                            has_db_import
-                        ), f"{module_name} should import database helpers"
+                        assert has_db_import, f"{module_name} should import database helpers"
 
             except ImportError as e:
                 pytest.fail(f"Could not check imports in {module_name}: {e}")
@@ -201,9 +199,7 @@ class TestDatabaseHelperFunctionality:
             mock_create.return_value = MagicMock(spec=User)
 
             result = mock_create(User, username="test", email="test@example.com")
-            mock_create.assert_called_once_with(
-                User, username="test", email="test@example.com"
-            )
+            mock_create.assert_called_once_with(User, username="test", email="test@example.com")
 
     def test_database_helper_class_instantiation(self):
         """Test that DatabaseHelper class can be instantiated"""
@@ -347,9 +343,7 @@ class TestDatabaseMigrationIntegration:
         from utils.config_helpers import ConfigHelper
 
         # Should be able to configure database operations using ConfigHelper
-        db_config = {
-            "database": {"retry_attempts": 3, "timeout": 30, "enable_logging": True}
-        }
+        db_config = {"database": {"retry_attempts": 3, "timeout": 30, "enable_logging": True}}
 
         helper = ConfigHelper(db_config)
         retry_attempts = helper.get_int("database.retry_attempts", 1)

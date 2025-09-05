@@ -74,16 +74,12 @@ class LocalAuthProvider(BaseAuthenticationProvider):
         self.require_uppercase = self.password_policy.get("require_uppercase", True)
         self.require_lowercase = self.password_policy.get("require_lowercase", True)
         self.require_numbers = self.password_policy.get("require_numbers", True)
-        self.require_special_chars = self.password_policy.get(
-            "require_special_chars", True
-        )
+        self.require_special_chars = self.password_policy.get("require_special_chars", True)
         self.max_age_days = self.password_policy.get("max_age_days", 90)
 
         # Registration settings
         self.allow_registration = config.get("allow_registration", False)
-        self.require_email_verification = config.get(
-            "require_email_verification", False
-        )
+        self.require_email_verification = config.get("require_email_verification", False)
         self.default_role = UserRole(config.get("default_role", "user"))
 
         # Security settings
@@ -97,9 +93,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
             f"Local authentication provider initialized (registration: {self.allow_registration})"
         )
 
-    def authenticate(
-        self, username: str, password: str = None, **kwargs
-    ) -> AuthenticationResponse:
+    def authenticate(self, username: str, password: str = None, **kwargs) -> AuthenticationResponse:
         """
         Authenticate user with username and password
 
@@ -119,15 +113,11 @@ class LocalAuthProvider(BaseAuthenticationProvider):
 
         try:
             # Find user by username
-            user = User.query.filter_by(
-                username=username, auth_provider=AuthProvider.LOCAL
-            ).first()
+            user = User.query.filter_by(username=username, auth_provider=AuthProvider.LOCAL).first()
 
             if not user:
                 # Log failed attempt for non-existent user
-                self.logger.warning(
-                    f"Authentication attempt for non-existent user: {username}"
-                )
+                self.logger.warning(f"Authentication attempt for non-existent user: {username}")
                 return AuthenticationResponse(
                     result=AuthenticationResult.USER_NOT_FOUND,
                     message="Invalid username or password",
@@ -146,9 +136,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
                         message="Account is temporarily locked",
                         details={
                             "locked_until": (
-                                user.locked_until.isoformat()
-                                if user.locked_until
-                                else None
+                                user.locked_until.isoformat() if user.locked_until else None
                             ),
                             "failed_attempts": user.failed_login_attempts,
                         },
@@ -179,9 +167,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
                 except Exception as e:
                     self.logger.error(f"Failed to update failed login count: {e}")
 
-                self.logger.warning(
-                    f"Failed password authentication for user: {username}"
-                )
+                self.logger.warning(f"Failed password authentication for user: {username}")
                 return AuthenticationResponse(
                     result=AuthenticationResult.INVALID_CREDENTIALS,
                     message="Invalid username or password",
@@ -206,9 +192,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
             )
 
         except Exception as e:
-            self.logger.error(
-                f"Local authentication error for {username}: {e}", exc_info=True
-            )
+            self.logger.error(f"Local authentication error for {username}: {e}", exc_info=True)
             return AuthenticationResponse(
                 result=AuthenticationResult.PROVIDER_ERROR,
                 message="Authentication service error",
@@ -227,9 +211,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
             Dictionary with user information or None if not found
         """
         try:
-            user = User.query.filter_by(
-                username=username, auth_provider=AuthProvider.LOCAL
-            ).first()
+            user = User.query.filter_by(username=username, auth_provider=AuthProvider.LOCAL).first()
 
             if user:
                 return {
@@ -240,9 +222,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
                     "role": user.role.value,
                     "status": user.status.value,
                     "created_at": user.created_at.isoformat(),
-                    "last_login": (
-                        user.last_login.isoformat() if user.last_login else None
-                    ),
+                    "last_login": (user.last_login.isoformat() if user.last_login else None),
                     "is_active": user.is_active(),
                     "is_locked": user.is_locked(),
                     "password_expired": self._is_password_expired(user),
@@ -295,16 +275,10 @@ class LocalAuthProvider(BaseAuthenticationProvider):
             # Test database connectivity by counting local users
             from database import db
 
-            user_count = (
-                db.session.query(User)
-                .filter_by(auth_provider=AuthProvider.LOCAL)
-                .count()
-            )
+            user_count = db.session.query(User).filter_by(auth_provider=AuthProvider.LOCAL).count()
 
             # Test bcrypt functionality
-            test_hash = bcrypt.hashpw(
-                b"test", bcrypt.gensalt(rounds=self.bcrypt_rounds)
-            )
+            test_hash = bcrypt.hashpw(b"test", bcrypt.gensalt(rounds=self.bcrypt_rounds))
             test_verify = bcrypt.checkpw(b"test", test_hash)
 
             if not test_verify:
@@ -409,9 +383,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
                 f"Failed to create user: {str(e)}", AuthenticationResult.PROVIDER_ERROR
             )
 
-    def change_password(
-        self, username: str, current_password: str, new_password: str
-    ) -> bool:
+    def change_password(self, username: str, current_password: str, new_password: str) -> bool:
         """
         Change user password
 
@@ -427,14 +399,10 @@ class LocalAuthProvider(BaseAuthenticationProvider):
             AuthenticationException: If password change fails
         """
         # Find user
-        user = User.query.filter_by(
-            username=username, auth_provider=AuthProvider.LOCAL
-        ).first()
+        user = User.query.filter_by(username=username, auth_provider=AuthProvider.LOCAL).first()
 
         if not user:
-            raise AuthenticationException(
-                "User not found", AuthenticationResult.USER_NOT_FOUND
-            )
+            raise AuthenticationException("User not found", AuthenticationResult.USER_NOT_FOUND)
 
         # Verify current password
         if not user.check_password(current_password):
@@ -486,14 +454,10 @@ class LocalAuthProvider(BaseAuthenticationProvider):
             AuthenticationException: If password reset fails
         """
         # Find user
-        user = User.query.filter_by(
-            username=username, auth_provider=AuthProvider.LOCAL
-        ).first()
+        user = User.query.filter_by(username=username, auth_provider=AuthProvider.LOCAL).first()
 
         if not user:
-            raise AuthenticationException(
-                "User not found", AuthenticationResult.USER_NOT_FOUND
-            )
+            raise AuthenticationException("User not found", AuthenticationResult.USER_NOT_FOUND)
 
         # Validate new password policy
         policy_violations = self.validate_password(new_password)
@@ -537,9 +501,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
         violations = []
 
         if len(password) < self.min_length:
-            violations.append(
-                f"Password must be at least {self.min_length} characters long"
-            )
+            violations.append(f"Password must be at least {self.min_length} characters long")
 
         if self.require_uppercase and not re.search(r"[A-Z]", password):
             violations.append("Password must contain at least one uppercase letter")
@@ -550,9 +512,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
         if self.require_numbers and not re.search(r"\d", password):
             violations.append("Password must contain at least one number")
 
-        if self.require_special_chars and not re.search(
-            r'[!@#$%^&*(),.?":{}|<>]', password
-        ):
+        if self.require_special_chars and not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
             violations.append("Password must contain at least one special character")
 
         return violations
@@ -623,9 +583,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
             # Users by role
             users_by_role = {}
             for role in UserRole:
-                count = User.query.filter_by(
-                    auth_provider=AuthProvider.LOCAL, role=role
-                ).count()
+                count = User.query.filter_by(auth_provider=AuthProvider.LOCAL, role=role).count()
                 users_by_role[role.value] = count
 
             return {
@@ -652,9 +610,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
         Returns:
             True if password has expired
         """
-        if (
-            self.max_age_days is None or self.max_age_days <= 0
-        ):  # None or 0 means no expiration
+        if self.max_age_days is None or self.max_age_days <= 0:  # None or 0 means no expiration
             return False
 
         if not user.password_changed_at:
@@ -665,9 +621,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
                 and user.username == "admin"
                 and user.auth_provider == AuthProvider.LOCAL
             ):
-                logger.debug(
-                    f"Allowing initial setup login for admin user: {user.username}"
-                )
+                logger.debug(f"Allowing initial setup login for admin user: {user.username}")
                 return False  # Allow initial setup login
 
             # Other users with no password change date are considered expired

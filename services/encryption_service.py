@@ -196,9 +196,7 @@ class EncryptionService:
         """Check if a value is encrypted"""
         return isinstance(value, str) and value.startswith("ENC:")
 
-    def encrypt_config(
-        self, config: Dict[str, Any], sensitive_fields: list
-    ) -> Dict[str, Any]:
+    def encrypt_config(self, config: Dict[str, Any], sensitive_fields: list) -> Dict[str, Any]:
         """
         Encrypt sensitive fields in a configuration dictionary with validation
         """
@@ -220,9 +218,7 @@ class EncryptionService:
 
         return encrypted_config
 
-    def decrypt_config(
-        self, config: Dict[str, Any], sensitive_fields: list
-    ) -> Dict[str, Any]:
+    def decrypt_config(self, config: Dict[str, Any], sensitive_fields: list) -> Dict[str, Any]:
         """
         Decrypt sensitive fields in a configuration dictionary with validation
         """
@@ -314,9 +310,7 @@ class EncryptionService:
                     current_config = stream.get_plugin_config()
 
                     # Re-encrypt sensitive fields with new key
-                    rotated_config = new_service.encrypt_config(
-                        current_config, sensitive_fields
-                    )
+                    rotated_config = new_service.encrypt_config(current_config, sensitive_fields)
 
                     # Update the stream's plugin config
                     stream.plugin_config = json.dumps(rotated_config)

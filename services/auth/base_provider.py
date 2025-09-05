@@ -148,9 +148,7 @@ class BaseAuthenticationProvider(ABC):
         self._validate_configuration()
 
     @abstractmethod
-    def authenticate(
-        self, username: str, password: str = None, **kwargs
-    ) -> AuthenticationResponse:
+    def authenticate(self, username: str, password: str = None, **kwargs) -> AuthenticationResponse:
         """
         Authenticate a user with credentials
 
@@ -227,9 +225,7 @@ class BaseAuthenticationProvider(ABC):
         from database import db
 
         # Check if user already exists
-        user = User.query.filter_by(
-            username=username, auth_provider=self.provider_type
-        ).first()
+        user = User.query.filter_by(username=username, auth_provider=self.provider_type).first()
 
         if user:
             # Update existing user
@@ -290,9 +286,7 @@ class BaseAuthenticationProvider(ABC):
 
         return default_role
 
-    def create_session(
-        self, user: User, request_info: Dict[str, Any] = None
-    ) -> UserSession:
+    def create_session(self, user: User, request_info: Dict[str, Any] = None) -> UserSession:
         """
         Create a new user session
 

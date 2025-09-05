@@ -77,9 +77,7 @@ class TestLocalAuthProvider:
 
     def test_local_auth_provider_none_max_age_days(self):
         """Test LocalAuthProvider handles None max_age_days (fixes TypeError bug)."""
-        config = {
-            "password_policy": {"max_age_days": None}  # This was causing the TypeError
-        }
+        config = {"password_policy": {"max_age_days": None}}  # This was causing the TypeError
 
         provider = LocalAuthProvider(config)
 
@@ -142,8 +140,7 @@ class TestLocalAuthProvider:
             full_name="Test User",
             role=UserRole.USER,
             auth_provider=AuthProvider.LOCAL,
-            password_changed_at=datetime.now(timezone.utc)
-            - timedelta(days=15),  # Recent password
+            password_changed_at=datetime.now(timezone.utc) - timedelta(days=15),  # Recent password
         )
 
         # Password changed 15 days ago, should not be expired (limit is 30 days)
@@ -162,8 +159,7 @@ class TestLocalAuthProvider:
             full_name="Test User",
             role=UserRole.USER,
             auth_provider=AuthProvider.LOCAL,
-            password_changed_at=datetime.now(timezone.utc)
-            - timedelta(days=45),  # Old password
+            password_changed_at=datetime.now(timezone.utc) - timedelta(days=45),  # Old password
         )
 
         # Password changed 45 days ago, should be expired (limit is 30 days)
@@ -212,9 +208,7 @@ class TestLocalAuthProvider:
 
         for password in valid_passwords:
             errors = provider.validate_password(password)
-            assert (
-                len(errors) == 0
-            ), f"Password {password} should be valid but got errors: {errors}"
+            assert len(errors) == 0, f"Password {password} should be valid but got errors: {errors}"
 
     def test_password_validation_invalid_passwords(self):
         """Test password validation with invalid passwords."""
@@ -247,9 +241,7 @@ class TestLocalAuthProvider:
             assert len(errors) > 0, f"Password {password} should be invalid"
 
             # Check if expected error message is present
-            error_found = any(
-                expected_error_substring.lower() in error.lower() for error in errors
-            )
+            error_found = any(expected_error_substring.lower() in error.lower() for error in errors)
             assert (
                 error_found
             ), f"Expected error containing '{expected_error_substring}' not found in {errors}"
@@ -289,9 +281,7 @@ class TestLocalAuthProvider:
 
         # Test known features (based on actual implementation)
         assert provider.supports_feature("password_change") is True
-        assert (
-            provider.supports_feature("user_creation") is True
-        )  # Changed from user_registration
+        assert provider.supports_feature("user_creation") is True  # Changed from user_registration
         assert (
             provider.supports_feature("password_policy") is True
         )  # Changed from password_validation
@@ -316,9 +306,7 @@ class TestLocalAuthProvider:
         }
 
         provider = LocalAuthProvider(valid_config)
-        issues = (
-            provider.validate_configuration()
-        )  # No parameters, returns list of issues
+        issues = provider.validate_configuration()  # No parameters, returns list of issues
 
         assert len(issues) == 0
 

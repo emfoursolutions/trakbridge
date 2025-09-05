@@ -106,9 +106,7 @@ class TestTakServerModel:
         with app.app_context():
             # Use unique name to avoid constraint violations between tests
             unique_name = f"Test Server {uuid.uuid4().hex[:8]}"
-            server = TakServer(
-                name=unique_name, host="localhost", port=8089, protocol="tcp"
-            )
+            server = TakServer(name=unique_name, host="localhost", port=8089, protocol="tcp")
             db_session.add(server)
             db_session.commit()
 
@@ -257,9 +255,7 @@ class TestCallsignMigrationIntegration:
             assert "callsign_mappings" in tables
 
             # Check callsign_mappings table columns
-            callsign_columns = [
-                col["name"] for col in inspector.get_columns("callsign_mappings")
-            ]
+            callsign_columns = [col["name"] for col in inspector.get_columns("callsign_mappings")]
             expected_callsign_columns = [
                 "id",
                 "stream_id",
@@ -283,9 +279,7 @@ class TestCallsignMigrationIntegration:
                 "enable_per_callsign_cot_types",
             ]
             for col in expected_stream_callsign_columns:
-                assert (
-                    col in stream_columns
-                ), f"Column '{col}' missing from streams table"
+                assert col in stream_columns, f"Column '{col}' missing from streams table"
 
     def test_database_constraints_exist(self, app, db_session):
         """Test that database constraints are properly created"""
@@ -311,10 +305,7 @@ class TestCallsignMigrationIntegration:
             foreign_keys = inspector.get_foreign_keys("callsign_mappings")
             fk_found = False
             for fk in foreign_keys:
-                if (
-                    fk["constrained_columns"] == ["stream_id"]
-                    and fk["referred_table"] == "streams"
-                ):
+                if fk["constrained_columns"] == ["stream_id"] and fk["referred_table"] == "streams":
                     fk_found = True
                     break
             assert fk_found, "Foreign key constraint to streams table not found"

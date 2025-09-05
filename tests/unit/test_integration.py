@@ -281,12 +281,8 @@ class TestPhase3AMigrationCompleteness:
                             "from services.logging_service import get_module_logger",
                         ]
 
-                        has_new_pattern = any(
-                            pattern in content for pattern in new_patterns
-                        )
-                        assert (
-                            has_new_pattern
-                        ), f"{module_name} should have new logging pattern"
+                        has_new_pattern = any(pattern in content for pattern in new_patterns)
+                        assert has_new_pattern, f"{module_name} should have new logging pattern"
 
             except ImportError as e:
                 pytest.skip(f"Could not check {module_name}: {e}")
@@ -305,10 +301,7 @@ class TestPhase3AMigrationCompleteness:
                     assert "helper.get(" in content
 
                     # Should not have old 13-line pattern
-                    assert (
-                        'user_search_config = config.get("user_search", {})'
-                        not in content
-                    )
+                    assert 'user_search_config = config.get("user_search", {})' not in content
 
         except ImportError:
             pytest.skip("LDAP provider not available")
@@ -350,9 +343,7 @@ class TestPhase3AMigrationCompleteness:
                         ]
 
                         has_db_import = any(imp in content for imp in db_helper_imports)
-                        assert (
-                            has_db_import
-                        ), f"{module_name} should import database helpers"
+                        assert has_db_import, f"{module_name} should import database helpers"
 
             except ImportError as e:
                 pytest.skip(f"Could not check {module_name}: {e}")
@@ -376,9 +367,7 @@ class TestPhase3ABenefitsRealization:
         # New pattern (what we migrated to) - 3 lines
         helper = ConfigHelper(test_config)
         base_dn = helper.get("user_search.base_dn", "")
-        search_filter = helper.get(
-            "user_search.search_filter", "(sAMAccountName={username})"
-        )
+        search_filter = helper.get("user_search.search_filter", "(sAMAccountName={username})")
 
         # Should work correctly
         assert base_dn == "ou=users,dc=test,dc=com"
@@ -400,10 +389,7 @@ class TestPhase3ABenefitsRealization:
                         content = f.read()
 
                         # Check logging consistency
-                        if (
-                            "from services.logging_service import get_module_logger"
-                            not in content
-                        ):
+                        if "from services.logging_service import get_module_logger" not in content:
                             logging_consistency = False
 
                         # Check for config helper usage where expected
@@ -414,18 +400,13 @@ class TestPhase3ABenefitsRealization:
                         ]
 
                         if module_name in config_services:
-                            if (
-                                "from utils.config_helpers import ConfigHelper"
-                                not in content
-                            ):
+                            if "from utils.config_helpers import ConfigHelper" not in content:
                                 config_consistency = False
 
             except ImportError:
                 continue
 
-        assert (
-            logging_consistency
-        ), "Logging patterns should be consistent across services"
+        assert logging_consistency, "Logging patterns should be consistent across services"
         # Config consistency is checked for services that need it
 
     def test_maintainability_improvements_achieved(self):

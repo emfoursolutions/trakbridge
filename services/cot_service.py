@@ -116,9 +116,7 @@ class EnhancedCOTService:
 
         for key, value in location.items():
             if isinstance(value, datetime) and key not in ["timestamp"]:
-                logger.warning(
-                    f"Found datetime object in unexpected field '{key}': {value}"
-                )
+                logger.warning(f"Found datetime object in unexpected field '{key}': {value}")
                 # Convert datetime to timestamp if it's not in timestamp field
                 if key in [
                     "lat",
@@ -135,9 +133,7 @@ class EnhancedCOTService:
                 ]:
                     cleaned_location[key] = 0.0  # Use default for numeric fields
                 else:
-                    cleaned_location[key] = str(
-                        value
-                    )  # Convert to string for other fields
+                    cleaned_location[key] = str(value)  # Convert to string for other fields
             else:
                 cleaned_location[key] = value
 
@@ -231,9 +227,7 @@ class EnhancedCOTService:
 
                 # Ensure event_time is a proper datetime object
                 if not isinstance(event_time, datetime):
-                    logger.error(
-                        f"event_time is not a datetime object: {type(event_time)}"
-                    )
+                    logger.error(f"event_time is not a datetime object: {type(event_time)}")
                     event_time = datetime.now(timezone.utc)
 
                 # Determine COT type based on mode
@@ -272,9 +266,7 @@ class EnhancedCOTService:
 
                 # Add optional fields with safe conversions
                 if location.get("speed"):
-                    event_data["speed"] = EnhancedCOTService._safe_float_convert(
-                        location["speed"]
-                    )
+                    event_data["speed"] = EnhancedCOTService._safe_float_convert(location["speed"])
                 if location.get("heading") or location.get("course"):
                     event_data["course"] = EnhancedCOTService._safe_float_convert(
                         location.get("heading", location.get("course", 0.0))
@@ -289,21 +281,15 @@ class EnhancedCOTService:
                 cot_xml = EnhancedCOTService._generate_cot_xml(event_data)
                 events.append(cot_xml)
                 logger.debug(cot_xml)
-                logger.debug(
-                    f"Created COT event for {cleaned_location.get('name', 'Unknown')}"
-                )
+                logger.debug(f"Created COT event for {cleaned_location.get('name', 'Unknown')}")
 
             except Exception as e:
                 location_name = location.get("name", "Unknown")
-                logger.error(
-                    f"Error creating COT event for location {location_name}: {e}"
-                )
+                logger.error(f"Error creating COT event for location {location_name}: {e}")
                 logger.error(f"Location data: {location}")
                 continue
 
-        logger.debug(
-            f"Created {len(events)} COT events from {len(locations)} locations"
-        )
+        logger.debug(f"Created {len(events)} COT events from {len(locations)} locations")
         return events
 
     @staticmethod
@@ -465,18 +451,12 @@ class EnhancedCOTService:
                 contact.set("endpoint", "*:-1:stcp")
 
                 # Add track information with safe conversions
-                if (
-                    location.get("speed")
-                    or location.get("heading")
-                    or location.get("course")
-                ):
+                if location.get("speed") or location.get("heading") or location.get("course"):
                     track = etree.SubElement(detail, "track")
 
                     speed_val = max(
                         0.0,
-                        EnhancedCOTService._safe_float_convert(
-                            location.get("speed", 0.0)
-                        ),
+                        EnhancedCOTService._safe_float_convert(location.get("speed", 0.0)),
                     )
                     course_val = (
                         EnhancedCOTService._safe_float_convert(
@@ -606,9 +586,7 @@ class EnhancedCOTService:
                 cert_pem, key_pem = EnhancedCOTService._extract_p12_certificate(
                     tak_server.cert_p12, tak_server.get_cert_password()
                 )
-                cert_path, key_path = EnhancedCOTService._create_temp_cert_files(
-                    cert_pem, key_pem
-                )
+                cert_path, key_path = EnhancedCOTService._create_temp_cert_files(cert_pem, key_pem)
                 logger.debug(f"Created temporary cert files: {cert_path}, {key_path}")
 
             # Create PyTAK configuration
@@ -659,9 +637,7 @@ class EnhancedCOTService:
                     for event in self.events_to_send:
                         await self.put_queue(event)
                         self.events_sent += 1
-                        logger.debug(
-                            f"Queued event {self.events_sent}/{len(self.events_to_send)}"
-                        )
+                        logger.debug(f"Queued event {self.events_sent}/{len(self.events_to_send)}")
 
                     logger.info(f"Queued {self.events_sent} events for transmission")
 
@@ -669,9 +645,7 @@ class EnhancedCOTService:
                     max_wait = 60  # seconds
                     waited = 0
                     while not self.queue.empty() and waited < max_wait:
-                        logger.debug(
-                            f"Waiting for queue to empty... (size: {self.queue.qsize()})"
-                        )
+                        logger.debug(f"Waiting for queue to empty... (size: {self.queue.qsize()})")
                         await asyncio.sleep(1)
                         waited += 1
 
@@ -703,9 +677,7 @@ class EnhancedCOTService:
 
                 while (asyncio.get_event_loop().time() - start_time) < timeout_time:
                     if sender.finished:
-                        logger.info(
-                            f"Successfully sent {len(events)} events to {tak_server.name}"
-                        )
+                        logger.info(f"Successfully sent {len(events)} events to {tak_server.name}")
                         success = True
                         break
                     await asyncio.sleep(0.5)
@@ -739,14 +711,10 @@ class EnhancedCOTService:
     @staticmethod
     async def _send_with_custom(events: List[bytes], tak_server) -> bool:
         """Send events using custom implementation"""
-        return await EnhancedCOTService._send_cot_to_tak_server_direct(
-            events, tak_server
-        )
+        return await EnhancedCOTService._send_cot_to_tak_server_direct(events, tak_server)
 
     @staticmethod
-    async def _send_cot_to_tak_server_direct(
-        cot_events: List[bytes], tak_server
-    ) -> bool:
+    async def _send_cot_to_tak_server_direct(cot_events: List[bytes], tak_server) -> bool:
         """Direct send implementation without PyTAK"""
         if not cot_events:
             logger.warning("No COT events to send")
@@ -771,14 +739,10 @@ class EnhancedCOTService:
                         cert_pem, key_pem = EnhancedCOTService._extract_p12_certificate(
                             tak_server.cert_p12, tak_server.get_cert_password()
                         )
-                        cert_path, key_path = (
-                            EnhancedCOTService._create_temp_cert_files(
-                                cert_pem, key_pem
-                            )
+                        cert_path, key_path = EnhancedCOTService._create_temp_cert_files(
+                            cert_pem, key_pem
                         )
-                        ssl_context.load_cert_chain(
-                            certfile=cert_path, keyfile=key_path
-                        )
+                        ssl_context.load_cert_chain(certfile=cert_path, keyfile=key_path)
                     except Exception as e:
                         logger.error(f"Failed to load P12 certificate: {e}")
                         raise
@@ -790,9 +754,7 @@ class EnhancedCOTService:
 
             if ssl_context:
                 reader, writer = await asyncio.wait_for(
-                    asyncio.open_connection(
-                        tak_server.host, tak_server.port, ssl=ssl_context
-                    ),
+                    asyncio.open_connection(tak_server.host, tak_server.port, ssl=ssl_context),
                     timeout=30.0,
                 )
             else:
@@ -810,9 +772,7 @@ class EnhancedCOTService:
                 events_sent += 1
                 logger.debug(f"Sent event {events_sent}/{len(cot_events)}")
 
-            logger.info(
-                f"Successfully sent {events_sent} COT events to {tak_server.name}"
-            )
+            logger.info(f"Successfully sent {events_sent} COT events to {tak_server.name}")
             return True
 
         except Exception as e:
@@ -834,8 +794,8 @@ class EnhancedCOTService:
         """Extract certificate and key from P12 data"""
         try:
             password_bytes = password.encode("utf-8") if password else None
-            private_key, certificate, additional_certificates = (
-                pkcs12.load_key_and_certificates(p12_data, password_bytes)
+            private_key, certificate, additional_certificates = pkcs12.load_key_and_certificates(
+                p12_data, password_bytes
             )
 
             cert_pem = certificate.public_bytes(serialization.Encoding.PEM)
@@ -869,9 +829,7 @@ class EnhancedCOTService:
                 os.unlink(cert_path)
                 os.unlink(key_path)
             except Exception as cleanup_error:
-                logger.error(
-                    f"Error cleaning up temporary Certificate Files: {cleanup_error}"
-                )
+                logger.error(f"Error cleaning up temporary Certificate Files: {cleanup_error}")
             logger.error(f"Error creating temporary Certificate Files: {e}")
             raise
 
@@ -986,9 +944,7 @@ class PersistentCOTService:
             """PyTAK worker coroutine"""
             nonlocal connection_error
             try:
-                logger.info(
-                    f"Starting persistent worker for TAK server {tak_server.name}"
-                )
+                logger.info(f"Starting persistent worker for TAK server {tak_server.name}")
 
                 # Create PyTAK configuration
                 config = await self._create_pytak_config(tak_server)
@@ -1006,10 +962,7 @@ class PersistentCOTService:
                     )
 
                     # Handle the connection result (might be a tuple for TCP)
-                    if (
-                        isinstance(connection_result, tuple)
-                        and len(connection_result) == 2
-                    ):
+                    if isinstance(connection_result, tuple) and len(connection_result) == 2:
                         reader, writer = connection_result
                         logger.info(
                             f"Received (reader, writer) tuple for TAK server {tak_server.name}"
@@ -1021,9 +974,7 @@ class PersistentCOTService:
                         )
                         self.connections[tak_server_id] = connection_result
 
-                    logger.info(
-                        f"Successfully connected to TAK server {tak_server.name}"
-                    )
+                    logger.info(f"Successfully connected to TAK server {tak_server.name}")
 
                     # Signal that connection is ready
                     connection_ready.set()
@@ -1034,17 +985,13 @@ class PersistentCOTService:
                     connection_error = Exception(error_msg)
                     return
                 except Exception as e:
-                    error_msg = (
-                        f"Failed to connect to TAK server {tak_server.name}: {e}"
-                    )
+                    error_msg = f"Failed to connect to TAK server {tak_server.name}: {e}"
                     logger.error(error_msg)
                     connection_error = Exception(error_msg)
                     return
 
                 # Start the transmission worker
-                await self._transmission_worker(
-                    queue, self.connections[tak_server_id], tak_server
-                )
+                await self._transmission_worker(queue, self.connections[tak_server_id], tak_server)
 
             except Exception as e:
                 logger.error(f"PyTAK worker failed for TAK server {tak_server_id}: {e}")
@@ -1065,9 +1012,7 @@ class PersistentCOTService:
                 logger.info(f"Started PyTAK worker for TAK server {tak_server_id}.")
                 return True
             except asyncio.TimeoutError:
-                logger.error(
-                    f"Timeout waiting for worker to start for TAK server {tak_server_id}"
-                )
+                logger.error(f"Timeout waiting for worker to start for TAK server {tak_server_id}")
                 # Clean up the task
                 task.cancel()
                 try:
@@ -1082,9 +1027,7 @@ class PersistentCOTService:
 
         # Check if there was a connection error
         if connection_error:
-            logger.error(
-                f"Connection error for TAK server {tak_server_id}: {connection_error}"
-            )
+            logger.error(f"Connection error for TAK server {tak_server_id}: {connection_error}")
             return False
 
     @staticmethod
@@ -1102,17 +1045,13 @@ class PersistentCOTService:
         # Handle the case where connection might be a tuple (reader, writer)
         if isinstance(connection, tuple) and len(connection) == 2:
             reader, writer = connection
-            logger.info(
-                f"Using (reader, writer) tuple for TAK server '{tak_server.name}'"
-            )
+            logger.info(f"Using (reader, writer) tuple for TAK server '{tak_server.name}'")
             use_writer = True
         else:
             reader = connection
             writer = None
             use_writer = False
-            logger.info(
-                f"Using single connection object for TAK server '{tak_server.name}'"
-            )
+            logger.info(f"Using single connection object for TAK server '{tak_server.name}'")
 
         try:
             while True:
@@ -1121,11 +1060,7 @@ class PersistentCOTService:
                     current_queue_size = queue.qsize()
 
                     # Log when queue becomes empty after having events
-                    if (
-                        current_queue_size == 0
-                        and not queue_empty_logged
-                        and events_processed > 0
-                    ):
+                    if current_queue_size == 0 and not queue_empty_logged and events_processed > 0:
                         logger.info(
                             f"Queue cleared for TAK server '{tak_server.name}' - "
                             f"all {events_processed} events have been processed and transmitted"
@@ -1162,9 +1097,7 @@ class PersistentCOTService:
                     # Reset queue empty flag when we get an event
                     if queue_empty_logged:
                         queue_empty_logged = False
-                        logger.debug(
-                            f"Queue activity resumed for TAK server '{tak_server.name}'"
-                        )
+                        logger.debug(f"Queue activity resumed for TAK server '{tak_server.name}'")
 
                     logger.debug(
                         f"Processing event {events_processed + 1} from queue for TAK server '{tak_server.name}'"
@@ -1206,9 +1139,7 @@ class PersistentCOTService:
 
                 except asyncio.TimeoutError:
                     # Timeout is normal when no events are available
-                    logger.debug(
-                        f"No events received (timeout) for TAK server '{tak_server.name}'"
-                    )
+                    logger.debug(f"No events received (timeout) for TAK server '{tak_server.name}'")
                     continue
 
                 except Exception as e:
@@ -1220,9 +1151,7 @@ class PersistentCOTService:
                     queue.task_done()
 
         except Exception as e:
-            logger.error(
-                f"Transmission worker error for TAK server '{tak_server.name}': {e}"
-            )
+            logger.error(f"Transmission worker error for TAK server '{tak_server.name}': {e}")
         finally:
             # Log final statistics
             logger.info(
@@ -1235,30 +1164,20 @@ class PersistentCOTService:
                 try:
                     writer.close()
                     await writer.wait_closed()
-                    logger.info(
-                        f"Closed writer connection for TAK server '{tak_server.name}'"
-                    )
+                    logger.info(f"Closed writer connection for TAK server '{tak_server.name}'")
                 except Exception as e:
-                    logger.debug(
-                        f"Error closing writer for TAK server '{tak_server.name}': {e}"
-                    )
+                    logger.debug(f"Error closing writer for TAK server '{tak_server.name}': {e}")
             elif hasattr(reader, "close"):
                 try:
                     await reader.close()
-                    logger.info(
-                        f"Closed reader connection for TAK server '{tak_server.name}'"
-                    )
+                    logger.info(f"Closed reader connection for TAK server '{tak_server.name}'")
                 except Exception as e:
-                    logger.debug(
-                        f"Error closing reader for TAK server '{tak_server.name}': {e}"
-                    )
+                    logger.debug(f"Error closing reader for TAK server '{tak_server.name}': {e}")
 
     def log_queue_status(self, tak_server_id: int, context: str = ""):
         """Log current queue status for a TAK server"""
         if tak_server_id not in self.queues:
-            logger.warning(
-                f"No queue found for TAK server {tak_server_id} when logging status"
-            )
+            logger.warning(f"No queue found for TAK server {tak_server_id} when logging status")
             return
 
         queue = self.queues[tak_server_id]
@@ -1283,15 +1202,11 @@ class PersistentCOTService:
 
         # Determine protocol
         protocol = "tls" if tak_server.protocol.lower() in ["tls", "ssl"] else "tcp"
-        config.set(
-            "pytak", "COT_URL", f"{protocol}://{tak_server.host}:{tak_server.port}"
-        )
+        config.set("pytak", "COT_URL", f"{protocol}://{tak_server.host}:{tak_server.port}")
 
         # Add TLS configuration if needed
         if protocol == "tls":
-            config.set(
-                "pytak", "PYTAK_TLS_DONT_VERIFY", str(not tak_server.verify_ssl).lower()
-            )
+            config.set("pytak", "PYTAK_TLS_DONT_VERIFY", str(not tak_server.verify_ssl).lower())
 
             # Handle P12 certificate if available
             if tak_server.cert_p12 and len(tak_server.cert_p12) > 0:
@@ -1307,9 +1222,7 @@ class PersistentCOTService:
                 except Exception as e:
                     logger.error(f"Failed to configure P12 certificate: {e}")
 
-        logger.debug(
-            f"Created PyTAK config for {tak_server.name}: {dict(config['pytak'])}"
-        )
+        logger.debug(f"Created PyTAK config for {tak_server.name}: {dict(config['pytak'])}")
         return config["pytak"]
 
     async def stop_worker(self, tak_server_id: int):
@@ -1359,9 +1272,7 @@ class PersistentCOTService:
         Put a COT event onto the TAK server's queue.
         """
         if tak_server_id not in self.queues:
-            logger.error(
-                f"No queue found for TAK server {tak_server_id}. Event not sent."
-            )
+            logger.error(f"No queue found for TAK server {tak_server_id}. Event not sent.")
             return False
 
         try:
@@ -1370,9 +1281,7 @@ class PersistentCOTService:
 
             # Log if this is the first event being added to an empty queue
             if queue_size_before == 0:
-                logger.info(
-                    f"Adding first event to empty queue for TAK server {tak_server_id}"
-                )
+                logger.info(f"Adding first event to empty queue for TAK server {tak_server_id}")
 
             await queue.put(event)
             queue_size_after = queue.qsize()
@@ -1432,9 +1341,7 @@ class PersistentCOTService:
         """Get status for all workers"""
         return {
             tak_server_id: self.get_worker_status(tak_server_id)
-            for tak_server_id in set(
-                list(self.workers.keys()) + list(self.queues.keys())
-            )
+            for tak_server_id in set(list(self.workers.keys()) + list(self.queues.keys()))
         }
 
     def get_detailed_worker_status(self, tak_server_id: int) -> Dict[str, Any]:

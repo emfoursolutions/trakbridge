@@ -181,9 +181,7 @@ class GarminPlugin(BaseGPSPlugin, CallsignMappable):
                     f"[Garmin] Applied callsign mapping: {identifier_value} -> {custom_callsign}"
                 )
 
-    async def fetch_locations(
-        self, session: aiohttp.ClientSession
-    ) -> List[Dict[str, Any]]:
+    async def fetch_locations(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
         """Fetch location data from Garmin KML feed"""
         config = self.get_decrypted_config()
 
@@ -215,9 +213,7 @@ class GarminPlugin(BaseGPSPlugin, CallsignMappable):
 
         for placemark in placemarks:
             if hide_inactive and self._is_device_inactive(placemark):
-                logger.debug(
-                    f"Skipping inactive device: {placemark.get('name', 'Unknown')}"
-                )
+                logger.debug(f"Skipping inactive device: {placemark.get('name', 'Unknown')}")
                 continue
 
             location = self._create_location_dict(placemark)
@@ -268,9 +264,7 @@ class GarminPlugin(BaseGPSPlugin, CallsignMappable):
 
         for attempt in range(3):
             try:
-                async with session.get(
-                    config["url"], auth=auth, ssl=ssl_context
-                ) as response:
+                async with session.get(config["url"], auth=auth, ssl=ssl_context) as response:
                     if response.status == 200:
                         content = await response.text(encoding="utf-8")
                         return self._validate_kml_content(content)
@@ -281,9 +275,7 @@ class GarminPlugin(BaseGPSPlugin, CallsignMappable):
                 logger.warning(f"SSL Error on attempt {attempt + 1}: {ssl_err}")
                 # Try without SSL verification
                 try:
-                    async with session.get(
-                        config["url"], auth=auth, ssl=False
-                    ) as response:
+                    async with session.get(config["url"], auth=auth, ssl=False) as response:
                         if response.status == 200:
                             content = await response.text(encoding="utf-8")
                             if content and "<kml" in content:
@@ -331,9 +323,7 @@ class GarminPlugin(BaseGPSPlugin, CallsignMappable):
         }
 
         error_text = await response.text(encoding="utf-8")
-        message = error_messages.get(
-            response.status, f"HTTP {response.status}: {error_text}"
-        )
+        message = error_messages.get(response.status, f"HTTP {response.status}: {error_text}")
         logger.error(message)
         # Return error format expected by COT service
         return {"_error": str(response.status), "_error_message": message}
@@ -395,9 +385,9 @@ class TimestampParser:
         # Handle ISO format with Z suffix
         if timestamp_str.endswith("Z"):
             try:
-                return datetime.fromisoformat(
-                    timestamp_str.replace("Z", "+00:00")
-                ).replace(tzinfo=None)
+                return datetime.fromisoformat(timestamp_str.replace("Z", "+00:00")).replace(
+                    tzinfo=None
+                )
             except ValueError:
                 pass
 
@@ -512,16 +502,12 @@ class KMLDataExtractor:
     def _get_coordinates(geometry) -> Optional[tuple]:
         """Extract coordinates from geometry"""
         try:
-            coords = getattr(geometry, "coords", None) or getattr(
-                geometry, "coordinates", None
-            )
+            coords = getattr(geometry, "coords", None) or getattr(geometry, "coordinates", None)
             if not coords:
                 return None
 
             if isinstance(coords, list) and coords:
-                coord_pair = (
-                    coords[0] if isinstance(coords[0], (list, tuple)) else coords
-                )
+                coord_pair = coords[0] if isinstance(coords[0], (list, tuple)) else coords
                 return coord_pair[0], coord_pair[1]
 
         except (IndexError, AttributeError, TypeError):
@@ -583,9 +569,7 @@ class KMLDataExtractor:
         """Extract placemark data from XML element"""
         try:
             # Get coordinates
-            coords_elem = placemark_xml.find(
-                ".//kml:Point/kml:coordinates", self.KML_NAMESPACE
-            )
+            coords_elem = placemark_xml.find(".//kml:Point/kml:coordinates", self.KML_NAMESPACE)
             if coords_elem is None:
                 return None
 
@@ -646,9 +630,7 @@ class KMLDataExtractor:
     def _extract_xml_timestamp(self, placemark_xml) -> Optional[datetime]:
         """Extract timestamp from XML elements"""
         # Check TimeStamp element
-        timestamp_elem = placemark_xml.find(
-            ".//kml:TimeStamp/kml:when", self.KML_NAMESPACE
-        )
+        timestamp_elem = placemark_xml.find(".//kml:TimeStamp/kml:when", self.KML_NAMESPACE)
         if timestamp_elem is not None:
             return TimestampParser.parse(timestamp_elem.text)
 
@@ -665,9 +647,7 @@ class KMLDataExtractor:
 
         return None
 
-    def _extract_device_imei(
-        self, extended_data: Dict[str, Any], device_name: str
-    ) -> str:
+    def _extract_device_imei(self, extended_data: Dict[str, Any], device_name: str) -> str:
         """Extract IMEI with multiple fallback strategies to avoid 'Unknown' identifiers"""
         # Primary: Standard IMEI field
         imei = extended_data.get("IMEI")
@@ -689,9 +669,7 @@ class KMLDataExtractor:
 
             imei_pattern = re.search(r"\b\d{15}\b", device_name)
             if imei_pattern:
-                logger.debug(
-                    f"[Garmin] Extracted IMEI from device name: {imei_pattern.group()}"
-                )
+                logger.debug(f"[Garmin] Extracted IMEI from device name: {imei_pattern.group()}")
                 return imei_pattern.group()
 
         # Fallback 3: Generate stable identifier from other extended data
@@ -710,9 +688,7 @@ class KMLDataExtractor:
                 # Create a hash-based stable identifier from field name + first non-empty value
                 import hashlib
 
-                stable_id = hashlib.md5(f"{field_name}:{value}".encode()).hexdigest()[
-                    :12
-                ]
+                stable_id = hashlib.md5(f"{field_name}:{value}".encode()).hexdigest()[:12]
                 logger.warning(
                     f"[Garmin] IMEI not found, using generated stable ID from {field_name}: {stable_id}"
                 )
@@ -724,9 +700,7 @@ class KMLDataExtractor:
 
             clean_name = re.sub(r"[^a-zA-Z0-9]", "", device_name)[:12]
             if clean_name:
-                logger.warning(
-                    f"[Garmin] IMEI not found, using cleaned device name: {clean_name}"
-                )
+                logger.warning(f"[Garmin] IMEI not found, using cleaned device name: {clean_name}")
                 return f"DEV-{clean_name}"
 
         # Last resort: Generate based on timestamp to ensure uniqueness

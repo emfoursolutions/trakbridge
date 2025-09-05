@@ -48,8 +48,7 @@ def app():
     test_env_vars = {
         "FLASK_ENV": "testing",
         "DB_TYPE": "sqlite",
-        "TRAKBRIDGE_ENCRYPTION_KEY": ci_encryption_key
-        or "test-encryption-key-for-testing-12345",
+        "TRAKBRIDGE_ENCRYPTION_KEY": ci_encryption_key or "test-encryption-key-for-testing-12345",
         "SECRET_KEY": ci_secret_key or "test-secret-key-for-sessions",
     }
 
@@ -70,9 +69,7 @@ def app():
 
         # Create app using the testing configuration
         app = create_app("testing")
-        print(
-            f"✅ Flask app created successfully with config: {app.config.get('ENV', 'unknown')}"
-        )
+        print(f"✅ Flask app created successfully with config: {app.config.get('ENV', 'unknown')}")
 
         with app.app_context():
             # Verify database is working
@@ -135,9 +132,7 @@ def db_session(app):
         except Exception as e:
             # Enhanced error handling for CI debugging
             print(f"❌ Database session setup error: {e}")
-            print(
-                f"Database URI: {app.config.get('SQLALCHEMY_DATABASE_URI', 'Not set')}"
-            )
+            print(f"Database URI: {app.config.get('SQLALCHEMY_DATABASE_URI', 'Not set')}")
             print(f"Database type: {os.environ.get('DB_TYPE', 'Not set')}")
 
             # Try to recover by creating tables if they don't exist
@@ -521,9 +516,7 @@ def test_callsign_mappings(app, db_session, test_users):
                 name=f"Test {plugin_type.title()} Stream",
                 plugin_type=plugin_type,
                 enable_callsign_mapping=True,
-                callsign_identifier_field=(
-                    "imei" if plugin_type == "garmin" else "device_name"
-                ),
+                callsign_identifier_field=("imei" if plugin_type == "garmin" else "device_name"),
             )
             db_session.add(stream)
             test_streams[plugin_type] = stream
@@ -616,9 +609,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "performance: mark test as performance test")
     config.addinivalue_line("markers", "security: mark test as security test")
     config.addinivalue_line("markers", "callsign: mark test as callsign mapping test")
-    config.addinivalue_line(
-        "markers", "database: mark test as requiring specific database"
-    )
+    config.addinivalue_line("markers", "database: mark test as requiring specific database")
 
 
 def pytest_sessionstart(session):

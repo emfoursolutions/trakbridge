@@ -30,9 +30,7 @@ def upgrade():
 
     # Check if user_sessions table exists
     if not table_exists("user_sessions"):
-        print(
-            "WARNING: Table 'user_sessions' does not exist. Skipping timezone migration."
-        )
+        print("WARNING: Table 'user_sessions' does not exist. Skipping timezone migration.")
         return
 
     # Check if the migration has already been applied
@@ -43,12 +41,8 @@ def upgrade():
 
     # Check if we already have timezone-aware columns
     for col in columns:
-        if col["name"] in ["expires_at", "last_activity"] and "TIME ZONE" in str(
-            col["type"]
-        ):
-            print(
-                "Timezone support already exists in user_sessions table. Skipping migration."
-            )
+        if col["name"] in ["expires_at", "last_activity"] and "TIME ZONE" in str(col["type"]):
+            print("Timezone support already exists in user_sessions table. Skipping migration.")
             return
 
     # Create new table with timezone-aware columns
@@ -114,9 +108,7 @@ def upgrade():
         )
         """
 
-    success = safe_execute(
-        table_sql, "Create new user_sessions table with timezone support"
-    )
+    success = safe_execute(table_sql, "Create new user_sessions table with timezone support")
 
     if not success:
         print("Failed to create new user_sessions table. Aborting migration.")
@@ -186,9 +178,7 @@ def upgrade():
     )
 
     # Recreate indexes
-    safe_create_index(
-        "ix_user_sessions_session_id", "user_sessions", ["session_id"], unique=True
-    )
+    safe_create_index("ix_user_sessions_session_id", "user_sessions", ["session_id"], unique=True)
 
 
 def downgrade():
@@ -196,9 +186,7 @@ def downgrade():
 
     # Check if user_sessions table exists
     if not table_exists("user_sessions"):
-        print(
-            "WARNING: Table 'user_sessions' does not exist. Cannot downgrade timezone migration."
-        )
+        print("WARNING: Table 'user_sessions' does not exist. Cannot downgrade timezone migration.")
         return
 
     # Create table without timezone support
@@ -264,9 +252,7 @@ def downgrade():
         )
         """
 
-    success = safe_execute(
-        table_sql, "Create user_sessions table without timezone support"
-    )
+    success = safe_execute(table_sql, "Create user_sessions table without timezone support")
 
     if not success:
         print("Failed to create downgrade table. Aborting downgrade.")
@@ -336,6 +322,4 @@ def downgrade():
     )
 
     # Recreate indexes
-    safe_create_index(
-        "ix_user_sessions_session_id", "user_sessions", ["session_id"], unique=True
-    )
+    safe_create_index("ix_user_sessions_session_id", "user_sessions", ["session_id"], unique=True)

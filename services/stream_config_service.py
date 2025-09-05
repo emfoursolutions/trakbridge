@@ -60,9 +60,7 @@ class StreamConfigService:
             # Get plugin metadata to identify sensitive fields
             metadata = self.plugin_manager.get_plugin_metadata(plugin_type)
             if not metadata:
-                validation_result["errors"].append(
-                    f"Plugin type '{plugin_type}' not found"
-                )
+                validation_result["errors"].append(f"Plugin type '{plugin_type}' not found")
                 validation_result["valid"] = False
                 return validation_result
 
@@ -98,9 +96,7 @@ class StreamConfigService:
                         validation_result["security_issues"].append(
                             f"Field '{key}' contains default password value"
                         )
-                    if "url" in key.lower() and not value.startswith(
-                        ("http://", "https://")
-                    ):
+                    if "url" in key.lower() and not value.startswith(("http://", "https://")):
                         validation_result["warnings"].append(
                             f"URL field '{key}' may not be properly formatted"
                         )
@@ -128,9 +124,7 @@ class StreamConfigService:
                 # Remove 'plugin_' prefix
                 config_key = key[7:]
                 plugin_config[config_key] = value
-                logger.debug(
-                    f"Found plugin config field: {key} -> {config_key} = {value}"
-                )
+                logger.debug(f"Found plugin config field: {key} -> {config_key} = {value}")
 
         logger.debug(f"Extracted plugin config: {plugin_config}")
         return plugin_config
@@ -177,9 +171,7 @@ class StreamConfigService:
                 logger.info(f"Loaded existing config for stream {stream_id}")
 
             except Exception as e:
-                logger.warning(
-                    f"Could not load existing config for stream {stream_id}: {e}"
-                )
+                logger.warning(f"Could not load existing config for stream {stream_id}: {e}")
                 return merged_config
 
             # Get sensitive fields from plugin metadata
@@ -205,9 +197,7 @@ class StreamConfigService:
                     field_name not in merged_config or not merged_config.get(field_name)
                 ) and existing_config.get(field_name):
                     merged_config[field_name] = existing_config[field_name]
-                    logger.info(
-                        f"Preserved existing encrypted value for empty {field_name} field"
-                    )
+                    logger.info(f"Preserved existing encrypted value for empty {field_name} field")
 
             return merged_config
 
@@ -217,9 +207,7 @@ class StreamConfigService:
             return new_config
 
     @staticmethod
-    def export_stream_config(
-        stream_id: int, include_sensitive: bool = False
-    ) -> Dict[str, Any]:
+    def export_stream_config(stream_id: int, include_sensitive: bool = False) -> Dict[str, Any]:
         """Export stream configuration for backup or migration"""
         try:
             stream = Stream.query.get_or_404(stream_id)
@@ -239,12 +227,8 @@ class StreamConfigService:
                     "plugin_config"
                 ],
                 "metadata": {
-                    "created_at": (
-                        stream.created_at.isoformat() if stream.created_at else None
-                    ),
-                    "updated_at": (
-                        stream.updated_at.isoformat() if stream.updated_at else None
-                    ),
+                    "created_at": (stream.created_at.isoformat() if stream.created_at else None),
+                    "updated_at": (stream.updated_at.isoformat() if stream.updated_at else None),
                     "total_messages_sent": stream.total_messages_sent,
                 },
             }
@@ -284,13 +268,9 @@ class StreamConfigService:
                 if stream_security["has_issues"]:
                     security_status["streams_with_issues"] += 1
 
-                security_status["encrypted_fields"] += stream_security[
-                    "encrypted_fields"
-                ]
+                security_status["encrypted_fields"] += stream_security["encrypted_fields"]
                 security_status["weak_passwords"] += stream_security["weak_passwords"]
-                security_status["default_passwords"] += stream_security[
-                    "default_passwords"
-                ]
+                security_status["default_passwords"] += stream_security["default_passwords"]
 
             return security_status
 
@@ -425,14 +405,10 @@ class StreamConfigService:
                     if isinstance(value, str):
                         if len(value) < 8:
                             analysis["weak_passwords"] += 1
-                            analysis["issues"].append(
-                                f"Weak password in field '{field_name}'"
-                            )
+                            analysis["issues"].append(f"Weak password in field '{field_name}'")
                         if value.lower() in ["password", "123456", "admin"]:
                             analysis["default_passwords"] += 1
-                            analysis["issues"].append(
-                                f"Default password in field '{field_name}'"
-                            )
+                            analysis["issues"].append(f"Default password in field '{field_name}'")
 
             analysis["has_issues"] = len(analysis["issues"]) > 0
             return analysis

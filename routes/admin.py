@@ -76,9 +76,7 @@ def admin_dashboard():
     # Use the correct stream_manager instance
     stream_manager = getattr(current_app, "stream_manager", None)
     running_streams = sum(
-        1
-        for status in stream_manager.get_all_stream_status().values()
-        if status.get("running")
+        1 for status in stream_manager.get_all_stream_status().values() if status.get("running")
     )
 
     return render_template(
@@ -136,9 +134,7 @@ def start_key_rotation():
             return jsonify({"success": False, "error": "New key is required"}), 400
 
         key_rotation_service = get_key_rotation_service()
-        result = key_rotation_service.start_rotation(
-            new_key, create_backup, current_app
-        )
+        result = key_rotation_service.start_rotation(new_key, create_backup, current_app)
 
         return jsonify(result)
 

@@ -73,10 +73,8 @@ class ConnectionTestService:
                     return success, device_count, error
             else:
                 # Use shared session
-                success, device_count, error = (
-                    await ConnectionTestService._perform_connection_test(
-                        plugin_instance, session
-                    )
+                success, device_count, error = await ConnectionTestService._perform_connection_test(
+                    plugin_instance, session
                 )
                 return success, device_count, error
 
@@ -295,9 +293,7 @@ class ConnectionTestService:
                 "error": "Connection test timed out",
             }
         except Exception as e:
-            logger.error(
-                f"Error running sync connection test for stream {stream_id}: {e}"
-            )
+            logger.error(f"Error running sync connection test for stream {stream_id}: {e}")
             return {
                 "success": False,
                 "device_count": 0,
@@ -378,9 +374,7 @@ class ConnectionTestService:
                     if required and (
                         field_name not in plugin_config or not plugin_config[field_name]
                     ):
-                        errors.append(
-                            f"Required field '{field_name}' is missing or empty"
-                        )
+                        errors.append(f"Required field '{field_name}' is missing or empty")
 
             return len(errors) == 0, errors
 
@@ -403,9 +397,7 @@ class ConnectionTestService:
             }
 
             # First validate configuration
-            valid, validation_errors = self.validate_plugin_config(
-                plugin_type, plugin_config
-            )
+            valid, validation_errors = self.validate_plugin_config(plugin_type, plugin_config)
             report["validation_passed"] = valid
             report["validation_errors"] = validation_errors
 

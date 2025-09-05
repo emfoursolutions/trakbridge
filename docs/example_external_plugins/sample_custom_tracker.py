@@ -105,9 +105,7 @@ class SampleCustomTrackerPlugin(BaseGPSPlugin):
             ],
         }
 
-    async def fetch_locations(
-        self, session: aiohttp.ClientSession
-    ) -> List[Dict[str, Any]]:
+    async def fetch_locations(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
         """
         Fetch location data from the custom tracking service
 
@@ -138,9 +136,7 @@ class SampleCustomTrackerPlugin(BaseGPSPlugin):
                     return [{"_error": "401", "_error_message": "Invalid API key"}]
                 elif response.status == 404:
                     logger.error("API endpoint not found - check server URL")
-                    return [
-                        {"_error": "404", "_error_message": "API endpoint not found"}
-                    ]
+                    return [{"_error": "404", "_error_message": "API endpoint not found"}]
                 else:
                     error_text = await response.text(encoding="utf-8")
                     logger.error(f"API returned status {response.status}: {error_text}")
@@ -159,9 +155,7 @@ class SampleCustomTrackerPlugin(BaseGPSPlugin):
             return [{"_error": "network", "_error_message": f"Network error: {str(e)}"}]
         except Exception as e:
             logger.error(f"Unexpected error fetching locations: {e}")
-            return [
-                {"_error": "unknown", "_error_message": f"Unexpected error: {str(e)}"}
-            ]
+            return [{"_error": "unknown", "_error_message": f"Unexpected error: {str(e)}"}]
 
     def _transform_api_data(
         self, api_data: Dict[str, Any], config: Dict[str, Any]
@@ -273,9 +267,7 @@ class SampleCustomTrackerPlugin(BaseGPSPlugin):
             test_url = f"{config['server_url']}/api/v1/status"  # or /devices/locations
 
             async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    test_url, headers=headers, timeout=10
-                ) as response:
+                async with session.get(test_url, headers=headers, timeout=10) as response:
                     if response.status == 200:
                         return {
                             "success": True,

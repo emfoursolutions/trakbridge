@@ -120,9 +120,7 @@ authentication:
         self.assertEqual(config["authentication"]["session"]["lifetime_hours"], 12)
         self.assertFalse(config["authentication"]["session"]["secure_cookies"])
         self.assertEqual(
-            config["authentication"]["providers"]["local"]["password_policy"][
-                "min_length"
-            ],
+            config["authentication"]["providers"]["local"]["password_policy"]["min_length"],
             4,
         )
 
@@ -388,9 +386,7 @@ authentication:
         # Should use environment variables from local config
         self.assertEqual(config["authentication"]["session"]["lifetime_hours"], 24)
         self.assertTrue(config["authentication"]["providers"]["ldap"]["enabled"])
-        self.assertEqual(
-            config["authentication"]["providers"]["ldap"]["default_role"], "admin"
-        )
+        self.assertEqual(config["authentication"]["providers"]["ldap"]["default_role"], "admin")
 
     @patch.dict(os.environ, {}, clear=True)
     def test_local_config_environment_defaults(self):
@@ -407,9 +403,7 @@ authentication:
         self.assertFalse(config["authentication"]["session"]["secure_cookies"])
         self.assertTrue(config["authentication"]["providers"]["local"]["enabled"])
         self.assertFalse(config["authentication"]["providers"]["ldap"]["enabled"])
-        self.assertEqual(
-            config["authentication"]["providers"]["ldap"]["default_role"], "user"
-        )
+        self.assertEqual(config["authentication"]["providers"]["ldap"]["default_role"], "user")
 
 
 class TestAuthenticationLoaderIntegration(unittest.TestCase):
@@ -448,9 +442,7 @@ class TestAuthenticationLoaderIntegration(unittest.TestCase):
         # Verify validation logging
         validation_error = loader.validate_config(config)
         if validation_error is None:
-            mock_logger.debug.assert_any_call(
-                "Authentication configuration validation passed"
-            )
+            mock_logger.debug.assert_any_call("Authentication configuration validation passed")
 
 
 if __name__ == "__main__":

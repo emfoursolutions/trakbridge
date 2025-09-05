@@ -50,9 +50,7 @@ class DatabaseManager:
         # Add debug logging
         import traceback
 
-        logger.info(
-            f"DatabaseManager created with factory: {app_context_factory is not None}"
-        )
+        logger.info(f"DatabaseManager created with factory: {app_context_factory is not None}")
         if app_context_factory is None:
             logger.warning("DatabaseManager created WITHOUT app_context_factory!")
             logger.warning("Stack trace:")
@@ -88,9 +86,7 @@ class DatabaseManager:
                         return result
                     except SQLAlchemyError as e:
                         db.session.rollback()
-                        logger.error(
-                            f"Database error (attempt {attempt + 1}/{max_retries}): {e}"
-                        )
+                        logger.error(f"Database error (attempt {attempt + 1}/{max_retries}): {e}")
                         if attempt == max_retries - 1:
                             raise
                         time.sleep(retry_delay * (attempt + 1))
@@ -101,9 +97,7 @@ class DatabaseManager:
 
             except Exception as e:
                 if attempt == max_retries - 1:
-                    logger.error(
-                        f"Database operation failed after {max_retries} attempts: {e}"
-                    )
+                    logger.error(f"Database operation failed after {max_retries} attempts: {e}")
                     return None
                 time.sleep(retry_delay * (attempt + 1))
 
@@ -212,10 +206,7 @@ class DatabaseManager:
                 stream.last_poll = datetime.now(timezone.utc)
 
             if messages_sent is not None:
-                if (
-                    not hasattr(stream, "total_messages_sent")
-                    or stream.total_messages_sent is None
-                ):
+                if not hasattr(stream, "total_messages_sent") or stream.total_messages_sent is None:
                     stream.total_messages_sent = 0
                 stream.total_messages_sent += messages_sent
 

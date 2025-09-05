@@ -87,8 +87,7 @@ class TestPhase3CRouteMigration:
             module_source = self._get_module_source(module_name)
 
             assert (
-                "from services.logging_service import get_module_logger"
-                in module_source
+                "from services.logging_service import get_module_logger" in module_source
             ), f"{module_name} should import get_module_logger from services.logging_service"
 
     def test_no_old_logging_patterns(self):
@@ -117,9 +116,7 @@ class TestPhase3CRouteMigration:
             ), f"{module_name} should use 'logger = get_module_logger(__name__)' pattern"
 
             # Check that logger attribute exists
-            assert hasattr(
-                module, "logger"
-            ), f"{module_name} should have 'logger' attribute"
+            assert hasattr(module, "logger"), f"{module_name} should have 'logger' attribute"
 
     def test_logger_instance_types(self):
         """Test that route modules have proper logger instances"""
@@ -158,9 +155,7 @@ class TestPhase3CRouteMigration:
 
             # Test that logger has all standard logging methods
             for method in ["debug", "info", "warning", "error", "critical"]:
-                assert hasattr(
-                    logger, method
-                ), f"{module_name}.logger should have {method} method"
+                assert hasattr(logger, method), f"{module_name}.logger should have {method} method"
 
                 # Test that the method is callable
                 assert callable(
@@ -170,9 +165,7 @@ class TestPhase3CRouteMigration:
     def test_blueprint_registration(self):
         """Test that blueprints are properly registered with logging"""
         for module_name in self.ROUTE_MODULES_WITH_LOGGING:
-            if (
-                module_name == "routes.main"
-            ):  # main doesn't have bp, it has different structure
+            if module_name == "routes.main":  # main doesn't have bp, it has different structure
                 continue
 
             module = importlib.import_module(module_name)
@@ -216,12 +209,8 @@ class TestPhase3CRouteMigration:
                 if "logger = get_module_logger(__name__)" in line:
                     logger_creation_line = i
 
-            assert (
-                logging_import_line is not None
-            ), f"{module_name} should import get_module_logger"
-            assert (
-                logger_creation_line is not None
-            ), f"{module_name} should create logger instance"
+            assert logging_import_line is not None, f"{module_name} should import get_module_logger"
+            assert logger_creation_line is not None, f"{module_name} should create logger instance"
             assert (
                 logging_import_line < logger_creation_line
             ), f"{module_name} should import get_module_logger before using it"
@@ -247,9 +236,7 @@ class TestPhase3CRouteMigration:
             )
 
         except ImportError as e:
-            pytest.fail(
-                f"Integration test failed - cannot import required modules: {e}"
-            )
+            pytest.fail(f"Integration test failed - cannot import required modules: {e}")
 
     def test_integration_with_phase3b_plugins(self):
         """Test that route logging integrates properly with Phase 3B plugins"""
@@ -280,9 +267,7 @@ class TestPhase3CRouteMigration:
             if "ABOUTME:" in module.__doc__:
                 lines = module.__doc__.split("\n")
                 aboutme_lines = [
-                    line.strip()
-                    for line in lines
-                    if line.strip().startswith("ABOUTME:")
+                    line.strip() for line in lines if line.strip().startswith("ABOUTME:")
                 ]
                 assert (
                     len(aboutme_lines) >= 2

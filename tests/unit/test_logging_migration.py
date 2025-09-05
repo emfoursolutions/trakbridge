@@ -82,8 +82,7 @@ class TestMigratedServiceLogging:
                     with open(module_source.origin, "r") as f:
                         content = f.read()
                         assert (
-                            "from services.logging_service import get_module_logger"
-                            in content
+                            "from services.logging_service import get_module_logger" in content
                         ), f"{module_name} should import get_module_logger"
 
             except ImportError as e:
@@ -96,9 +95,7 @@ class TestMigratedServiceLogging:
                 module = importlib.import_module(module_name)
 
                 # Should have a module-level logger
-                assert hasattr(
-                    module, "logger"
-                ), f"{module_name} should have logger attribute"
+                assert hasattr(module, "logger"), f"{module_name} should have logger attribute"
                 assert isinstance(
                     module.logger, logging.Logger
                 ), f"{module_name}.logger should be Logger instance"

@@ -101,9 +101,7 @@ def _analyze_postgresql_error(error_str: str, error_type: str) -> Tuple[str, Lis
         )
 
     # Database does not exist
-    if "database" in error_str and (
-        "does not exist" in error_str or "not exist" in error_str
-    ):
+    if "database" in error_str and ("does not exist" in error_str or "not exist" in error_str):
         return (
             "The specified database does not exist on the PostgreSQL server.",
             [
@@ -115,9 +113,7 @@ def _analyze_postgresql_error(error_str: str, error_type: str) -> Tuple[str, Lis
         )
 
     # Role/user does not exist
-    if "role" in error_str and (
-        "does not exist" in error_str or "not exist" in error_str
-    ):
+    if "role" in error_str and ("does not exist" in error_str or "not exist" in error_str):
         return (
             "The database user does not exist on the PostgreSQL server.",
             [
@@ -282,10 +278,7 @@ def _analyze_generic_error(error_str: str, error_type: str) -> Tuple[str, List[s
     """Analyze generic database errors."""
 
     # Network/connection issues
-    if any(
-        keyword in error_str
-        for keyword in ["network", "timeout", "refused", "unreachable"]
-    ):
+    if any(keyword in error_str for keyword in ["network", "timeout", "refused", "unreachable"]):
         return (
             "Network connection to database failed.",
             [
@@ -298,8 +291,7 @@ def _analyze_generic_error(error_str: str, error_type: str) -> Tuple[str, List[s
 
     # Permission issues
     if any(
-        keyword in error_str
-        for keyword in ["permission", "denied", "unauthorized", "forbidden"]
+        keyword in error_str for keyword in ["permission", "denied", "unauthorized", "forbidden"]
     ):
         return (
             "Database access permission denied.",

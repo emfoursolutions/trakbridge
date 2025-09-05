@@ -50,12 +50,8 @@ class TestStreamManager:
                 # Return a simple value instead of a coroutine
                 return True
 
-            with patch.object(
-                stream_manager, "start_stream", side_effect=mock_start_stream
-            ):
-                with patch.object(
-                    stream_manager, "_run_coroutine_threadsafe", return_value=True
-                ):
+            with patch.object(stream_manager, "start_stream", side_effect=mock_start_stream):
+                with patch.object(stream_manager, "_run_coroutine_threadsafe", return_value=True):
                     result = stream_manager.start_stream_sync(1)
                     assert result is True
 
@@ -175,9 +171,7 @@ class TestStreamWorkerCallsignIntegration:
                     "lat": 40.0,
                     "lon": -120.0,
                     "uid": "test-123",
-                    "additional_data": {
-                        "raw_placemark": {"extended_data": {"IMEI": "123456789"}}
-                    },
+                    "additional_data": {"raw_placemark": {"extended_data": {"IMEI": "123456789"}}},
                 }
             ]
 
@@ -234,9 +228,7 @@ class TestStreamWorkerCallsignIntegration:
                     "lat": 40.0,
                     "lon": -120.0,
                     "uid": "test-123",
-                    "additional_data": {
-                        "raw_placemark": {"extended_data": {"IMEI": "123456789"}}
-                    },
+                    "additional_data": {"raw_placemark": {"extended_data": {"IMEI": "123456789"}}},
                 }
             ]
 
@@ -290,9 +282,7 @@ class TestStreamWorkerCallsignIntegration:
                     "lat": 40.0,
                     "lon": -120.0,
                     "uid": "test-123",
-                    "additional_data": {
-                        "raw_placemark": {"extended_data": {"IMEI": "123456789"}}
-                    },
+                    "additional_data": {"raw_placemark": {"extended_data": {"IMEI": "123456789"}}},
                 }
             ]
 
@@ -304,9 +294,7 @@ class TestStreamWorkerCallsignIntegration:
             assert test_locations[0]["cot_type"] == "a-f-G-E-V-C"
 
     @pytest.mark.asyncio
-    async def test_stream_worker_callsign_error_handling_fallback(
-        self, app, db_session
-    ):
+    async def test_stream_worker_callsign_error_handling_fallback(self, app, db_session):
         """Test stream worker fallback behavior when callsign mapping fails"""
         with app.app_context():
             from database import db
@@ -338,9 +326,7 @@ class TestStreamWorkerCallsignIntegration:
                     "lat": 40.0,
                     "lon": -120.0,
                     "uid": "test-123",
-                    "additional_data": {
-                        "raw_placemark": {"extended_data": {"IMEI": "999888777"}}
-                    },
+                    "additional_data": {"raw_placemark": {"extended_data": {"IMEI": "999888777"}}},
                 }
             ]
 
@@ -383,18 +369,14 @@ class TestStreamWorkerCallsignIntegration:
                     "lat": 40.0,
                     "lon": -120.0,
                     "uid": "test-123",
-                    "additional_data": {
-                        "raw_placemark": {"extended_data": {"IMEI": "999888777"}}
-                    },
+                    "additional_data": {"raw_placemark": {"extended_data": {"IMEI": "999888777"}}},
                 },
                 {
                     "name": "Valid Location",
                     "lat": 41.0,
                     "lon": -121.0,
                     "uid": "test-456",
-                    "additional_data": {
-                        "raw_placemark": {"extended_data": {"IMEI": "111222333"}}
-                    },
+                    "additional_data": {"raw_placemark": {"extended_data": {"IMEI": "111222333"}}},
                 },
             ]
 
@@ -503,9 +485,7 @@ class TestStreamWorkerCallsignIntegration:
                 def get_available_fields(self):
                     return [FieldMetadata("imei", "Device IMEI", "string", True)]
 
-                def apply_callsign_mapping(
-                    self, tracker_data, field_name, callsign_map
-                ):
+                def apply_callsign_mapping(self, tracker_data, field_name, callsign_map):
                     for item in tracker_data:
                         if field_name == "imei":
                             imei = (
@@ -539,9 +519,7 @@ class TestStreamWorkerCallsignIntegration:
                     "lat": 40.0,
                     "lon": -120.0,
                     "uid": "test-123",
-                    "additional_data": {
-                        "raw_placemark": {"extended_data": {"IMEI": "123456789"}}
-                    },
+                    "additional_data": {"raw_placemark": {"extended_data": {"IMEI": "123456789"}}},
                 }
             ]
 
@@ -567,9 +545,7 @@ class TestStreamOperationsServiceCallsign:
             from models.tak_server import TakServer
             from services.stream_operations_service import StreamOperationsService
 
-            tak_server = TakServer(
-                name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
-            )
+            tak_server = TakServer(name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087)
             db_session.add(tak_server)
             db_session.commit()
 
@@ -635,9 +611,7 @@ class TestStreamOperationsServiceCallsign:
             from models.tak_server import TakServer
             from services.stream_operations_service import StreamOperationsService
 
-            tak_server = TakServer(
-                name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
-            )
+            tak_server = TakServer(name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087)
             db_session.add(tak_server)
             db_session.commit()
 
@@ -685,9 +659,7 @@ class TestStreamOperationsServiceCallsign:
             from models.tak_server import TakServer
             from services.stream_operations_service import StreamOperationsService
 
-            tak_server = TakServer(
-                name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
-            )
+            tak_server = TakServer(name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087)
             db_session.add(tak_server)
             db_session.commit()
 
@@ -758,9 +730,7 @@ class TestStreamOperationsServiceCallsign:
             from models.tak_server import TakServer
             from services.stream_operations_service import StreamOperationsService
 
-            tak_server = TakServer(
-                name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
-            )
+            tak_server = TakServer(name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087)
             db_session.add(tak_server)
             db_session.commit()
 
@@ -821,9 +791,7 @@ class TestStreamOperationsServiceCallsign:
             from models.tak_server import TakServer
             from services.stream_operations_service import StreamOperationsService
 
-            tak_server = TakServer(
-                name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
-            )
+            tak_server = TakServer(name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087)
             db_session.add(tak_server)
             db_session.commit()
 
@@ -922,17 +890,13 @@ class TestStreamWorkerConfiguration:
             # Mock plugin manager to capture the plugin and verify stream assignment
             created_plugin = AsyncMock()
             created_plugin.validate_config.return_value = True
-            created_plugin.fetch_locations.return_value = (
-                []
-            )  # Return empty list for async method
+            created_plugin.fetch_locations.return_value = []  # Return empty list for async method
 
             def mock_get_plugin(plugin_type, config):
                 return created_plugin
 
             with (
-                patch(
-                    "services.stream_worker.get_plugin_manager"
-                ) as mock_plugin_manager,
+                patch("services.stream_worker.get_plugin_manager") as mock_plugin_manager,
                 patch("services.stream_worker.cot_service") as mock_cot_service,
             ):
                 mock_plugin_manager.return_value.get_plugin = mock_get_plugin
@@ -940,9 +904,7 @@ class TestStreamWorkerConfiguration:
                 # Mock COT service to prevent TAK server connections
                 mock_cot_service.start_worker = AsyncMock(return_value=True)
                 mock_cot_service.is_worker_running.return_value = True
-                mock_cot_service.get_worker_status.return_value = {
-                    "worker_running": True
-                }
+                mock_cot_service.get_worker_status.return_value = {"worker_running": True}
                 mock_cot_service.enqueue_event = AsyncMock(return_value=True)
 
                 # Create stream worker
@@ -958,9 +920,7 @@ class TestStreamWorkerConfiguration:
                 assert created_plugin.stream is stream
 
     @pytest.mark.asyncio
-    async def test_stream_worker_handles_missing_stream_fields_gracefully(
-        self, app, db_session
-    ):
+    async def test_stream_worker_handles_missing_stream_fields_gracefully(self, app, db_session):
         """Test that stream worker handles missing stream-level fields gracefully."""
         with app.app_context():
             from unittest.mock import AsyncMock, Mock, patch
@@ -1013,15 +973,11 @@ class TestStreamWorkerConfiguration:
                     return True
 
                 mock_plugin.validate_config = sync_validate_config
-                mock_plugin.fetch_locations.return_value = (
-                    []
-                )  # Return empty list for async method
+                mock_plugin.fetch_locations.return_value = []  # Return empty list for async method
                 return mock_plugin
 
             with (
-                patch(
-                    "services.stream_worker.get_plugin_manager"
-                ) as mock_plugin_manager,
+                patch("services.stream_worker.get_plugin_manager") as mock_plugin_manager,
                 patch("services.stream_worker.cot_service") as mock_cot_service,
             ):
                 mock_plugin_manager.return_value.get_plugin = mock_get_plugin
@@ -1029,9 +985,7 @@ class TestStreamWorkerConfiguration:
                 # Mock COT service to prevent TAK server connections
                 mock_cot_service.start_worker = AsyncMock(return_value=True)
                 mock_cot_service.is_worker_running.return_value = True
-                mock_cot_service.get_worker_status.return_value = {
-                    "worker_running": True
-                }
+                mock_cot_service.get_worker_status.return_value = {"worker_running": True}
                 mock_cot_service.enqueue_event = AsyncMock(return_value=True)
 
                 # Create stream worker
@@ -1052,9 +1006,7 @@ class TestStreamWorkerConfiguration:
                 assert worker.stream.cot_type == "a-f-G-U-C"
 
     @pytest.mark.asyncio
-    async def test_stream_worker_preserves_plugin_specific_config(
-        self, app, db_session
-    ):
+    async def test_stream_worker_preserves_plugin_specific_config(self, app, db_session):
         """Test that stream worker preserves plugin-specific configuration when adding stream config."""
         with app.app_context():
             from unittest.mock import AsyncMock, Mock, patch
@@ -1091,9 +1043,7 @@ class TestStreamWorkerConfiguration:
                 tak_server_id=tak_server.id,
                 cot_type_mode="stream",
                 cot_type="a-h-G-U-C",
-                plugin_config=str(plugin_config).replace(
-                    "'", '"'
-                ),  # Convert to JSON string
+                plugin_config=str(plugin_config).replace("'", '"'),  # Convert to JSON string
             )
             db_session.add(stream)
             db_session.commit()
@@ -1115,15 +1065,11 @@ class TestStreamWorkerConfiguration:
                     return True
 
                 mock_plugin.validate_config = sync_validate_config
-                mock_plugin.fetch_locations.return_value = (
-                    []
-                )  # Return empty list for async method
+                mock_plugin.fetch_locations.return_value = []  # Return empty list for async method
                 return mock_plugin
 
             with (
-                patch(
-                    "services.stream_worker.get_plugin_manager"
-                ) as mock_plugin_manager,
+                patch("services.stream_worker.get_plugin_manager") as mock_plugin_manager,
                 patch("services.stream_worker.cot_service") as mock_cot_service,
             ):
                 mock_plugin_manager.return_value.get_plugin = mock_get_plugin
@@ -1131,9 +1077,7 @@ class TestStreamWorkerConfiguration:
                 # Mock COT service to prevent TAK server connections
                 mock_cot_service.start_worker = AsyncMock(return_value=True)
                 mock_cot_service.is_worker_running.return_value = True
-                mock_cot_service.get_worker_status.return_value = {
-                    "worker_running": True
-                }
+                mock_cot_service.get_worker_status.return_value = {"worker_running": True}
                 mock_cot_service.enqueue_event = AsyncMock(return_value=True)
 
                 # Create stream worker
@@ -1247,23 +1191,17 @@ class TestStreamWorkerCotTypeModeIntegration:
                         return None
 
                     with (
-                        patch(
-                            "services.stream_worker.get_plugin_manager"
-                        ) as mock_plugin_manager,
+                        patch("services.stream_worker.get_plugin_manager") as mock_plugin_manager,
                         patch("services.stream_worker.cot_service") as mock_cot_service,
                     ):
                         mock_plugin_manager.return_value.get_plugin = mock_get_plugin
 
                         # Mock COT service to prevent TAK server connections
                         mock_cot_service.return_value.start_worker.return_value = True
-                        mock_cot_service.return_value.is_worker_running.return_value = (
-                            True
-                        )
+                        mock_cot_service.return_value.is_worker_running.return_value = True
 
                         # Create stream worker
-                        worker = StreamWorker(
-                            stream, mock_session_manager, mock_db_manager
-                        )
+                        worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
 
                         # Start the worker (this initializes the plugin)
                         result = await worker.start()
@@ -1277,8 +1215,7 @@ class TestStreamWorkerCotTypeModeIntegration:
                         assert plugin_config["cot_type_mode"] == case["expected_mode"]
                         assert plugin_config["cot_type"] == case["cot_type"]
                         assert (
-                            plugin_config["api_url"]
-                            == "https://deepstatemap.live/api/history/last"
+                            plugin_config["api_url"] == "https://deepstatemap.live/api/history/last"
                         )
 
                 except ImportError:

@@ -135,9 +135,7 @@ class ConfigManager:
                 logger.info(f"✅ Successfully loaded external config: {external_path}")
                 return config_data
             except Exception as e:
-                logger.error(
-                    f"❌ External config failed validation: {external_path} - {e}"
-                )
+                logger.error(f"❌ External config failed validation: {external_path} - {e}")
 
                 # Backup corrupted file
                 self._backup_corrupted_file(external_path, str(e))
@@ -166,9 +164,7 @@ class ConfigManager:
                 logger.info(f"✅ Using container default config: {container_path}")
                 return config_data
             except Exception as e:
-                logger.error(
-                    f"❌ Container default config failed: {container_path} - {e}"
-                )
+                logger.error(f"❌ Container default config failed: {container_path} - {e}")
 
         # Final fallback: minimal default configuration
         logger.warning(f"⚠️ Using minimal default configuration for {config_name}")
@@ -200,9 +196,7 @@ class ConfigManager:
                 content = f.read()
 
             if not content.strip():
-                raise ConfigValidationError(
-                    f"Configuration file is empty", str(file_path)
-                )
+                raise ConfigValidationError(f"Configuration file is empty", str(file_path))
 
             # Parse YAML with detailed error reporting
             try:
@@ -235,9 +229,7 @@ class ConfigManager:
 
             # Step 4: Schema validation (if available)
             if config_name in self.schemas:
-                self._validate_schema(
-                    config_data, self.schemas[config_name], str(file_path)
-                )
+                self._validate_schema(config_data, self.schemas[config_name], str(file_path))
 
             return config_data
 
@@ -251,9 +243,7 @@ class ConfigManager:
     def _validate_schema(self, data: Any, schema: Dict[str, Any], file_path: str):
         """Basic schema validation (simplified implementation)"""
         if schema.get("type") == "object" and not isinstance(data, dict):
-            raise ConfigValidationError(
-                f"Expected object, got {type(data).__name__}", file_path
-            )
+            raise ConfigValidationError(f"Expected object, got {type(data).__name__}", file_path)
 
         if "required" in schema and isinstance(data, dict):
             for required_field in schema["required"]:

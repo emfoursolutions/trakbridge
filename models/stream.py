@@ -40,21 +40,13 @@ class Stream(db.Model, TimestampMixin):
     last_poll = db.Column(db.DateTime)
     last_error = db.Column(db.Text)  # Last error message
     total_messages_sent = db.Column(db.Integer, default=0)  # Statistics
-    cot_type_mode = db.Column(
-        db.String(20), default="stream"
-    )  # "stream" or "per_point"
+    cot_type_mode = db.Column(db.String(20), default="stream")  # "stream" or "per_point"
 
     # New minimal fields for callsign mapping functionality
     enable_callsign_mapping = db.Column(db.Boolean, default=False)
-    callsign_identifier_field = db.Column(
-        db.String(100), nullable=True
-    )  # Selected field name
-    callsign_error_handling = db.Column(
-        db.String(20), default="fallback"
-    )  # "fallback" or "skip"
-    enable_per_callsign_cot_types = db.Column(
-        db.Boolean, default=False
-    )  # Feature toggle
+    callsign_identifier_field = db.Column(db.String(100), nullable=True)  # Selected field name
+    callsign_error_handling = db.Column(db.String(20), default="fallback")  # "fallback" or "skip"
+    enable_per_callsign_cot_types = db.Column(db.Boolean, default=False)  # Feature toggle
 
     # Relationships
     tak_server = db.relationship("TakServer", back_populates="streams")
@@ -120,16 +112,12 @@ class Stream(db.Model, TimestampMixin):
             try:
                 # Validate the config dict structure before encryption
                 if not isinstance(config_dict, dict):
-                    raise ValueError(
-                        f"Plugin config must be a dictionary, got {type(config_dict)}"
-                    )
+                    raise ValueError(f"Plugin config must be a dictionary, got {type(config_dict)}")
 
                 # Check the serialized size before storage
                 test_json = json.dumps(config_dict)
                 if len(test_json.encode("utf-8")) > 256 * 1024:  # 256KB limit
-                    raise ValueError(
-                        "Plugin configuration exceeds maximum size limit (256KB)"
-                    )
+                    raise ValueError("Plugin configuration exceeds maximum size limit (256KB)")
 
                 # Encrypt sensitive fields before storage
                 encrypted_config = BaseGPSPlugin.encrypt_config_for_storage(
@@ -137,9 +125,7 @@ class Stream(db.Model, TimestampMixin):
                 )
                 self.plugin_config = json.dumps(encrypted_config)
 
-                logger.debug(
-                    f"Set plugin config for stream {self.id}: {len(test_json)} bytes"
-                )
+                logger.debug(f"Set plugin config for stream {self.id}: {len(test_json)} bytes")
                 logger.debug(f"Plugin config content: {config_dict}")
                 logger.debug(f"Encrypted config content: {encrypted_config}")
 
@@ -147,9 +133,7 @@ class Stream(db.Model, TimestampMixin):
                 logger.error(f"Failed to set plugin config for stream {self.id}: {e}")
                 raise ValueError(f"Invalid plugin configuration: {e}")
             except Exception as e:
-                logger.error(
-                    f"Unexpected error setting plugin config for stream {self.id}: {e}"
-                )
+                logger.error(f"Unexpected error setting plugin config for stream {self.id}: {e}")
                 raise
         else:
             self.plugin_config = None

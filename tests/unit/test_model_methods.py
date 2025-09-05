@@ -29,15 +29,11 @@ class TestStandardizedModelMethods:
         """Test that all models have consistent to_dict method signatures."""
         with app.app_context():
             # Create test instances
-            server = TakServer(
-                name="Test Server", host="localhost", port=8089, protocol="tls"
-            )
+            server = TakServer(name="Test Server", host="localhost", port=8089, protocol="tls")
             db_session.add(server)
             db_session.flush()
 
-            stream = Stream(
-                name="Test Stream", plugin_type="garmin", tak_server_id=server.id
-            )
+            stream = Stream(name="Test Stream", plugin_type="garmin", tak_server_id=server.id)
             db_session.add(stream)
             db_session.flush()
 
@@ -70,9 +66,7 @@ class TestStandardizedModelMethods:
                 ), f"{model.__class__.__name__}.to_dict() should return dict"
 
                 # Should contain basic fields that all models should have
-                assert (
-                    "id" in result
-                ), f"{model.__class__.__name__}.to_dict() missing 'id' field"
+                assert "id" in result, f"{model.__class__.__name__}.to_dict() missing 'id' field"
                 assert (
                     "created_at" in result
                 ), f"{model.__class__.__name__}.to_dict() missing 'created_at' field"
@@ -122,15 +116,11 @@ class TestStandardizedModelMethods:
             safe_config_str = str(stream_dict_safe.get("plugin_config", {}))
             full_config_str = str(stream_dict_full.get("plugin_config", {}))
 
-            assert (
-                "••••••••" in safe_config_str
-            ), "Safe dict should mask sensitive config values"
+            assert "••••••••" in safe_config_str, "Safe dict should mask sensitive config values"
 
             # In sensitive mode, should either show decrypted value OR encrypted value (if decryption fails in CI)
             # The key test is that it's different from the masked version and contains some form of the password
-            assert (
-                safe_config_str != full_config_str
-            ), "Full dict should differ from safe dict"
+            assert safe_config_str != full_config_str, "Full dict should differ from safe dict"
             assert (
                 "secret_password" in full_config_str or "ENC:v1:" in full_config_str
             ), "Full dict should include either decrypted password or encrypted value"
@@ -139,9 +129,7 @@ class TestStandardizedModelMethods:
         """Test that all models have consistent and informative __repr__ methods."""
         with app.app_context():
             # Create test instances
-            server = TakServer(
-                name="Test Server", host="localhost", port=8089, protocol="tls"
-            )
+            server = TakServer(name="Test Server", host="localhost", port=8089, protocol="tls")
             stream = Stream(name="Test Stream", plugin_type="garmin")
             user = User.create_local_user(username="testuser", password="pass123")
             mapping = CallsignMapping(
@@ -160,12 +148,8 @@ class TestStandardizedModelMethods:
 
                 # Should include class name and key identifier
                 # This will fail initially until all models have consistent __repr__
-                assert (
-                    class_name in repr_str
-                ), f"__repr__ should include class name {class_name}"
-                assert (
-                    identifier in repr_str
-                ), f"__repr__ should include identifier {identifier}"
+                assert class_name in repr_str, f"__repr__ should include class name {class_name}"
+                assert identifier in repr_str, f"__repr__ should include identifier {identifier}"
                 assert repr_str.startswith("<"), "__repr__ should start with '<'"
                 assert repr_str.endswith(">"), "__repr__ should end with '>'"
 
@@ -186,9 +170,7 @@ class TestStandardizedModelMethods:
                     method = getattr(user, method_name)
                     result = method()
                     # Should return boolean
-                    assert isinstance(
-                        result, bool
-                    ), f"{method_name}() should return boolean"
+                    assert isinstance(result, bool), f"{method_name}() should return boolean"
 
             # Test Stream validation - should have status property
             stream = Stream(name="Test Stream", plugin_type="garmin", is_active=True)
@@ -206,15 +188,11 @@ class TestStandardizedModelMethods:
         """Test that models follow common field patterns consistently."""
         with app.app_context():
             # Create instances of all models
-            server = TakServer(
-                name="Test Server", host="localhost", port=8089, protocol="tls"
-            )
+            server = TakServer(name="Test Server", host="localhost", port=8089, protocol="tls")
             db_session.add(server)
             db_session.flush()
 
-            stream = Stream(
-                name="Test Stream", plugin_type="garmin", tak_server_id=server.id
-            )
+            stream = Stream(name="Test Stream", plugin_type="garmin", tak_server_id=server.id)
             db_session.add(stream)
             db_session.flush()
 
@@ -242,20 +220,12 @@ class TestStandardizedModelMethods:
                 ), f"{model.__class__.__name__} missing updated_at"
 
                 # Timestamps should be datetime objects
-                assert isinstance(
-                    model.created_at, datetime
-                ), "created_at should be datetime"
-                assert isinstance(
-                    model.updated_at, datetime
-                ), "updated_at should be datetime"
+                assert isinstance(model.created_at, datetime), "created_at should be datetime"
+                assert isinstance(model.updated_at, datetime), "updated_at should be datetime"
 
                 # Timestamps should be timezone-aware (UTC)
-                assert (
-                    model.created_at.tzinfo is not None
-                ), "created_at should be timezone-aware"
-                assert (
-                    model.updated_at.tzinfo is not None
-                ), "updated_at should be timezone-aware"
+                assert model.created_at.tzinfo is not None, "created_at should be timezone-aware"
+                assert model.updated_at.tzinfo is not None, "updated_at should be timezone-aware"
 
 
 class TestModelValidationPatterns:
@@ -269,18 +239,14 @@ class TestModelValidationPatterns:
 
             # Should have standardized password methods
             assert hasattr(user, "set_password"), "User should have set_password method"
-            assert hasattr(
-                user, "check_password"
-            ), "User should have check_password method"
+            assert hasattr(user, "check_password"), "User should have check_password method"
 
             # Test password validation
             assert user.check_password("secret123"), "Should validate correct password"
             assert not user.check_password("wrong"), "Should reject wrong password"
 
             # TakServer certificate password handling
-            server = TakServer(
-                name="Test Server", host="localhost", port=8089, protocol="tls"
-            )
+            server = TakServer(name="Test Server", host="localhost", port=8089, protocol="tls")
 
             # Should have standardized password methods for certificate
             assert hasattr(
@@ -296,9 +262,7 @@ class TestModelValidationPatterns:
             # Test certificate password handling
             server.set_cert_password("cert_pass")
             assert server.has_cert_password(), "Should detect password is set"
-            assert (
-                server.get_cert_password() == "cert_pass"
-            ), "Should return decrypted password"
+            assert server.get_cert_password() == "cert_pass", "Should return decrypted password"
 
     def test_configuration_handling_standardization(self, app, db_session):
         """Test that configuration handling is standardized."""
@@ -313,9 +277,7 @@ class TestModelValidationPatterns:
                 "get_raw_plugin_config",
             ]
             for method_name in config_methods:
-                assert hasattr(
-                    stream, method_name
-                ), f"Stream should have {method_name} method"
+                assert hasattr(stream, method_name), f"Stream should have {method_name} method"
 
             # Test configuration handling
             test_config = {"api_key": "secret", "feed_id": "123", "interval": 60}
@@ -333,15 +295,11 @@ class TestModelValidationPatterns:
         """Test that relationship access follows consistent patterns."""
         with app.app_context():
             # Create related objects
-            server = TakServer(
-                name="Test Server", host="localhost", port=8089, protocol="tls"
-            )
+            server = TakServer(name="Test Server", host="localhost", port=8089, protocol="tls")
             db_session.add(server)
             db_session.flush()
 
-            stream = Stream(
-                name="Test Stream", plugin_type="garmin", tak_server_id=server.id
-            )
+            stream = Stream(name="Test Stream", plugin_type="garmin", tak_server_id=server.id)
             db_session.add(stream)
             db_session.flush()
 
@@ -354,30 +312,18 @@ class TestModelValidationPatterns:
             db_session.commit()
 
             # Test forward relationships
-            assert (
-                stream.tak_server is not None
-            ), "Stream should have tak_server relationship"
-            assert (
-                stream.tak_server.id == server.id
-            ), "Relationship should be correctly linked"
+            assert stream.tak_server is not None, "Stream should have tak_server relationship"
+            assert stream.tak_server.id == server.id, "Relationship should be correctly linked"
 
             assert session.user is not None, "UserSession should have user relationship"
             assert session.user.id == user.id, "Relationship should be correctly linked"
 
             # Test reverse relationships - these will fail initially if not properly configured
-            assert (
-                len(server.streams) > 0
-            ), "TakServer should have reverse streams relationship"
-            assert (
-                stream in server.streams
-            ), "Stream should be in server's streams collection"
+            assert len(server.streams) > 0, "TakServer should have reverse streams relationship"
+            assert stream in server.streams, "Stream should be in server's streams collection"
 
-            assert (
-                len(user.sessions) > 0
-            ), "User should have reverse sessions relationship"
-            assert (
-                session in user.sessions
-            ), "Session should be in user's sessions collection"
+            assert len(user.sessions) > 0, "User should have reverse sessions relationship"
+            assert session in user.sessions, "Session should be in user's sessions collection"
 
     def test_model_factory_methods_standardization(self, app, db_session):
         """Test that models have consistent factory/creation methods."""
@@ -385,9 +331,7 @@ class TestModelValidationPatterns:
             # User model should have standardized creation methods
             user_methods = ["create_local_user", "create_external_user"]
             for method_name in user_methods:
-                assert hasattr(
-                    User, method_name
-                ), f"User should have {method_name} class method"
+                assert hasattr(User, method_name), f"User should have {method_name} class method"
 
             # Test factory methods work
             local_user = User.create_local_user(
@@ -439,9 +383,7 @@ class TestModelErrorHandling:
                 assert False, "Should raise ValueError for invalid config"
             except ValueError as e:
                 # Should have descriptive error message
-                assert (
-                    "dictionary" in str(e).lower()
-                ), "Error should mention expected type"
+                assert "dictionary" in str(e).lower(), "Error should mention expected type"
 
             # Test empty/None configuration handling
             stream.set_plugin_config(None)
@@ -456,9 +398,7 @@ class TestModelErrorHandling:
 
             try:
                 user.set_password("newpass")
-                assert (
-                    False
-                ), "Should raise ValueError for external provider password set"
+                assert False, "Should raise ValueError for external provider password set"
             except ValueError as e:
                 assert (
                     "local authentication" in str(e).lower()
@@ -477,16 +417,10 @@ class TestModelErrorHandling:
             # Test with corrupted JSON config
             stream.plugin_config = "{'invalid': json}"
             config = stream.get_plugin_config()
-            assert (
-                config == {}
-            ), "Corrupted config should return empty dict, not raise exception"
+            assert config == {}, "Corrupted config should return empty dict, not raise exception"
 
             # Test TakServer with missing certificate password
-            server = TakServer(
-                name="Test Server", host="localhost", port=8089, protocol="tls"
-            )
+            server = TakServer(name="Test Server", host="localhost", port=8089, protocol="tls")
 
             password = server.get_cert_password()
-            assert (
-                password == ""
-            ), "Missing password should return empty string, not None"
+            assert password == "", "Missing password should return empty string, not None"

@@ -67,36 +67,28 @@ class TestCallsignMappingIntegration:
                     "lat": 40.0,
                     "lon": -120.0,
                     "uid": "test-123",
-                    "additional_data": {
-                        "raw_placemark": {"extended_data": {"IMEI": "123456789"}}
-                    },
+                    "additional_data": {"raw_placemark": {"extended_data": {"IMEI": "123456789"}}},
                 },
                 {
                     "name": "Original Device 2",
                     "lat": 41.0,
                     "lon": -121.0,
                     "uid": "test-456",
-                    "additional_data": {
-                        "raw_placemark": {"extended_data": {"IMEI": "987654321"}}
-                    },
+                    "additional_data": {"raw_placemark": {"extended_data": {"IMEI": "987654321"}}},
                 },
                 {
                     "name": "Original Device 3",
                     "lat": 42.0,
                     "lon": -122.0,
                     "uid": "test-789",
-                    "additional_data": {
-                        "raw_placemark": {"extended_data": {"IMEI": "555666777"}}
-                    },
+                    "additional_data": {"raw_placemark": {"extended_data": {"IMEI": "555666777"}}},
                 },
                 {
                     "name": "Unmapped Device",
                     "lat": 43.0,
                     "lon": -123.0,
                     "uid": "test-999",
-                    "additional_data": {
-                        "raw_placemark": {"extended_data": {"IMEI": "999888777"}}
-                    },
+                    "additional_data": {"raw_placemark": {"extended_data": {"IMEI": "999888777"}}},
                 },
             ]
 
@@ -170,9 +162,7 @@ class TestCallsignMappingIntegration:
                     "lat": 40.0,
                     "lon": -120.0,
                     "uid": "test-123",
-                    "additional_data": {
-                        "raw_placemark": {"extended_data": {"IMEI": "PLUGIN123"}}
-                    },
+                    "additional_data": {"raw_placemark": {"extended_data": {"IMEI": "PLUGIN123"}}},
                 }
             ]
 
@@ -218,9 +208,7 @@ class TestCallsignMappingIntegration:
             mock_session_manager = Mock()
 
             # Test fallback mode
-            fallback_worker = StreamWorker(
-                fallback_stream, mock_session_manager, mock_db_manager
-            )
+            fallback_worker = StreamWorker(fallback_stream, mock_session_manager, mock_db_manager)
             fallback_locations = [
                 {
                     "name": "Original Name",
@@ -234,9 +222,7 @@ class TestCallsignMappingIntegration:
             ]
 
             # Test skip mode
-            skip_worker = StreamWorker(
-                skip_stream, mock_session_manager, mock_db_manager
-            )
+            skip_worker = StreamWorker(skip_stream, mock_session_manager, mock_db_manager)
             skip_locations = [
                 {
                     "name": "Device 1",
@@ -418,9 +404,7 @@ class TestPhase5ApiServiceIntegration:
             assert updated_stream.enable_per_callsign_cot_types is False
 
             # Verify mappings were updated (old ones cleared, new ones added)
-            updated_mappings = CallsignMapping.query.filter_by(
-                stream_id=stream_id
-            ).all()
+            updated_mappings = CallsignMapping.query.filter_by(stream_id=stream_id).all()
             assert len(updated_mappings) == 2
 
             updated_mapping_dict = {m.identifier_value: m for m in updated_mappings}
@@ -479,9 +463,7 @@ class TestPhase5ApiServiceIntegration:
             assert error_stream is None
 
             # 2. Test update with invalid stream ID
-            update_result = service.update_stream_safely(
-                99999, {"name": "Invalid Update"}
-            )
+            update_result = service.update_stream_safely(99999, {"name": "Invalid Update"})
             assert update_result["success"] is False
             assert "error" in update_result
 
@@ -537,9 +519,7 @@ class TestPhase5ApiServiceIntegration:
             db_session.commit()
 
             # Verify CREATE
-            initial_mappings = CallsignMapping.query.filter_by(
-                stream_id=stream.id
-            ).all()
+            initial_mappings = CallsignMapping.query.filter_by(stream_id=stream.id).all()
             assert len(initial_mappings) == 2
 
             # 2. UPDATE: Modify mappings
@@ -556,9 +536,7 @@ class TestPhase5ApiServiceIntegration:
             db_session.commit()
 
             # Verify UPDATE (should replace all mappings)
-            updated_mappings = CallsignMapping.query.filter_by(
-                stream_id=stream.id
-            ).all()
+            updated_mappings = CallsignMapping.query.filter_by(stream_id=stream.id).all()
             assert len(updated_mappings) == 3
 
             updated_identifiers = [m.identifier_value for m in updated_mappings]
@@ -647,24 +625,16 @@ class TestPhase5ApiServiceIntegration:
             db_session.commit()
 
             # Assert: Verify isolation
-            stream1_mappings = CallsignMapping.query.filter_by(
-                stream_id=stream1.id
-            ).all()
-            stream2_mappings = CallsignMapping.query.filter_by(
-                stream_id=stream2.id
-            ).all()
+            stream1_mappings = CallsignMapping.query.filter_by(stream_id=stream1.id).all()
+            stream2_mappings = CallsignMapping.query.filter_by(stream_id=stream2.id).all()
 
             # Both streams should have their own mappings
             assert len(stream1_mappings) == 2
             assert len(stream2_mappings) == 2
 
             # Same identifiers should map to different callsigns per stream
-            stream1_dict = {
-                m.identifier_value: m.custom_callsign for m in stream1_mappings
-            }
-            stream2_dict = {
-                m.identifier_value: m.custom_callsign for m in stream2_mappings
-            }
+            stream1_dict = {m.identifier_value: m.custom_callsign for m in stream1_mappings}
+            stream2_dict = {m.identifier_value: m.custom_callsign for m in stream2_mappings}
 
             assert stream1_dict["SHARED001"] == "Stream1-Alpha"
             assert stream2_dict["SHARED001"] == "Stream2-Charlie"

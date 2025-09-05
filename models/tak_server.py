@@ -27,9 +27,7 @@ class TakServer(db.Model, TimestampMixin):
     # TLS Configuration - Updated for P12 support
     cert_p12 = db.Column(db.LargeBinary)  # Store P12 certificate file as binary
     cert_p12_filename = db.Column(db.String(255))  # Store original filename
-    cert_password = db.Column(
-        db.String(255)
-    )  # Password for P12 certificate (encrypted)
+    cert_password = db.Column(db.String(255))  # Password for P12 certificate (encrypted)
     verify_ssl = db.Column(db.Boolean, default=True)
 
     # Use back_populates instead of backref to match Stream model
@@ -57,9 +55,7 @@ class TakServer(db.Model, TimestampMixin):
             import logging
 
             logger = logging.getLogger(__name__)
-            logger.error(
-                f"Failed to decrypt certificate password for server {self.id}: {e}"
-            )
+            logger.error(f"Failed to decrypt certificate password for server {self.id}: {e}")
             return ""
 
     def set_cert_password(self, password: str):
@@ -76,9 +72,7 @@ class TakServer(db.Model, TimestampMixin):
             import logging
 
             logger = logging.getLogger(__name__)
-            logger.error(
-                f"Failed to encrypt certificate password for server {self.id}: {e}"
-            )
+            logger.error(f"Failed to encrypt certificate password for server {self.id}: {e}")
             raise
 
     def to_dict(self):

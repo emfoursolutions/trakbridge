@@ -5,7 +5,7 @@ Main Flask application factory providing multi-threaded stream management,
 TAK server integration, and plugin architecture for data processing workflows.
 
 Features: Application factory pattern, stream lifecycle management, database
-integration, plugin system, encryption services, and production-ready deployment.
+integration, plugin system, encryption services, and deployment.
 
 Author: Emfour Solutions
 Created: 18-Jul-2025
@@ -103,9 +103,7 @@ def initialize_database_safely():
         # Check if migrations directory exists
         migrations_dir = os.path.join(os.getcwd(), "migrations")
         if not os.path.exists(migrations_dir):
-            logger.info(
-                "No migrations directory found - creating database tables directly"
-            )
+            logger.info("No migrations directory found - creating database tables directly")
             db.create_all()
             return
 
@@ -228,9 +226,7 @@ def log_full_startup_info(app):
         app.logger.info(f"Application: {format_version(include_build_info=True)}")
         app.logger.info(f"Version: {version_info.get('version', 'unknown')}")
         app.logger.info(f"Version Source: {version_info.get('source', 'unknown')}")
-        app.logger.info(
-            f"Development Build: {'YES' if is_development_build() else 'NO'}"
-        )
+        app.logger.info(f"Development Build: {'YES' if is_development_build() else 'NO'}")
 
         if build_info.get("git_commit"):
             app.logger.info(f"Git Commit: {build_info['git_commit']}")
@@ -304,9 +300,7 @@ def should_run_delayed_startup() -> bool:
             file_age = time.time() - startup_task_file.stat().st_mtime
             if file_age < 30:
                 # Recent startup completion, don't run again
-                logger.debug(
-                    "Recent startup completion detected - skipping startup tasks"
-                )
+                logger.debug("Recent startup completion detected - skipping startup tasks")
                 return False
             else:
                 # Old file, remove it and run startup tasks
@@ -374,9 +368,7 @@ def create_app(config_name=None):
 
     # Determine environment and get configuration
     flask_env = config_name or os.environ.get("FLASK_ENV", "development")
-    app.config["SKIP_DB_INIT"] = (
-        os.environ.get("SKIP_DB_INIT", "false").lower() == "true"
-    )
+    app.config["SKIP_DB_INIT"] = os.environ.get("SKIP_DB_INIT", "false").lower() == "true"
 
     # Get configuration instance using the new system
     config_instance = get_config(flask_env)
@@ -511,9 +503,7 @@ def setup_version_context_processor(app):
                 worker_count = get_worker_count()
 
                 app.logger.info("=" * 80)
-                app.logger.info(
-                    "🚀 TrakBridge Application Ready - Now Serving Requests"
-                )
+                app.logger.info("🚀 TrakBridge Application Ready - Now Serving Requests")
                 app.logger.info("=" * 80)
 
                 # Include all the useful system information
@@ -545,9 +535,7 @@ def setup_version_context_processor(app):
                     f"{version_info['environment']['python_version_info'].minor}."
                     f"{version_info['environment']['python_version_info'].micro}"
                 ),
-                "platform": version_info.get("environment", {}).get(
-                    "platform", "unknown"
-                ),
+                "platform": version_info.get("environment", {}).get("platform", "unknown"),
                 "source": version_info.get("source", "unknown"),
             }
 
@@ -591,14 +579,10 @@ def configure_flask_app(app, config_instance):
 
     # SQLAlchemy settings
     app.config["SQLALCHEMY_DATABASE_URI"] = config_instance.SQLALCHEMY_DATABASE_URI
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = (
-        config_instance.SQLALCHEMY_TRACK_MODIFICATIONS
-    )
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = config_instance.SQLALCHEMY_TRACK_MODIFICATIONS
     app.config["SQLALCHEMY_RECORD_QUERIES"] = config_instance.SQLALCHEMY_RECORD_QUERIES
     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = config_instance.SQLALCHEMY_ENGINE_OPTIONS
-    app.config["SQLALCHEMY_SESSION_OPTIONS"] = (
-        config_instance.SQLALCHEMY_SESSION_OPTIONS
-    )
+    app.config["SQLALCHEMY_SESSION_OPTIONS"] = config_instance.SQLALCHEMY_SESSION_OPTIONS
 
     # Application-specific settings
     app.config["MAX_WORKER_THREADS"] = config_instance.MAX_WORKER_THREADS
@@ -606,9 +590,7 @@ def configure_flask_app(app, config_instance):
     app.config["MAX_CONCURRENT_STREAMS"] = config_instance.MAX_CONCURRENT_STREAMS
     app.config["HTTP_TIMEOUT"] = config_instance.HTTP_TIMEOUT
     app.config["HTTP_MAX_CONNECTIONS"] = config_instance.HTTP_MAX_CONNECTIONS
-    app.config["HTTP_MAX_CONNECTIONS_PER_HOST"] = (
-        config_instance.HTTP_MAX_CONNECTIONS_PER_HOST
-    )
+    app.config["HTTP_MAX_CONNECTIONS_PER_HOST"] = config_instance.HTTP_MAX_CONNECTIONS_PER_HOST
     app.config["ASYNC_TIMEOUT"] = config_instance.ASYNC_TIMEOUT
 
     # Logging settings
@@ -624,9 +606,7 @@ def configure_flask_app(app, config_instance):
     # Log configuration info (only once)
     if not hasattr(configure_flask_app, "_config_logged"):
         configure_flask_app._config_logged = True
-        logger.info(
-            f"Configured Flask app for environment: {config_instance.environment}"
-        )
+        logger.info(f"Configured Flask app for environment: {config_instance.environment}")
 
         # Validate configuration
         issues = config_instance.validate_config()
@@ -657,14 +637,10 @@ def initialize_admin_user_if_needed():
             logger.warning("⚠️  CHANGE PASSWORD ON FIRST LOGIN  ⚠️")
             logger.warning("=" * 60)
 
-            add_startup_progress(
-                f"✓ Initial admin user '{admin_user.username}' created"
-            )
+            add_startup_progress(f"✓ Initial admin user '{admin_user.username}' created")
             add_startup_progress("⚠️  Default password must be changed on first login")
         else:
-            logger.info(
-                "Initial admin user creation not needed - admin users already exist"
-            )
+            logger.info("Initial admin user creation not needed - admin users already exist")
             add_startup_progress("✓ Admin users already exist, bootstrap not needed")
 
     except Exception as e:
@@ -725,9 +701,7 @@ def start_active_streams():
 
             if active_streams:
                 for stream in active_streams:
-                    logger.info(
-                        f"Stream {stream.id}: {stream.name} ({stream.plugin_type})"
-                    )
+                    logger.info(f"Stream {stream.id}: {stream.name} ({stream.plugin_type})")
 
         except Exception as db_e:
             try:
@@ -735,9 +709,7 @@ def start_active_streams():
             except (ValueError, OSError):
                 # Handle cases where logging files are closed during shutdown
                 pass
-            add_startup_progress(
-                f"Error: Failed to fetch active streams from database: {db_e}"
-            )
+            add_startup_progress(f"Error: Failed to fetch active streams from database: {db_e}")
             return
 
         if not active_streams:
@@ -763,9 +735,7 @@ def start_active_streams():
                     try:
                         success = stream_manager.start_stream_sync(stream.id)
                         if success:
-                            logger.info(
-                                f"Successfully started stream {stream.id} ({stream.name})"
-                            )
+                            logger.info(f"Successfully started stream {stream.id} ({stream.name})")
                             add_startup_progress(
                                 f"✓ Successfully started stream {stream.id} ({stream.name})"
                             )
@@ -821,17 +791,13 @@ def start_active_streams():
                         fresh_stream = Stream.query.get(stream.id)
                         if fresh_stream:
                             fresh_stream.is_active = False
-                            fresh_stream.last_error = (
-                                "Failed to start during app startup"
-                            )
+                            fresh_stream.last_error = "Failed to start during app startup"
                             db.session.commit()
                             logger.info(
                                 f"Marked stream {stream.id} as inactive due to startup failure"
                             )
                     except Exception as db_e:
-                        logger.error(
-                            f"Failed to update stream {stream.id} status: {db_e}"
-                        )
+                        logger.error(f"Failed to update stream {stream.id} status: {db_e}")
                         try:
                             db.session.rollback()
                         except Exception:
@@ -841,12 +807,8 @@ def start_active_streams():
                 time.sleep(3)
 
             except Exception as e:
-                logger.error(
-                    f"Unexpected error starting stream {stream.id}: {e}", exc_info=True
-                )
-                add_startup_progress(
-                    f"✗ Unexpected error starting stream {stream.id}: {e}"
-                )
+                logger.error(f"Unexpected error starting stream {stream.id}: {e}", exc_info=True)
+                add_startup_progress(f"✗ Unexpected error starting stream {stream.id}: {e}")
                 failed_count += 1
 
         # Log final results
@@ -917,8 +879,6 @@ def setup_cleanup_handlers():
             # Close database connections
             try:
                 # Check if we have an active Flask application context
-                from flask import has_app_context
-
                 if has_app_context():
                     db.session.remove()
                     db.engine.dispose()
@@ -1001,8 +961,10 @@ def setup_error_handlers(app):
         if hasattr(db, "session"):
             try:
                 db.session.rollback()
-            except:
-                pass  # Session may not be available
+            except Exception as e:
+                logger.warning(
+                    f"Failed to rollback database session: {e}"
+                )  # Session may not be available
 
         error_response = format_error_response(error)
         return jsonify(error_response), 503
@@ -1014,8 +976,8 @@ def setup_error_handlers(app):
         if hasattr(db, "session"):
             try:
                 db.session.rollback()
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to rollback database session: {e}")
 
         error_response = format_error_response(error)
         return jsonify(error_response), 500
@@ -1027,8 +989,8 @@ def setup_error_handlers(app):
         if hasattr(db, "session"):
             try:
                 db.session.rollback()
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to rollback database session: {e}")
 
         error_response = format_error_response(error)
         return jsonify(error_response), 500
@@ -1040,8 +1002,8 @@ def setup_error_handlers(app):
         if hasattr(db, "session"):
             try:
                 db.session.rollback()
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to rollback database session: {e}")
 
         error_response = format_error_response(error)
         return jsonify(error_response), 500
@@ -1053,8 +1015,8 @@ def setup_error_handlers(app):
         if hasattr(db, "session"):
             try:
                 db.session.rollback()
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to rollback database session: {e}")
 
         error_response = format_error_response(error)
         return jsonify(error_response), 500
@@ -1118,9 +1080,9 @@ def setup_error_handlers(app):
 
         try:
             db.session.rollback()
-        except:
+        except Exception as e:
             # Database session may not be available
-            pass
+            logger.warning(f"Failed to rollback database session: {e}")
 
         if app.debug:
             raise e
@@ -1209,9 +1171,7 @@ def delayed_startup():
 
     # Check if we should run startup tasks
     if not should_run_delayed_startup():
-        safe_log(
-            logger.info, "Delayed startup tasks will be handled by another process"
-        )
+        safe_log(logger.info, "Delayed startup tasks will be handled by another process")
         return
 
     startup_start_time = dt.now()
@@ -1236,9 +1196,7 @@ def delayed_startup():
                     logger.info,
                     f"Plugin Manager: {'Ready' if hasattr(app, 'plugin_manager') else 'Not Ready'}",
                 )
-                safe_log(
-                    logger.info, f"Database: {'Ready' if db.engine else 'Not Ready'}"
-                )
+                safe_log(logger.info, f"Database: {'Ready' if db.engine else 'Not Ready'}")
                 safe_log(
                     logger.info,
                     f"Encryption Service: {'Ready' if hasattr(app, 'encryption_service') else 'Not Ready'}",
@@ -1247,9 +1205,7 @@ def delayed_startup():
                 add_startup_progress("System components verified")
             except Exception as e:
                 safe_log(logger.warning, f"Could not log system status: {e}")
-                add_startup_progress(
-                    f"Warning: Could not verify all system components: {e}"
-                )
+                add_startup_progress(f"Warning: Could not verify all system components: {e}")
 
             # Initialize admin user if needed
             add_startup_progress("Checking admin user bootstrap...")
@@ -1269,9 +1225,7 @@ def delayed_startup():
             safe_log(logger.info, f"Ready at: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
             safe_log(logger.info, "=" * 60)
 
-            add_startup_progress(
-                f"Startup complete! Ready in {startup_time:.2f} seconds"
-            )
+            add_startup_progress(f"Startup complete! Ready in {startup_time:.2f} seconds")
             set_startup_complete(True)
 
     except Exception as e:

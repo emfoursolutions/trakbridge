@@ -215,21 +215,17 @@ class BaseGPSPlugin(ABC):
                 value = decrypted_config[field_name]
                 if value:
                     try:
-                        decrypted_config[field_name] = (
-                            self.encryption_service.decrypt_value(str(value))
+                        decrypted_config[field_name] = self.encryption_service.decrypt_value(
+                            str(value)
                         )
                     except Exception as e:
-                        get_logger().error(
-                            f"Failed to decrypt field '{field_name}': {e}"
-                        )
+                        get_logger().error(f"Failed to decrypt field '{field_name}': {e}")
                         # Keep original value if decryption fails
 
         return decrypted_config
 
     @staticmethod
-    def encrypt_config_for_storage(
-        plugin_type: str, config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def encrypt_config_for_storage(plugin_type: str, config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Encrypt sensitive fields in configuration before storing in database
 
@@ -262,9 +258,7 @@ class BaseGPSPlugin(ABC):
         return config
 
     @staticmethod
-    def decrypt_config_from_storage(
-        plugin_type: str, config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def decrypt_config_from_storage(plugin_type: str, config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Decrypt sensitive fields in configuration after loading from database
 
@@ -336,16 +330,12 @@ class BaseGPSPlugin(ABC):
                 self.apply_callsign_mapping(tracker_data, field_name, callsign_map)
                 return True
             except Exception as e:
-                get_logger().error(
-                    f"[{self.plugin_name}] Failed to apply callsign mapping: {e}"
-                )
+                get_logger().error(f"[{self.plugin_name}] Failed to apply callsign mapping: {e}")
                 return False
         return False
 
     @abstractmethod
-    async def fetch_locations(
-        self, session: aiohttp.ClientSession
-    ) -> List[Dict[str, Any]]:
+    async def fetch_locations(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
         """
         Fetch location data from the GPS service
 
@@ -361,9 +351,7 @@ class BaseGPSPlugin(ABC):
         """
         pass
 
-    async def process_and_enqueue_locations(
-        self, locations: List[Dict[str, Any]], stream
-    ) -> None:
+    async def process_and_enqueue_locations(self, locations: List[Dict[str, Any]], stream) -> None:
         """
         Process locations and enqueue COT events using persistent COT service.
 
@@ -428,9 +416,7 @@ class BaseGPSPlugin(ABC):
 
             # Check required fields
             if field.required and (field_value is None or field_value == ""):
-                get_logger().error(
-                    f"Missing required configuration field: {field_name}"
-                )
+                get_logger().error(f"Missing required configuration field: {field_name}")
                 return False
 
             # Type-specific validation
@@ -455,15 +441,11 @@ class BaseGPSPlugin(ABC):
                             )
                             return False
                     except (ValueError, TypeError):
-                        get_logger().error(
-                            f"Field '{field_name}' must be a valid number"
-                        )
+                        get_logger().error(f"Field '{field_name}' must be a valid number")
                         return False
 
                 if field.field_type == "email" and "@" not in str(field_value):
-                    get_logger().error(
-                        f"Field '{field_name}' must be a valid email address"
-                    )
+                    get_logger().error(f"Field '{field_name}' must be a valid email address")
                     return False
 
         return True
@@ -570,8 +552,7 @@ class BaseGPSPlugin(ABC):
                         return {
                             "success": False,
                             "error": "No Devices Found",
-                            "message": "Successfully connected. "
-                            "No devices returned.",
+                            "message": "Successfully connected. " "No devices returned.",
                         }
                     else:
                         return {

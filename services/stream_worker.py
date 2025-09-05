@@ -51,9 +51,7 @@ class StreamWorker:
         self._startup_complete = False
         self._consecutive_errors = 0
         self._last_successful_poll = None
-        self._tak_worker_ensured = (
-            False  # Track if we've ensured the persistent worker exists
-        )
+        self._tak_worker_ensured = False  # Track if we've ensured the persistent worker exists
 
     @property
     def startup_complete(self):
@@ -75,9 +73,7 @@ class StreamWorker:
                 return False
 
             try:
-                self.logger.info(
-                    f"Starting stream '{self.stream.name}' (ID: {self.stream.id})"
-                )
+                self.logger.info(f"Starting stream '{self.stream.name}' (ID: {self.stream.id})")
                 self.running = True
                 self._startup_complete = False
                 self._consecutive_errors = 0
@@ -106,9 +102,7 @@ class StreamWorker:
                 if self.stream.tak_server:
                     success = await self._ensure_persistent_tak_worker()
                     if not success:
-                        self.logger.error(
-                            "Failed to ensure persistent TAK server worker"
-                        )
+                        self.logger.error("Failed to ensure persistent TAK server worker")
                         self.running = False
                         return False
 
@@ -116,13 +110,9 @@ class StreamWorker:
                 self._stop_event = asyncio.Event()
 
                 # Update stream status in database
-                success = await self._update_stream_status_async(
-                    is_active=True, last_error=None
-                )
+                success = await self._update_stream_status_async(is_active=True, last_error=None)
                 if not success:
-                    self.logger.warning(
-                        "Failed to update stream status in database during startup"
-                    )
+                    self.logger.warning("Failed to update stream status in database during startup")
 
                 # Create task in the current event loop
                 self.task = asyncio.create_task(self._run_loop())
@@ -139,18 +129,14 @@ class StreamWorker:
                 self.running = False
                 self._startup_complete = False
                 # Update database with error
-                await self._update_stream_status_async(
-                    is_active=False, last_error=str(e)
-                )
+                await self._update_stream_status_async(is_active=False, last_error=str(e))
                 return False
 
     async def stop(self, skip_db_update=False):
         """Stop the stream worker"""
         async with self._start_lock:
             if not self.running:
-                self.logger.info(
-                    f"Stream '{self.stream.name}' is not running, nothing to stop"
-                )
+                self.logger.info(f"Stream '{self.stream.name}' is not running, nothing to stop")
                 return
 
             self.logger.info(
@@ -210,9 +196,7 @@ class StreamWorker:
                 return False
 
             tak_server = self.stream.tak_server
-            self.logger.debug(
-                f"Ensuring persistent worker for TAK server {tak_server.name}"
-            )
+            self.logger.debug(f"Ensuring persistent worker for TAK server {tak_server.name}")
 
             # Check if worker is already running
             worker_status = cot_service.get_worker_status(tak_server.id)
@@ -234,24 +218,18 @@ class StreamWorker:
             # Verify worker started successfully
             worker_status = cot_service.get_worker_status(tak_server.id)
             if not worker_status or not worker_status.get("worker_running", False):
-                self.logger.error(
-                    f"Worker failed to start for TAK server {tak_server.name}"
-                )
+                self.logger.error(f"Worker failed to start for TAK server {tak_server.name}")
                 return False
 
             # Test the connection with a simple location
             await self._test_persistent_connection()
 
             self._tak_worker_ensured = True
-            self.logger.debug(
-                f"Persistent worker ensured for TAK server {tak_server.name}"
-            )
+            self.logger.debug(f"Persistent worker ensured for TAK server {tak_server.name}")
             return True
 
         except Exception as e:
-            self.logger.error(
-                f"Failed to ensure persistent TAK worker: {e}", exc_info=True
-            )
+            self.logger.error(f"Failed to ensure persistent TAK worker: {e}", exc_info=True)
             return False
 
     async def _test_persistent_connection(self):
@@ -294,21 +272,15 @@ class StreamWorker:
 
         while self.running:
             try:
-                self.logger.debug(
-                    f"Poll cycle starting for stream '{self.stream.name}'"
-                )
+                self.logger.debug(f"Poll cycle starting for stream '{self.stream.name}'")
 
                 # Fetch locations from GPS service
                 locations = []
                 try:
                     async with asyncio.timeout(90):  # 90 second timeout
-                        locations = await self.plugin.fetch_locations(
-                            self.session_manager.session
-                        )
+                        locations = await self.plugin.fetch_locations(self.session_manager.session)
                 except asyncio.TimeoutError:
-                    self.logger.error(
-                        "Plugin fetch_locations timed out after 90 seconds"
-                    )
+                    self.logger.error("Plugin fetch_locations timed out after 90 seconds")
                     raise Exception("Plugin fetch timeout")
                 except Exception as e:
                     self.logger.error(f"Error fetching locations from plugin: {e}")
@@ -325,9 +297,7 @@ class StreamWorker:
 
                     # Send to persistent TAK server if configured
                     if self.stream.tak_server and self._tak_worker_ensured:
-                        success = await self._send_locations_to_persistent_tak(
-                            locations
-                        )
+                        success = await self._send_locations_to_persistent_tak(locations)
                         if success:
                             self.logger.info(
                                 f"Successfully sent {len(locations)} locations to TAK server"
@@ -335,25 +305,17 @@ class StreamWorker:
                         else:
                             self.logger.error("Failed to send locations to TAK server")
                             # Try to restart the worker
-                            self.logger.info(
-                                "Attempting to restart persistent TAK worker"
-                            )
+                            self.logger.info("Attempting to restart persistent TAK worker")
                             await cot_service.stop_worker(self.stream.tak_server.id)
                             await asyncio.sleep(2)  # Brief delay
                             restart_success = await self._ensure_persistent_tak_worker()
                             if restart_success:
                                 # Retry sending
-                                success = await self._send_locations_to_persistent_tak(
-                                    locations
-                                )
+                                success = await self._send_locations_to_persistent_tak(locations)
                                 if not success:
-                                    raise Exception(
-                                        "Failed to send locations after worker restart"
-                                    )
+                                    raise Exception("Failed to send locations after worker restart")
                             else:
-                                raise Exception(
-                                    "Failed to restart persistent TAK worker"
-                                )
+                                raise Exception("Failed to restart persistent TAK worker")
                     else:
                         if not self.stream.tak_server:
                             self.logger.warning("No TAK server configured")
@@ -395,9 +357,7 @@ class StreamWorker:
 
             except Exception as e:
                 self._consecutive_errors += 1
-                error_msg = (
-                    f"Error in stream loop (attempt {self._consecutive_errors}): {e}"
-                )
+                error_msg = f"Error in stream loop (attempt {self._consecutive_errors}): {e}"
                 self.logger.error(error_msg, exc_info=True)
 
                 # Update error in database
@@ -465,9 +425,7 @@ class StreamWorker:
 
             # If all locations are error responses, treat this as success (no data to send)
             if error_locations and len(error_locations) == len(locations):
-                self.logger.info(
-                    "All locations were error responses, this is expected behavior"
-                )
+                self.logger.info("All locations were error responses, this is expected behavior")
                 return True  # Don't treat this as a failure
 
             # Get COT type mode from fresh stream configuration (avoid cached values)
@@ -475,9 +433,7 @@ class StreamWorker:
             cot_type_mode = fresh_stream_config.get("cot_type_mode", "stream")
 
             # Get per-callsign CoT type determination (reuse fresh config)
-            enable_per_cot_types = fresh_stream_config.get(
-                "enable_per_callsign_cot_types", False
-            )
+            enable_per_cot_types = fresh_stream_config.get("enable_per_callsign_cot_types", False)
 
             # If either plugin wants per-point mode OR per-callsign CoT types are enabled, use per_point mode
             # This ensures the COT service uses the cot_type field from each location instead of stream default
@@ -506,9 +462,7 @@ class StreamWorker:
                 # Log first location's cot_type for debugging
                 if locations:
                     first_location_cot_type = locations[0].get("cot_type", "NOT_SET")
-                    self.logger.debug(
-                        f"First location cot_type: {first_location_cot_type}"
-                    )
+                    self.logger.debug(f"First location cot_type: {first_location_cot_type}")
 
                 cot_events = await EnhancedCOTService().create_cot_events(
                     locations,
@@ -516,9 +470,7 @@ class StreamWorker:
                     self.stream.cot_stale_time or 300,
                     cot_type_mode,  # Pass the COT type mode
                 )
-                self.logger.info(
-                    f"Created {len(cot_events) if cot_events else 0} COT events"
-                )
+                self.logger.info(f"Created {len(cot_events) if cot_events else 0} COT events")
             except Exception as e:
                 self.logger.error(f"Error creating COT events: {e}", exc_info=True)
                 return False
@@ -551,18 +503,14 @@ class StreamWorker:
         # Get persistent worker status if available
         persistent_worker_status = None
         if self.stream.tak_server and cot_service:
-            persistent_worker_status = cot_service.get_worker_status(
-                self.stream.tak_server.id
-            )
+            persistent_worker_status = cot_service.get_worker_status(self.stream.tak_server.id)
 
         return {
             "running": self.running,
             "startup_complete": self._startup_complete,
             "consecutive_errors": self._consecutive_errors,
             "last_successful_poll": (
-                self._last_successful_poll.isoformat()
-                if self._last_successful_poll
-                else None
+                self._last_successful_poll.isoformat() if self._last_successful_poll else None
             ),
             "tak_worker_ensured": self._tak_worker_ensured,
             "task_done": self.task.done() if self.task else None,
@@ -611,9 +559,7 @@ class StreamWorker:
         locations_to_skip = []
         identifier_field = fresh_stream_config.get("callsign_identifier_field")
         error_handling = fresh_stream_config.get("callsign_error_handling", "fallback")
-        enable_per_cot_types = fresh_stream_config.get(
-            "enable_per_callsign_cot_types", False
-        )
+        enable_per_cot_types = fresh_stream_config.get("enable_per_callsign_cot_types", False)
 
         for i, location in enumerate(locations):
             try:
@@ -627,9 +573,7 @@ class StreamWorker:
                     original_name = location.get("name", "Unknown")
 
                     # Apply callsign mapping through plugin interface if available
-                    if self.plugin and hasattr(
-                        self.plugin, "supports_callsign_mapping"
-                    ):
+                    if self.plugin and hasattr(self.plugin, "supports_callsign_mapping"):
                         if self.plugin.supports_callsign_mapping():
                             # Use plugin's apply_callsign_mapping method
                             self.logger.debug(
@@ -759,11 +703,7 @@ class StreamWorker:
             from models.callsign_mapping import CallsignMapping
 
             # Direct database query (same pattern as other services in codebase)
-            mappings = (
-                db.session.query(CallsignMapping)
-                .filter_by(stream_id=self.stream.id)
-                .all()
-            )
+            mappings = db.session.query(CallsignMapping).filter_by(stream_id=self.stream.id).all()
 
             # Convert to dictionary for efficient lookup
             mappings_dict = {mapping.identifier_value: mapping for mapping in mappings}
@@ -804,9 +744,7 @@ class StreamWorker:
             elif field_name == "messenger_name":
                 # SPOT-style extraction
                 return (
-                    location.get("additional_data", {})
-                    .get("raw_message", {})
-                    .get("messengerName")
+                    location.get("additional_data", {}).get("raw_message", {}).get("messengerName")
                 )
             elif field_name == "device_id":
                 # Traccar-style extraction
@@ -823,7 +761,5 @@ class StreamWorker:
                 return location.get("additional_data", {}).get(field_name)
 
         except Exception as e:
-            self.logger.debug(
-                f"Failed to extract identifier '{field_name}' from location: {e}"
-            )
+            self.logger.debug(f"Failed to extract identifier '{field_name}' from location: {e}")
             return None

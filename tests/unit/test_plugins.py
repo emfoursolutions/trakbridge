@@ -204,9 +204,7 @@ class TestPluginConfigurationHandling:
             temp_config_path = f.name
 
         try:
-            with patch(
-                "utils.config_manager.config_manager.load_config_safe"
-            ) as mock_load:
+            with patch("utils.config_manager.config_manager.load_config_safe") as mock_load:
                 mock_load.return_value = config_data
 
                 manager = PluginManager()
@@ -475,9 +473,7 @@ class TestGarminPluginInterface:
             {
                 "name": "Original Name",
                 "uid": "test-uid-123",
-                "additional_data": {
-                    "raw_placemark": {"extended_data": {"IMEI": "123456789"}}
-                },
+                "additional_data": {"raw_placemark": {"extended_data": {"IMEI": "123456789"}}},
             }
         ]
 
@@ -667,9 +663,7 @@ class TestPluginFallbackBehavior:
         test_data = [
             {
                 "name": "Original Name",
-                "additional_data": {
-                    "raw_placemark": {"extended_data": {"IMEI": "123456789"}}
-                },
+                "additional_data": {"raw_placemark": {"extended_data": {"IMEI": "123456789"}}},
             }
         ]
 
@@ -709,14 +703,10 @@ class TestDeepstatePluginCotTypeMode:
             }
 
             # In 'stream' mode, should use default CoT type regardless of pattern
-            result = plugin._convert_feature_to_location(
-                test_feature, "a-f-G-U-C", "stream"
-            )
+            result = plugin._convert_feature_to_location(test_feature, "a-f-G-U-C", "stream")
 
             assert result is not None
-            assert (
-                result["cot_type"] == "a-f-G-U-C"
-            )  # Should use stream default, not pattern match
+            assert result["cot_type"] == "a-f-G-U-C"  # Should use stream default, not pattern match
 
         except ImportError:
             pytest.skip("Deepstate plugin not available")
@@ -737,15 +727,11 @@ class TestDeepstatePluginCotTypeMode:
             # Test feature with a name that should trigger Kyiv pattern matching
             test_feature = {
                 "geometry": {"type": "Point", "coordinates": [30.5234, 50.4501]},
-                "properties": {
-                    "name": "/// Kyiv ///"  # Should match kyiv -> a-n-G-I-G pattern
-                },
+                "properties": {"name": "/// Kyiv ///"},  # Should match kyiv -> a-n-G-I-G pattern
             }
 
             # In 'per_point' mode, should use pattern analysis
-            result = plugin._convert_feature_to_location(
-                test_feature, "a-f-G-U-C", "per_point"
-            )
+            result = plugin._convert_feature_to_location(test_feature, "a-f-G-U-C", "per_point")
 
             assert result is not None
             assert result["cot_type"] == "a-n-G-I-G"  # Should match Kyiv pattern
@@ -769,20 +755,14 @@ class TestDeepstatePluginCotTypeMode:
             # Test feature with unknown name that won't match any pattern
             test_feature = {
                 "geometry": {"type": "Point", "coordinates": [20.0, 40.0]},
-                "properties": {
-                    "name": "/// Unknown Location ///"  # Should not match any pattern
-                },
+                "properties": {"name": "/// Unknown Location ///"},  # Should not match any pattern
             }
 
             # In 'per_point' mode with no pattern match, should fall back to stream default
-            result = plugin._convert_feature_to_location(
-                test_feature, "a-f-G-U-C", "per_point"
-            )
+            result = plugin._convert_feature_to_location(test_feature, "a-f-G-U-C", "per_point")
 
             assert result is not None
-            assert (
-                result["cot_type"] == "a-f-G-U-C"
-            )  # Should fall back to stream default
+            assert result["cot_type"] == "a-f-G-U-C"  # Should fall back to stream default
 
         except ImportError:
             pytest.skip("Deepstate plugin not available")
@@ -809,9 +789,7 @@ class TestDeepstatePluginCotTypeMode:
             }
 
             # In 'per_point' mode, should recognize tank pattern
-            result = plugin._convert_feature_to_location(
-                test_feature, "a-f-G-U-C", "per_point"
-            )
+            result = plugin._convert_feature_to_location(test_feature, "a-f-G-U-C", "per_point")
 
             assert result is not None
             assert result["cot_type"] == "a-h-G-U-C-A"  # Should match tank pattern
@@ -852,9 +830,7 @@ class TestDeepstatePluginCotTypeMode:
                 stream_default_cot_type = plugin.stream.cot_type
 
             assert cot_type_mode == "stream"
-            assert (
-                stream_default_cot_type == "a-u-G"
-            )  # Should use stream object CoT type
+            assert stream_default_cot_type == "a-u-G"  # Should use stream object CoT type
 
         except ImportError:
             pytest.skip("Deepstate plugin not available")

@@ -81,37 +81,25 @@ class PluginManager:
                 elif isinstance(additional_modules, list):
                     modules_added = 0
                     for module in additional_modules:
-                        if isinstance(module, str) and self._is_safe_module_name(
-                            module
-                        ):
+                        if isinstance(module, str) and self._is_safe_module_name(module):
                             self._allowed_modules.add(module)
                             logger.info(f"✅ Added allowed plugin module: {module}")
                             modules_added += 1
                         else:
-                            logger.warning(
-                                f"⚠️ Ignoring unsafe plugin module name: {module}"
-                            )
+                            logger.warning(f"⚠️ Ignoring unsafe plugin module name: {module}")
 
                     logger.info(
                         f"Plugin configuration loaded successfully: {modules_added} modules added"
                     )
                 else:
-                    logger.warning(
-                        "Plugin configuration 'allowed_plugin_modules' must be a list"
-                    )
+                    logger.warning("Plugin configuration 'allowed_plugin_modules' must be a list")
             else:
-                logger.info(
-                    "No additional plugin modules configured (using built-in plugins only)"
-                )
+                logger.info("No additional plugin modules configured (using built-in plugins only)")
 
         except Exception as e:
             # Graceful fallback - continue with built-in plugins only
-            logger.warning(
-                f"Failed to load plugin configuration, using built-in plugins only: {e}"
-            )
-            logger.info(
-                "Application startup will continue with default built-in plugins"
-            )
+            logger.warning(f"Failed to load plugin configuration, using built-in plugins only: {e}")
+            logger.info("Application startup will continue with default built-in plugins")
 
     def _is_safe_module_name(self, module_name: str) -> bool:
         """
@@ -216,9 +204,7 @@ class PluginManager:
                         )
 
                         if spec is None or spec.loader is None:
-                            logger.error(
-                                f"Failed to create spec for external plugin: {filename}"
-                            )
+                            logger.error(f"Failed to create spec for external plugin: {filename}")
                             continue
 
                         module = importlib.util.module_from_spec(spec)
@@ -229,24 +215,15 @@ class PluginManager:
 
                         # Look for plugin classes
                         for name, obj in inspect.getmembers(module, inspect.isclass):
-                            if (
-                                issubclass(obj, BaseGPSPlugin)
-                                and obj is not BaseGPSPlugin
-                            ):
-                                logger.info(
-                                    f"Loading external plugin: {name} from {filename}"
-                                )
+                            if issubclass(obj, BaseGPSPlugin) and obj is not BaseGPSPlugin:
+                                logger.info(f"Loading external plugin: {name} from {filename}")
                                 self.register_plugin(obj)
 
                     except Exception as e:
-                        logger.error(
-                            f"Failed to load external plugin file {filename}: {e}"
-                        )
+                        logger.error(f"Failed to load external plugin file {filename}: {e}")
 
         except Exception as e:
-            logger.error(
-                f"Failed to scan external plugins directory {plugins_path}: {e}"
-            )
+            logger.error(f"Failed to scan external plugins directory {plugins_path}: {e}")
 
     def load_external_plugins(self):
         """
@@ -287,15 +264,11 @@ class PluginManager:
 
         # Security: Check for path traversal attempts
         if ".." in module_name or "/" in module_name or "\\" in module_name:
-            logger.error(
-                f"Path traversal attempt detected in module name: {module_name}"
-            )
+            logger.error(f"Path traversal attempt detected in module name: {module_name}")
             return False
 
         # Security: Check for invalid characters that could be used for injection
-        if not re.match(
-            r"^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)*$", module_name
-        ):
+        if not re.match(r"^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)*$", module_name):
             logger.error(f"Invalid characters in module name: {module_name}")
             return False
 
@@ -311,9 +284,7 @@ class PluginManager:
         ]
         for prefix in dangerous_prefixes:
             if module_name.startswith(prefix + ".") or module_name == prefix:
-                logger.error(
-                    f"Attempted to load dangerous system module: {module_name}"
-                )
+                logger.error(f"Attempted to load dangerous system module: {module_name}")
                 return False
 
         # Check if the module name is in our allowed modules set
@@ -351,9 +322,7 @@ class PluginManager:
                 )
                 return
             except Exception as e:
-                logger.error(
-                    f"Failed to get plugin name for {plugin_class.__name__}: {e}"
-                )
+                logger.error(f"Failed to get plugin name for {plugin_class.__name__}: {e}")
                 return
 
         self.plugins[plugin_name] = plugin_class
@@ -442,9 +411,7 @@ class PluginManager:
                 f"Plugin creation failed for '{plugin_name}'",
                 {
                     "config_type": str(type(config)),
-                    "config_fields": (
-                        len(config) if isinstance(config, dict) else "non-dict"
-                    ),
+                    "config_fields": (len(config) if isinstance(config, dict) else "non-dict"),
                 },
             )
             return None
@@ -476,9 +443,7 @@ class PluginManager:
                 metadata[plugin_name] = plugin_metadata
         return metadata
 
-    def get_plugin_config_schema(
-        self, plugin_name: str
-    ) -> Optional[List[Dict[str, Any]]]:
+    def get_plugin_config_schema(self, plugin_name: str) -> Optional[List[Dict[str, Any]]]:
         """Get configuration schema for a specific plugin"""
         if plugin_name not in self.plugins:
             return None
@@ -630,18 +595,13 @@ class PluginManager:
                 sys.path.insert(0, plugins_path)
 
             # Handle external plugins directory differently
-            if (
-                directory.startswith("/app/external_plugins")
-                or directory == "external_plugins"
-            ):
+            if directory.startswith("/app/external_plugins") or directory == "external_plugins":
                 self._load_external_plugins_directory(plugins_path)
                 return
 
             # Import the plugins package - validate first for security
             if not self._validate_module_name(directory):
-                logger.error(
-                    f"Unauthorized attempt to load plugin directory: {directory}"
-                )
+                logger.error(f"Unauthorized attempt to load plugin directory: {directory}")
                 return
 
             try:
@@ -650,9 +610,7 @@ class PluginManager:
                 logger.error(f"Failed to import plugin directory '{directory}': {e}")
                 return
             except Exception as e:
-                logger.error(
-                    f"Unexpected error importing plugin directory '{directory}': {e}"
-                )
+                logger.error(f"Unexpected error importing plugin directory '{directory}': {e}")
                 return
 
             # Iterate through all modules in the plugins package
@@ -666,9 +624,7 @@ class PluginManager:
                 try:
                     # Validate module name before importing for security
                     if not self._validate_module_name(modname):
-                        logger.error(
-                            f"Unauthorized attempt to load plugin module: {modname}"
-                        )
+                        logger.error(f"Unauthorized attempt to load plugin module: {modname}")
                         continue
 
                     # Import the module with enhanced error handling
@@ -678,9 +634,7 @@ class PluginManager:
                         logger.error(f"Failed to import plugin module '{modname}': {e}")
                         continue
                     except Exception as e:
-                        logger.error(
-                            f"Unexpected error importing plugin module '{modname}': {e}"
-                        )
+                        logger.error(f"Unexpected error importing plugin module '{modname}': {e}")
                         continue
 
                     # Look for classes that inherit from BaseGPSPlugin
@@ -728,10 +682,7 @@ class PluginManager:
 
                         # Look for plugin classes
                         for name, obj in inspect.getmembers(module, inspect.isclass):
-                            if (
-                                issubclass(obj, BaseGPSPlugin)
-                                and obj is not BaseGPSPlugin
-                            ):
+                            if issubclass(obj, BaseGPSPlugin) and obj is not BaseGPSPlugin:
                                 self.register_plugin(obj)
 
                     except Exception as e:
@@ -762,9 +713,7 @@ class PluginManager:
                             temp_instance = obj({})
                             if temp_instance.plugin_name == plugin_name:
                                 self.plugins[plugin_name] = obj
-                                logger.info(
-                                    f"Successfully reloaded plugin: {plugin_name}"
-                                )
+                                logger.info(f"Successfully reloaded plugin: {plugin_name}")
                                 return True
                         except Exception:
                             continue
@@ -849,9 +798,7 @@ class PluginManager:
                 if name in streams_by_plugin and streams_by_plugin[name]:
                     # Test with actual stream configuration
                     stream = streams_by_plugin[name][0]  # Use first stream's config
-                    config = (
-                        stream.get_plugin_config()
-                    )  # Use the method, not the attribute
+                    config = stream.get_plugin_config()  # Use the method, not the attribute
                     plugin_instance = plugin_class(config)
                     health = await plugin_instance.health_check()
 

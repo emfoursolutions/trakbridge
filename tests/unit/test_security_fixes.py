@@ -257,9 +257,7 @@ class TestDynamicImportSecurity:
             assert re.match(pattern, valid), f"Should match valid pattern: {valid}"
 
         for invalid in invalid_patterns:
-            assert not re.match(
-                pattern, invalid
-            ), f"Should not match invalid pattern: {invalid}"
+            assert not re.match(pattern, invalid), f"Should not match invalid pattern: {invalid}"
 
 
 class TestNginxSecurityConfiguration:
@@ -355,9 +353,7 @@ class TestSecurityConfigurationIntegration:
         with app.app_context():
             assert current_app.config.get("APPLICATION_URL") is not None
             assert isinstance(current_app.config["APPLICATION_URL"], str)
-            assert current_app.config["APPLICATION_URL"].startswith(
-                ("http://", "https://")
-            )
+            assert current_app.config["APPLICATION_URL"].startswith(("http://", "https://"))
 
     def test_plugin_security_with_config_integration(self):
         """Test plugin security validation with configuration integration"""

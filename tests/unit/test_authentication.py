@@ -75,9 +75,7 @@ def app():
         # Add auth_manager for route tests
         from services.auth.auth_manager import AuthenticationManager
 
-        app.auth_manager = AuthenticationManager(
-            {"providers": {"local": {"enabled": True}}}
-        )
+        app.auth_manager = AuthenticationManager({"providers": {"local": {"enabled": True}}})
 
         yield app
         db.drop_all()
@@ -233,9 +231,7 @@ class TestUserModel:
             sensitive_data = user.to_dict(include_sensitive=True)
             assert "provider_user_id" in sensitive_data
             assert "failed_login_attempts" in sensitive_data
-            assert (
-                "password_hash" not in sensitive_data
-            )  # Password hash should never be serialized
+            assert "password_hash" not in sensitive_data  # Password hash should never be serialized
 
 
 class TestUserSession:
@@ -347,9 +343,7 @@ class TestLocalAuthProvider:
         provider = LocalAuthProvider(auth_config["providers"]["local"])
 
         # Valid password (with special character)
-        assert (
-            provider.validate_password("ValidPass123!") == []
-        )  # Empty list means valid
+        assert provider.validate_password("ValidPass123!") == []  # Empty list means valid
 
         # Too short
         violations = provider.validate_password("short")
@@ -478,9 +472,7 @@ class TestOIDCAuthProvider:
         # Enable OIDC for this test - need to wrap in providers structure
         oidc_config = auth_config["providers"]["oidc"].copy()
         oidc_config["enabled"] = True
-        oidc_config["discovery_url"] = (
-            oidc_config["issuer"] + "/.well-known/openid_configuration"
-        )
+        oidc_config["discovery_url"] = oidc_config["issuer"] + "/.well-known/openid_configuration"
         config = {"providers": {"test_provider": oidc_config}}
         provider = OIDCAuthProvider(config)
 
@@ -503,17 +495,13 @@ class TestOIDCAuthProvider:
         # Enable OIDC for this test - need to wrap in providers structure
         oidc_config = auth_config["providers"]["oidc"].copy()
         oidc_config["enabled"] = True
-        oidc_config["discovery_url"] = (
-            oidc_config["issuer"] + "/.well-known/openid_configuration"
-        )
+        oidc_config["discovery_url"] = oidc_config["issuer"] + "/.well-known/openid_configuration"
         config = {"providers": {"test_provider": oidc_config}}
         provider = OIDCAuthProvider(config)
 
         # Mock the discovery document to avoid network calls
         with patch.object(provider, "_get_discovery_document") as mock_discovery:
-            mock_discovery.return_value = {
-                "authorization_endpoint": "https://test-issuer.com/auth"
-            }
+            mock_discovery.return_value = {"authorization_endpoint": "https://test-issuer.com/auth"}
             auth_url, state = provider.get_authorization_url("https://app.com/callback")
 
         assert "https://test-issuer.com" in auth_url
@@ -564,9 +552,7 @@ class TestOIDCAuthProvider:
                 )
                 mock_handle.return_value = mock_response
 
-                response = provider.authenticate(
-                    authorization_code="auth_code", state="state"
-                )
+                response = provider.authenticate(authorization_code="auth_code", state="state")
 
             assert response.success is True
             assert response.user is not None
@@ -671,13 +657,9 @@ class TestAuthenticationDecorators:
 
             with app.test_request_context():
                 # Mock url_for to avoid route resolution errors
-                with patch(
-                    "services.auth.decorators.url_for", return_value="/auth/login"
-                ):
+                with patch("services.auth.decorators.url_for", return_value="/auth/login"):
                     # No user in session
-                    with patch(
-                        "services.auth.decorators.get_current_user", return_value=None
-                    ):
+                    with patch("services.auth.decorators.get_current_user", return_value=None):
                         response = protected_view()
                         assert response.status_code == 302  # Redirect to login
 
@@ -838,9 +820,7 @@ class TestAuthenticationRoutes:
                 with patch("routes.auth.url_for") as mock_url_for:
                     with patch("routes.auth.redirect") as mock_redirect:
                         mock_url_for.return_value = "/auth/login"
-                        mock_redirect.return_value = app.response_class(
-                            "Login Failed", 200
-                        )
+                        mock_redirect.return_value = app.response_class("Login Failed", 200)
                         response = client.post(
                             "/auth/login",
                             data={
@@ -866,9 +846,7 @@ class TestAuthenticationRoutes:
                         mock_auth_manager = Mock()
                         mock_auth_manager.get_providers_info.return_value = {}
                         mock_app.auth_manager = mock_auth_manager
-                        mock_redirect.return_value = app.response_class(
-                            "Logged out", 200
-                        )
+                        mock_redirect.return_value = app.response_class("Logged out", 200)
 
                         response = client.get("/auth/logout", follow_redirects=True)
                         assert response.status_code == 200
@@ -1113,9 +1091,7 @@ class TestAuthenticationPerformance:
             # Test lookup performance
             start_time = time.time()
             for session in sessions:  # Test all created sessions
-                found_session = UserSession.query.filter_by(
-                    session_id=session.session_id
-                ).first()
+                found_session = UserSession.query.filter_by(session_id=session.session_id).first()
                 assert found_session is not None
 
             lookup_time = time.time() - start_time

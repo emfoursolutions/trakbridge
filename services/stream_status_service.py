@@ -139,9 +139,7 @@ class StreamStatusService:
 
                 stats["by_plugin_type"][plugin_type]["count"] += 1
                 total_messages += stream.total_messages_sent
-                stats["by_plugin_type"][plugin_type][
-                    "total_messages"
-                ] += stream.total_messages_sent
+                stats["by_plugin_type"][plugin_type]["total_messages"] += stream.total_messages_sent
 
                 # Status statistics
                 if stream.is_active:
@@ -164,9 +162,7 @@ class StreamStatusService:
             # Calculate averages
             if streams:
                 stats["message_totals"]["total_messages"] = total_messages
-                stats["message_totals"]["avg_messages_per_stream"] = (
-                    total_messages / len(streams)
-                )
+                stats["message_totals"]["avg_messages_per_stream"] = total_messages / len(streams)
 
             return stats
 
@@ -202,20 +198,14 @@ class StreamStatusService:
                     "cot_type": stream.cot_type,
                     "cot_stale_time": stream.cot_stale_time,
                     "tak_server_id": stream.tak_server_id,
-                    "tak_server_name": (
-                        stream.tak_server.name if stream.tak_server else None
-                    ),
+                    "tak_server_name": (stream.tak_server.name if stream.tak_server else None),
                 },
                 "statistics": {
                     "total_messages_sent": stream.total_messages_sent,
                     "last_poll": self._format_last_poll(stream),
                     "last_error": stream.last_error,
-                    "created_at": (
-                        stream.created_at.isoformat() if stream.created_at else None
-                    ),
-                    "updated_at": (
-                        stream.updated_at.isoformat() if stream.updated_at else None
-                    ),
+                    "created_at": (stream.created_at.isoformat() if stream.created_at else None),
+                    "updated_at": (stream.updated_at.isoformat() if stream.updated_at else None),
                 },
                 "health": {
                     "has_error": bool(stream.last_error),
@@ -305,27 +295,19 @@ def validate_stream_status_format(status: Dict[str, Any], stream_id: int) -> boo
 
     for field in required_fields:
         if field not in status:
-            logger.error(
-                f"Missing required field '{field}' in stream status for {stream_id}"
-            )
+            logger.error(f"Missing required field '{field}' in stream status for {stream_id}")
             return False
 
     if not isinstance(status["stream_id"], int):
-        logger.error(
-            f"stream_id must be int, got {type(status['stream_id'])} for {stream_id}"
-        )
+        logger.error(f"stream_id must be int, got {type(status['stream_id'])} for {stream_id}")
         return False
 
     if not isinstance(status["running"], bool):
-        logger.error(
-            f"running must be bool, got {type(status['running'])} for {stream_id}"
-        )
+        logger.error(f"running must be bool, got {type(status['running'])} for {stream_id}")
         return False
 
     if not isinstance(status["status"], str):
-        logger.error(
-            f"status must be str, got {type(status['status'])} for {stream_id}"
-        )
+        logger.error(f"status must be str, got {type(status['status'])} for {stream_id}")
         return False
 
     return True

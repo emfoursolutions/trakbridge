@@ -70,21 +70,15 @@ def upgrade():
 
         # Index on session_id (already exists as unique, but ensure it's there)
         if not index_exists("ix_user_sessions_session_id"):
-            safe_create_index(
-                "ix_user_sessions_session_id", "user_sessions", ["session_id"]
-            )
+            safe_create_index("ix_user_sessions_session_id", "user_sessions", ["session_id"])
 
         # Index on expires_at (for session cleanup queries)
         if not index_exists("ix_user_sessions_expires_at"):
-            safe_create_index(
-                "ix_user_sessions_expires_at", "user_sessions", ["expires_at"]
-            )
+            safe_create_index("ix_user_sessions_expires_at", "user_sessions", ["expires_at"])
 
         # Index on is_active (frequently filtered)
         if not index_exists("ix_user_sessions_is_active"):
-            safe_create_index(
-                "ix_user_sessions_is_active", "user_sessions", ["is_active"]
-            )
+            safe_create_index("ix_user_sessions_is_active", "user_sessions", ["is_active"])
 
     # TakServer table indexes
     if table_exists("tak_servers"):
@@ -108,9 +102,7 @@ def upgrade():
 
         # Index on stream_id (foreign key)
         if not index_exists("ix_callsign_mappings_stream_id"):
-            safe_create_index(
-                "ix_callsign_mappings_stream_id", "callsign_mappings", ["stream_id"]
-            )
+            safe_create_index("ix_callsign_mappings_stream_id", "callsign_mappings", ["stream_id"])
 
 
 def downgrade():
@@ -121,14 +113,10 @@ def downgrade():
     # CallsignMapping indexes
     if table_exists("callsign_mappings"):
         if index_exists("ix_callsign_mappings_stream_id"):
-            op.drop_index(
-                "ix_callsign_mappings_stream_id", table_name="callsign_mappings"
-            )
+            op.drop_index("ix_callsign_mappings_stream_id", table_name="callsign_mappings")
 
         if index_exists("ix_callsign_mappings_stream_identifier"):
-            op.drop_index(
-                "ix_callsign_mappings_stream_identifier", table_name="callsign_mappings"
-            )
+            op.drop_index("ix_callsign_mappings_stream_identifier", table_name="callsign_mappings")
 
     # TakServer indexes
     if table_exists("tak_servers"):

@@ -100,9 +100,7 @@ class TestMigrationUtils:
         """Test PostgreSQL enum column creation with proper Python Enum"""
         mock_get_dialect.return_value = "postgresql"
 
-        column = get_enum_column(
-            MockProperEnum, "auth_provider", nullable=False, default="local"
-        )
+        column = get_enum_column(MockProperEnum, "auth_provider", nullable=False, default="local")
 
         # Verify column properties
         assert column.name == "auth_provider"
@@ -121,9 +119,7 @@ class TestMigrationUtils:
         """Test PostgreSQL enum column creation with legacy string-based Enum"""
         mock_get_dialect.return_value = "postgresql"
 
-        column = get_enum_column(
-            MockLegacyEnum, "auth_provider", nullable=True, default="LOCAL"
-        )
+        column = get_enum_column(MockLegacyEnum, "auth_provider", nullable=True, default="LOCAL")
 
         # Verify column properties
         assert column.name == "auth_provider"
@@ -141,9 +137,7 @@ class TestMigrationUtils:
         """Test MySQL enum column creation with proper Python Enum"""
         mock_get_dialect.return_value = "mysql"
 
-        column = get_enum_column(
-            MockProperEnum, "auth_provider", nullable=False, default="local"
-        )
+        column = get_enum_column(MockProperEnum, "auth_provider", nullable=False, default="local")
 
         # Verify column properties
         assert column.name == "auth_provider"
@@ -160,9 +154,7 @@ class TestMigrationUtils:
         """Test SQLite enum column creation with legacy string-based Enum"""
         mock_get_dialect.return_value = "sqlite"
 
-        column = get_enum_column(
-            MockLegacyEnum, "auth_provider", nullable=True, default="LOCAL"
-        )
+        column = get_enum_column(MockLegacyEnum, "auth_provider", nullable=True, default="LOCAL")
 
         # Verify column properties
         assert column.name == "auth_provider"
@@ -194,9 +186,7 @@ class TestMigrationUtils:
         """Test enum column creation with Enum member as default"""
         mock_get_dialect.return_value = "postgresql"
 
-        column = get_enum_column(
-            MockProperEnum, "auth_provider", default=MockProperEnum.LOCAL
-        )
+        column = get_enum_column(MockProperEnum, "auth_provider", default=MockProperEnum.LOCAL)
 
         # Should handle enum member as default value
         assert str(column.default.arg) == str(MockProperEnum.LOCAL)
@@ -324,16 +314,10 @@ class TestMigrationIntegration:
             LOCKED = "LOCKED"
 
         # These are the exact calls from the migration file (after our fixes)
-        auth_provider_column = get_enum_column(
-            AuthProvider, "auth_provider", default="LOCAL"
-        )
+        auth_provider_column = get_enum_column(AuthProvider, "auth_provider", default="LOCAL")
         user_role_column = get_enum_column(UserRole, "role", default="USER")
-        account_status_column = get_enum_column(
-            AccountStatus, "status", default="ACTIVE"
-        )
-        session_provider_column = get_enum_column(
-            AuthProvider, "provider", default="LOCAL"
-        )
+        account_status_column = get_enum_column(AccountStatus, "status", default="ACTIVE")
+        session_provider_column = get_enum_column(AuthProvider, "provider", default="LOCAL")
 
         # All should succeed without AttributeError
         assert auth_provider_column.name == "auth_provider"
