@@ -84,6 +84,8 @@ class StreamWorker:
                 # Provide stream reference to plugin for stream-level configuration access
                 if self.plugin:
                     self.plugin.stream = self.stream
+                    # Mark plugin as being in production context for better logging
+                    self.plugin._in_production_context = True
 
                 if not self.plugin:
                     self.logger.error("Failed to initialize plugin")

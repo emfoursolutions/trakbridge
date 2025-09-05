@@ -387,34 +387,13 @@ class DeepstatePlugin(BaseGPSPlugin):
                     logger.debug(f"First feature: {features[0]}")
 
                 # Get the CoT type mode and stream's default CoT type from stream object
-                logger.debug(f"DEBUG: hasattr(self, 'stream')={hasattr(self, 'stream')}")
-                if hasattr(self, "stream"):
-                    logger.debug(f"DEBUG: self.stream is not None={self.stream is not None}")
-                    if self.stream:
-                        logger.debug(f"DEBUG: stream.id={getattr(self.stream, 'id', 'No ID')}")
-                        logger.debug(
-                            f"DEBUG: stream.cot_type_mode (direct)={getattr(self.stream, 'cot_type_mode', 'NOT_FOUND')}"
-                        )
-                        logger.debug(
-                            f"DEBUG: stream.cot_type (direct)={getattr(self.stream, 'cot_type', 'NOT_FOUND')}"
-                        )
-                        logger.debug(
-                            f"DEBUG: stream attributes={[attr for attr in dir(self.stream) if not attr.startswith('_')]}"
-                        )
-
-                if hasattr(self, "stream") and self.stream:
-                    cot_type_mode = getattr(self.stream, "cot_type_mode", "per_point")
-                    stream_default_cot_type = getattr(self.stream, "cot_type", "a-f-G-U-C")
-                    logger.debug(
-                        f"Using stream-level configuration: cot_type_mode={cot_type_mode}, cot_type={stream_default_cot_type}"
-                    )
-                else:
-                    # Fallback to config if stream not available
-                    cot_type_mode = config.get("cot_type_mode", "per_point")
-                    stream_default_cot_type = config.get("cot_type", "a-f-G-U-C")
-                    logger.warning(
-                        f"No stream object available, using plugin config fallback: cot_type_mode={cot_type_mode}, cot_type={stream_default_cot_type}"
-                    )
+                # Use new helper methods for configuration management
+                cot_type_mode = self.get_stream_config_value("cot_type_mode", "per_point")
+                stream_default_cot_type = self.get_stream_config_value("cot_type", "a-f-G-U-C")
+                
+                # Log configuration source for debugging
+                self.log_config_source("cot_type_mode", cot_type_mode, logger)
+                self.log_config_source("cot_type", stream_default_cot_type, logger)
 
                 logger.debug(
                     f"FINAL VALUES USED: cot_type_mode={cot_type_mode}, stream_default_cot_type={stream_default_cot_type}"

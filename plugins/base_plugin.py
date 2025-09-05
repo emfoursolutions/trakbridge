@@ -146,6 +146,9 @@ class BaseGPSPlugin(ABC):
         from services.encryption_service import EncryptionService
 
         self.encryption_service = EncryptionService()
+        # Initialize stream reference as None - will be set by StreamWorker if in production
+        self.stream = None
+        self._in_production_context = False
 
     @property
     @abstractmethod
@@ -372,12 +375,23 @@ class BaseGPSPlugin(ABC):
             if hasattr(stream, "tak_server_id") and stream.tak_server_id:
                 await cot_service.ensure_worker_running(stream.tak_server_id)
 
+            # Temporarily set stream reference for helper method access
+            original_stream = getattr(self, 'stream', None)
+            self.stream = stream
+            
+            # Use helper methods for consistent configuration access
+            cot_type = self.get_stream_config_value("cot_type", "a-f-G-U-C")
+            stale_time = self.get_stream_config_value("cot_stale_time", 300)
+            
             # Create COT events from locations
             cot_events = await EnhancedCOTService().create_cot_events(
                 locations,
-                cot_type=getattr(stream, "cot_type", "a-f-G-U-C"),
-                stale_time=getattr(stream, "cot_stale_time", 300),
+                cot_type=cot_type,
+                stale_time=stale_time,
             )
+            
+            # Restore original stream reference
+            self.stream = original_stream
 
             # Enqueue events to persistent worker
             enqueued_count = 0
@@ -447,6 +461,47 @@ class BaseGPSPlugin(ABC):
                     return False
 
         return True
+
+    def get_stream_config_value(self, key: str, default_value: Any = None) -> Any:
+        """
+        Get configuration value from stream object with fallback to plugin config.
+        
+        Args:
+            key: Configuration key name
+            default_value: Default value if not found in either source
+            
+        Returns:
+            Configuration value from stream if available, otherwise from plugin config
+        """
+        # Try stream-level configuration first
+        if hasattr(self, 'stream') and self.stream is not None:
+            stream_value = getattr(self.stream, key, None)
+            if stream_value is not None:
+                return stream_value
+        
+        # Fallback to plugin configuration
+        return self.config.get(key, default_value)
+
+    def log_config_source(self, key: str, value: Any, logger_instance=None) -> None:
+        """
+        Log the configuration source for debugging purposes.
+        
+        Args:
+            key: Configuration key name
+            value: The configuration value being used
+            logger_instance: Logger instance to use (defaults to module logger)
+        """
+        if logger_instance is None:
+            logger_instance = get_logger()
+            
+        stream_available = hasattr(self, 'stream') and self.stream is not None
+        source = "stream" if stream_available else "plugin config"
+        
+        # Check if this looks like a health check scenario
+        is_health_check = not getattr(self, '_in_production_context', True)
+        log_level = logger_instance.debug if is_health_check else logger_instance.debug
+        
+        log_level(f"Using {source} for {key}={value}")
 
     async def health_check(self) -> dict:
         """

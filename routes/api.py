@@ -144,12 +144,11 @@ def api_status():
 
     # Handle stream_manager import carefully
     try:
-        from services.stream_manager import stream_manager
+        from services.stream_manager import get_stream_manager
+        stream_manager = get_stream_manager()
 
-        running_workers = len(stream_manager.workers)
+        running_workers = len(stream_manager.workers) if stream_manager else 0
     except ImportError:
-        from services.stream_manager import stream_manager
-
         running_workers = 0
 
     return jsonify(
