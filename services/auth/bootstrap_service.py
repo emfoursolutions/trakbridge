@@ -21,8 +21,6 @@ Key features:
 
 Author: Emfour Solutions
 Created: 2025-07-28
-Last Modified: 2025-07-28
-Version: 1.0.0
 """
 
 import fcntl

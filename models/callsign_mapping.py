@@ -12,8 +12,6 @@ Description:
 
 Author: Emfour Solutions
 Created: 2025-08-30
-Last Modified: {{LASTMOD}}
-Version: {{VERSION}}
 """
 
 # Local application imports

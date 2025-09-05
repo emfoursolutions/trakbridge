@@ -8,8 +8,6 @@ development environment detection, and Git integration.
 
 Author: Emfour Solutions
 Created: 18-Jul-2025
-Last Modified: {{LASTMOD}}
-Version: {{VERSION}}
 """
 
 import logging

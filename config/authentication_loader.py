@@ -7,8 +7,6 @@ Description:
 
 Author: Emfour Solutions
 Created: 2025-08-03
-Last Modified: {{LASTMOD}}
-Version: {{VERSION}}
 """
 
 # Standard library imports

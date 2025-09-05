@@ -21,8 +21,6 @@ Key features:
 
 Author: Emfour Solutions
 Created: 18-Jul-2025
-Last Modified: {{LASTMOD}}
-Version: {{VERSION}}
 """
 
 # Third-party imports
@@ -150,6 +148,7 @@ def api_status():
 
         running_workers = len(stream_manager.workers)
     except ImportError:
+        from services.stream_manager import stream_manager
         running_workers = 0
 
     return jsonify(
@@ -269,28 +268,27 @@ def detailed_health_check():
 @bp.route("/health/ready")
 def readiness_check():
     """Kubernetes readiness probe - checks if app is ready to serve traffic"""
-    checks = ["database", "encryption"]
 
-    for check_name in checks:
-        if check_name == "database":
-            result = get_cached_health_check("database", health_service.check_database_connectivity)
-        elif check_name == "encryption":
-            result = get_cached_health_check("encryption", check_encryption_health)
+    checks = {
+        "database": health_service.check_database_connectivity,
+        "encryption": check_encryption_health,
+    }
+
+    for check_name, check_func in checks.items():
+        result = get_cached_health_check(check_name, check_func)
 
         if result.get("status") != "healthy":
-            return (
-                jsonify(
-                    {
-                        "status": "not_ready",
-                        "failed_check": check_name,
-                        "error": result.get("error", "Unknown error"),
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                ),
-                503,
-            )
+            return jsonify({
+                "status": "not_ready",
+                "failed_check": check_name,
+                "error": result.get("error", "Unknown error"),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }), 503
 
-    return jsonify({"status": "ready", "timestamp": datetime.now(timezone.utc).isoformat()})
+    return jsonify({
+        "status": "ready",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
 
 
 @bp.route("/health/live")
@@ -1081,7 +1079,17 @@ def get_uptime_seconds():
     try:
         process = psutil.Process()
         return int(time.time() - process.create_time())
-    except:
+    except psutil.NoSuchProcess:
+        # Process no longer exists
+        logger.warning("Process no longer exists when calculating uptime")
+        return 0
+    except psutil.AccessDenied:
+        # Insufficient permissions to access process info
+        logger.warning("Access denied when trying to get process creation time")
+        return 0
+    except (OSError, ValueError) as e:
+        # Handle system-level errors or value conversion issues
+        logger.error(f"Error calculating uptime: {e}")
         return 0
 
 
@@ -1108,10 +1116,11 @@ def start_cache_cleanup():
             time.sleep(300)  # 5 minutes
             try:
                 clear_expired_cache()
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"Cache cleanup failed: {e}")
+                # Continue running despite errors
 
-    cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True, name="HealthCacheCleanup")
+    cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True, name="CacheCleanup")
     cleanup_thread.start()
 
 

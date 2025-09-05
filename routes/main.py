@@ -20,8 +20,6 @@ Key features:
 
 Author: Emfour Solutions
 Created: 18-Jul-2025
-Last Modified: {{LASTMOD}}
-Version: {{VERSION}}
 """
 
 # Standard library imports

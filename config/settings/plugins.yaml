@@ -1,12 +1,12 @@
+# =============================================================================
 # TrakBridge Plugin Configuration
-# 
 # This file allows administrators to add additional plugin modules
 # without modifying the core application code.
 #
 # SECURITY NOTE: Only add trusted plugin modules to this list.
 # All modules must be under the 'plugins.' namespace for security.
+# =============================================================================
 
-# List of additional plugin modules to allow for dynamic loading
 allowed_plugin_modules:
   # Example: Add custom plugins here
   # - plugins.custom_gps_plugin

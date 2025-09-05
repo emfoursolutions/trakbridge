@@ -1,6 +1,7 @@
-# TrakBridge Authentication Configuration Template
-# This file uses environment variable substitution for secure CI/CD deployment
-# For local development, copy this to authentication.yaml and add real values
+# =============================================================================
+# Authentication Configuration Settings
+# General application settings (non-sensitive)
+# =============================================================================
 
 authentication:
   # Session management configuration

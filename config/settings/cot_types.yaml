@@ -1,5 +1,7 @@
+# =============================================================================
 # Cursor-on-Target (CoT) Type to SIDC mapping with SVG icon references
 # Compatible with MIL-STD-2525C format for military symbology
+# =============================================================================
 
 cot_types:
   - value: "a-f-G-U"

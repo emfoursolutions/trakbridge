@@ -8,8 +8,6 @@ Description:
 
 Author: Emfour Solutions
 Created: 2025-08-08
-Last Modified: 2025-08-08
-Version: 1.0.0
 """
 
 import logging
