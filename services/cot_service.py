@@ -160,9 +160,17 @@ class EnhancedCOTService:
             f"create_cot_events called with: cot_type_mode='{cot_type_mode}', cot_type='{cot_type}', locations={len(locations)}"
         )
         if self.use_pytak:
-            return await EnhancedCOTService._create_pytak_events(
-                locations, cot_type, stale_time, cot_type_mode
-            )
+            # Use parallel processing for larger datasets to improve performance
+            if len(locations) >= 10:  # Threshold for parallel processing
+                logger.debug(f"Using parallel processing for {len(locations)} locations")
+                return await EnhancedCOTService._create_parallel_pytak_events(
+                    locations, cot_type, stale_time, cot_type_mode
+                )
+            else:
+                logger.debug(f"Using serial processing for {len(locations)} locations (below threshold)")
+                return await EnhancedCOTService._create_pytak_events(
+                    locations, cot_type, stale_time, cot_type_mode
+                )
         else:
             return await EnhancedCOTService._create_custom_events(
                 locations, cot_type, stale_time, cot_type_mode
@@ -289,6 +297,184 @@ class EnhancedCOTService:
 
         logger.debug(f"Created {len(events)} COT events from {len(locations)} locations")
         return events
+
+    @staticmethod
+    async def _create_parallel_pytak_events(
+        locations: List[Dict[str, Any]],
+        cot_type: str,
+        stale_time: int,
+        cot_type_mode: str = "stream",
+    ) -> List[bytes]:
+        """
+        Create COT events using parallel processing for improved performance
+        
+        This method processes multiple locations concurrently using asyncio.gather()
+        to significantly improve performance for large datasets (50+ points).
+        
+        Args:
+            locations: List of location dictionaries
+            cot_type: COT type identifier (used when cot_type_mode is "stream")
+            stale_time: Time in seconds before event becomes stale
+            cot_type_mode: "stream" or "per_point" to determine COT type source
+            
+        Returns:
+            List of COT events as XML bytes
+        """
+        if not locations:
+            logger.debug("No locations to process in parallel")
+            return []
+            
+        logger.debug(f"Starting parallel processing of {len(locations)} locations")
+        
+        # Create async tasks for each location
+        tasks = [
+            EnhancedCOTService._process_single_location_async(
+                location, cot_type, stale_time, cot_type_mode
+            )
+            for location in locations
+        ]
+        
+        # Execute all tasks concurrently
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Filter out exceptions and collect valid COT events
+        valid_events = []
+        error_count = 0
+        
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                # Log error but continue processing other locations
+                location_name = locations[i].get("name", f"Location_{i}")
+                logger.error(f"Error processing location {location_name}: {result}")
+                error_count += 1
+            elif result is not None:  # Valid COT event
+                valid_events.append(result)
+                
+        logger.debug(
+            f"Parallel processing completed: {len(valid_events)} valid events, "
+            f"{error_count} errors from {len(locations)} locations"
+        )
+        
+        return valid_events
+
+    @staticmethod
+    async def _process_single_location_async(
+        location: Dict[str, Any],
+        cot_type: str,
+        stale_time: int,
+        cot_type_mode: str
+    ) -> bytes:
+        """
+        Process a single location to COT event asynchronously
+        
+        This wraps the existing single-location processing logic in an async function
+        to enable concurrent processing via asyncio.gather().
+        
+        Args:
+            location: Single location dictionary
+            cot_type: COT type identifier
+            stale_time: Time in seconds before event becomes stale
+            cot_type_mode: "stream" or "per_point" mode
+            
+        Returns:
+            COT event as XML bytes
+            
+        Raises:
+            Exception: If location processing fails
+        """
+        try:
+            # Check for error responses from plugins
+            if "_error" in location:
+                error_code = location.get("_error", "unknown")
+                error_message = location.get("_error_message", "Unknown error")
+                logger.warning(
+                    f"Skipping error response from plugin: {error_code} - {error_message}"
+                )
+                raise ValueError(f"Plugin error: {error_code} - {error_message}")
+
+            # Validate and clean location data first
+            cleaned_location = EnhancedCOTService._validate_location_data(location)
+
+            # Parse timestamp - ensure we get a proper datetime object
+            if "timestamp" in cleaned_location and cleaned_location["timestamp"]:
+                if isinstance(cleaned_location["timestamp"], str):
+                    try:
+                        event_time = datetime.fromisoformat(
+                            cleaned_location["timestamp"].replace("Z", "+00:00")
+                        )
+                        # Remove timezone info to avoid issues
+                        if event_time.tzinfo is not None:
+                            event_time = event_time.replace(tzinfo=None)
+                    except ValueError as e:
+                        logger.warning(
+                            f"Could not parse timestamp '{cleaned_location['timestamp']}': {e}"
+                        )
+                        event_time = datetime.now(timezone.utc)
+                elif isinstance(cleaned_location["timestamp"], datetime):
+                    event_time = cleaned_location["timestamp"]
+                    # Remove timezone info to avoid issues
+                    if event_time.tzinfo is not None:
+                        event_time = event_time.replace(tzinfo=None)
+                else:
+                    logger.warning(
+                        f"Unexpected timestamp type: {type(cleaned_location['timestamp'])}"
+                    )
+                    event_time = datetime.now(timezone.utc)
+            else:
+                event_time = datetime.now(timezone.utc)
+
+            # Ensure event_time is a proper datetime object
+            if not isinstance(event_time, datetime):
+                logger.error(f"event_time is not a datetime object: {type(event_time)}")
+                event_time = datetime.now(timezone.utc)
+
+            # Determine COT type based on mode
+            if cot_type_mode == "per_point" and "cot_type" in location:
+                point_cot_type = location["cot_type"]
+            else:
+                point_cot_type = cot_type
+
+            # Create COT event data dictionary with safe conversions
+            event_data = {
+                "uid": str(location["uid"]),
+                "type": str(point_cot_type),  # Use determined COT type
+                "time": event_time,
+                "start": event_time,
+                "stale": event_time + timedelta(seconds=int(stale_time)),
+                "how": "m-g",  # Standard PyTAK "how" value
+                "lat": EnhancedCOTService._safe_float_convert(location["lat"]),
+                "lon": EnhancedCOTService._safe_float_convert(location["lon"]),
+                "hae": EnhancedCOTService._safe_float_convert(
+                    location.get("altitude", location.get("hae", 0.0))
+                ),
+                "ce": EnhancedCOTService._safe_float_convert(
+                    location.get("accuracy", location.get("ce", 999999)), 999999
+                ),
+                "le": EnhancedCOTService._safe_float_convert(
+                    location.get("linear_error", location.get("le", 999999)), 999999
+                ),
+                "callsign": str(location.get("name", "Unknown")),
+            }
+
+            # Add optional fields with safe conversions
+            if location.get("speed"):
+                event_data["speed"] = EnhancedCOTService._safe_float_convert(location["speed"])
+            if location.get("heading") or location.get("course"):
+                event_data["course"] = EnhancedCOTService._safe_float_convert(
+                    location.get("heading", location.get("course", 0.0))
+                )
+            if location.get("description"):
+                event_data["remarks"] = str(location["description"])
+
+            # Generate COT XML using PyTAK's functions
+            cot_xml = EnhancedCOTService._generate_cot_xml(event_data)
+            
+            return cot_xml
+
+        except Exception as e:
+            location_name = location.get("name", "Unknown")
+            logger.debug(f"Error processing location {location_name}: {e}")
+            raise  # Re-raise to be handled by caller
 
     @staticmethod
     def _generate_cot_xml(event_data: Dict[str, Any]) -> bytes:
