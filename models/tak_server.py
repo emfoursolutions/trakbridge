@@ -28,9 +28,17 @@ class TakServer(db.Model, TimestampMixin):
     cert_password = db.Column(db.String(255))  # Password for P12 certificate (encrypted)
     verify_ssl = db.Column(db.Boolean, default=True)
 
-    # Use back_populates instead of backref to match Stream model
+    # Legacy single-server relationship (maintained for backward compatibility) 
     streams = db.relationship(
         "Stream", back_populates="tak_server", lazy=True, cascade="all, delete-orphan"
+    )
+    
+    # New many-to-many relationship with streams
+    streams_many = db.relationship(
+        "Stream",
+        secondary="stream_tak_servers", 
+        back_populates="tak_servers",
+        lazy='dynamic'  # Use dynamic loading for better performance
     )
 
     def __repr__(self):

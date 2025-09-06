@@ -20,6 +20,15 @@ from utils.json_validator import JSONValidationError, safe_json_loads
 # Module-level logger
 logger = logging.getLogger(__name__)
 
+# Association table for many-to-many relationship between streams and TAK servers
+stream_tak_servers = db.Table('stream_tak_servers',
+    db.Column('stream_id', db.Integer, db.ForeignKey('streams.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('tak_server_id', db.Integer, db.ForeignKey('tak_servers.id', ondelete='CASCADE'), primary_key=True),
+    # Add indexes for performance
+    db.Index('idx_stream_tak_servers_stream_id', 'stream_id'),
+    db.Index('idx_stream_tak_servers_tak_server_id', 'tak_server_id')
+)
+
 
 class Stream(db.Model, TimestampMixin):
     __tablename__ = "streams"
@@ -47,7 +56,17 @@ class Stream(db.Model, TimestampMixin):
     enable_per_callsign_cot_types = db.Column(db.Boolean, default=False)  # Feature toggle
 
     # Relationships
+    # Legacy single-server relationship (maintained for backward compatibility)
     tak_server = db.relationship("TakServer", back_populates="streams")
+    
+    # New many-to-many relationship with TAK servers
+    tak_servers = db.relationship(
+        "TakServer",
+        secondary=stream_tak_servers,
+        back_populates="streams_many",
+        lazy='dynamic'  # Use dynamic loading for better performance with large datasets
+    )
+    
     callsign_mappings = db.relationship(
         "CallsignMapping", back_populates="stream", cascade="all, delete-orphan"
     )

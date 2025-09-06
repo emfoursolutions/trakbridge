@@ -402,8 +402,8 @@ def create_app(config_name=None):
         from models.tak_server import TakServer
         from models.user import User, UserSession
 
-        # Register models with SQLAlchemy
-        db.Model.metadata.create_all(bind=db.engine)
+        # Register models with SQLAlchemy - use checkfirst=True to avoid conflicts
+        db.Model.metadata.create_all(bind=db.engine, checkfirst=True)
 
         # Initialize stream manager and attach to Flask app
         from services.stream_manager import StreamManager

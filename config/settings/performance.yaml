@@ -1,0 +1,52 @@
+# TrakBridge Performance Configuration
+# Phase 1B: Configuration & Fallbacks for Parallel Processing
+
+parallel_processing:
+  # Enable or disable parallel processing entirely
+  enabled: true
+  
+  # Minimum number of locations to trigger parallel processing
+  # Below this threshold, serial processing will be used
+  batch_size_threshold: 10
+  
+  # Maximum number of concurrent tasks for parallel processing
+  # Prevents overwhelming the system with too many simultaneous operations
+  max_concurrent_tasks: 50
+  
+  # Automatically fallback to serial processing if parallel fails
+  fallback_on_error: true
+  
+  # Processing timeout in seconds (0 = no timeout)
+  processing_timeout: 30.0
+  
+  # Enable detailed performance logging
+  enable_performance_logging: true
+
+# Circuit breaker configuration for fault tolerance
+circuit_breaker:
+  # Number of consecutive failures before opening circuit
+  failure_threshold: 3
+  
+  # Time to wait before attempting to close circuit (seconds)
+  recovery_timeout: 60.0
+  
+  # Enable circuit breaker pattern
+  enabled: true
+
+# Performance monitoring and statistics
+monitoring:
+  # Track fallback statistics for alerting
+  track_fallback_statistics: true
+  
+  # Maximum number of statistics entries to keep in memory
+  max_statistics_entries: 1000
+  
+  # Reset statistics after this many seconds (0 = never reset)
+  statistics_reset_interval: 3600
+
+# Environment variable overrides
+# These can be set to override configuration values:
+# TRAKBRIDGE_PARALLEL_ENABLED=true/false
+# TRAKBRIDGE_BATCH_SIZE_THRESHOLD=number
+# TRAKBRIDGE_MAX_CONCURRENT_TASKS=number
+# TRAKBRIDGE_FALLBACK_ON_ERROR=true/false

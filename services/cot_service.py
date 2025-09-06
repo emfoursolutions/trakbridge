@@ -33,6 +33,8 @@ import logging
 import os
 import ssl
 import tempfile
+import time
+import yaml
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -82,6 +84,22 @@ class EnhancedCOTService:
         """
         self.use_pytak = use_pytak and PYTAK_AVAILABLE
         self.device_state_manager = DeviceStateManager()
+        
+        # Phase 1B: Initialize performance configuration with defaults
+        self.parallel_config = self._get_default_performance_config()
+        self._load_performance_config()
+        
+        # Phase 1B: Initialize fallback tracking
+        self.fallback_statistics = {
+            'total_fallbacks': 0,
+            'fallback_reasons': {},
+            'total_parallel_attempts': 0,
+            'successful_parallel_operations': 0,
+            'circuit_breaker_open': False,
+            'consecutive_failures': 0,
+            'last_failure_time': None,
+            'last_success_time': time.time()
+        }
 
         if self.use_pytak:
             logger.debug("Using PyTAK library for COT transmission")
@@ -166,7 +184,7 @@ class EnhancedCOTService:
             # Use parallel processing for larger datasets to improve performance
             if len(locations) >= 10:  # Threshold for parallel processing
                 logger.debug(f"Using parallel processing for {len(locations)} locations")
-                return await EnhancedCOTService._create_parallel_pytak_events(
+                return await self._create_parallel_pytak_events(
                     locations, cot_type, stale_time, cot_type_mode
                 )
             else:
@@ -301,8 +319,8 @@ class EnhancedCOTService:
         logger.debug(f"Created {len(events)} COT events from {len(locations)} locations")
         return events
 
-    @staticmethod
     async def _create_parallel_pytak_events(
+        self,
         locations: List[Dict[str, Any]],
         cot_type: str,
         stale_time: int,
@@ -329,16 +347,28 @@ class EnhancedCOTService:
             
         logger.debug(f"Starting parallel processing of {len(locations)} locations")
         
-        # Create async tasks for each location
-        tasks = [
-            EnhancedCOTService._process_single_location_async(
-                location, cot_type, stale_time, cot_type_mode
-            )
-            for location in locations
-        ]
+        # Get max concurrent tasks from configuration
+        max_concurrent = self.parallel_config.get('max_concurrent_tasks', 50)
         
-        # Execute all tasks concurrently
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Process locations in batches to respect max_concurrent_tasks limit
+        all_results = []
+        
+        for i in range(0, len(locations), max_concurrent):
+            batch = locations[i:i + max_concurrent]
+            
+            # Create async tasks for this batch
+            tasks = [
+                EnhancedCOTService._process_single_location_async(
+                    location, cot_type, stale_time, cot_type_mode
+                )
+                for location in batch
+            ]
+            
+            # Execute batch concurrently
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            all_results.extend(batch_results)
+        
+        results = all_results
         
         # Filter out exceptions and collect valid COT events
         valid_events = []
@@ -1092,6 +1122,332 @@ class EnhancedCOTService:
                 f"Input: {len(locations) if locations else 0} locations"
             )
             return False
+
+    # Phase 1B: Configuration & Fallback Methods
+
+    def _get_default_performance_config(self) -> Dict[str, Any]:
+        """Get default performance configuration values"""
+        return {
+            'enabled': True,
+            'batch_size_threshold': 10,
+            'max_concurrent_tasks': 50,
+            'fallback_on_error': True,
+            'processing_timeout': 30.0,
+            'enable_performance_logging': True,
+            'circuit_breaker': {
+                'enabled': True,
+                'failure_threshold': 3,
+                'recovery_timeout': 60.0
+            }
+        }
+
+    def load_performance_config(self, config_path: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Load performance configuration from YAML file
+        
+        Args:
+            config_path: Optional path to config file. If None, uses default paths.
+            
+        Returns:
+            Configuration dictionary
+        """
+        if config_path:
+            config_paths = [config_path]
+        else:
+            config_paths = self.get_config_file_search_paths()
+        
+        config = {}
+        for path in config_paths:
+            try:
+                expanded_path = os.path.expanduser(path)
+                if os.path.exists(expanded_path):
+                    with open(expanded_path, 'r') as f:
+                        file_config = yaml.safe_load(f) or {}
+                        if 'parallel_processing' in file_config:
+                            config = file_config['parallel_processing']
+                            logger.info(f"Loaded performance configuration from {expanded_path}")
+                            break
+                        elif file_config:  # File exists but no parallel_processing section
+                            logger.warning(f"Configuration file {expanded_path} missing 'parallel_processing' section")
+            except Exception as e:
+                logger.warning(f"Failed to load configuration from {path}: {e}")
+                continue
+        
+        # If no config found, return the full structure expected by tests
+        if not config:
+            return {"parallel_processing": self._get_default_performance_config()}
+        
+        return {"parallel_processing": config}
+
+    def get_config_file_search_paths(self) -> List[str]:
+        """Get list of paths to search for configuration files"""
+        return [
+            "config/settings/performance.yaml",
+            "/etc/trakbridge/performance.yaml", 
+            "~/.trakbridge/performance.yaml"
+        ]
+
+    def _load_performance_config(self):
+        """Load and apply performance configuration with environment overrides"""
+        # Load from file
+        file_config = self.load_performance_config()
+        
+        # Apply file configuration over defaults
+        if file_config:
+            self.parallel_config.update(file_config)
+        
+        # Apply environment variable overrides
+        env_config = self.load_performance_config_with_env_override()
+        self.parallel_config.update(env_config)
+        
+        # Validate configuration
+        self.parallel_config = self.validate_performance_config(self.parallel_config)
+
+    def load_performance_config_with_env_override(self) -> Dict[str, Any]:
+        """Load configuration overrides from environment variables"""
+        env_config = {}
+        
+        # Boolean environment variables
+        if 'TRAKBRIDGE_PARALLEL_ENABLED' in os.environ:
+            env_config['enabled'] = os.environ['TRAKBRIDGE_PARALLEL_ENABLED'].lower() == 'true'
+        
+        if 'TRAKBRIDGE_FALLBACK_ON_ERROR' in os.environ:
+            env_config['fallback_on_error'] = os.environ['TRAKBRIDGE_FALLBACK_ON_ERROR'].lower() == 'true'
+            
+        # Numeric environment variables
+        for env_var, config_key in [
+            ('TRAKBRIDGE_BATCH_SIZE_THRESHOLD', 'batch_size_threshold'),
+            ('TRAKBRIDGE_MAX_CONCURRENT_TASKS', 'max_concurrent_tasks'),
+        ]:
+            if env_var in os.environ:
+                try:
+                    env_config[config_key] = int(os.environ[env_var])
+                except ValueError:
+                    logger.warning(f"Invalid value for {env_var}: {os.environ[env_var]}")
+        
+        return env_config
+
+    def validate_performance_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate and sanitize performance configuration
+        
+        Args:
+            config: Raw configuration dictionary
+            
+        Returns:
+            Validated configuration with defaults for missing values
+        """
+        defaults = self._get_default_performance_config()
+        validated = {}
+        
+        # Validate boolean values
+        for key in ['enabled', 'fallback_on_error', 'enable_performance_logging']:
+            value = config.get(key, defaults[key])
+            validated[key] = bool(value) if isinstance(value, (bool, str)) else defaults[key]
+        
+        # Validate positive integers
+        for key in ['batch_size_threshold', 'max_concurrent_tasks']:
+            value = config.get(key, defaults[key])
+            if isinstance(value, (int, float)) and value > 0:
+                validated[key] = int(value)
+            else:
+                validated[key] = defaults[key]
+                logger.warning(f"Invalid {key}: {value}, using default {defaults[key]}")
+        
+        # Validate timeout (allow 0 for no timeout)
+        timeout = config.get('processing_timeout', defaults['processing_timeout'])
+        if isinstance(timeout, (int, float)) and timeout >= 0:
+            validated['processing_timeout'] = float(timeout)
+        else:
+            validated['processing_timeout'] = defaults['processing_timeout']
+        
+        # Validate circuit breaker config
+        cb_config = config.get('circuit_breaker', defaults['circuit_breaker'])
+        if isinstance(cb_config, dict):
+            validated['circuit_breaker'] = {
+                'enabled': bool(cb_config.get('enabled', defaults['circuit_breaker']['enabled'])),
+                'failure_threshold': max(1, int(cb_config.get('failure_threshold', 
+                                               defaults['circuit_breaker']['failure_threshold']))),
+                'recovery_timeout': max(1.0, float(cb_config.get('recovery_timeout',
+                                                   defaults['circuit_breaker']['recovery_timeout'])))
+            }
+        else:
+            validated['circuit_breaker'] = defaults['circuit_breaker']
+        
+        return validated
+
+    def reload_performance_config(self, config_path: Optional[str] = None):
+        """Reload configuration from file"""
+        old_config = self.parallel_config.copy()
+        
+        # Load new config
+        if config_path:
+            loaded = self.load_performance_config(config_path)
+            if loaded and 'parallel_processing' in loaded:
+                self.parallel_config = loaded['parallel_processing']
+        
+        self._load_performance_config()
+        
+        if old_config != self.parallel_config:
+            logger.info("Performance configuration reloaded with changes")
+        
+    def should_log_performance(self) -> bool:
+        """Check if performance logging is enabled"""
+        return self.parallel_config.get('enable_performance_logging', True)
+
+    def _choose_processing_method(self, locations: List[Dict[str, Any]]) -> str:
+        """
+        Choose between serial and parallel processing based on configuration
+        
+        Args:
+            locations: List of location data
+            
+        Returns:
+            'serial' or 'parallel' indicating which method to use
+        """
+        # Check if parallel processing is enabled
+        if not self.parallel_config.get('enabled', True):
+            return 'serial'
+            
+        # Check circuit breaker
+        if self.is_circuit_breaker_open():
+            return 'serial'
+            
+        # Check batch size threshold
+        if len(locations) < self.parallel_config.get('batch_size_threshold', 10):
+            return 'serial'
+            
+        return 'parallel'
+
+    async def create_cot_events_with_fallback(self, locations: List[Dict[str, Any]], 
+                                            cot_type: str, stale_time: int, 
+                                            cot_type_mode: str = "stream") -> List[bytes]:
+        """
+        Create COT events with automatic fallback to serial processing on error
+        
+        Args:
+            locations: List of location dictionaries
+            cot_type: COT event type
+            stale_time: Event stale time in seconds
+            cot_type_mode: Processing mode
+            
+        Returns:
+            List of COT events as bytes
+        """
+        if not locations:
+            return []
+            
+        processing_method = self._choose_processing_method(locations)
+        
+        if processing_method == 'serial':
+            if self.should_log_performance():
+                logger.debug(f"Using serial processing for {len(locations)} locations")
+            return await self._create_pytak_events(locations, cot_type, stale_time, cot_type_mode)
+        
+        # Try parallel processing with fallback
+        self.fallback_statistics['total_parallel_attempts'] += 1
+        
+        try:
+            # Apply processing timeout if configured
+            timeout = self.parallel_config.get('processing_timeout', 0)
+            if timeout > 0:
+                result = await asyncio.wait_for(
+                    self._create_parallel_pytak_events(locations, cot_type, stale_time, cot_type_mode),
+                    timeout=timeout
+                )
+            else:
+                result = await self._create_parallel_pytak_events(locations, cot_type, stale_time, cot_type_mode)
+            
+            # Record successful parallel processing
+            self.record_successful_parallel_processing()
+            
+            if self.should_log_performance():
+                logger.debug(f"Parallel processing succeeded for {len(locations)} locations")
+            
+            return result
+            
+        except Exception as e:
+            # Check if fallback is enabled
+            if not self.parallel_config.get('fallback_on_error', True):
+                logger.error(f"Parallel processing failed and fallback disabled: {e}")
+                raise
+                
+            # Record failure and fallback
+            error_type = type(e).__name__
+            if isinstance(e, asyncio.TimeoutError):
+                error_type = "timeout"
+            
+            self.record_fallback_event(error_type, str(e))
+            
+            logger.warning(f"Parallel processing failed ({error_type}), falling back to serial processing: {e}")
+            
+            # Fallback to serial processing
+            try:
+                result = await self._create_pytak_events(locations, cot_type, stale_time, cot_type_mode)
+                logger.info(f"Serial fallback succeeded for {len(locations)} locations")
+                return result
+            except Exception as fallback_error:
+                logger.error(f"Serial fallback also failed: {fallback_error}")
+                raise
+
+    def record_fallback_event(self, reason: str, error_message: str):
+        """Record a fallback event for monitoring"""
+        self.fallback_statistics['total_fallbacks'] += 1
+        self.fallback_statistics['consecutive_failures'] += 1
+        self.fallback_statistics['last_failure_time'] = time.time()
+        
+        if reason not in self.fallback_statistics['fallback_reasons']:
+            self.fallback_statistics['fallback_reasons'][reason] = 0
+        self.fallback_statistics['fallback_reasons'][reason] += 1
+        
+        # Check circuit breaker
+        if (self.parallel_config.get('circuit_breaker', {}).get('enabled', True) and
+            self.fallback_statistics['consecutive_failures'] >= 
+            self.parallel_config.get('circuit_breaker', {}).get('failure_threshold', 3)):
+            self.fallback_statistics['circuit_breaker_open'] = True
+            logger.warning(f"Circuit breaker opened after {self.fallback_statistics['consecutive_failures']} failures")
+
+    def record_successful_parallel_processing(self):
+        """Record successful parallel processing"""
+        self.fallback_statistics['successful_parallel_operations'] += 1
+        self.fallback_statistics['consecutive_failures'] = 0
+        self.fallback_statistics['last_success_time'] = time.time()
+        self.fallback_statistics['circuit_breaker_open'] = False
+
+    def get_fallback_statistics(self) -> Dict[str, Any]:
+        """Get current fallback statistics"""
+        stats = self.fallback_statistics.copy()
+        
+        # Calculate fallback rate
+        total_attempts = stats['total_parallel_attempts'] + stats['total_fallbacks']
+        if total_attempts > 0:
+            stats['fallback_rate'] = stats['total_fallbacks'] / total_attempts
+        else:
+            stats['fallback_rate'] = 0.0
+            
+        return stats
+
+    def is_parallel_processing_healthy(self) -> bool:
+        """Check if parallel processing is healthy based on recent performance"""
+        # Consider healthy if we've had recent successes and low failure rate
+        recent_successes = self.fallback_statistics['successful_parallel_operations']
+        consecutive_failures = self.fallback_statistics['consecutive_failures']
+        
+        # Healthy if we have successes and not too many consecutive failures
+        return recent_successes > 0 and consecutive_failures < 3
+
+    def is_circuit_breaker_open(self) -> bool:
+        """Check if circuit breaker is currently open"""
+        if not self.fallback_statistics.get('circuit_breaker_open', False):
+            return False
+            
+        # Check if recovery timeout has passed
+        last_failure = self.fallback_statistics.get('last_failure_time')
+        if last_failure is None:
+            return False
+            
+        recovery_timeout = self.parallel_config.get('circuit_breaker', {}).get('recovery_timeout', 60.0)
+        return (time.time() - last_failure) < recovery_timeout
 
     def extract_uid_from_cot_event(self, event: bytes) -> Optional[str]:
         """
