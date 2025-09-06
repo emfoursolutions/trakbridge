@@ -479,11 +479,17 @@ class StreamWorker:
                 self.logger.warning("No COT events created from locations")
                 return False
 
-            # Enqueue each event directly
-            events_sent = 0
-            for event in cot_events:
-                await cot_service.enqueue_event(event, self.stream.tak_server.id)
-                events_sent += 1
+            # Use smart queue replacement for large batches to prevent accumulation
+            if len(cot_events) >= 10:  # Use replacement logic for large batches
+                success = await cot_service.enqueue_with_replacement(cot_events, self.stream.tak_server.id)
+                events_sent = len(cot_events) if success else 0
+                self.logger.info(f"Used queue replacement for {len(cot_events)} events (prevents accumulation)")
+            else:
+                # Use individual enqueueing for small batches
+                events_sent = 0
+                for event in cot_events:
+                    await cot_service.enqueue_event(event, self.stream.tak_server.id)
+                    events_sent += 1
 
             # Update total_messages_sent in database
             await self._update_stream_status_async(messages_sent=events_sent)

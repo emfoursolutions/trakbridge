@@ -38,8 +38,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # Third-party imports
 from lxml import etree
+import xml.etree.ElementTree as ET
 
 from services.logging_service import get_module_logger
+from services.device_state_manager import DeviceStateManager
 
 # PyTAK imports
 try:
@@ -79,6 +81,7 @@ class EnhancedCOTService:
             use_pytak: Whether to use PyTAK library when available
         """
         self.use_pytak = use_pytak and PYTAK_AVAILABLE
+        self.device_state_manager = DeviceStateManager()
 
         if self.use_pytak:
             logger.debug("Using PyTAK library for COT transmission")
@@ -1090,6 +1093,186 @@ class EnhancedCOTService:
             )
             return False
 
+    def extract_uid_from_cot_event(self, event: bytes) -> Optional[str]:
+        """
+        Extract device UID from COT event XML for deduplication.
+        
+        Args:
+            event: COT event XML as bytes
+            
+        Returns:
+            Device UID if found, None if extraction fails
+        """
+        try:
+            root = ET.fromstring(event.decode('utf-8'))
+            uid = root.get('uid')
+            return uid
+        except Exception as e:
+            logger.warning(f"Failed to extract UID from COT event: {e}")
+            return None
+
+    def extract_timestamp_from_cot_event(self, event: bytes) -> Optional[datetime]:
+        """
+        Extract timestamp from COT event XML for freshness comparison.
+        
+        Args:
+            event: COT event XML as bytes
+            
+        Returns:
+            Event timestamp if found, None if extraction fails
+        """
+        try:
+            root = ET.fromstring(event.decode('utf-8'))
+            time_str = root.get('time')
+            if time_str:
+                # Parse ISO format timestamp
+                return datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to extract timestamp from COT event: {e}")
+            return None
+
+    async def remove_events_by_uid(self, tak_server_id: int, uids_to_remove: List[str]) -> int:
+        """
+        Remove events with specific UIDs from the queue.
+        
+        Args:
+            tak_server_id: TAK server ID
+            uids_to_remove: List of device UIDs to remove from queue
+            
+        Returns:
+            Number of events removed
+        """
+        if tak_server_id not in self.queues:
+            return 0
+            
+        queue = self.queues[tak_server_id]
+        
+        # Create new temporary queue to hold non-matching events
+        temp_events = []
+        removed_count = 0
+        
+        # Drain the queue and filter out events with matching UIDs
+        while not queue.empty():
+            try:
+                event = queue.get_nowait()
+                uid = self.extract_uid_from_cot_event(event)
+                
+                if uid in uids_to_remove:
+                    removed_count += 1
+                    logger.debug(f"Removing old event for device {uid}")
+                else:
+                    temp_events.append(event)
+                    
+            except asyncio.QueueEmpty:
+                break
+        
+        # Put back the events we want to keep
+        for event in temp_events:
+            await queue.put(event)
+            
+        if removed_count > 0:
+            logger.info(f"Removed {removed_count} old events from queue for TAK server {tak_server_id}")
+            
+        return removed_count
+
+    async def enqueue_with_replacement(self, events: List[bytes], tak_server_id: int) -> bool:
+        """
+        Enqueue events while replacing outdated ones for same devices.
+        
+        This implements the core queue management enhancement to prevent event accumulation.
+        Events from same device UID replace older events instead of accumulating.
+        
+        Args:
+            events: List of COT events to enqueue
+            tak_server_id: Target TAK server ID
+            
+        Returns:
+            True if successfully processed, False otherwise
+        """
+        if tak_server_id not in self.queues:
+            logger.error(f"No queue found for TAK server {tak_server_id}")
+            return False
+            
+        if not events:
+            return True
+            
+        try:
+            queue = self.queues[tak_server_id]
+            queue_size_before = queue.qsize()
+            
+            # Track statistics
+            new_events = 0
+            updated_events = 0
+            skipped_events = 0
+            
+            # Group events by UID and find newest timestamp for each device
+            device_events = {}
+            uids_to_remove = []
+            
+            for event in events:
+                uid = self.extract_uid_from_cot_event(event)
+                timestamp = self.extract_timestamp_from_cot_event(event)
+                
+                if uid is None:
+                    logger.warning("Event has no UID, skipping deduplication")
+                    await queue.put(event)
+                    new_events += 1
+                    continue
+                    
+                if timestamp is None:
+                    logger.warning(f"Event {uid} has no timestamp, skipping deduplication")
+                    await queue.put(event)
+                    new_events += 1
+                    continue
+                
+                # Check if we should update this device
+                if self.device_state_manager.should_update_device(uid, timestamp):
+                    # Update device state
+                    self.device_state_manager.update_device_state(uid, {
+                        "timestamp": timestamp,
+                        "uid": uid
+                    })
+                    
+                    # Track for old event removal
+                    uids_to_remove.append(uid)
+                    device_events[uid] = event
+                    
+                    # Check if this is a new device or an update
+                    if uid in self.device_state_manager.device_states:
+                        updated_events += 1
+                    else:
+                        new_events += 1
+                else:
+                    # Event is older than current state, skip it
+                    skipped_events += 1
+                    logger.debug(f"Skipping older event for device {uid}")
+                    continue
+            
+            # Remove old events for devices we're updating
+            if uids_to_remove:
+                removed_count = await self.remove_events_by_uid(tak_server_id, uids_to_remove)
+                logger.debug(f"Removed {removed_count} old events for {len(uids_to_remove)} devices")
+            
+            # Add new/updated events to queue
+            for uid, event in device_events.items():
+                await queue.put(event)
+            
+            queue_size_after = queue.qsize()
+            
+            # Log replacement statistics
+            logger.info(
+                f"Queue replacement statistics for TAK server {tak_server_id}: "
+                f"new={new_events}, updated={updated_events}, skipped={skipped_events}, "
+                f"queue size: {queue_size_before} → {queue_size_after}"
+            )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to enqueue events with replacement for TAK server {tak_server_id}: {e}")
+            return False
+
 
 class PersistentCOTService:
     """
@@ -1102,6 +1285,7 @@ class PersistentCOTService:
         self.connections: Dict[int, Any] = {}  # tak_server_id -> pytak connection
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self._running = False
+        self.device_state_manager = DeviceStateManager()  # For queue replacement functionality
 
     async def start_worker(self, tak_server):
         """
@@ -1607,6 +1791,186 @@ class PersistentCOTService:
         self.connections.clear()
 
         logger.info("Persistent COT service shutdown complete.")
+
+    def extract_uid_from_cot_event(self, event: bytes) -> Optional[str]:
+        """
+        Extract device UID from COT event XML for deduplication.
+        
+        Args:
+            event: COT event XML as bytes
+            
+        Returns:
+            Device UID if found, None if extraction fails
+        """
+        try:
+            root = ET.fromstring(event.decode('utf-8'))
+            uid = root.get('uid')
+            return uid
+        except Exception as e:
+            logger.warning(f"Failed to extract UID from COT event: {e}")
+            return None
+
+    def extract_timestamp_from_cot_event(self, event: bytes) -> Optional[datetime]:
+        """
+        Extract timestamp from COT event XML for freshness comparison.
+        
+        Args:
+            event: COT event XML as bytes
+            
+        Returns:
+            Event timestamp if found, None if extraction fails
+        """
+        try:
+            root = ET.fromstring(event.decode('utf-8'))
+            time_str = root.get('time')
+            if time_str:
+                # Parse ISO format timestamp
+                return datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to extract timestamp from COT event: {e}")
+            return None
+
+    async def remove_events_by_uid(self, tak_server_id: int, uids_to_remove: List[str]) -> int:
+        """
+        Remove events with specific UIDs from the queue.
+        
+        Args:
+            tak_server_id: TAK server ID
+            uids_to_remove: List of device UIDs to remove from queue
+            
+        Returns:
+            Number of events removed
+        """
+        if tak_server_id not in self.queues:
+            return 0
+            
+        queue = self.queues[tak_server_id]
+        
+        # Create new temporary queue to hold non-matching events
+        temp_events = []
+        removed_count = 0
+        
+        # Drain the queue and filter out events with matching UIDs
+        while not queue.empty():
+            try:
+                event = queue.get_nowait()
+                uid = self.extract_uid_from_cot_event(event)
+                
+                if uid in uids_to_remove:
+                    removed_count += 1
+                    logger.debug(f"Removing old event for device {uid}")
+                else:
+                    temp_events.append(event)
+                    
+            except asyncio.QueueEmpty:
+                break
+        
+        # Put back the events we want to keep
+        for event in temp_events:
+            await queue.put(event)
+            
+        if removed_count > 0:
+            logger.info(f"Removed {removed_count} old events from queue for TAK server {tak_server_id}")
+            
+        return removed_count
+
+    async def enqueue_with_replacement(self, events: List[bytes], tak_server_id: int) -> bool:
+        """
+        Enqueue events while replacing outdated ones for same devices.
+        
+        This implements the core queue management enhancement to prevent event accumulation.
+        Events from same device UID replace older events instead of accumulating.
+        
+        Args:
+            events: List of COT events to enqueue
+            tak_server_id: Target TAK server ID
+            
+        Returns:
+            True if successfully processed, False otherwise
+        """
+        if tak_server_id not in self.queues:
+            logger.error(f"No queue found for TAK server {tak_server_id}")
+            return False
+            
+        if not events:
+            return True
+            
+        try:
+            queue = self.queues[tak_server_id]
+            queue_size_before = queue.qsize()
+            
+            # Track statistics
+            new_events = 0
+            updated_events = 0
+            skipped_events = 0
+            
+            # Group events by UID and find newest timestamp for each device
+            device_events = {}
+            uids_to_remove = []
+            
+            for event in events:
+                uid = self.extract_uid_from_cot_event(event)
+                timestamp = self.extract_timestamp_from_cot_event(event)
+                
+                if uid is None:
+                    logger.warning("Event has no UID, skipping deduplication")
+                    await queue.put(event)
+                    new_events += 1
+                    continue
+                    
+                if timestamp is None:
+                    logger.warning(f"Event {uid} has no timestamp, skipping deduplication")
+                    await queue.put(event)
+                    new_events += 1
+                    continue
+                
+                # Check if we should update this device
+                if self.device_state_manager.should_update_device(uid, timestamp):
+                    # Update device state
+                    self.device_state_manager.update_device_state(uid, {
+                        "timestamp": timestamp,
+                        "uid": uid
+                    })
+                    
+                    # Track for old event removal
+                    uids_to_remove.append(uid)
+                    device_events[uid] = event
+                    
+                    # Check if this is a new device or an update
+                    if uid in self.device_state_manager.device_states:
+                        updated_events += 1
+                    else:
+                        new_events += 1
+                else:
+                    # Event is older than current state, skip it
+                    skipped_events += 1
+                    logger.debug(f"Skipping older event for device {uid}")
+                    continue
+            
+            # Remove old events for devices we're updating
+            if uids_to_remove:
+                removed_count = await self.remove_events_by_uid(tak_server_id, uids_to_remove)
+                logger.debug(f"Removed {removed_count} old events for {len(uids_to_remove)} devices")
+            
+            # Add new/updated events to queue
+            for uid, event in device_events.items():
+                await queue.put(event)
+            
+            queue_size_after = queue.qsize()
+            
+            # Log replacement statistics
+            logger.info(
+                f"Queue replacement statistics for TAK server {tak_server_id}: "
+                f"new={new_events}, updated={updated_events}, skipped={skipped_events}, "
+                f"queue size: {queue_size_before} → {queue_size_after}"
+            )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to enqueue events with replacement for TAK server {tak_server_id}: {e}")
+            return False
 
 
 # Singleton instance
