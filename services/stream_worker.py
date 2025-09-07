@@ -831,7 +831,7 @@ class StreamWorker:
             if hasattr(self.stream, 'tak_servers'):
                 try:
                     # Use dynamic loading to get all associated servers
-                    multi_servers = self.stream.tak_servers.all()
+                    multi_servers = self.stream.tak_servers
                     if multi_servers:
                         target_servers = list(multi_servers)
                         self.logger.debug(

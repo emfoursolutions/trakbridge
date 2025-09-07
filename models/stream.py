@@ -64,7 +64,7 @@ class Stream(db.Model, TimestampMixin):
         "TakServer",
         secondary=stream_tak_servers,
         back_populates="streams_many",
-        lazy='dynamic'  # Use dynamic loading for better performance with large datasets
+        lazy='select'  # Allow eager loading with joinedload
     )
     
     callsign_mappings = db.relationship(
@@ -264,3 +264,55 @@ class Stream(db.Model, TimestampMixin):
             return "error"
         else:
             return "active"
+
+    def get_all_tak_servers(self):
+        """Get all TAK servers (combines legacy single server and new multiple servers)"""
+        servers = []
+        
+        # Add legacy single server if it exists and is not already in the many-to-many relationship
+        if self.tak_server:
+            servers.append(self.tak_server)
+        
+        # Add servers from the many-to-many relationship
+        many_to_many_servers = self.tak_servers
+        for server in many_to_many_servers:
+            # Only add if not already in list (avoid duplicates)
+            if server not in servers:
+                servers.append(server)
+        
+        return servers
+
+    def get_tak_server_count(self):
+        """Get total count of TAK servers configured for this stream"""
+        return len(self.get_all_tak_servers())
+
+    def get_tak_server_display_info(self):
+        """Get display information for TAK servers in templates"""
+        all_servers = self.get_all_tak_servers()
+        server_count = len(all_servers)
+        
+        if server_count == 0:
+            return {
+                'has_servers': False,
+                'count': 0,
+                'single_server': None,
+                'multiple_servers': [],
+                'display_text': 'Not configured'
+            }
+        elif server_count == 1:
+            server = all_servers[0]
+            return {
+                'has_servers': True,
+                'count': 1,
+                'single_server': server,
+                'multiple_servers': [],
+                'display_text': server.name if server.name else 'Unnamed'
+            }
+        else:
+            return {
+                'has_servers': True,
+                'count': server_count,
+                'single_server': None,
+                'multiple_servers': all_servers,
+                'display_text': f'{server_count} servers'
+            }

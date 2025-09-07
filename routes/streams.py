@@ -126,7 +126,15 @@ def create_stream():
         services = get_stream_services()
         operations_service = services["operations_service"]
 
-        data = request.get_json() if request.is_json else request.form
+        if request.is_json:
+            data = request.get_json()
+        else:
+            # Handle form data - convert to dict and handle checkbox arrays
+            data = dict(request.form)
+            # Handle checkbox array for tak_servers (note: HTML uses name="tak_servers[]")
+            if "tak_servers[]" in request.form:
+                data["tak_servers"] = request.form.getlist("tak_servers[]")
+        
         result = operations_service.create_stream(data)
 
         if request.is_json:
@@ -310,7 +318,15 @@ def edit_stream(stream_id):
 
     # Handle POST request
     try:
-        data = request.get_json() if request.is_json else request.form
+        if request.is_json:
+            data = request.get_json()
+        else:
+            # Handle form data - convert to dict and handle checkbox arrays
+            data = dict(request.form)
+            # Handle checkbox array for tak_servers (note: HTML uses name="tak_servers[]")
+            if "tak_servers[]" in request.form:
+                data["tak_servers"] = request.form.getlist("tak_servers[]")
+        
         result = operations_service.update_stream_safely(stream_id, data)
 
         if request.is_json:

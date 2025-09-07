@@ -60,70 +60,78 @@
                         <div class="form-text">Specific provider within the selected category</div>
                     </div>
 
-                    <!-- Phase 2C: Enhanced TAK Server Selection with Multi-Server Support -->
+                    <!-- Simplified TAK Server Selection with Checkbox Grid -->
                     <div class="mb-3">
-                        <label for="tak_server_selection" class="form-label">TAK Server Selection</label>
-                        
-                        <!-- Server Selection Mode Toggle -->
-                        <div class="btn-group mb-2" role="group" aria-label="Server selection mode">
-                            <input type="radio" class="btn-check" name="server_selection_mode" id="single_server_mode" value="single" checked onchange="toggleServerSelectionMode()">
-                            <label class="btn btn-outline-primary btn-sm" for="single_server_mode">
-                                <i class="fas fa-server"></i> Single Server
-                            </label>
-                            
-                            <input type="radio" class="btn-check" name="server_selection_mode" id="multi_server_mode" value="multi" onchange="toggleServerSelectionMode()">
-                            <label class="btn btn-outline-primary btn-sm" for="multi_server_mode">
-                                <i class="fas fa-network-wired"></i> Multiple Servers
-                            </label>
+                        <label class="form-label">TAK Servers</label>
+                        <div class="form-text mb-3">
+                            <i class="fas fa-info-circle"></i> 
+                            Select one server for single-server mode, or multiple servers for multi-server distribution.
                         </div>
                         
-                        <!-- Single Server Selection (Legacy Mode) -->
-                        <div id="single_server_selection" class="server-selection-container">
-                            <select class="form-select" id="tak_server_id" name="tak_server_id">
-                                <option value="">Select TAK Server</option>
-                                {% for server in tak_servers %}
-                                <option value="{{ server.id }}">{{ server.name }} ({{ server.host }}:{{ server.port }})</option>
-                                {% endfor %}
-                            </select>
-                            <div class="form-text">Select a single TAK server for this stream</div>
+                        <!-- Server Selection Controls -->
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <button type="button" class="btn btn-outline-primary btn-sm me-2" onclick="selectAllServers()">
+                                    <i class="fas fa-check-double"></i> Select All
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearServerSelection()">
+                                    <i class="fas fa-times"></i> Clear All
+                                </button>
+                            </div>
+                            <div id="server_selection_mode_hint" class="text-muted small"></div>
                         </div>
                         
-                        <!-- Multi-Server Selection (Phase 2C) -->
-                        <div id="multi_server_selection" class="server-selection-container" style="display: none;">
-                            <div class="border rounded p-3">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h6 class="mb-0">Available TAK Servers</h6>
-                                    <small class="text-muted">Select multiple servers for data distribution</small>
-                                </div>
-                                
-                                <div class="row">
+                        <!-- Server Checkbox Grid -->
+                        <div class="border rounded p-3">
+                            {% if tak_servers %}
+                                <div class="row g-3">
                                     {% for server in tak_servers %}
-                                    <div class="col-md-6 col-lg-4 mb-2">
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" 
-                                                   id="tak_server_{{ server.id }}" 
-                                                   name="tak_server_ids" 
-                                                   value="{{ server.id }}"
-                                                   onchange="updateSelectedServersDisplay()">
-                                            <label class="form-check-label" for="tak_server_{{ server.id }}">
-                                                <strong>{{ server.name }}</strong><br>
-                                                <small class="text-muted">{{ server.host }}:{{ server.port }}</small>
-                                            </label>
+                                    <div class="col-lg-4 col-md-6">
+                                        <div class="server-card p-3 border rounded h-100">
+                                            <div class="form-check h-100 d-flex flex-column">
+                                                <input class="form-check-input" type="checkbox" 
+                                                       id="tak_server_{{ server.id }}" 
+                                                       name="tak_servers[]" 
+                                                       value="{{ server.id }}"
+                                                       onchange="updateServerSelectionDisplay()">
+                                                <label class="form-check-label flex-grow-1 d-flex flex-column" for="tak_server_{{ server.id }}">
+                                                    <div class="server-name fw-bold text-dark mb-1">{{ server.name }}</div>
+                                                    <div class="server-details text-muted small">
+                                                        <div><i class="fas fa-server me-1"></i>{{ server.host }}:{{ server.port }}</div>
+                                                        <div><i class="fas fa-shield-alt me-1"></i>{{ server.protocol.upper() }}</div>
+                                                        {% if server.verify_ssl %}
+                                                        <div><i class="fas fa-lock me-1 text-success"></i>SSL Verified</div>
+                                                        {% else %}
+                                                        <div><i class="fas fa-unlock me-1 text-warning"></i>SSL Not Verified</div>
+                                                        {% endif %}
+                                                    </div>
+                                                </label>
+                                            </div>
                                         </div>
                                     </div>
                                     {% endfor %}
                                 </div>
-                                
-                                <!-- Selected Servers Display -->
-                                <div id="selected_servers_display" class="mt-3" style="display: none;">
-                                    <div class="alert alert-info mb-0">
-                                        <strong>Selected Servers:</strong>
-                                        <span id="selected_servers_list"></span>
-                                        <small class="d-block mt-1">Data will be distributed to all selected servers</small>
-                                    </div>
+                            {% else %}
+                                <div class="text-center py-4 text-muted">
+                                    <i class="fas fa-server fa-3x mb-3 opacity-25"></i>
+                                    <p class="mb-2">No TAK servers configured</p>
+                                    <p class="small">You need to add TAK servers before creating streams.</p>
+                                    <a href="{{ url_for('tak_servers.create_tak_server') }}" class="btn btn-primary btn-sm">
+                                        <i class="fas fa-plus"></i> Add TAK Server
+                                    </a>
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Selection Summary -->
+                        <div id="selected_servers_summary" class="mt-3 p-3 bg-light rounded" style="display: none;">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-info-circle text-primary me-2"></i>
+                                <div>
+                                    <div class="fw-bold" id="selection_mode_text"></div>
+                                    <div class="text-muted small" id="selected_servers_text"></div>
                                 </div>
                             </div>
-                            <div class="form-text">Select one or more TAK servers for data distribution</div>
                         </div>
                     </div>
 
@@ -1026,84 +1034,83 @@ function clearTrackerMappingTable() {
     `;
 }
 
-// Phase 2C: Multi-Server UI Functions
-function toggleServerSelectionMode() {
-    const singleMode = document.getElementById('single_server_mode').checked;
-    const multiMode = document.getElementById('multi_server_mode').checked;
+// Simplified Automatic Mode Detection Functions
+function updateServerSelectionDisplay() {
+    const checkboxes = document.querySelectorAll('input[name="tak_servers[]"]:checked');
+    const summaryDiv = document.getElementById('selected_servers_summary');
+    const modeHint = document.getElementById('server_selection_mode_hint');
+    const modeText = document.getElementById('selection_mode_text');
+    const serversText = document.getElementById('selected_servers_text');
     
-    const singleSelection = document.getElementById('single_server_selection');
-    const multiSelection = document.getElementById('multi_server_selection');
-    
-    if (singleMode) {
-        singleSelection.style.display = 'block';
-        multiSelection.style.display = 'none';
-        
-        // Clear multi-server selections
-        const checkboxes = multiSelection.querySelectorAll('input[type="checkbox"]');
-        checkboxes.forEach(cb => cb.checked = false);
-        updateSelectedServersDisplay();
-        
-        // Make single server selection required
-        document.getElementById('tak_server_id').required = true;
-        
-    } else if (multiMode) {
-        singleSelection.style.display = 'none';
-        multiSelection.style.display = 'block';
-        
-        // Clear single server selection
-        document.getElementById('tak_server_id').value = '';
-        document.getElementById('tak_server_id').required = false;
+    if (checkboxes.length === 0) {
+        summaryDiv.style.display = 'none';
+        modeHint.textContent = '';
+    } else if (checkboxes.length === 1) {
+        // Single server mode
+        summaryDiv.style.display = 'block';
+        modeText.textContent = 'Single Server Mode';
+        const serverName = checkboxes[0].parentElement.querySelector('.server-name').textContent;
+        serversText.textContent = serverName;
+        modeHint.textContent = 'Automatic single-server mode';
+        modeHint.className = 'text-success small';
+    } else {
+        // Multi-server mode
+        summaryDiv.style.display = 'block';
+        modeText.textContent = `Multi-Server Mode (${checkboxes.length} servers)`;
+        const serverNames = Array.from(checkboxes).map(cb => 
+            cb.parentElement.querySelector('.server-name').textContent
+        ).join(', ');
+        serversText.textContent = serverNames;
+        modeHint.textContent = 'Automatic multi-server mode - parallel distribution';
+        modeHint.className = 'text-primary small';
     }
+    
+    // Update server card styling
+    updateServerCardStyling();
 }
 
-function updateSelectedServersDisplay() {
-    const checkboxes = document.querySelectorAll('input[name="tak_server_ids"]:checked');
-    const displayDiv = document.getElementById('selected_servers_display');
-    const listSpan = document.getElementById('selected_servers_list');
-    
-    if (checkboxes.length > 0) {
-        const serverNames = Array.from(checkboxes).map(cb => {
-            const label = document.querySelector(`label[for="${cb.id}"] strong`);
-            return label ? label.textContent : `Server ${cb.value}`;
-        });
-        
-        listSpan.textContent = serverNames.join(', ');
-        displayDiv.style.display = 'block';
-        
-        // Update info based on count
-        const infoText = displayDiv.querySelector('small');
-        if (checkboxes.length === 1) {
-            infoText.textContent = 'Data will be sent to 1 server';
+function updateServerCardStyling() {
+    const allCards = document.querySelectorAll('.server-card');
+    allCards.forEach(card => {
+        const checkbox = card.querySelector('input[type="checkbox"]');
+        if (checkbox.checked) {
+            card.classList.add('border-primary', 'bg-primary', 'bg-opacity-10');
+            card.classList.remove('border-secondary');
         } else {
-            infoText.textContent = `Data will be distributed to ${checkboxes.length} servers simultaneously`;
+            card.classList.remove('border-primary', 'bg-primary', 'bg-opacity-10');
+            card.classList.add('border-secondary');
         }
-    } else {
-        displayDiv.style.display = 'none';
-    }
+    });
+}
+
+function clearServerSelection() {
+    const checkboxes = document.querySelectorAll('input[name="tak_servers[]"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateServerSelectionDisplay();
+}
+
+function selectAllServers() {
+    const checkboxes = document.querySelectorAll('input[name="tak_servers[]"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    updateServerSelectionDisplay();
 }
 
 function validateServerSelection() {
-    const singleMode = document.getElementById('single_server_mode').checked;
-    const multiMode = document.getElementById('multi_server_mode').checked;
+    const checkboxes = document.querySelectorAll('input[name="tak_servers[]"]:checked');
     
-    if (singleMode) {
-        const singleServerSelect = document.getElementById('tak_server_id');
-        if (!singleServerSelect.value) {
-            showAlert('Please select a TAK server for this stream.', 'warning');
-            return false;
-        }
-    } else if (multiMode) {
-        const checkedServers = document.querySelectorAll('input[name="tak_server_ids"]:checked');
-        if (checkedServers.length === 0) {
-            showAlert('Please select at least one TAK server for multi-server distribution.', 'warning');
-            return false;
-        }
+    if (checkboxes.length === 0) {
+        showAlert('Please select at least one TAK server for this stream.', 'warning');
+        return false;
     }
     
     return true;
 }
 
-// Override form submission to include server selection validation
+// Initialize server selection validation and display
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('streamForm');
     if (form) {
@@ -1116,31 +1123,23 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Initialize server selection display
-    updateSelectedServersDisplay();
+    updateServerSelectionDisplay();
 });
 
-// Enhance the existing testStreamConfig function to handle multi-server data
+// Simplified form data collection for testing with automatic mode detection
 function collectFormDataForTest() {
     const formData = {
         name: document.getElementById('name').value,
         plugin_type: document.getElementById('plugin_type').value,
-        plugin_config: {},
-        server_selection_mode: document.querySelector('input[name="server_selection_mode"]:checked').value
+        plugin_config: {}
     };
     
-    // Collect server selection based on mode
-    if (formData.server_selection_mode === 'single') {
-        const singleServer = document.getElementById('tak_server_id').value;
-        if (singleServer) {
-            formData.tak_server_id = singleServer;
-        }
-    } else {
-        const selectedServers = Array.from(document.querySelectorAll('input[name="tak_server_ids"]:checked'))
-            .map(cb => cb.value);
-        if (selectedServers.length > 0) {
-            formData.tak_server_ids = selectedServers;
-        }
-    }
+    // Collect selected servers from checkboxes
+    const checkboxes = document.querySelectorAll('input[name="tak_servers[]"]:checked');
+    const selectedServers = Array.from(checkboxes).map(cb => cb.value);
+    
+    // Use the new simplified format that backend expects
+    formData.tak_servers = selectedServers;
     
     // Collect plugin-specific configuration
     const pluginType = formData.plugin_type;
@@ -1155,4 +1154,47 @@ function collectFormDataForTest() {
     return formData;
 }
 </script>
+
+<style>
+.server-card {
+    transition: all 0.2s ease;
+    cursor: pointer;
+    border: 1px solid #dee2e6;
+}
+
+.server-card:hover {
+    border-color: #6c757d !important;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.server-card.border-primary {
+    border-color: #0d6efd !important;
+}
+
+.server-card .form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.server-card .server-name {
+    font-weight: 600;
+}
+
+.server-card .server-details {
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.server-card .server-details i {
+    width: 14px;
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    .col-lg-4, .col-md-6 {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+}
+</style>
 {% endblock %}

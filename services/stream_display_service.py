@@ -51,8 +51,11 @@ class StreamDisplayService:
     def get_streams_for_listing(self) -> List[Stream]:
         """Get all streams prepared for listing display"""
         try:
-            # Use joinedload to eagerly load the tak_server relationship
-            streams = Stream.query.options(joinedload(Stream.tak_server)).all()
+            # Use joinedload to eagerly load both single and multiple server relationships
+            streams = Stream.query.options(
+                joinedload(Stream.tak_server),
+                joinedload(Stream.tak_servers)
+            ).all()
 
             # Prepare each stream for display
             for stream in streams:
@@ -66,9 +69,12 @@ class StreamDisplayService:
 
     def get_stream_for_detail_view(self, stream_id: int) -> Stream:
         """Get a single stream prepared for detail view"""
-        # Use joinedload to eagerly load the tak_server relationship
+        # Use joinedload to eagerly load both single and multiple server relationships
         stream = (
-            Stream.query.options(joinedload(Stream.tak_server))
+            Stream.query.options(
+                joinedload(Stream.tak_server),
+                joinedload(Stream.tak_servers)
+            )
             .filter_by(id=stream_id)
             .first_or_404()
         )
@@ -81,9 +87,12 @@ class StreamDisplayService:
     @staticmethod
     def get_stream_for_edit_form(stream_id: int) -> Stream:
         """Get a stream prepared for the edit form"""
-        # Use joinedload to eagerly load the tak_server relationship
+        # Use joinedload to eagerly load both single and multiple server relationships
         stream = (
-            Stream.query.options(joinedload(Stream.tak_server))
+            Stream.query.options(
+                joinedload(Stream.tak_server),
+                joinedload(Stream.tak_servers)
+            )
             .filter_by(id=stream_id)
             .first_or_404()
         )
@@ -295,7 +304,9 @@ class StreamDisplayService:
                 "last_poll": getattr(stream, "last_poll_iso", None),
                 "last_error": stream.last_error,
                 "total_messages_sent": stream.total_messages_sent or 0,
-                "tak_server": stream.tak_server.name if stream.tak_server else None,
+                "tak_servers": [s.name for s in stream.get_all_tak_servers()],
+                "tak_server_count": stream.get_tak_server_count(),
+                "tak_server": stream.tak_server.name if stream.tak_server else None,  # Keep for backwards compatibility
                 "poll_interval": stream.poll_interval,
                 "cot_type": stream.cot_type,
                 "cot_type_label": getattr(stream, "cot_type_label", stream.cot_type),
@@ -322,7 +333,9 @@ class StreamDisplayService:
             "last_poll": getattr(stream, "last_poll_iso", None),
             "message_count": stream.total_messages_sent or 0,
             "has_error": bool(stream.last_error),
-            "tak_server_name": stream.tak_server.name if stream.tak_server else None,
+            "tak_server_names": [s.name for s in stream.get_all_tak_servers()],
+            "tak_server_count": stream.get_tak_server_count(),
+            "tak_server_name": stream.tak_server.name if stream.tak_server else None,  # Keep for backwards compatibility
             "cot_type_label": getattr(stream, "cot_type_label", stream.cot_type),
             "cot_type_sidc": getattr(stream, "cot_type_sidc", ""),
         }
@@ -330,7 +343,10 @@ class StreamDisplayService:
     def get_plugin_usage_summary(self) -> Dict[str, Dict[str, Any]]:
         """Get summary of plugin usage across all streams"""
         try:
-            streams = Stream.query.options(joinedload(Stream.tak_server)).all()
+            streams = Stream.query.options(
+                joinedload(Stream.tak_server),
+                joinedload(Stream.tak_servers)
+            ).all()
 
             # Add running status to all streams
             for stream in streams:

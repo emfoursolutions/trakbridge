@@ -114,7 +114,7 @@ class StreamManager:
                 logger.warning(f"Error checking tak_servers count for stream {stream.id}: {e}")
                 try:
                     # Fallback if dynamic relationship count fails
-                    servers_list = list(stream.tak_servers.all())
+                    servers_list = list(stream.tak_servers)
                     logger.info(f"Stream {stream.id} tak_servers list length: {len(servers_list)}")
                     return len(servers_list) > 0
                 except Exception as fallback_e:
@@ -140,7 +140,7 @@ class StreamManager:
                     if server_count > 0:
                         if server_count == 1:
                             # Get the single server name for cleaner display
-                            servers = list(stream.tak_servers.all())
+                            servers = list(stream.tak_servers)
                             return servers[0].name if servers else f"Multi-server (1 server)"
                         else:
                             return f"Multi-server ({server_count} servers)"
@@ -148,7 +148,7 @@ class StreamManager:
                     logger.debug(f"Error getting tak_servers count for stream {stream.id}: {e}")
                     try:
                         # Fallback to all() method
-                        servers = list(stream.tak_servers.all())
+                        servers = list(stream.tak_servers)
                         if servers:
                             if len(servers) == 1:
                                 return servers[0].name
@@ -192,7 +192,7 @@ class StreamManager:
                 if hasattr(stream, 'tak_servers'):
                     try:
                         # Get all servers for this stream via many-to-many relationship
-                        multi_servers = stream.tak_servers.all()
+                        multi_servers = stream.tak_servers
                         for server in multi_servers:
                             key = getattr(server, "id", None) or getattr(server, "name", None)
                             if key:
@@ -805,7 +805,7 @@ class StreamManager:
                 if hasattr(stream, 'tak_servers'):
                     try:
                         # Get all servers for this stream via many-to-many relationship
-                        multi_servers = stream.tak_servers.all()
+                        multi_servers = stream.tak_servers
                         for server in multi_servers:
                             key = getattr(server, "id", None) or getattr(server, "name", None)
                             if key:

@@ -244,7 +244,7 @@ class DatabaseManager:
                 if hasattr(stream, 'tak_servers'):
                     try:
                         # Access tak_servers to load the relationship
-                        tak_servers_list = list(stream.tak_servers.all())
+                        tak_servers_list = list(stream.tak_servers)
                         # Access commonly used fields for each server
                         for server in tak_servers_list:
                             _ = server.name
@@ -309,7 +309,7 @@ class DatabaseManager:
         if hasattr(stream, 'tak_servers'):
             try:
                 # Get all servers from the relationship
-                tak_servers_list = list(stream.tak_servers.all())
+                tak_servers_list = list(stream.tak_servers)
                 
                 # Create SimpleNamespace copies for each server
                 tak_servers_copies = []
@@ -334,7 +334,7 @@ class DatabaseManager:
                     
                     tak_servers_copies.append(server_copy)
                 
-                # Create mock relationship object that supports count() and all()
+                # Create mock relationship object that supports count(), all(), and iteration
                 class MockTakServersRelationship:
                     def __init__(self, servers_list):
                         self._servers_list = servers_list
@@ -344,6 +344,12 @@ class DatabaseManager:
                     
                     def all(self):
                         return self._servers_list
+                    
+                    def __iter__(self):
+                        return iter(self._servers_list)
+                    
+                    def __len__(self):
+                        return len(self._servers_list)
                 
                 stream_copy.tak_servers = MockTakServersRelationship(tak_servers_copies)
                 
@@ -351,18 +357,38 @@ class DatabaseManager:
                 # If there's an error accessing tak_servers, create empty relationship
                 logger.debug(f"Error copying tak_servers for stream {stream.id}: {e}")
                 class MockTakServersRelationship:
+                    def __init__(self, servers_list=None):
+                        self._servers_list = servers_list or []
+                    
                     def count(self):
                         return 0
+                    
                     def all(self):
                         return []
+                    
+                    def __iter__(self):
+                        return iter([])
+                    
+                    def __len__(self):
+                        return 0
                 stream_copy.tak_servers = MockTakServersRelationship([])
         else:
             # Create empty relationship if tak_servers doesn't exist
             class MockTakServersRelationship:
+                def __init__(self, servers_list=None):
+                    self._servers_list = servers_list or []
+                
                 def count(self):
                     return 0
+                
                 def all(self):
                     return []
+                
+                def __iter__(self):
+                    return iter([])
+                
+                def __len__(self):
+                    return 0
             stream_copy.tak_servers = MockTakServersRelationship([])
 
         # Copy missing fields needed for validation

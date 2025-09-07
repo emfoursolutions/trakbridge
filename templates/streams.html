@@ -92,13 +92,20 @@
                             {% endif %}
                         </td>
                         <td>
-                            {% if stream.tak_server %}
+                            {% set server_info = stream.get_tak_server_display_info() %}
+                            {% if server_info.has_servers %}
                                 <div class="d-flex align-items-center">
                                     <i class="fas fa-server me-2 text-muted"></i>
                                     <div>
-                                        <strong>{{ stream.tak_server.name if stream.tak_server.name else 'Unnamed' }}</strong>
-                                        <br>
-                                        <small class="text-mono text-muted">{{ stream.tak_server.host }}:{{ stream.tak_server.port }}</small>
+                                        {% if server_info.count == 1 %}
+                                            <strong>{{ server_info.single_server.name if server_info.single_server.name else 'Unnamed' }}</strong>
+                                            <br>
+                                            <small class="text-mono text-muted">{{ server_info.single_server.host }}:{{ server_info.single_server.port }}</small>
+                                        {% else %}
+                                            <strong>{{ server_info.display_text }}</strong>
+                                            <br>
+                                            <small class="text-muted">Multiple server configuration</small>
+                                        {% endif %}
                                     </div>
                                 </div>
                             {% else %}

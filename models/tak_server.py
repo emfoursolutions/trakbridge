@@ -95,6 +95,26 @@ class TakServer(db.Model, TimestampMixin):
             "updated_at": self.updated_at.isoformat(),
         }
 
+    def get_total_stream_count(self) -> int:
+        """Get total count of streams (both single-server and multi-server)"""
+        return len(self.streams) + self.streams_many.count()
+
+    def get_all_associated_streams(self):
+        """Get all streams associated with this server (both relationships)"""
+        # Get streams from legacy single-server relationship
+        legacy_streams = list(self.streams)
+        
+        # Get streams from Phase 2B multi-server relationship
+        multi_streams = list(self.streams_many.all())
+        
+        # Combine and avoid duplicates using dict comprehension (in case a stream uses both relationships)
+        all_streams = list({stream.id: stream for stream in legacy_streams + multi_streams}.values())
+        return all_streams
+
+    def has_any_streams(self) -> bool:
+        """Check if server has any associated streams (both relationships)"""
+        return len(self.streams) > 0 or self.streams_many.count() > 0
+
     def get_pytak_config(self):
         """Generate PyTAK configuration for this server"""
         config = {
