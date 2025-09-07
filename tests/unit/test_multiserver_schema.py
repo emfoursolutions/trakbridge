@@ -100,7 +100,7 @@ class TestMultiServerSchema:
         db.session.commit()
         
         # Verify the stream is associated with all three servers
-        assert sample_stream.tak_servers.count() == 3, "Stream should be associated with 3 TAK servers"
+        assert len(sample_stream.tak_servers) == 3, "Stream should be associated with 3 TAK servers"
         
         # Verify specific servers are present
         server_names = [server.name for server in sample_stream.tak_servers]
