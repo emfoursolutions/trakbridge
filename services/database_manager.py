@@ -240,6 +240,20 @@ class DatabaseManager:
                     _ = stream.tak_server.port
                     _ = stream.tak_server.protocol
 
+                # Phase 2B: Eagerly load multi-server relationship
+                if hasattr(stream, 'tak_servers'):
+                    try:
+                        # Access tak_servers to load the relationship
+                        tak_servers_list = list(stream.tak_servers.all())
+                        # Access commonly used fields for each server
+                        for server in tak_servers_list:
+                            _ = server.name
+                            _ = server.host
+                            _ = server.port
+                            _ = server.protocol
+                    except Exception as e:
+                        logger.debug(f"Error eagerly loading tak_servers for stream {stream_id}: {e}")
+
                 # Create a detached copy with all necessary data
                 return DatabaseManager._create_detached_stream_copy(stream)
             return None
@@ -290,6 +304,69 @@ class DatabaseManager:
             stream_copy.tak_server = tak_copy
         else:
             stream_copy.tak_server = None
+
+        # Phase 2B: Copy multi-server relationships (tak_servers)
+        if hasattr(stream, 'tak_servers'):
+            try:
+                # Get all servers from the relationship
+                tak_servers_list = list(stream.tak_servers.all())
+                
+                # Create SimpleNamespace copies for each server
+                tak_servers_copies = []
+                for tak_server in tak_servers_list:
+                    server_copy = SimpleNamespace()
+                    server_copy.id = tak_server.id
+                    server_copy.name = tak_server.name
+                    server_copy.host = tak_server.host
+                    server_copy.port = tak_server.port
+                    server_copy.protocol = tak_server.protocol
+                    server_copy.verify_ssl = tak_server.verify_ssl
+                    server_copy.cert_p12 = tak_server.cert_p12
+                    server_copy.cert_password = tak_server.get_cert_password()
+                    server_copy.has_cert_password = tak_server.has_cert_password
+                    
+                    # Add method to get cert password (for compatibility)
+                    def make_get_cert_password(cert_password):
+                        def get_cert_password():
+                            return cert_password
+                        return get_cert_password
+                    server_copy.get_cert_password = make_get_cert_password(server_copy.cert_password)
+                    
+                    tak_servers_copies.append(server_copy)
+                
+                # Create mock relationship object that supports count() and all()
+                class MockTakServersRelationship:
+                    def __init__(self, servers_list):
+                        self._servers_list = servers_list
+                    
+                    def count(self):
+                        return len(self._servers_list)
+                    
+                    def all(self):
+                        return self._servers_list
+                
+                stream_copy.tak_servers = MockTakServersRelationship(tak_servers_copies)
+                
+            except Exception as e:
+                # If there's an error accessing tak_servers, create empty relationship
+                logger.debug(f"Error copying tak_servers for stream {stream.id}: {e}")
+                class MockTakServersRelationship:
+                    def count(self):
+                        return 0
+                    def all(self):
+                        return []
+                stream_copy.tak_servers = MockTakServersRelationship([])
+        else:
+            # Create empty relationship if tak_servers doesn't exist
+            class MockTakServersRelationship:
+                def count(self):
+                    return 0
+                def all(self):
+                    return []
+            stream_copy.tak_servers = MockTakServersRelationship([])
+
+        # Copy missing fields needed for validation
+        stream_copy.tak_server_id = getattr(stream, 'tak_server_id', None)
 
         # Add method to get plugin config
         def get_plugin_config():

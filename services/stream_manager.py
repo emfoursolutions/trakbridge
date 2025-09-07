@@ -91,36 +91,136 @@ class StreamManager:
         # Start background loop
         self._start_background_loop()
 
+    def _has_tak_servers_configured(self, stream) -> bool:
+        """
+        Check if stream has TAK servers configured (single or multi-server).
+        Phase 2B: Enhanced validation supporting both legacy and multi-server configurations.
+        """
+        logger.info(f"Checking TAK servers for stream {stream.id}: tak_server={stream.tak_server}, has_tak_servers_attr={hasattr(stream, 'tak_servers')}")
+        
+        # Check legacy single-server configuration
+        if hasattr(stream, 'tak_server') and stream.tak_server:
+            logger.info(f"Stream {stream.id} has single server configured: {stream.tak_server.name}")
+            return True
+        
+        # Check Phase 2B multi-server configuration  
+        if hasattr(stream, 'tak_servers'):
+            try:
+                # Use count() for dynamic relationships - more efficient
+                count = stream.tak_servers.count()
+                logger.info(f"Stream {stream.id} tak_servers count: {count}")
+                return count > 0
+            except Exception as e:
+                logger.warning(f"Error checking tak_servers count for stream {stream.id}: {e}")
+                try:
+                    # Fallback if dynamic relationship count fails
+                    servers_list = list(stream.tak_servers.all())
+                    logger.info(f"Stream {stream.id} tak_servers list length: {len(servers_list)}")
+                    return len(servers_list) > 0
+                except Exception as fallback_e:
+                    logger.warning(f"Error checking tak_servers all() for stream {stream.id}: {fallback_e}")
+        
+        logger.info(f"Stream {stream.id} has no TAK servers configured")
+        return False
+
+    def _get_tak_server_display(self, stream) -> str:
+        """
+        Get display string for TAK server configuration.
+        Phase 2B: Shows both single-server and multi-server configurations.
+        """
+        try:
+            # Check legacy single-server configuration first
+            if hasattr(stream, 'tak_server') and stream.tak_server:
+                return stream.tak_server.name
+            
+            # Check Phase 2B multi-server configuration
+            if hasattr(stream, 'tak_servers'):
+                try:
+                    server_count = stream.tak_servers.count()
+                    if server_count > 0:
+                        if server_count == 1:
+                            # Get the single server name for cleaner display
+                            servers = list(stream.tak_servers.all())
+                            return servers[0].name if servers else f"Multi-server (1 server)"
+                        else:
+                            return f"Multi-server ({server_count} servers)"
+                except Exception as e:
+                    logger.debug(f"Error getting tak_servers count for stream {stream.id}: {e}")
+                    try:
+                        # Fallback to all() method
+                        servers = list(stream.tak_servers.all())
+                        if servers:
+                            if len(servers) == 1:
+                                return servers[0].name
+                            else:
+                                return f"Multi-server ({len(servers)} servers)"
+                    except Exception as fallback_e:
+                        logger.debug(f"Error getting tak_servers all() for stream {stream.id}: {fallback_e}")
+                        
+        except Exception as e:
+            logger.debug(f"Error getting TAK server display for stream {stream.id}: {e}")
+        
+        return None
+
     async def _initialize_persistent_cot_service(self):
-        """Initialize persistent COT service for all TAK servers"""
+        """
+        Initialize persistent COT service for all TAK servers.
+        Phase 2B: Enhanced for multi-server support with proper deduplication.
+        """
         if self._cot_service_initialized:
             return
 
         try:
-            logger.info("Initializing persistent COT service")
+            logger.info("Initializing persistent COT service (Phase 2B multi-server)")
 
             # Get all active TAK servers from database
             active_streams = self.db_manager.get_active_streams()
 
-            # Use a dictionary to deduplicate by tak_server.id or name
+            # Phase 2B: Enhanced deduplication for both legacy and multi-server relationships
             tak_servers = {}
 
             for stream in active_streams:
-                if stream.tak_server:
-                    # Use tak_server.id as key for deduplication
-                    # If tak_server doesn't have an id, use name as fallback
+                # Legacy single-server relationship
+                if hasattr(stream, 'tak_server') and stream.tak_server:
                     key = getattr(stream.tak_server, "id", None) or getattr(
                         stream.tak_server, "name", None
                     )
                     if key:
                         tak_servers[key] = stream.tak_server
 
-            # Start persistent workers for each unique TAK server
-            for tak_server in tak_servers.values():
-                logger.info(f"Starting persistent worker for TAK server: {tak_server.name}")
-                await cot_service.start_worker(tak_server)
+                # Phase 2B: Multi-server relationship
+                if hasattr(stream, 'tak_servers'):
+                    try:
+                        # Get all servers for this stream via many-to-many relationship
+                        multi_servers = stream.tak_servers.all()
+                        for server in multi_servers:
+                            key = getattr(server, "id", None) or getattr(server, "name", None)
+                            if key:
+                                tak_servers[key] = server
+                    except Exception as e:
+                        logger.debug(f"Error accessing multi-server relationship for stream {stream.id}: {e}")
 
-            logger.info(f"Initialized persistent COT service for {len(tak_servers)} TAK servers")
+            # Start persistent workers for each unique TAK server
+            workers_started = 0
+            workers_failed = 0
+            
+            for tak_server in tak_servers.values():
+                try:
+                    logger.info(f"Starting persistent worker for TAK server: {tak_server.name}")
+                    success = await cot_service.start_worker(tak_server)
+                    if success:
+                        workers_started += 1
+                    else:
+                        workers_failed += 1
+                        logger.warning(f"Failed to start worker for TAK server: {tak_server.name}")
+                except Exception as e:
+                    workers_failed += 1
+                    logger.error(f"Error starting worker for TAK server {tak_server.name}: {e}")
+
+            logger.info(
+                f"Initialized persistent COT service: {workers_started} workers started, "
+                f"{workers_failed} failed, {len(tak_servers)} total unique servers"
+            )
             self._cot_service_initialized = True
 
         except Exception as e:
@@ -317,7 +417,11 @@ class StreamManager:
                 logger.warning(f"Stream {stream_id} ({stream.name}) is not active")
                 return False
 
-            if not stream.tak_server:
+            # Phase 2B: Enhanced validation for both single and multi-server configurations
+            has_tak_servers = self._has_tak_servers_configured(stream)
+            logger.info(f"Stream {stream_id} TAK server validation: has_servers={has_tak_servers}, tak_server={stream.tak_server}, tak_server_id={stream.tak_server_id}")
+            
+            if not has_tak_servers:
                 logger.error(f"Stream {stream_id} has no TAK server configured")
                 return False
 
@@ -598,7 +702,7 @@ class StreamManager:
                     worker.stream.last_poll.isoformat() if worker.stream.last_poll else None
                 ),
                 "last_error": worker.stream.last_error,
-                "tak_server": (worker.stream.tak_server.name if worker.stream.tak_server else None),
+                "tak_server": self._get_tak_server_display(worker.stream),
                 "consecutive_errors": health_status.get("consecutive_errors", 0),
                 "last_successful_poll": health_status.get("last_successful_poll"),
                 "has_tak_connection": health_status.get("has_tak_connection", False),
@@ -617,7 +721,7 @@ class StreamManager:
                         "plugin_type": stream.plugin_type,
                         "last_poll": (stream.last_poll.isoformat() if stream.last_poll else None),
                         "last_error": stream.last_error,
-                        "tak_server": (stream.tak_server.name if stream.tak_server else None),
+                        "tak_server": self._get_tak_server_display(stream),
                         "is_active_in_db": stream.is_active,
                         "consecutive_errors": 0,
                         "last_successful_poll": None,
@@ -659,7 +763,7 @@ class StreamManager:
                         "plugin_type": stream.plugin_type,
                         "last_poll": (stream.last_poll.isoformat() if stream.last_poll else None),
                         "last_error": stream.last_error,
-                        "tak_server": (stream.tak_server.name if stream.tak_server else None),
+                        "tak_server": self._get_tak_server_display(stream),
                         "is_active_in_db": True,
                         "discrepancy": "Marked active in DB but not running",
                         "consecutive_errors": 0,
@@ -675,23 +779,39 @@ class StreamManager:
         return status
 
     def ensure_tak_workers_running(self):
-        """Ensure persistent workers are running for all active TAK servers"""
+        """
+        Ensure persistent workers are running for all active TAK servers.
+        Phase 2B: Enhanced for multi-server support with proper deduplication.
+        """
         try:
-            logger.debug("Ensuring TAK workers are running for all active streams")
+            logger.debug("Ensuring TAK workers are running for all active streams (Phase 2B multi-server)")
 
             # Get currently active streams
             active_streams = self.db_manager.get_active_streams()
 
-            # Use dictionary to deduplicate TAK servers
+            # Phase 2B: Enhanced deduplication for both legacy and multi-server relationships
             required_tak_servers = {}
 
             for stream in active_streams:
-                if stream.tak_server:
+                # Legacy single-server relationship
+                if hasattr(stream, 'tak_server') and stream.tak_server:
                     key = getattr(stream.tak_server, "id", None) or getattr(
                         stream.tak_server, "name", None
                     )
                     if key:
                         required_tak_servers[key] = stream.tak_server
+
+                # Phase 2B: Multi-server relationship
+                if hasattr(stream, 'tak_servers'):
+                    try:
+                        # Get all servers for this stream via many-to-many relationship
+                        multi_servers = stream.tak_servers.all()
+                        for server in multi_servers:
+                            key = getattr(server, "id", None) or getattr(server, "name", None)
+                            if key:
+                                required_tak_servers[key] = server
+                    except Exception as e:
+                        logger.debug(f"Error accessing multi-server relationship for stream {stream.id}: {e}")
 
             # Get currently running workers
             running_workers = cot_service.get_running_workers()
@@ -708,13 +828,21 @@ class StreamManager:
             required_keys = set(required_tak_servers.keys())
             missing_keys = required_keys - running_tak_server_keys
 
+            workers_started = 0
             for key in missing_keys:
                 tak_server = required_tak_servers[key]
-                logger.info(f"Starting missing persistent worker for TAK server: {tak_server.name}")
-                cot_service.start_worker(tak_server)
+                try:
+                    logger.info(f"Starting missing persistent worker for TAK server: {tak_server.name}")
+                    success = cot_service.start_worker(tak_server)
+                    if success:
+                        workers_started += 1
+                    else:
+                        logger.warning(f"Failed to start worker for TAK server: {tak_server.name}")
+                except Exception as e:
+                    logger.error(f"Error starting worker for TAK server {tak_server.name}: {e}")
 
             if missing_keys:
-                logger.info(f"Started {len(missing_keys)} missing persistent workers")
+                logger.info(f"Started {workers_started}/{len(missing_keys)} missing persistent workers")
 
         except Exception as e:
             logger.error(f"Error ensuring TAK workers are running: {e}", exc_info=True)

@@ -98,13 +98,32 @@ class StreamWorker:
                     self.running = False
                     return False
 
-                # Initialize persistent TAK server connection if configured
-                if self.stream.tak_server:
-                    success = await self._ensure_persistent_tak_worker()
-                    if not success:
-                        self.logger.error("Failed to ensure persistent TAK server worker")
+                # Phase 2B: Initialize persistent TAK server connections for all configured servers
+                target_servers = await self._get_target_tak_servers()
+                if target_servers:
+                    self.logger.info(f"Initializing persistent workers for {len(target_servers)} TAK servers")
+                    workers_initialized = 0
+                    for server in target_servers:
+                        if await self._ensure_persistent_tak_worker_for_server(server):
+                            workers_initialized += 1
+                        else:
+                            self.logger.warning(f"Failed to initialize worker for server {server.name}")
+                    
+                    if workers_initialized == 0:
+                        self.logger.error("Failed to initialize any persistent TAK server workers")
                         self.running = False
                         return False
+                    elif workers_initialized < len(target_servers):
+                        self.logger.warning(f"Only {workers_initialized}/{len(target_servers)} TAK server workers initialized")
+                    else:
+                        self.logger.info(f"All {workers_initialized} TAK server workers initialized successfully")
+                    
+                    # Mark that at least some workers are ensured
+                    self._tak_worker_ensured = True
+                else:
+                    self.logger.error("No TAK servers configured for stream")
+                    self.running = False
+                    return False
 
                 # Create stop event for this loop
                 self._stop_event = asyncio.Event()
@@ -295,32 +314,44 @@ class StreamWorker:
                     # Apply callsign mapping if enabled
                     await self._apply_callsign_mapping(locations)
 
-                    # Send to persistent TAK server if configured
-                    if self.stream.tak_server and self._tak_worker_ensured:
+                    # Phase 2B: Send to persistent TAK server(s) if configured
+                    if self._tak_worker_ensured:
                         success = await self._send_locations_to_persistent_tak(locations)
                         if success:
                             self.logger.info(
-                                f"Successfully sent {len(locations)} locations to TAK server"
+                                f"Successfully sent {len(locations)} locations to TAK server(s)"
                             )
                         else:
-                            self.logger.error("Failed to send locations to TAK server")
-                            # Try to restart the worker
-                            self.logger.info("Attempting to restart persistent TAK worker")
-                            await cot_service.stop_worker(self.stream.tak_server.id)
+                            self.logger.error("Failed to send locations to TAK server(s)")
+                            # Phase 2B: Try to restart workers for all target servers
+                            self.logger.info("Attempting to restart persistent TAK workers")
+                            target_servers = await self._get_target_tak_servers()
+                            
+                            # Stop all workers
+                            for server in target_servers:
+                                try:
+                                    await cot_service.stop_worker(server.id)
+                                except Exception as e:
+                                    self.logger.warning(f"Error stopping worker for {server.name}: {e}")
+                            
                             await asyncio.sleep(2)  # Brief delay
-                            restart_success = await self._ensure_persistent_tak_worker()
-                            if restart_success:
+                            
+                            # Restart workers
+                            workers_restarted = 0
+                            for server in target_servers:
+                                if await self._ensure_persistent_tak_worker_for_server(server):
+                                    workers_restarted += 1
+                            
+                            if workers_restarted > 0:
+                                self.logger.info(f"Restarted {workers_restarted}/{len(target_servers)} workers")
                                 # Retry sending
                                 success = await self._send_locations_to_persistent_tak(locations)
                                 if not success:
                                     raise Exception("Failed to send locations after worker restart")
                             else:
-                                raise Exception("Failed to restart persistent TAK worker")
+                                raise Exception("Failed to restart any persistent TAK workers")
                     else:
-                        if not self.stream.tak_server:
-                            self.logger.warning("No TAK server configured")
-                        else:
-                            self.logger.warning("Persistent TAK worker not ensured")
+                        self.logger.warning("No persistent TAK workers ensured")
 
                     # Update stream status with success
                     await self._update_stream_status_async(
@@ -394,22 +425,25 @@ class StreamWorker:
         self.logger.info(f"Main loop for stream '{self.stream.name}' has ended")
 
     async def _send_locations_to_persistent_tak(self, locations: List[Dict]) -> bool:
-        """Send locations to persistent TAK server using the persistent service"""
-
+        """
+        Send locations to persistent TAK server(s) using the persistent service.
+        
+        Phase 2B: Multi-Server Distribution Logic
+        - Supports both legacy single-server and new multi-server approaches
+        - Single API fetch distributed to multiple servers (major performance improvement)
+        - Server failure isolation - if one server fails, others continue
+        - Backward compatibility maintained for existing streams
+        """
         try:
-            if not self._tak_worker_ensured:
-                self.logger.error("Persistent TAK worker not ensured")
-                return False
-
             if not cot_service:
                 self.logger.error("Persistent COT service not available")
                 return False
 
-            # Log the locations being processed
-            self.logger.debug(
-                f"Processing {len(locations)} locations "
-                f"for TAK server {self.stream.tak_server.name}"
-            )
+            # Phase 2B: Determine target servers (multi-server or legacy single-server)
+            target_servers = await self._get_target_tak_servers()
+            if not target_servers:
+                self.logger.error("No target TAK servers found for stream")
+                return False
 
             # Check for error responses in locations
             error_locations = [
@@ -428,15 +462,17 @@ class StreamWorker:
                 self.logger.info("All locations were error responses, this is expected behavior")
                 return True  # Don't treat this as a failure
 
-            # Get COT type mode from fresh stream configuration (avoid cached values)
+            # Phase 2B: Single API fetch → Multiple server distribution
+            self.logger.info(
+                f"Processing {len(locations)} locations for distribution to "
+                f"{len(target_servers)} TAK server(s): {[s.name for s in target_servers]}"
+            )
+
+            # Get COT configuration
             fresh_stream_config = await self._get_fresh_stream_config()
             cot_type_mode = fresh_stream_config.get("cot_type_mode", "stream")
-
-            # Get per-callsign CoT type determination (reuse fresh config)
             enable_per_cot_types = fresh_stream_config.get("enable_per_callsign_cot_types", False)
 
-            # If either plugin wants per-point mode OR per-callsign CoT types are enabled, use per_point mode
-            # This ensures the COT service uses the cot_type field from each location instead of stream default
             if cot_type_mode == "per_point" or bool(enable_per_cot_types):
                 cot_type_mode = "per_point"
                 self.logger.debug(
@@ -449,7 +485,7 @@ class StreamWorker:
                     f"per-callsign CoT types enabled: {bool(enable_per_cot_types)})"
                 )
 
-            # Create COT events directly
+            # Create COT events once (shared across all servers)
             from services.cot_service import EnhancedCOTService
 
             try:
@@ -459,7 +495,6 @@ class StreamWorker:
                     f"stream_default_cot_type='{stream_default_cot_type}', "
                     f"locations_count={len(locations)}"
                 )
-                # Log first location's cot_type for debugging
                 if locations:
                     first_location_cot_type = locations[0].get("cot_type", "NOT_SET")
                     self.logger.debug(f"First location cot_type: {first_location_cot_type}")
@@ -468,7 +503,7 @@ class StreamWorker:
                     locations,
                     stream_default_cot_type,
                     self.stream.cot_stale_time or 300,
-                    cot_type_mode,  # Pass the COT type mode
+                    cot_type_mode,
                 )
                 self.logger.info(f"Created {len(cot_events) if cot_events else 0} COT events")
             except Exception as e:
@@ -479,28 +514,39 @@ class StreamWorker:
                 self.logger.warning("No COT events created from locations")
                 return False
 
-            # Use smart queue replacement for large batches to prevent accumulation
-            if len(cot_events) >= 10:  # Use replacement logic for large batches
-                success = await cot_service.enqueue_with_replacement(cot_events, self.stream.tak_server.id)
-                events_sent = len(cot_events) if success else 0
-                self.logger.info(f"Used queue replacement for {len(cot_events)} events (prevents accumulation)")
-            else:
-                # Use individual enqueueing for small batches
-                events_sent = 0
-                for event in cot_events:
-                    await cot_service.enqueue_event(event, self.stream.tak_server.id)
-                    events_sent += 1
+            # Phase 2B: Distribute to multiple servers with failure isolation
+            distribution_results = await self._distribute_to_multiple_servers(cot_events, target_servers)
+            
+            # Analyze results
+            successful_servers = [result['server'] for result in distribution_results if result['success']]
+            failed_servers = [result['server'] for result in distribution_results if not result['success']]
+            
+            total_events_sent = sum(result.get('events_sent', 0) for result in distribution_results if result['success'])
 
-            # Update total_messages_sent in database
-            await self._update_stream_status_async(messages_sent=events_sent)
-            self.logger.info(
-                f"Successfully enqueued {events_sent} COT events via persistent service"
-            )
-            return True
+            # Log distribution results
+            if successful_servers:
+                self.logger.info(
+                    f"Successfully distributed {len(cot_events)} COT events to "
+                    f"{len(successful_servers)}/{len(target_servers)} servers: "
+                    f"{[s.name for s in successful_servers]}"
+                )
+            
+            if failed_servers:
+                self.logger.error(
+                    f"Failed to distribute to {len(failed_servers)} servers: "
+                    f"{[s.name for s in failed_servers]}"
+                )
+
+            # Update total_messages_sent in database (total across all successful servers)
+            await self._update_stream_status_async(messages_sent=total_events_sent)
+
+            # Phase 2B: Partial success is acceptable (server failure isolation)
+            # As long as at least one server received the data, consider it successful
+            return len(successful_servers) > 0
 
         except Exception as e:
             self.logger.error(
-                f"Failed to send locations to persistent TAK server: {e}", exc_info=True
+                f"Failed to send locations to persistent TAK server(s): {e}", exc_info=True
             )
             return False
 
@@ -769,3 +815,182 @@ class StreamWorker:
         except Exception as e:
             self.logger.debug(f"Failed to extract identifier '{field_name}' from location: {e}")
             return None
+
+    async def _get_target_tak_servers(self) -> List:
+        """
+        Phase 2B: Get target TAK servers for this stream.
+        Supports both legacy single-server and new multi-server approaches.
+        
+        Returns:
+            List of TakServer objects to send data to
+        """
+        try:
+            target_servers = []
+            
+            # Phase 2B: Check multi-server relationship first
+            if hasattr(self.stream, 'tak_servers'):
+                try:
+                    # Use dynamic loading to get all associated servers
+                    multi_servers = self.stream.tak_servers.all()
+                    if multi_servers:
+                        target_servers = list(multi_servers)
+                        self.logger.debug(
+                            f"Using multi-server configuration: {len(target_servers)} servers found"
+                        )
+                except Exception as e:
+                    self.logger.debug(f"Error accessing multi-server relationship: {e}")
+            
+            # Backward compatibility: Fall back to legacy single-server relationship
+            if not target_servers and hasattr(self.stream, 'tak_server') and self.stream.tak_server:
+                target_servers = [self.stream.tak_server]
+                self.logger.debug("Using legacy single-server configuration")
+            
+            # Ensure all target servers have workers
+            for server in target_servers:
+                if not await self._ensure_persistent_tak_worker_for_server(server):
+                    self.logger.warning(f"Failed to ensure worker for server {server.name}")
+            
+            return target_servers
+            
+        except Exception as e:
+            self.logger.error(f"Error getting target TAK servers: {e}", exc_info=True)
+            return []
+
+    async def _ensure_persistent_tak_worker_for_server(self, tak_server) -> bool:
+        """
+        Ensure persistent PyTAK worker exists for a specific TAK server.
+        Phase 2B: Supports multiple servers with worker deduplication.
+        """
+        try:
+            if not cot_service:
+                self.logger.error("Persistent COT service not available")
+                return False
+
+            self.logger.debug(f"Ensuring persistent worker for TAK server {tak_server.name}")
+
+            # Check if worker is already running
+            worker_status = cot_service.get_worker_status(tak_server.id)
+            if worker_status and worker_status.get("worker_running", False):
+                self.logger.debug(
+                    f"Persistent worker already running for TAK server {tak_server.name}"
+                )
+                return True
+
+            # Start the worker
+            success = await cot_service.start_worker(tak_server)
+            if not success:
+                self.logger.error(
+                    f"Failed to start persistent worker for TAK server {tak_server.name}"
+                )
+                return False
+
+            # Verify worker started successfully
+            worker_status = cot_service.get_worker_status(tak_server.id)
+            if not worker_status or not worker_status.get("worker_running", False):
+                self.logger.error(f"Worker failed to start for TAK server {tak_server.name}")
+                return False
+
+            self.logger.debug(f"Persistent worker ensured for TAK server {tak_server.name}")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Failed to ensure persistent TAK worker for {tak_server.name}: {e}", exc_info=True)
+            return False
+
+    async def _distribute_to_multiple_servers(self, cot_events: List, target_servers: List) -> List[Dict]:
+        """
+        Phase 2B: Distribute COT events to multiple TAK servers with failure isolation.
+        
+        Args:
+            cot_events: List of COT events to distribute
+            target_servers: List of TakServer objects to send to
+            
+        Returns:
+            List of distribution results with success status for each server
+        """
+        distribution_results = []
+        
+        try:
+            # Phase 2B: Concurrent distribution to multiple servers
+            distribution_tasks = []
+            
+            for server in target_servers:
+                task = self._send_to_single_server(cot_events, server)
+                distribution_tasks.append(task)
+            
+            # Execute all distributions concurrently with failure isolation
+            results = await asyncio.gather(*distribution_tasks, return_exceptions=True)
+            
+            # Process results
+            for i, result in enumerate(results):
+                server = target_servers[i]
+                
+                if isinstance(result, Exception):
+                    # Server failed, but others can continue (failure isolation)
+                    self.logger.error(f"Distribution to {server.name} failed: {result}")
+                    distribution_results.append({
+                        'server': server,
+                        'success': False,
+                        'error': str(result),
+                        'events_sent': 0
+                    })
+                else:
+                    # Server succeeded
+                    distribution_results.append({
+                        'server': server,
+                        'success': result.get('success', False),
+                        'events_sent': result.get('events_sent', 0),
+                        'error': result.get('error')
+                    })
+            
+            return distribution_results
+            
+        except Exception as e:
+            self.logger.error(f"Error in multi-server distribution: {e}", exc_info=True)
+            
+            # Return failure results for all servers
+            return [
+                {
+                    'server': server,
+                    'success': False,
+                    'error': f"Distribution error: {str(e)}",
+                    'events_sent': 0
+                }
+                for server in target_servers
+            ]
+
+    async def _send_to_single_server(self, cot_events: List, server) -> Dict:
+        """
+        Send COT events to a single TAK server.
+        Phase 2B: Individual server distribution with error handling.
+        """
+        try:
+            self.logger.debug(f"Sending {len(cot_events)} events to server {server.name}")
+            
+            # Use smart queue replacement for large batches to prevent accumulation
+            if len(cot_events) >= 10:  # Use replacement logic for large batches
+                success = await cot_service.enqueue_with_replacement(cot_events, server.id)
+                events_sent = len(cot_events) if success else 0
+                self.logger.debug(f"Used queue replacement for {len(cot_events)} events to {server.name}")
+            else:
+                # Use individual enqueueing for small batches
+                events_sent = 0
+                for event in cot_events:
+                    await cot_service.enqueue_event(event, server.id)
+                    events_sent += 1
+                self.logger.debug(f"Individually enqueued {events_sent} events to {server.name}")
+            
+            return {
+                'success': True,
+                'events_sent': events_sent,
+                'server_name': server.name
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Failed to send events to server {server.name}: {e}", exc_info=True)
+            return {
+                'success': False,
+                'events_sent': 0,
+                'error': str(e),
+                'server_name': server.name
+            }

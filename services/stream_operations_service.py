@@ -125,15 +125,75 @@ class StreamOperationsService:
             return "unknown"
 
     def create_stream(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a new stream with the provided data"""
+        """
+        Create a new stream with the provided data.
+        Phase 2C: Enhanced to support both single-server and multi-server configurations.
+        """
         try:
+            # Phase 2C: Determine server selection mode and validate
+            server_selection_mode = data.get("server_selection_mode", "single")
+            tak_server_id = None
+            selected_server_ids = []
+
+            if server_selection_mode == "single":
+                # Legacy single-server mode
+                if not data.get("tak_server_id"):
+                    return {"success": False, "error": "TAK server ID is required for single-server mode"}
+                tak_server_id = int(data["tak_server_id"])
+                
+                # Verify the server exists
+                from models.tak_server import TakServer
+                server = TakServer.query.get(tak_server_id)
+                if not server:
+                    return {"success": False, "error": f"TAK server with ID {tak_server_id} not found"}
+                    
+            elif server_selection_mode == "multi":
+                # Phase 2C: Multi-server mode
+                server_ids_data = data.get("tak_server_ids", [])
+                
+                # Handle both form data (list) and individual fields
+                if isinstance(server_ids_data, list):
+                    selected_server_ids = [int(sid) for sid in server_ids_data if sid]
+                else:
+                    # Handle case where it's a single value or comma-separated
+                    if server_ids_data:
+                        selected_server_ids = [int(server_ids_data)]
+                
+                # Also check for individual checkbox fields (tak_server_ids)
+                checkbox_servers = []
+                for key in data.keys():
+                    if key == "tak_server_ids" and data[key]:
+                        # This might be a list from form processing
+                        if isinstance(data[key], list):
+                            checkbox_servers.extend([int(sid) for sid in data[key] if sid])
+                        else:
+                            checkbox_servers.append(int(data[key]))
+                
+                if checkbox_servers:
+                    selected_server_ids = checkbox_servers
+                
+                if not selected_server_ids:
+                    return {"success": False, "error": "At least one TAK server must be selected for multi-server mode"}
+                
+                # Verify all servers exist
+                from models.tak_server import TakServer
+                existing_servers = TakServer.query.filter(TakServer.id.in_(selected_server_ids)).all()
+                if len(existing_servers) != len(selected_server_ids):
+                    existing_ids = [s.id for s in existing_servers]
+                    missing_ids = [sid for sid in selected_server_ids if sid not in existing_ids]
+                    return {"success": False, "error": f"TAK servers not found: {missing_ids}"}
+                    
+            else:
+                return {"success": False, "error": "Invalid server selection mode"}
+
+            # Create stream with appropriate server configuration
             stream = Stream(
                 name=data["name"],
                 plugin_type=data["plugin_type"],
                 poll_interval=int(data.get("poll_interval", 120)),
                 cot_type=data.get("cot_type", "a-f-G-U-C"),
                 cot_stale_time=int(data.get("cot_stale_time", 300)),
-                tak_server_id=int(data["tak_server_id"]),
+                tak_server_id=tak_server_id,  # Will be None for multi-server mode
                 cot_type_mode=data.get("cot_type_mode", "stream"),
                 # Callsign mapping fields
                 enable_callsign_mapping=bool(data.get("enable_callsign_mapping", False)),
@@ -154,7 +214,18 @@ class StreamOperationsService:
 
             session = self._get_session()
             session.add(stream)
-            session.flush()  # Flush to get stream.id for callsign mappings
+            session.flush()  # Flush to get stream.id for relationships
+
+            # Phase 2C: Create multi-server relationships if in multi-server mode
+            if server_selection_mode == "multi" and selected_server_ids:
+                from models.tak_server import TakServer
+                servers = TakServer.query.filter(TakServer.id.in_(selected_server_ids)).all()
+                for server in servers:
+                    stream.tak_servers.append(server)
+                
+                logger.info(f"Created stream '{stream.name}' with {len(servers)} TAK servers: {[s.name for s in servers]}")
+            else:
+                logger.info(f"Created stream '{stream.name}' with single TAK server (ID: {tak_server_id})")
 
             # Handle callsign mappings if enabled
             if stream.enable_callsign_mapping:
@@ -318,14 +389,87 @@ class StreamOperationsService:
                 if was_running:
                     self._get_session().refresh(stream)
 
-                # Update stream properties
+                # Update basic stream properties
                 stream.name = data["name"]
                 stream.plugin_type = data["plugin_type"]
                 stream.poll_interval = int(data.get("poll_interval", 120))
                 stream.cot_type = data.get("cot_type", "a-f-G-U-C")
                 stream.cot_stale_time = int(data.get("cot_stale_time", 300))
-                stream.tak_server_id = int(data["tak_server_id"])
                 stream.cot_type_mode = data.get("cot_type_mode", "stream")
+
+                # Phase 2C: Handle server assignment (single-server or multi-server)
+                server_selection_mode = data.get("server_selection_mode", "single")
+                
+                if server_selection_mode == "single":
+                    # Legacy single-server mode
+                    if not data.get("tak_server_id"):
+                        return {"success": False, "error": "TAK server ID is required for single-server mode"}
+                    
+                    new_server_id = int(data["tak_server_id"])
+                    
+                    # Verify the server exists
+                    from models.tak_server import TakServer
+                    server = TakServer.query.get(new_server_id)
+                    if not server:
+                        return {"success": False, "error": f"TAK server with ID {new_server_id} not found"}
+                    
+                    # Clear multi-server relationships and set single server
+                    # Handle dynamic relationship properly - get all servers first, then remove
+                    servers_to_remove = list(stream.tak_servers.all())
+                    for existing_server in servers_to_remove:
+                        stream.tak_servers.remove(existing_server)
+                    stream.tak_server_id = new_server_id
+                    logger.info(f"Updated stream '{stream.name}' to single TAK server: {server.name}")
+                    
+                elif server_selection_mode == "multi":
+                    # Phase 2C: Multi-server mode
+                    server_ids_data = data.get("tak_server_ids", [])
+                    selected_server_ids = []
+                    
+                    # Handle both form data (list) and individual fields
+                    if isinstance(server_ids_data, list):
+                        selected_server_ids = [int(sid) for sid in server_ids_data if sid]
+                    else:
+                        if server_ids_data:
+                            selected_server_ids = [int(server_ids_data)]
+                    
+                    # Also check for individual checkbox fields
+                    checkbox_servers = []
+                    for key in data.keys():
+                        if key == "tak_server_ids" and data[key]:
+                            if isinstance(data[key], list):
+                                checkbox_servers.extend([int(sid) for sid in data[key] if sid])
+                            else:
+                                checkbox_servers.append(int(data[key]))
+                    
+                    if checkbox_servers:
+                        selected_server_ids = checkbox_servers
+                    
+                    if not selected_server_ids:
+                        return {"success": False, "error": "At least one TAK server must be selected for multi-server mode"}
+                    
+                    # Verify all servers exist
+                    from models.tak_server import TakServer
+                    existing_servers = TakServer.query.filter(TakServer.id.in_(selected_server_ids)).all()
+                    if len(existing_servers) != len(selected_server_ids):
+                        existing_ids = [s.id for s in existing_servers]
+                        missing_ids = [sid for sid in selected_server_ids if sid not in existing_ids]
+                        return {"success": False, "error": f"TAK servers not found: {missing_ids}"}
+                    
+                    # Clear single server relationship and set multi-server relationships
+                    stream.tak_server_id = None
+                    # Handle dynamic relationship properly - get all servers first, then remove
+                    servers_to_remove = list(stream.tak_servers.all())
+                    for existing_server in servers_to_remove:
+                        stream.tak_servers.remove(existing_server)
+                    
+                    for server in existing_servers:
+                        stream.tak_servers.append(server)
+                    
+                    logger.info(f"Updated stream '{stream.name}' to multi-server mode with {len(existing_servers)} servers: {[s.name for s in existing_servers]}")
+                    
+                else:
+                    return {"success": False, "error": "Invalid server selection mode"}
 
                 # Update callsign mapping fields
                 stream.enable_callsign_mapping = bool(data.get("enable_callsign_mapping", False))

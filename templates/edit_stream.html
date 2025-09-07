@@ -56,17 +56,105 @@
                         <div class="form-text">Specific provider within the selected category</div>
                     </div>
 
+                    <!-- Phase 2C: Enhanced TAK Server Selection with Multi-Server Support (Edit Mode) -->
                     <div class="mb-3">
-                        <label for="tak_server_id" class="form-label">TAK Server</label>
-                        <select class="form-select" id="tak_server_id" name="tak_server_id" required>
-                            <option value="">Select TAK Server</option>
-                            {% for server in tak_servers %}
-                            <option value="{{ server.id }}" {% if server.id == stream.tak_server_id %}selected{% endif %}>
-                                {{ server.name }} ({{ server.host }}:{{ server.port }})
-                            </option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text text-muted">TAK server where Stream data will be sent</div>
+                        <label for="tak_server_selection" class="form-label">TAK Server Selection</label>
+                        
+                        <!-- Detect current configuration and set appropriate mode -->
+                        {% set has_multi_servers = stream.tak_servers.all() | length > 0 %}
+                        {% set has_single_server = stream.tak_server_id and not has_multi_servers %}
+                        {% set default_mode = 'multi' if has_multi_servers else 'single' %}
+                        
+                        <!-- Server Selection Mode Toggle -->
+                        <div class="btn-group mb-2" role="group" aria-label="Server selection mode">
+                            <input type="radio" class="btn-check" name="server_selection_mode" id="single_server_mode" 
+                                   value="single" {% if default_mode == 'single' %}checked{% endif %} 
+                                   onchange="toggleServerSelectionMode()">
+                            <label class="btn btn-outline-primary btn-sm" for="single_server_mode">
+                                <i class="fas fa-server"></i> Single Server
+                            </label>
+                            
+                            <input type="radio" class="btn-check" name="server_selection_mode" id="multi_server_mode" 
+                                   value="multi" {% if default_mode == 'multi' %}checked{% endif %} 
+                                   onchange="toggleServerSelectionMode()">
+                            <label class="btn btn-outline-primary btn-sm" for="multi_server_mode">
+                                <i class="fas fa-network-wired"></i> Multiple Servers
+                            </label>
+                        </div>
+                        
+                        <!-- Current Configuration Display -->
+                        {% if has_multi_servers %}
+                        <div class="alert alert-info mb-3">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>Current Configuration:</strong> Multi-Server Distribution to {{ stream.tak_servers.all() | length }} servers
+                            ({{ stream.tak_servers.all() | map(attribute='name') | join(', ') }})
+                        </div>
+                        {% elif has_single_server %}
+                        <div class="alert alert-info mb-3">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>Current Configuration:</strong> Single Server ({{ stream.tak_server.name }})
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Single Server Selection (Legacy Mode) -->
+                        <div id="single_server_selection" class="server-selection-container" 
+                             {% if default_mode == 'multi' %}style="display: none;"{% endif %}>
+                            <select class="form-select" id="tak_server_id" name="tak_server_id">
+                                <option value="">Select TAK Server</option>
+                                {% for server in tak_servers %}
+                                <option value="{{ server.id }}" {% if server.id == stream.tak_server_id %}selected{% endif %}>
+                                    {{ server.name }} ({{ server.host }}:{{ server.port }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Select a single TAK server for this stream</div>
+                        </div>
+                        
+                        <!-- Multi-Server Selection (Phase 2C) -->
+                        <div id="multi_server_selection" class="server-selection-container" 
+                             {% if default_mode == 'single' %}style="display: none;"{% endif %}>
+                            <div class="border rounded p-3">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="mb-0">Available TAK Servers</h6>
+                                    <small class="text-muted">Select multiple servers for data distribution</small>
+                                </div>
+                                
+                                <!-- Get currently associated server IDs -->
+                                {% set current_server_ids = stream.tak_servers.all() | map(attribute='id') | list %}
+                                
+                                <div class="row">
+                                    {% for server in tak_servers %}
+                                    <div class="col-md-6 col-lg-4 mb-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" 
+                                                   id="tak_server_{{ server.id }}" 
+                                                   name="tak_server_ids" 
+                                                   value="{{ server.id }}"
+                                                   {% if server.id in current_server_ids %}checked{% endif %}
+                                                   onchange="updateSelectedServersDisplay()">
+                                            <label class="form-check-label" for="tak_server_{{ server.id }}">
+                                                <strong>{{ server.name }}</strong><br>
+                                                <small class="text-muted">{{ server.host }}:{{ server.port }}</small>
+                                                {% if server.id in current_server_ids %}
+                                                <span class="badge bg-success ms-1">Currently Active</span>
+                                                {% endif %}
+                                            </label>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                
+                                <!-- Selected Servers Display -->
+                                <div id="selected_servers_display" class="mt-3">
+                                    <div class="alert alert-info mb-0">
+                                        <strong>Selected Servers:</strong>
+                                        <span id="selected_servers_list"></span>
+                                        <small class="d-block mt-1">Data will be distributed to all selected servers</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-text">Select one or more TAK servers for data distribution</div>
+                        </div>
                     </div>
 
                     <div class="row">
@@ -1076,5 +1164,139 @@ document.addEventListener('DOMContentLoaded', async function() {
         }, 100);
     }
 });
+
+// Phase 2C: Multi-Server UI Functions (Edit Mode)
+function toggleServerSelectionMode() {
+    const singleMode = document.getElementById('single_server_mode').checked;
+    const multiMode = document.getElementById('multi_server_mode').checked;
+    
+    const singleSelection = document.getElementById('single_server_selection');
+    const multiSelection = document.getElementById('multi_server_selection');
+    
+    if (singleMode) {
+        singleSelection.style.display = 'block';
+        multiSelection.style.display = 'none';
+        
+        // Clear multi-server selections when switching to single mode
+        const checkboxes = multiSelection.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(cb => cb.checked = false);
+        updateSelectedServersDisplay();
+        
+        // Make single server selection required
+        document.getElementById('tak_server_id').required = true;
+        
+    } else if (multiMode) {
+        singleSelection.style.display = 'none';
+        multiSelection.style.display = 'block';
+        
+        // Clear single server selection when switching to multi mode
+        document.getElementById('tak_server_id').value = '';
+        document.getElementById('tak_server_id').required = false;
+    }
+}
+
+function updateSelectedServersDisplay() {
+    const checkboxes = document.querySelectorAll('input[name="tak_server_ids"]:checked');
+    const displayDiv = document.getElementById('selected_servers_display');
+    const listSpan = document.getElementById('selected_servers_list');
+    
+    if (checkboxes.length > 0) {
+        const serverNames = Array.from(checkboxes).map(cb => {
+            const label = document.querySelector(`label[for="${cb.id}"] strong`);
+            return label ? label.textContent : `Server ${cb.value}`;
+        });
+        
+        listSpan.textContent = serverNames.join(', ');
+        displayDiv.style.display = 'block';
+        
+        // Update info based on count
+        const infoText = displayDiv.querySelector('small');
+        if (checkboxes.length === 1) {
+            infoText.textContent = 'Data will be sent to 1 server';
+        } else {
+            infoText.textContent = `Data will be distributed to ${checkboxes.length} servers simultaneously`;
+        }
+    } else {
+        displayDiv.style.display = 'none';
+    }
+}
+
+function validateServerSelection() {
+    const singleMode = document.getElementById('single_server_mode').checked;
+    const multiMode = document.getElementById('multi_server_mode').checked;
+    
+    if (singleMode) {
+        const singleServerSelect = document.getElementById('tak_server_id');
+        if (!singleServerSelect.value) {
+            showAlert('Please select a TAK server for this stream.', 'warning');
+            return false;
+        }
+    } else if (multiMode) {
+        const checkedServers = document.querySelectorAll('input[name="tak_server_ids"]:checked');
+        if (checkedServers.length === 0) {
+            showAlert('Please select at least one TAK server for multi-server distribution.', 'warning');
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+// Initialize edit mode with proper server selection display
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('editStreamForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (!validateServerSelection()) {
+                e.preventDefault();
+                return false;
+            }
+        });
+    }
+    
+    // Initialize server selection display for edit mode
+    updateSelectedServersDisplay();
+    
+    // Auto-initialize based on current stream configuration
+    const multiModeRadio = document.getElementById('multi_server_mode');
+    if (multiModeRadio && multiModeRadio.checked) {
+        // If in multi-server mode, ensure display is updated
+        setTimeout(() => {
+            updateSelectedServersDisplay();
+        }, 100);
+    }
+});
+
+function showAlert(message, type = 'info') {
+    // Create alert element
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    // Insert into the dedicated alert container
+    const alertContainer = document.getElementById('alert-container');
+    if (alertContainer) {
+        alertContainer.appendChild(alertDiv);
+    } else {
+        // Fallback: insert at the beginning of the content block
+        const contentBlock = document.querySelector('[id^="content"], .content, main');
+        if (contentBlock) {
+            contentBlock.insertBefore(alertDiv, contentBlock.firstChild);
+        } else {
+            // Last resort: insert at the top of the body
+            document.body.insertBefore(alertDiv, document.body.firstChild);
+        }
+    }
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
 </script>
 {% endblock %}
