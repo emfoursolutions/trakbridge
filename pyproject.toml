@@ -154,7 +154,10 @@ markers = [
     "security: Security-focused tests",
     "callsign: Callsign mapping functionality tests",
     "database: Database-specific tests",
-    "slow: Slow-running tests that may be skipped in quick runs"
+    "slow: Slow-running tests that may be skipped in quick runs",
+    "benchmark: Performance benchmarking tests for optimization validation",
+    "cot_service: Tests that require COT service functionality",
+    "final_validation: Final validation tests for complete feature implementation"
 ]
 
 # Warning filters
