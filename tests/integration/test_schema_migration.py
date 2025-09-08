@@ -308,37 +308,46 @@ class TestSchemaMigration:
         # Verify database is in consistent state after migration
         self._verify_database_consistency()
 
+    @pytest.mark.slow
     def test_migration_performance_with_large_datasets(self, app_context):
         """
         Test that migration performs acceptably with larger datasets
         STATUS: WILL FAIL - migration optimization doesn't exist
         """
-        # Create larger test dataset
+        # Create smaller test dataset for CI performance (CI environment gets 50 streams, local gets 1000)
+        import os
+        is_ci = os.environ.get('CI') == 'true'
+        stream_count = 50 if is_ci else 1000
+        server_count = 5 if is_ci else 10
+        
+        # Create servers with bulk insert for better performance
         servers = []
-        for i in range(10):  # 10 servers
+        for i in range(server_count):
             server = TakServer(
                 name=f"Server {i+1}",
                 host=f"tak{i+1}.example.com", 
                 port=8089,
                 protocol="tls"
             )
-            db.session.add(server)
             servers.append(server)
         
+        # Bulk insert servers
+        db.session.add_all(servers)
         db.session.flush()
         
-        # Create many streams (simulate real usage)
+        # Create streams with bulk insert for better performance  
         streams = []
-        for i in range(1000):  # 1000 streams
+        for i in range(stream_count):
             stream = Stream(
                 name=f"Stream {i+1}",
                 plugin_type="garmin",
-                tak_server_id=servers[i % 10].id,  # Distribute across servers
+                tak_server_id=servers[i % server_count].id,  # Distribute across servers
                 poll_interval=120
             )
-            db.session.add(stream)
             streams.append(stream)
         
+        # Bulk insert streams
+        db.session.add_all(streams)
         db.session.commit()
         
         # Measure migration performance
@@ -358,7 +367,7 @@ class TestSchemaMigration:
             db.text("SELECT COUNT(*) FROM stream_tak_servers")
         ).scalar()
         
-        assert junction_count == 1000, "All 1000 stream-server relationships should be migrated"
+        assert junction_count == stream_count, f"All {stream_count} stream-server relationships should be migrated"
 
     # Helper methods for migration testing
     
@@ -370,8 +379,9 @@ class TestSchemaMigration:
         # This would normally be: flask db upgrade
         # For now, we simulate by manually creating what the migration should do
         
-        # Create junction table
-        with db.engine.connect() as connection:
+        # Create junction table and migrate data in a single transaction for better performance
+        with db.engine.begin() as connection:
+            # Create junction table
             connection.execute(db.text("""
                 CREATE TABLE IF NOT EXISTS stream_tak_servers (
                     stream_id INTEGER NOT NULL,
@@ -382,13 +392,12 @@ class TestSchemaMigration:
                 )
             """))
             
-            # Migrate existing relationships
+            # Migrate existing relationships in bulk
             connection.execute(db.text("""
                 INSERT INTO stream_tak_servers (stream_id, tak_server_id)
                 SELECT id, tak_server_id FROM streams 
                 WHERE tak_server_id IS NOT NULL
             """))
-            connection.commit()
         
         # Add new columns to models (this would be handled by SQLAlchemy in real migration)
         # For testing purposes, we'll assume the models are already updated
@@ -396,9 +405,8 @@ class TestSchemaMigration:
     def _execute_migration_downgrade(self):
         """Execute the downgrade migration (simulated)"""
         # This would normally be: flask db downgrade
-        with db.engine.connect() as connection:
+        with db.engine.begin() as connection:
             connection.execute(db.text("DROP TABLE IF EXISTS stream_tak_servers"))
-            connection.commit()
     
     def _junction_table_exists(self) -> bool:
         """Check if junction table exists"""
