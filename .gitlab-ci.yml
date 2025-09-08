@@ -386,7 +386,7 @@ code-quality:
 # PostgreSQL service for integration tests
 .postgres_service: &postgres_service
   services:
-    - name: postgres:15-alpine
+    - name: postgres:17-alpine
       alias: postgres
       variables:
         POSTGRES_DB: test_db
