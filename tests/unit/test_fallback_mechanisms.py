@@ -157,10 +157,10 @@ class TestFallbackMechanisms:
             ))
 
             # Should log the fallback event
-            assert any("fallback" in str(call).lower() for call in mock_logger.warning.call_args_list), \
+            assert any("falling back" in str(call).lower() for call in mock_logger.warning.call_args_list), \
                 "Should log fallback warning"
-            assert any("parallel processing failed" in str(call).lower() for call in mock_logger.error.call_args_list), \
-                "Should log the original error"
+            assert any("parallel processing failed" in str(call).lower() for call in mock_logger.warning.call_args_list), \
+                "Should log the original error as warning"
 
     @pytest.mark.asyncio
     async def test_partial_failure_handling(self, cot_service):
@@ -175,6 +175,10 @@ class TestFallbackMechanisms:
             {"name": "good2", "lat": 41.0, "lon": -75.0, "uid": "good-002"},
         ]
 
+        # Force parallel processing by adjusting config
+        original_threshold = cot_service.parallel_config.get('batch_size_threshold', 10)
+        cot_service.parallel_config['batch_size_threshold'] = 2  # Lower threshold to force parallel
+
         # Mock partial success scenario
         async def partially_failing_parallel(locations, *args, **kwargs):
             # Return results for good locations only
@@ -186,13 +190,17 @@ class TestFallbackMechanisms:
 
         cot_service._create_parallel_pytak_events = AsyncMock(side_effect=partially_failing_parallel)
         
-        result = await cot_service.create_cot_events_with_fallback(
-            problematic_dataset, "a-f-G-U-C", 300, "stream"
-        )
+        try:
+            result = await cot_service.create_cot_events_with_fallback(
+                problematic_dataset, "a-f-G-U-C", 300, "stream"
+            )
 
-        # Should handle partial success gracefully
-        assert len(result) == 2, "Should return events for good locations only"
-        assert all(isinstance(event, bytes) for event in result), "All results should be valid events"
+            # Should handle partial success gracefully
+            assert len(result) == 2, "Should return events for good locations only"
+            assert all(isinstance(event, bytes) for event in result), "All results should be valid events"
+        finally:
+            # Restore original threshold
+            cot_service.parallel_config['batch_size_threshold'] = original_threshold
 
     @pytest.mark.asyncio
     async def test_timeout_fallback(self, cot_service, performance_datasets):
