@@ -596,8 +596,19 @@ class TestSchemaMigration:
     def _ensure_clean_test_state(self):
         """Ensure database is in clean state for test isolation"""
         try:
-            # Remove any stray data from previous tests
-            db.session.query(Stream).filter(Stream.name.like('%Isolation Stream%')).delete()
+            # Import CallsignMapping to avoid circular imports
+            from models.callsign_mapping import CallsignMapping
+            
+            # First, find streams to be deleted
+            isolation_streams = db.session.query(Stream).filter(Stream.name.like('%Isolation Stream%')).all()
+            isolation_stream_ids = [stream.id for stream in isolation_streams]
+            
+            # Delete related callsign mappings first to avoid foreign key constraint violations
+            if isolation_stream_ids:
+                db.session.query(CallsignMapping).filter(CallsignMapping.stream_id.in_(isolation_stream_ids)).delete(synchronize_session=False)
+            
+            # Now delete the streams
+            db.session.query(Stream).filter(Stream.name.like('%Isolation Stream%')).delete(synchronize_session=False)
             db.session.commit()
         except Exception as e:
             # If cleanup fails, rollback and continue
