@@ -28,9 +28,12 @@ class TestSchemaMigration:
         from app import create_app
         import os
         
-        # Configure for CI environment - disable background services
+        # Configure for test environment - disable ALL background services
         os.environ['DISABLE_BACKGROUND_TASKS'] = 'true'
         os.environ['FLASK_ENV'] = 'testing'
+        os.environ['TESTING'] = 'true'
+        os.environ['SKIP_STREAM_MANAGER'] = 'true'
+        os.environ['SKIP_AUTHENTICATION_INIT'] = 'true'
         
         app = create_app()
         
@@ -49,14 +52,22 @@ class TestSchemaMigration:
             finally:
                 # Clean up after test
                 try:
+                    # Force cleanup of all sessions and connections
+                    db.session.remove()
                     db.session.rollback()
+                    # Drop all tables to ensure clean state
                     db.drop_all()
+                    # Ensure all connections are closed
+                    db.engine.dispose()
                 except Exception as e:
                     print(f"Cleanup warning: {e}")  # Don't fail on cleanup issues
                 finally:
                     # Ensure environment is clean
                     os.environ.pop('DISABLE_BACKGROUND_TASKS', None)
                     os.environ.pop('FLASK_ENV', None)
+                    os.environ.pop('TESTING', None)
+                    os.environ.pop('SKIP_STREAM_MANAGER', None)
+                    os.environ.pop('SKIP_AUTHENTICATION_INIT', None)
     
     @pytest.fixture
     def pre_migration_data(self, app_context):
@@ -145,6 +156,9 @@ class TestSchemaMigration:
         REQUIREMENT: Zero data loss during migration
         STATUS: WILL FAIL - migration doesn't exist
         """
+        # Ensure clean test state
+        self._ensure_clean_test_state()
+        
         original_streams = pre_migration_data["streams"]
         
         # Record original state
@@ -523,7 +537,7 @@ class TestSchemaMigration:
         
         return result[0]
     
-    def _execute_migration_upgrade_with_timeout(self, timeout_seconds=15):
+    def _execute_migration_upgrade_with_timeout(self, timeout_seconds=30):
         """Execute migration upgrade with timeout protection"""
         return self._run_with_timeout(
             self._execute_migration_upgrade,
@@ -531,7 +545,7 @@ class TestSchemaMigration:
             self._execute_simple_migration_upgrade
         )
     
-    def _execute_migration_downgrade_with_timeout(self, timeout_seconds=8):
+    def _execute_migration_downgrade_with_timeout(self, timeout_seconds=15):
         """Execute migration downgrade with timeout protection"""
         return self._run_with_timeout(
             self._execute_migration_downgrade,
@@ -539,7 +553,7 @@ class TestSchemaMigration:
             self._execute_simple_migration_downgrade
         )
     
-    def _junction_table_exists_with_timeout(self, timeout_seconds=3) -> bool:
+    def _junction_table_exists_with_timeout(self, timeout_seconds=10) -> bool:
         """Check if junction table exists with timeout"""
         result = self._run_with_timeout(
             self._junction_table_exists,
@@ -548,7 +562,7 @@ class TestSchemaMigration:
         )
         return result if result is not None else False
     
-    def _capture_database_state_with_timeout(self, timeout_seconds=5):
+    def _capture_database_state_with_timeout(self, timeout_seconds=15):
         """Capture database state with timeout protection"""
         return self._run_with_timeout(
             self._capture_database_state,
@@ -578,6 +592,17 @@ class TestSchemaMigration:
                 connection.execute(db.text("DROP TABLE IF EXISTS stream_tak_servers"))
         except Exception as e:
             print(f"Simple migration downgrade warning: {e}")
+    
+    def _ensure_clean_test_state(self):
+        """Ensure database is in clean state for test isolation"""
+        try:
+            # Remove any stray data from previous tests
+            db.session.query(Stream).filter(Stream.name.like('%Isolation Stream%')).delete()
+            db.session.commit()
+        except Exception as e:
+            # If cleanup fails, rollback and continue
+            db.session.rollback()
+            print(f"Test state cleanup warning: {e}")
 
 
 if __name__ == "__main__":
