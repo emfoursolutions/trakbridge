@@ -626,6 +626,35 @@ def get_stream_config(stream_id):
         return jsonify({"error": "Failed to get stream configuration"}), 500
 
 
+@bp.route("/streams/<int:stream_id>/refresh-workers", methods=["POST"])
+@require_permission("streams", "write")
+def refresh_stream_tak_workers(stream_id):
+    """Refresh TAK workers for a specific stream after configuration changes"""
+    try:
+        from services.stream_manager import get_stream_manager
+
+        stream_manager = get_stream_manager()
+        success = stream_manager.refresh_stream_tak_workers(stream_id)
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": f"TAK workers refreshed successfully for stream {stream_id}"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Failed to refresh TAK workers"
+            }), 500
+
+    except Exception as e:
+        logger.error(f"Error refreshing TAK workers for stream {stream_id}: {e}")
+        return jsonify({
+            "success": False,
+            "error": "Failed to refresh TAK workers"
+        }), 500
+
+
 @bp.route("/streams/security-status")
 @require_permission("admin", "read")
 def security_status():

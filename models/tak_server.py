@@ -27,6 +27,7 @@ class TakServer(db.Model, TimestampMixin):
     cert_p12_filename = db.Column(db.String(255))  # Store original filename
     cert_password = db.Column(db.String(255))  # Password for P12 certificate (encrypted)
     verify_ssl = db.Column(db.Boolean, default=True)
+    tls_version = db.Column(db.String(10), default="1.3", nullable=False)  # TLS version: 1.3, 1.2, 1.1, auto
 
     # Legacy single-server relationship (maintained for backward compatibility) 
     streams = db.relationship(

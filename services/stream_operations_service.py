@@ -215,6 +215,11 @@ class StreamOperationsService:
 
             session.commit()
 
+            # Refresh TAK workers for the new stream configuration
+            worker_refresh_success = self.stream_manager.refresh_stream_tak_workers(stream.id)
+            if not worker_refresh_success:
+                logger.warning(f"TAK worker refresh failed for new stream {stream.id}")
+
             # Auto-start if requested
             if data.get("auto_start"):
                 try:
@@ -493,6 +498,11 @@ class StreamOperationsService:
                 self._get_session().commit()
                 
                 logger.debug(f"Stream {stream_id} updated successfully on {db_type} (attempt {attempt + 1})")
+
+                # Refresh TAK workers to match new configuration
+                worker_refresh_success = self.stream_manager.refresh_stream_tak_workers(stream_id)
+                if not worker_refresh_success:
+                    logger.warning(f"TAK worker refresh failed for stream {stream_id}, but update succeeded")
 
                 # Restart the stream if it was running before
                 if was_running:

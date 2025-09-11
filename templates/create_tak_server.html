@@ -95,6 +95,23 @@
                             </div>
 
                             <div class="mb-3">
+                                <label for="tls_version" class="form-label">
+                                    <i class="fas fa-lock"></i> TLS Version
+                                </label>
+                                <select class="form-select" id="tls_version" name="tls_version">
+                                    <option value="auto" selected>Auto (TLS 1.2-1.3 with fallback)</option>
+                                    <option value="1.3">TLS 1.3 only</option>
+                                    <option value="1.2">TLS 1.2 only</option>
+                                    <option value="1.1">TLS 1.1 only (legacy)</option>
+                                </select>
+                                <div class="form-text">
+                                    <small class="text-muted">
+                                        Choose TLS version for TAK server compatibility. Auto is recommended.
+                                    </small>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
                                 <label for="cert_p12_file" class="form-label">
                                     <i class="fas fa-certificate"></i> Client Certificate (P12/PKCS#12)
                                 </label>

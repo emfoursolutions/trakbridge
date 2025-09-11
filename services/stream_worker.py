@@ -834,11 +834,13 @@ class StreamWorker:
                     multi_servers = self.stream.tak_servers
                     if multi_servers:
                         target_servers = list(multi_servers)
-                        self.logger.debug(
-                            f"Using multi-server configuration: {len(target_servers)} servers found"
+                        server_names = [s.name for s in target_servers]
+                        server_ids = [s.id for s in target_servers]
+                        self.logger.info(
+                            f"Using multi-server configuration: {len(target_servers)} servers found - Names: {server_names}, IDs: {server_ids}"
                         )
                 except Exception as e:
-                    self.logger.debug(f"Error accessing multi-server relationship: {e}")
+                    self.logger.error(f"Error accessing multi-server relationship: {e}")
             
             # Backward compatibility: Fall back to legacy single-server relationship
             if not target_servers and hasattr(self.stream, 'tak_server') and self.stream.tak_server:
@@ -913,12 +915,17 @@ class StreamWorker:
         try:
             # Phase 2B: Concurrent distribution to multiple servers
             distribution_tasks = []
+            server_names = [server.name for server in target_servers]
+            
+            self.logger.info(f"Starting distribution of {len(cot_events)} events to {len(target_servers)} servers: {server_names}")
             
             for server in target_servers:
+                self.logger.debug(f"Creating distribution task for server: {server.name} (ID: {server.id})")
                 task = self._send_to_single_server(cot_events, server)
                 distribution_tasks.append(task)
             
             # Execute all distributions concurrently with failure isolation
+            self.logger.debug(f"Executing {len(distribution_tasks)} distribution tasks concurrently")
             results = await asyncio.gather(*distribution_tasks, return_exceptions=True)
             
             # Process results
@@ -927,7 +934,7 @@ class StreamWorker:
                 
                 if isinstance(result, Exception):
                     # Server failed, but others can continue (failure isolation)
-                    self.logger.error(f"Distribution to {server.name} failed: {result}")
+                    self.logger.error(f"Distribution to {server.name} (ID: {server.id}) failed with exception: {result}")
                     distribution_results.append({
                         'server': server,
                         'success': False,
@@ -936,10 +943,14 @@ class StreamWorker:
                     })
                 else:
                     # Server succeeded
+                    events_sent = result.get('events_sent', 0)
+                    success = result.get('success', False)
+                    self.logger.info(f"Distribution to {server.name} (ID: {server.id}): success={success}, events_sent={events_sent}")
+                    
                     distribution_results.append({
                         'server': server,
-                        'success': result.get('success', False),
-                        'events_sent': result.get('events_sent', 0),
+                        'success': success,
+                        'events_sent': events_sent,
                         'error': result.get('error')
                     })
             
@@ -965,20 +976,24 @@ class StreamWorker:
         Phase 2B: Individual server distribution with error handling.
         """
         try:
-            self.logger.debug(f"Sending {len(cot_events)} events to server {server.name}")
+            self.logger.info(f"Sending {len(cot_events)} events to server {server.name} (ID: {server.id})")
             
             # Use smart queue replacement for large batches to prevent accumulation
             if len(cot_events) >= 10:  # Use replacement logic for large batches
+                self.logger.info(f"Using queue replacement for large batch of {len(cot_events)} events to {server.name}")
                 success = await cot_service.enqueue_with_replacement(cot_events, server.id)
                 events_sent = len(cot_events) if success else 0
-                self.logger.debug(f"Used queue replacement for {len(cot_events)} events to {server.name}")
+                self.logger.info(f"Queue replacement result for {server.name}: success={success}, events_sent={events_sent}")
             else:
                 # Use individual enqueueing for small batches
                 events_sent = 0
                 for event in cot_events:
-                    await cot_service.enqueue_event(event, server.id)
-                    events_sent += 1
-                self.logger.debug(f"Individually enqueued {events_sent} events to {server.name}")
+                    success = await cot_service.enqueue_event(event, server.id)
+                    if success:
+                        events_sent += 1
+                    else:
+                        self.logger.warning(f"Failed to enqueue event to server {server.name}")
+                self.logger.debug(f"Individually enqueued {events_sent}/{len(cot_events)} events to {server.name}")
             
             return {
                 'success': True,

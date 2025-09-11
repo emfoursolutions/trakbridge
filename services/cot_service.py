@@ -945,12 +945,8 @@ class EnhancedCOTService:
         try:
             ssl_context = None
             if tak_server.protocol.lower() in ["tls", "ssl"]:
-                ssl_context = ssl.create_default_context()
-
-                if not tak_server.verify_ssl:
-                    ssl_context.check_hostname = False
-                    ssl_context.verify_mode = ssl.CERT_NONE
-
+                ssl_context = EnhancedCOTService._create_ssl_context(tak_server)
+                
                 if tak_server.cert_p12 and len(tak_server.cert_p12) > 0:
                     try:
                         cert_pem, key_pem = EnhancedCOTService._extract_p12_certificate(
@@ -960,8 +956,9 @@ class EnhancedCOTService:
                             cert_pem, key_pem
                         )
                         ssl_context.load_cert_chain(certfile=cert_path, keyfile=key_path)
+                        logger.debug(f"Loaded client certificate for TAK server '{tak_server.name}'")
                     except Exception as e:
-                        logger.error(f"Failed to load P12 certificate: {e}")
+                        logger.error(f"Failed to load P12 certificate for TAK server '{tak_server.name}': {e}")
                         raise
 
             logger.info(
@@ -1003,6 +1000,50 @@ class EnhancedCOTService:
                 except Exception as e:
                     logger.debug(f"Error closing writer: {e}")
             EnhancedCOTService._cleanup_temp_files(cert_path, key_path)
+
+    @staticmethod
+    def _create_ssl_context(tak_server):
+        """Create SSL context with configurable TLS version and TAK server compatibility"""
+        ssl_context = ssl.create_default_context()
+        
+        # Get TLS version from server config, default to auto (1.3 with fallback)
+        tls_version = getattr(tak_server, 'tls_version', 'auto')
+        
+        try:
+            if tls_version == '1.3':
+                ssl_context.minimum_version = ssl.TLSVersion.TLSv1_3
+                ssl_context.maximum_version = ssl.TLSVersion.TLSv1_3
+                logger.debug(f"TAK server '{tak_server.name}': Using TLS 1.3 only")
+            elif tls_version == '1.2':
+                ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+                ssl_context.maximum_version = ssl.TLSVersion.TLSv1_2
+                logger.debug(f"TAK server '{tak_server.name}': Using TLS 1.2 only")
+            elif tls_version == '1.1':
+                ssl_context.minimum_version = ssl.TLSVersion.TLSv1_1
+                ssl_context.maximum_version = ssl.TLSVersion.TLSv1_1
+                logger.debug(f"TAK server '{tak_server.name}': Using TLS 1.1 only")
+            else:  # 'auto' or any other value
+                ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+                ssl_context.maximum_version = ssl.TLSVersion.TLSv1_3
+                logger.debug(f"TAK server '{tak_server.name}': Using TLS 1.2-1.3 (auto)")
+                
+            # Set cipher suites compatible with TAK servers
+            ssl_context.set_ciphers('ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!MD5:!DSS')
+            
+        except Exception as e:
+            logger.warning(f"Failed to set specific TLS version '{tls_version}' for TAK server '{tak_server.name}': {e}. Using defaults.")
+            # Fall back to secure defaults
+            ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+        
+        # Configure certificate verification
+        if not tak_server.verify_ssl:
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            logger.debug(f"SSL verification disabled for TAK server '{tak_server.name}'")
+        else:
+            logger.debug(f"SSL verification enabled for TAK server '{tak_server.name}'")
+            
+        return ssl_context
 
     @staticmethod
     def _extract_p12_certificate(
@@ -1547,7 +1588,9 @@ class EnhancedCOTService:
             True if successfully processed, False otherwise
         """
         if tak_server_id not in self.queues:
-            logger.error(f"No queue found for TAK server {tak_server_id}")
+            available_queues = list(self.queues.keys())
+            available_workers = list(self.workers.keys())
+            logger.error(f"No queue found for TAK server {tak_server_id}. Available queues: {available_queues}, Available workers: {available_workers}")
             return False
             
         if not events:
@@ -1582,10 +1625,16 @@ class EnhancedCOTService:
                     new_events += 1
                     continue
                 
+                # Get or create server-specific device state manager (lazy initialization)
+                if tak_server_id not in self.device_state_managers:
+                    self.device_state_managers[tak_server_id] = DeviceStateManager()
+                
+                server_device_manager = self.device_state_managers[tak_server_id]
+                
                 # Check if we should update this device
-                if self.device_state_manager.should_update_device(uid, timestamp):
+                if server_device_manager.should_update_device(uid, timestamp):
                     # Update device state
-                    self.device_state_manager.update_device_state(uid, {
+                    server_device_manager.update_device_state(uid, {
                         "timestamp": timestamp,
                         "uid": uid
                     })
@@ -1595,7 +1644,7 @@ class EnhancedCOTService:
                     device_events[uid] = event
                     
                     # Check if this is a new device or an update
-                    if uid in self.device_state_manager.device_states:
+                    if uid in server_device_manager.device_states:
                         updated_events += 1
                     else:
                         new_events += 1
@@ -1641,7 +1690,7 @@ class PersistentCOTService:
         self.connections: Dict[int, Any] = {}  # tak_server_id -> pytak connection
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self._running = False
-        self.device_state_manager = DeviceStateManager()  # For queue replacement functionality
+        self.device_state_managers: Dict[int, DeviceStateManager] = {}  # Per-server device state managers for queue replacement functionality
 
     async def start_worker(self, tak_server):
         """
@@ -2246,7 +2295,9 @@ class PersistentCOTService:
             True if successfully processed, False otherwise
         """
         if tak_server_id not in self.queues:
-            logger.error(f"No queue found for TAK server {tak_server_id}")
+            available_queues = list(self.queues.keys())
+            available_workers = list(self.workers.keys())
+            logger.error(f"No queue found for TAK server {tak_server_id}. Available queues: {available_queues}, Available workers: {available_workers}")
             return False
             
         if not events:
@@ -2281,10 +2332,16 @@ class PersistentCOTService:
                     new_events += 1
                     continue
                 
+                # Get or create server-specific device state manager (lazy initialization)
+                if tak_server_id not in self.device_state_managers:
+                    self.device_state_managers[tak_server_id] = DeviceStateManager()
+                
+                server_device_manager = self.device_state_managers[tak_server_id]
+                
                 # Check if we should update this device
-                if self.device_state_manager.should_update_device(uid, timestamp):
+                if server_device_manager.should_update_device(uid, timestamp):
                     # Update device state
-                    self.device_state_manager.update_device_state(uid, {
+                    server_device_manager.update_device_state(uid, {
                         "timestamp": timestamp,
                         "uid": uid
                     })
@@ -2294,7 +2351,7 @@ class PersistentCOTService:
                     device_events[uid] = event
                     
                     # Check if this is a new device or an update
-                    if uid in self.device_state_manager.device_states:
+                    if uid in server_device_manager.device_states:
                         updated_events += 1
                     else:
                         new_events += 1

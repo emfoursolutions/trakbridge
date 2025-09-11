@@ -307,8 +307,10 @@ class TakServerService:
             return result
 
         except Exception as e:
-            logger.error(f"Connection test error for server {server.id}: {str(e)}")
-            return {"success": False, "error": str(e)}
+            # Handle potential encoding errors
+            error_msg = str(e) if e is not None else "Unknown connection error"
+            logger.error(f"Connection test error for server {server.id}: {error_msg}")
+            return {"success": False, "error": error_msg}
 
 
 class TakServerConnectionTester:
@@ -353,7 +355,9 @@ class TakServerConnectionTester:
             return connection_result
 
         except Exception as e:
-            return {"success": False, "error": f"Connection test failed: {str(e)}"}
+            # Handle potential encoding errors
+            error_msg = str(e) if e is not None else "Unknown error"
+            return {"success": False, "error": f"Connection test failed: {error_msg}"}
         finally:
             # Clean up temporary files
             TakServerConnectionTester.cleanup_temp_files(temp_files)
@@ -435,7 +439,9 @@ class TakServerConnectionTester:
                 }
 
         except Exception as e:
-            return {"success": False, "error": f"Connection test failed: {str(e)}"}
+            # Handle potential encoding errors
+            error_msg = str(e) if e is not None else "Unknown error"
+            return {"success": False, "error": f"Connection test failed: {error_msg}"}
 
     @staticmethod
     async def attempt_connection(config):
