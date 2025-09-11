@@ -14,7 +14,7 @@ import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 
-from services.cot_service import EnhancedCOTService
+from services.cot_service import PersistentCOTService
 from tests.fixtures.mock_location_data import generate_mock_gps_points
 
 
@@ -27,7 +27,7 @@ class TestQueueReplacement:
     @pytest.fixture
     def cot_service(self):
         """Create COT service instance for testing"""
-        return EnhancedCOTService(use_pytak=True)
+        return PersistentCOTService()
 
     @pytest.fixture
     def sample_cot_events(self):
@@ -341,7 +341,7 @@ class TestQueueReplacement:
         # Mock device state manager - should NOT update old events
         mock_device_manager = Mock()
         mock_device_manager.should_update_device.return_value = False  # Device has newer data
-        cot_service.device_state_manager = mock_device_manager
+        cot_service.device_state_managers = {tak_server_id: mock_device_manager}
         
         cot_service.extract_uid_from_cot_event = Mock(return_value="device-000")
         cot_service.extract_timestamp_from_cot_event = Mock(return_value=old_time)
