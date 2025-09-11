@@ -330,7 +330,7 @@ class BaseConfig:
 
         # SQLite validation: Remove pool settings that SQLite doesn't support
         if db_type == "sqlite":
-            invalid_sqlite_options = ["pool_size", "max_overflow"]
+            invalid_sqlite_options = ["pool_size", "max_overflow", "pool_timeout"]
             for option in invalid_sqlite_options:
                 if option in engine_options:
                     logger.warning(f"Removing invalid SQLite engine option: {option}")
