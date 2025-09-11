@@ -136,13 +136,13 @@ if [ -d "backups" ]; then
     for backup_dir in "backups" "backups/postgres-staging" "backups/mysql-staging" "backups/staging"; do
         if [ -d "$backup_dir" ] && [ -w "$backup_dir" ]; then
             if chown -R ${USER_ID}:${GROUP_ID} "$backup_dir" 2>/dev/null; then
-                log_info "✅ Fixed ownership of $backup_dir"
+                log_info "Fixed ownership of $backup_dir"
             else
-                log_warn "⚠️ Cannot change ownership of $backup_dir (likely root-owned), trying chmod..."
+                log_warn "Cannot change ownership of $backup_dir (likely root-owned), trying chmod..."
                 if chmod -R 755 "$backup_dir" 2>/dev/null; then
-                    log_info "✅ Fixed permissions of $backup_dir with chmod"
+                    log_info "Fixed permissions of $backup_dir with chmod"
                 else
-                    log_warn "⚠️ Cannot fix permissions of $backup_dir, will use test subdirectory if needed"
+                    log_warn "Cannot fix permissions of $backup_dir, will use test subdirectory if needed"
                     # Create a test-specific subdirectory as fallback
                     test_backup_dir="$backup_dir/test-$$"
                     mkdir -p "$test_backup_dir" 2>/dev/null || true
@@ -272,9 +272,9 @@ log_info "Using compose file: $COMPOSE_FILE"
 log_info "Checking for required directories..."
 for dir in logs data secrets config backups external_plugins; do
     if [ -d "$dir" ]; then
-        log_info "✅ $dir exists ($(ls -ld "$dir" | awk '{print $1, $3, $4}'))"
+        log_info "$dir exists ($(ls -ld "$dir" | awk '{print $1, $3, $4}'))"
     else
-        log_warn "❌ $dir does NOT exist - creating it"
+        log_warn "$dir does NOT exist - creating it"
         mkdir -p "$dir"
         chmod 755 "$dir"
     fi
@@ -363,11 +363,11 @@ timeout 240 bash -c "
                 
                 # Test the actual health endpoint directly
                 if docker exec $CONTAINER_NAME curl -f -s http://localhost:5000/api/health > /dev/null 2>&1; then
-                    echo '✅ Application health endpoint is actually responding correctly!'
+                    echo 'Application health endpoint is actually responding correctly!'
                     echo 'Docker health check may be misconfigured, but application is working - continuing tests'
                     break
                 else
-                    echo '❌ Application health endpoint is not responding'
+                    echo 'Application health endpoint is not responding'
                     echo 'Container logs:'
                     docker logs $CONTAINER_NAME --tail=20
                     if [ \$attempts -ge \$max_attempts ]; then

@@ -69,20 +69,20 @@ def app():
 
         # Create app using the testing configuration
         app = create_app("testing")
-        print(f"✅ Flask app created successfully with config: {app.config.get('ENV', 'unknown')}")
+        print(f"Flask app created successfully with config: {app.config.get('ENV', 'unknown')}")
 
         with app.app_context():
             # Verify database is working
             try:
                 db.create_all()
-                print("✅ Database tables created successfully")
+                print("Database tables created successfully")
             except Exception as db_error:
-                print(f"⚠️ Database setup warning: {db_error}")
+                print(f"Database setup warning: {db_error}")
 
             yield app
 
     except Exception as app_error:
-        print(f"❌ App creation failed: {app_error}")
+        print(f"App creation failed: {app_error}")
         print("Environment variables:")
         for key, value in test_env_vars.items():
             print(f"  {key}={value}")
@@ -124,14 +124,14 @@ def db_session(app):
 
             inspector = inspect(db.engine)
             tables = inspector.get_table_names()
-            print(f"✅ Database tables created: {tables}")
+            print(f"Database tables created: {tables}")
 
             # Provide the session
             yield db.session
 
         except Exception as e:
             # Enhanced error handling for CI debugging
-            print(f"❌ Database session setup error: {e}")
+            print(f"Database session setup error: {e}")
             print(f"Database URI: {app.config.get('SQLALCHEMY_DATABASE_URI', 'Not set')}")
             print(f"Database type: {os.environ.get('DB_TYPE', 'Not set')}")
 
@@ -140,10 +140,10 @@ def db_session(app):
                 print("Attempting database recovery...")
                 db.create_all()
                 db.session.commit()
-                print("✅ Database recovery successful")
+                print("Database recovery successful")
                 yield db.session
             except Exception as recovery_error:
-                print(f"❌ Database recovery failed: {recovery_error}")
+                print(f"Database recovery failed: {recovery_error}")
                 # Create a minimal session for tests that don't need database
                 yield db.session
         finally:
@@ -155,7 +155,7 @@ def db_session(app):
                 # Dispose engine connections to prevent hanging connections
                 db.engine.dispose()
             except Exception as cleanup_error:
-                print(f"⚠️ Database cleanup warning: {cleanup_error}")
+                print(f"Database cleanup warning: {cleanup_error}")
                 # Don't fail the test due to cleanup issues
 
 

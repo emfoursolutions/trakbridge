@@ -81,10 +81,10 @@ class PluginManager:
                     for module in additional_modules:
                         if isinstance(module, str) and self._is_safe_module_name(module):
                             self._allowed_modules.add(module)
-                            logger.info(f"✅ Added allowed plugin module: {module}")
+                            logger.info(f"Added allowed plugin module: {module}")
                             modules_added += 1
                         else:
-                            logger.warning(f"⚠️ Ignoring unsafe plugin module name: {module}")
+                            logger.warning(f"Ignoring unsafe plugin module name: {module}")
 
                     logger.info(
                         f"Plugin configuration loaded successfully: {modules_added} modules added"

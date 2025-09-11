@@ -168,6 +168,17 @@ class StreamOperationsService:
             server_selection_mode = "single" if len(selected_server_ids) == 1 else "multi"
             tak_server_id = selected_server_ids[0] if server_selection_mode == "single" else None
 
+            # Extract plugin config first to get cot_type_mode
+            from plugins.plugin_manager import get_plugin_manager
+            from services.stream_config_service import StreamConfigService
+            
+            plugin_manager = get_plugin_manager()
+            config_service = StreamConfigService(plugin_manager)
+            plugin_config = config_service.extract_plugin_config_from_request(data)
+            
+            # Get cot_type_mode from plugin config, fallback to form data, then default
+            cot_type_mode = plugin_config.get("cot_type_mode") or data.get("cot_type_mode", "stream")
+
             # Create stream with appropriate server configuration
             stream = Stream(
                 name=data["name"],
@@ -176,7 +187,7 @@ class StreamOperationsService:
                 cot_type=data.get("cot_type", "a-f-G-U-C"),
                 cot_stale_time=int(data.get("cot_stale_time", 300)),
                 tak_server_id=tak_server_id,  # Will be None for multi-server mode
-                cot_type_mode=data.get("cot_type_mode", "stream"),
+                cot_type_mode=cot_type_mode,
                 # Callsign mapping fields
                 enable_callsign_mapping=bool(data.get("enable_callsign_mapping", False)),
                 callsign_identifier_field=data.get("callsign_identifier_field"),
@@ -186,12 +197,7 @@ class StreamOperationsService:
                 ),
             )
 
-            # Set plugin configuration
-            plugin_config: Dict[str, Any] = {}
-            for key, value in data.items():
-                if key.startswith("plugin_"):
-                    plugin_config[key[7:]] = value  # Remove 'plugin_' prefix
-
+            # Set plugin configuration (already extracted above)
             stream.set_plugin_config(plugin_config)
 
             session = self._get_session()
@@ -382,7 +388,7 @@ class StreamOperationsService:
                 stream.poll_interval = int(data.get("poll_interval", 120))
                 stream.cot_type = data.get("cot_type", "a-f-G-U-C")
                 stream.cot_stale_time = int(data.get("cot_stale_time", 300))
-                stream.cot_type_mode = data.get("cot_type_mode", "stream")
+                # Note: cot_type_mode will be updated from plugin config later in this method
 
                 # Simplified approach: Handle server assignment with automatic mode detection
                 server_ids_data = data.get("tak_servers", [])
@@ -468,9 +474,10 @@ class StreamOperationsService:
 
                 # Copy certain plugin config values to stream-level fields
                 # This restores functionality that was removed in commit 48edfe59
+                # Note: cot_type_mode is now handled during stream creation
                 if "cot_type_mode" in merged_config:
                     stream.cot_type_mode = merged_config["cot_type_mode"]
-                    logger.debug(f"Set stream cot_type_mode to: {merged_config['cot_type_mode']}")
+                    logger.debug(f"Updated stream cot_type_mode to: {merged_config['cot_type_mode']}")
 
                 # Handle missing checkbox fields for all plugins
                 if plugin_type:

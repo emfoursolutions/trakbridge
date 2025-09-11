@@ -132,10 +132,10 @@ class ConfigManager:
                 config_data = self._load_and_validate_file(
                     external_path, config_name, required_fields
                 )
-                logger.info(f"✅ Successfully loaded external config: {external_path}")
+                logger.info(f"Successfully loaded external config: {external_path}")
                 return config_data
             except Exception as e:
-                logger.error(f"❌ External config failed validation: {external_path} - {e}")
+                logger.error(f"External config failed validation: {external_path} - {e}")
 
                 # Backup corrupted file
                 self._backup_corrupted_file(external_path, str(e))
@@ -143,17 +143,17 @@ class ConfigManager:
                 # Auto-repair: replace with container default
                 if container_path.exists():
                     logger.info(
-                        f"🔧 Auto-repairing: replacing corrupted {external_path} with container default"
+                        f"Auto-repairing: replacing corrupted {external_path} with container default"
                     )
                     try:
                         shutil.copy2(container_path, external_path)
                         config_data = self._load_and_validate_file(
                             external_path, config_name, required_fields
                         )
-                        logger.info(f"✅ Auto-repair successful for {config_name}")
+                        logger.info(f"Auto-repair successful for {config_name}")
                         return config_data
                     except Exception as repair_error:
-                        logger.error(f"❌ Auto-repair failed: {repair_error}")
+                        logger.error(f"Auto-repair failed: {repair_error}")
 
         # Fall back to container default
         if container_path.exists():
@@ -161,13 +161,13 @@ class ConfigManager:
                 config_data = self._load_and_validate_file(
                     container_path, config_name, required_fields
                 )
-                logger.info(f"✅ Using container default config: {container_path}")
+                logger.info(f"Using container default config: {container_path}")
                 return config_data
             except Exception as e:
-                logger.error(f"❌ Container default config failed: {container_path} - {e}")
+                logger.error(f"Container default config failed: {container_path} - {e}")
 
         # Final fallback: minimal default configuration
-        logger.warning(f"⚠️ Using minimal default configuration for {config_name}")
+        logger.warning(f"Using minimal default configuration for {config_name}")
         return self._get_minimal_default_config(config_name)
 
     def _load_and_validate_file(
@@ -278,10 +278,10 @@ class ConfigManager:
                 f.write(f"Original file: {file_path}\n")
                 f.write(f"Error: {error_message}\n")
 
-            logger.info(f"📦 Backed up corrupted config to: {backup_path}")
+            logger.info(f"Backed up corrupted config to: {backup_path}")
 
         except Exception as e:
-            logger.warning(f"⚠️ Failed to backup corrupted config: {e}")
+            logger.warning(f"Failed to backup corrupted config: {e}")
 
     def _get_minimal_default_config(self, config_name: str) -> Dict[str, Any]:
         """Provide minimal default configuration when all else fails"""

@@ -426,10 +426,10 @@ except Exception as e:
     local exit_code=$?
     
     if [[ $exit_code -eq 0 ]] && [[ "$result" == *"MODEL_VALIDATION_OK"* ]]; then
-        log_info "✅ Comprehensive model validation passed"
+        log_info "Comprehensive model validation passed"
         return 0
     else
-        log_error "❌ Comprehensive model validation failed: $result"
+        log_error "Comprehensive model validation failed: $result"
         return 1
     fi
 }
@@ -451,10 +451,10 @@ validate_schema() {
         "fast")
             log_info "Using fast validation mode (basic checks only)"
             if basic_table_check; then
-                log_info "✅ Fast schema validation passed"
+                log_info "Fast schema validation passed"
                 return 0
             else
-                log_error "❌ Fast schema validation failed"
+                log_error "Fast schema validation failed"
                 return 1
             fi
             ;;
@@ -482,7 +482,7 @@ validate_schema() {
                 if [[ -n "$current_rev" ]] && [[ -n "$head_rev" ]] && [[ "$current_rev" == "$head_rev" ]] && [[ "$current_rev" != "unknown" ]]; then
                     log_info "Migration state consistent, using fast validation path"
                     if basic_table_check; then
-                        log_info "✅ Hybrid schema validation passed (fast path)"
+                        log_info "Hybrid schema validation passed (fast path)"
                         return 0
                     else
                         log_warn "Fast validation failed, falling back to comprehensive validation"
@@ -503,10 +503,10 @@ validate_schema() {
             else
                 log_warn "Flask CLI not available, falling back to basic table check"
                 if basic_table_check; then
-                    log_info "✅ Schema validation passed (basic mode)"
+                    log_info "Schema validation passed (basic mode)"
                     return 0
                 else
-                    log_error "❌ Schema validation failed (basic mode)"
+                    log_error "Schema validation failed (basic mode)"
                     return 1
                 fi
             fi
@@ -584,12 +584,12 @@ run_migrations() {
                 log_info "Migration attempt $migration_attempts/$max_attempts"
                 
                 if flask db upgrade; then
-                    log_info "✅ Database migrations completed successfully"
+                    log_info "Database migrations completed successfully"
                     break
                 else
                     log_warn "Migration attempt $migration_attempts failed"
                     if [[ $migration_attempts -eq $max_attempts ]]; then
-                        log_error "❌ All migration attempts failed"
+                        log_error "All migration attempts failed"
                         return 1
                     fi
                     log_info "Retrying migration in 5 seconds..."
@@ -597,7 +597,7 @@ run_migrations() {
                 fi
             done
         else
-            log_info "✅ Database is already up to date (revision: $current_rev)"
+            log_info "Database is already up to date (revision: $current_rev)"
         fi
     else
         log_error "Could not determine migration heads"
@@ -607,13 +607,13 @@ run_migrations() {
     # Validate schema after migrations
     log_info "Migrations complete, validating database schema..."
     if ! validate_schema; then
-        log_error "❌ Schema validation failed after migrations"
+        log_error "Schema validation failed after migrations"
         log_error "This indicates the migrations may not have completed properly"
         log_error "Check the migration files and database state"
         return 1
     fi
     
-    log_info "✅ Database migrations and schema validation completed successfully"
+    log_info "Database migrations and schema validation completed successfully"
     return 0
 }
 

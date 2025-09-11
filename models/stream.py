@@ -79,6 +79,7 @@ class Stream(db.Model, TimestampMixin):
         cot_type: str = "a-f-G-U-C",
         cot_stale_time: int = 300,
         tak_server_id: int = None,
+        cot_type_mode: str = "stream",
         enable_callsign_mapping: bool = False,
         callsign_identifier_field: str = None,
         callsign_error_handling: str = "fallback",
@@ -92,6 +93,7 @@ class Stream(db.Model, TimestampMixin):
         self.cot_type = cot_type
         self.cot_stale_time = cot_stale_time
         self.tak_server_id = tak_server_id
+        self.cot_type_mode = cot_type_mode
         self.enable_callsign_mapping = enable_callsign_mapping
         self.callsign_identifier_field = callsign_identifier_field
         self.callsign_error_handling = callsign_error_handling

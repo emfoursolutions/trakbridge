@@ -284,7 +284,7 @@ fi
 chmod 600 "$SSL_DIR/trakbridge.key"
 chmod 644 "$SSL_DIR/trakbridge.crt"
 
-info "✅ SSL certificates ready in: $SSL_DIR"
+info "SSL certificates ready in: $SSL_DIR"
 info "Certificate: $SSL_DIR/trakbridge.crt"
 info "Private Key: $SSL_DIR/trakbridge.key"
 EOF

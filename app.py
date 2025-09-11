@@ -503,13 +503,13 @@ def setup_version_context_processor(app):
                 worker_count = get_worker_count()
 
                 app.logger.info("=" * 80)
-                app.logger.info("🚀 TrakBridge Application Ready - Now Serving Requests")
+                app.logger.info("TrakBridge Application Ready - Now Serving Requests")
                 app.logger.info("=" * 80)
 
                 # Include all the useful system information
                 log_primary_startup_banner(app, worker_count)
 
-                app.logger.info("✅ Application fully operational and handling traffic")
+                app.logger.info("Application fully operational and handling traffic")
                 app.logger.info("=" * 80)
 
             except FileExistsError:

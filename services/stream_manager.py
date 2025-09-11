@@ -669,14 +669,13 @@ class StreamManager:
         """Clean up persistent COT service during shutdown"""
         try:
             if hasattr(self, "cot_service") and self.cot_service:
-                # Check if the service has the method before calling it
-                if hasattr(self.cot_service, "get_running_workers"):
-                    running_workers = self.cot_service.get_running_workers()
-                    if running_workers:
-                        logger.info(f"Stopping {len(running_workers)} persistent COT workers")
-                        for worker in running_workers:
-                            if hasattr(worker, "stop"):
-                                worker.stop()
+                # Get running workers directly from the service
+                running_workers = self.cot_service.workers
+                if running_workers:
+                    logger.info(f"Stopping {len(running_workers)} persistent COT workers")
+                    for worker in running_workers:
+                        if hasattr(worker, "stop"):
+                            worker.stop()
                 else:
                     # Fallback: just log that we're cleaning up
                     logger.info("Cleaning up persistent COT service (no running workers method)")
@@ -814,7 +813,7 @@ class StreamManager:
                         logger.debug(f"Error accessing multi-server relationship for stream {stream.id}: {e}")
 
             # Get currently running workers
-            running_workers = cot_service.get_running_workers()
+            running_workers = cot_service.workers
 
             # Convert to set of keys for comparison
             running_tak_server_keys = set()
@@ -957,7 +956,7 @@ class StreamManager:
             logger.info("Checking persistent COT service health and worker status")
 
             # Get initial worker count for comparison
-            running_workers_before = cot_service.get_running_workers()
+            running_workers_before = cot_service.workers
             workers_before_count = len(running_workers_before) if running_workers_before else 0
             logger.info(f"TAK workers before health check: {workers_before_count}")
 
@@ -965,7 +964,7 @@ class StreamManager:
             self.ensure_tak_workers_running()
 
             # Check worker health status after ensuring workers are running
-            running_workers_after = cot_service.get_running_workers()
+            running_workers_after = cot_service.workers
             workers_after_count = len(running_workers_after) if running_workers_after else 0
             
             if workers_after_count != workers_before_count:
@@ -1186,7 +1185,7 @@ class StreamManager:
                 return True  # Not an error if no servers are configured
 
             # Get currently running workers
-            running_workers = cot_service.get_running_workers()
+            running_workers = cot_service.workers
             running_server_keys = set()
             if running_workers:
                 for tak_server in running_workers.keys():
