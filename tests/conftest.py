@@ -149,13 +149,21 @@ def db_session(app):
         finally:
             # Enhanced cleanup for CI environment
             try:
-                db.session.rollback()
-                db.session.close()
-                db.session.remove()
+                # Only attempt cleanup if session is active
+                if db.session and db.session.is_active:
+                    db.session.rollback()
+                if db.session:
+                    db.session.close()
+                    db.session.remove()
+            except Exception as session_cleanup_error:
+                print(f"Database session cleanup warning: {session_cleanup_error}")
+                
+            try:
                 # Dispose engine connections to prevent hanging connections
-                db.engine.dispose()
-            except Exception as cleanup_error:
-                print(f"Database cleanup warning: {cleanup_error}")
+                if db.engine:
+                    db.engine.dispose()
+            except Exception as engine_cleanup_error:
+                print(f"Database engine cleanup warning: {engine_cleanup_error}")
                 # Don't fail the test due to cleanup issues
 
 

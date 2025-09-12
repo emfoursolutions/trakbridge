@@ -255,14 +255,15 @@ class TestStreamCreationWithCategories:
                 assert "updatePluginsByCategory()" in html_content
 
     def test_edit_stream_form_loads_categories(
-        self, client, mock_app_with_categories, auth_headers
+        self, client, mock_app_with_categories, auth_headers, db_session
     ):
         """Test that edit stream form loads with category data"""
         # Mock authentication for this test
         with patch("services.auth.decorators.require_auth", lambda f: f):
             with mock_app_with_categories.app_context():
+                # Create test database objects
+                test_user, tak_server = create_test_user_and_server(db_session)
                 # Create a test stream
-                tak_server = TakServer.query.first()
                 test_stream = Stream(
                     name="Test Stream",
                     plugin_type="garmin",
@@ -377,14 +378,15 @@ class TestCascadingDropdownBehavior:
 class TestCategoryPersistence:
     """Test that category information persists correctly"""
 
-    def test_stream_plugin_type_maintains_category_relationship(self, mock_app_with_categories):
+    def test_stream_plugin_type_maintains_category_relationship(self, mock_app_with_categories, db_session):
         """Test that stream's plugin_type can be used to determine its category"""
         with mock_app_with_categories.app_context():
             from services.plugin_category_service import get_category_service
             from utils.app_helpers import get_plugin_manager
 
+            # Create test database objects
+            test_user, tak_server = create_test_user_and_server(db_session)
             # Create a test stream
-            tak_server = TakServer.query.first()
             test_stream = Stream(
                 name="Category Test Stream",
                 plugin_type="garmin",  # Should be in Tracker category
@@ -403,13 +405,14 @@ class TestCategoryPersistence:
 
             assert stream_category == "Tracker"
 
-    def test_multiple_streams_different_categories(self, mock_app_with_categories):
+    def test_multiple_streams_different_categories(self, mock_app_with_categories, db_session):
         """Test that streams with different plugin types maintain their categories"""
         with mock_app_with_categories.app_context():
             from services.plugin_category_service import get_category_service
             from utils.app_helpers import get_plugin_manager
 
-            tak_server = TakServer.query.first()
+            # Create test database objects
+            test_user, tak_server = create_test_user_and_server(db_session)
 
             # Create streams with different plugin types
             streams_data = [
@@ -505,11 +508,12 @@ class TestCategorySystemIntegration:
 class TestBackwardCompatibility:
     """Test that categorization system maintains backward compatibility"""
 
-    def test_existing_streams_still_work(self, mock_app_with_categories):
+    def test_existing_streams_still_work(self, mock_app_with_categories, db_session):
         """Test that existing streams continue to work with category system"""
         with mock_app_with_categories.app_context():
+            # Create test database objects
+            test_user, tak_server = create_test_user_and_server(db_session)
             # Simulate an existing stream (created before categorization)
-            tak_server = TakServer.query.first()
 
             old_stream = Stream(
                 name="Legacy Stream",
