@@ -590,15 +590,21 @@ class StreamWorker:
             )
             return
 
-        # Load mappings from database table
+        # Load enabled mappings from database table
         callsign_mappings = await self._load_callsign_mappings()
+        
+        # Also load disabled mappings for filtering purposes
+        disabled_mappings = await self._load_disabled_callsign_mappings()
+        
         if not callsign_mappings:
             self.logger.info(
-                f"No callsign mappings found for stream {self.stream.id} - callsign mapping will not be applied"
+                f"No enabled callsign mappings found for stream {self.stream.id} - callsign mapping will not be applied"
             )
             # If skip mode is enabled and we have no mappings, we need to process locations
             # to potentially skip them all
             if fresh_stream_config.get("callsign_error_handling") != "skip":
+                # Still need to filter out disabled trackers even if no enabled mappings
+                await self._filter_disabled_trackers(locations, disabled_mappings, fresh_stream_config)
                 return
 
         self.logger.info(
@@ -606,6 +612,9 @@ class StreamWorker:
             f"using identifier field '{fresh_stream_config.get('callsign_identifier_field')}' "
             f"(error handling: {fresh_stream_config.get('callsign_error_handling', 'fallback')})"
         )
+
+        # First, filter out disabled trackers before applying mappings
+        await self._filter_disabled_trackers(locations, disabled_mappings, fresh_stream_config)
 
         # Apply mappings with fallback behavior
         locations_to_skip = []
@@ -748,26 +757,84 @@ class StreamWorker:
             return {}
 
     async def _load_callsign_mappings(self) -> Dict[str, any]:
-        """Load callsign mappings from database for this stream"""
+        """Load enabled callsign mappings from database for this stream"""
         try:
             # Import here to avoid circular imports
             from database import db
             from models.callsign_mapping import CallsignMapping
 
-            # Direct database query (same pattern as other services in codebase)
-            mappings = db.session.query(CallsignMapping).filter_by(stream_id=self.stream.id).all()
+            # Load only enabled callsign mappings
+            mappings = db.session.query(CallsignMapping).filter_by(
+                stream_id=self.stream.id, enabled=True
+            ).all()
 
             # Convert to dictionary for efficient lookup
             mappings_dict = {mapping.identifier_value: mapping for mapping in mappings}
 
             self.logger.debug(
-                f"Loaded {len(mappings_dict)} callsign mappings for stream {self.stream.id}"
+                f"Loaded {len(mappings_dict)} enabled callsign mappings for stream {self.stream.id}"
             )
             return mappings_dict
 
         except Exception as e:
             self.logger.error(f"Failed to load callsign mappings: {e}")
             return {}
+
+    async def _load_disabled_callsign_mappings(self) -> Dict[str, any]:
+        """Load disabled callsign mappings from database for filtering"""
+        try:
+            # Import here to avoid circular imports
+            from database import db
+            from models.callsign_mapping import CallsignMapping
+
+            # Load only disabled callsign mappings for filtering
+            disabled_mappings = db.session.query(CallsignMapping).filter_by(
+                stream_id=self.stream.id, enabled=False
+            ).all()
+
+            # Convert to dictionary for efficient lookup
+            disabled_dict = {mapping.identifier_value: mapping for mapping in disabled_mappings}
+
+            self.logger.debug(
+                f"Loaded {len(disabled_dict)} disabled callsign mappings for stream {self.stream.id}"
+            )
+            return disabled_dict
+
+        except Exception as e:
+            self.logger.error(f"Failed to load disabled callsign mappings: {e}")
+            return {}
+
+    async def _filter_disabled_trackers(self, locations: List[Dict], disabled_mappings: Dict, fresh_stream_config: Dict) -> None:
+        """Filter out locations from disabled trackers"""
+        if not disabled_mappings:
+            return
+
+        identifier_field = fresh_stream_config.get("callsign_identifier_field")
+        if not identifier_field:
+            return
+
+        locations_to_remove = []
+        
+        for i, location in enumerate(locations):
+            try:
+                identifier = self._extract_identifier(location, identifier_field)
+                if identifier and identifier in disabled_mappings:
+                    locations_to_remove.append(i)
+                    self.logger.debug(
+                        f"Filtering out disabled tracker: '{identifier}' (name: {location.get('name', 'Unknown')})"
+                    )
+            except Exception as e:
+                self.logger.error(f"Error checking if tracker is disabled: {e}")
+
+        # Remove disabled tracker locations (in reverse order to maintain indices)
+        for i in reversed(locations_to_remove):
+            removed_location = locations.pop(i)
+            self.logger.info(
+                f"Removed location from disabled tracker: {removed_location.get('name', 'Unknown')}"
+            )
+
+        if locations_to_remove:
+            self.logger.info(f"Filtered out {len(locations_to_remove)} locations from disabled trackers")
 
     def _extract_identifier(self, location: Dict, identifier_field: str = None) -> str:
         """Extract identifier value from location data based on configured field"""

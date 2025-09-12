@@ -12,6 +12,157 @@ from services.tak_servers_service import TakServerConnectionTester, TakServerSer
 from services.version import get_version, get_version_info
 
 
+@pytest.mark.callsign
+class TestStreamWorkerCallsignFiltering:
+    """Test StreamWorker callsign mapping and tracker filtering functionality."""
+
+    @pytest.fixture
+    def mock_stream(self):
+        """Create a mock stream for testing."""
+        stream = Mock()
+        stream.id = 1
+        stream.name = "Test Stream"
+        stream.enable_callsign_mapping = True
+        stream.callsign_identifier_field = "imei"
+        stream.callsign_error_handling = "fallback"
+        stream.enable_per_callsign_cot_types = False
+        return stream
+
+    @pytest.fixture
+    def mock_session_manager(self):
+        """Create a mock session manager."""
+        session_manager = Mock()
+        session_manager.session = Mock()
+        return session_manager
+
+    @pytest.fixture 
+    def mock_db_manager(self):
+        """Create a mock database manager."""
+        return Mock()
+
+    @pytest.fixture
+    def stream_worker(self, mock_stream, mock_session_manager, mock_db_manager):
+        """Create a StreamWorker instance for testing."""
+        return StreamWorker(mock_stream, mock_session_manager, mock_db_manager)
+
+    @patch("database.db")
+    @patch("models.callsign_mapping.CallsignMapping")
+    async def test_load_disabled_callsign_mappings(
+        self, mock_mapping_class, mock_db, stream_worker
+    ):
+        """Test loading disabled callsign mappings."""
+        # Arrange: Mock disabled mappings
+        disabled_mapping1 = Mock()
+        disabled_mapping1.identifier_value = "123456"
+        disabled_mapping1.enabled = False
+
+        disabled_mapping2 = Mock() 
+        disabled_mapping2.identifier_value = "789012"
+        disabled_mapping2.enabled = False
+
+        mock_query = Mock()
+        mock_query.filter_by.return_value.all.return_value = [disabled_mapping1, disabled_mapping2]
+        mock_db.session.query.return_value = mock_query
+
+        # Act: Load disabled mappings
+        disabled_mappings = await stream_worker._load_disabled_callsign_mappings()
+
+        # Assert: Should return dictionary of disabled mappings
+        assert len(disabled_mappings) == 2
+        assert "123456" in disabled_mappings
+        assert "789012" in disabled_mappings
+        assert disabled_mappings["123456"] == disabled_mapping1
+        assert disabled_mappings["789012"] == disabled_mapping2
+
+        # Verify correct query was made
+        mock_db.session.query.assert_called_once_with(mock_mapping_class)
+        mock_query.filter_by.assert_called_once_with(stream_id=1, enabled=False)
+
+    async def test_filter_disabled_trackers(self, stream_worker):
+        """Test filtering out disabled trackers from locations."""
+        # Arrange: Mock locations and disabled mappings
+        locations = [
+            {"name": "Tracker1", "identifier": "123456", "lat": 1.0, "lon": 1.0},
+            {"name": "Tracker2", "identifier": "789012", "lat": 2.0, "lon": 2.0}, 
+            {"name": "Tracker3", "identifier": "345678", "lat": 3.0, "lon": 3.0},
+        ]
+
+        disabled_mappings = {
+            "789012": Mock(identifier_value="789012", enabled=False)  # Tracker2 is disabled
+        }
+
+        fresh_stream_config = {
+            "callsign_identifier_field": "identifier"
+        }
+
+        # Act: Filter disabled trackers
+        await stream_worker._filter_disabled_trackers(locations, disabled_mappings, fresh_stream_config)
+
+        # Assert: Disabled tracker should be removed
+        assert len(locations) == 2
+        assert locations[0]["identifier"] == "123456"  # Tracker1 remains
+        assert locations[1]["identifier"] == "345678"  # Tracker3 remains
+        # Tracker2 (789012) should be removed
+
+    async def test_filter_disabled_trackers_no_disabled_mappings(self, stream_worker):
+        """Test filtering when no disabled mappings exist."""
+        # Arrange: Mock locations with no disabled mappings
+        locations = [
+            {"name": "Tracker1", "identifier": "123456", "lat": 1.0, "lon": 1.0},
+            {"name": "Tracker2", "identifier": "789012", "lat": 2.0, "lon": 2.0},
+        ]
+
+        disabled_mappings = {}  # No disabled mappings
+        fresh_stream_config = {"callsign_identifier_field": "identifier"}
+
+        # Act: Filter disabled trackers
+        await stream_worker._filter_disabled_trackers(locations, disabled_mappings, fresh_stream_config)
+
+        # Assert: All locations should remain
+        assert len(locations) == 2
+
+    async def test_filter_disabled_trackers_no_identifier_field(self, stream_worker):
+        """Test filtering when no identifier field is configured."""
+        # Arrange: Mock locations with no identifier field
+        locations = [
+            {"name": "Tracker1", "identifier": "123456", "lat": 1.0, "lon": 1.0},
+        ]
+
+        disabled_mappings = {"123456": Mock(identifier_value="123456", enabled=False)}
+        fresh_stream_config = {"callsign_identifier_field": None}  # No identifier field
+
+        # Act: Filter disabled trackers
+        await stream_worker._filter_disabled_trackers(locations, disabled_mappings, fresh_stream_config)
+
+        # Assert: All locations should remain (no filtering possible without identifier field)
+        assert len(locations) == 1
+
+    @patch("database.db")
+    @patch("models.callsign_mapping.CallsignMapping")
+    async def test_load_callsign_mappings_only_enabled(
+        self, mock_mapping_class, mock_db, stream_worker
+    ):
+        """Test that callsign mappings only loads enabled mappings."""
+        # Arrange: Mock enabled mappings only
+        enabled_mapping = Mock()
+        enabled_mapping.identifier_value = "123456"
+        enabled_mapping.enabled = True
+
+        mock_query = Mock()
+        mock_query.filter_by.return_value.all.return_value = [enabled_mapping]
+        mock_db.session.query.return_value = mock_query
+
+        # Act: Load callsign mappings
+        mappings = await stream_worker._load_callsign_mappings()
+
+        # Assert: Should only return enabled mappings
+        assert len(mappings) == 1
+        assert "123456" in mappings
+
+        # Verify correct query was made with enabled=True filter
+        mock_query.filter_by.assert_called_once_with(stream_id=1, enabled=True)
+
+
 class TestStreamManager:
     """Test the StreamManager service."""
 

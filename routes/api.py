@@ -763,6 +763,27 @@ def discover_trackers():
         # Extract tracker data from the successful discovery
         tracker_data = result.get("tracker_data", [])
 
+        # Get existing callsign mappings to preserve enabled state for existing trackers
+        existing_mappings = {}
+        if stream_id:
+            from models.callsign_mapping import CallsignMapping
+            mappings = CallsignMapping.query.filter_by(stream_id=stream_id).all()
+            for mapping in mappings:
+                existing_mappings[mapping.identifier_value] = {
+                    "enabled": mapping.enabled,
+                    "custom_callsign": mapping.custom_callsign,
+                    "cot_type": mapping.cot_type
+                }
+
+        # Add enabled field to each tracker, defaulting to True for new trackers
+        # and preserving existing state for known trackers
+        for tracker in tracker_data:
+            identifier_value = tracker.get("identifier", "")
+            if identifier_value in existing_mappings:
+                tracker["enabled"] = existing_mappings[identifier_value]["enabled"]
+            else:
+                tracker["enabled"] = True  # Default enabled for new trackers
+
         # Get available fields from plugin if it supports callsign mapping
         available_fields = []
         if hasattr(plugin, "get_available_fields"):
@@ -867,6 +888,7 @@ def update_callsign_mappings(stream_id):
                     identifier_value=mapping_data["identifier_value"],
                     custom_callsign=mapping_data["custom_callsign"],
                     cot_type=mapping_data.get("cot_type"),
+                    enabled=mapping_data.get("enabled", True),  # Include enabled field
                 )
                 db.session.add(mapping)
 
