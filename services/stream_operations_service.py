@@ -668,7 +668,10 @@ class StreamOperationsService:
 
         # Extract callsign mapping data from form
         mapping_index = 0
-        while f"callsign_mapping_{mapping_index}_identifier" in data:
+        while any(
+            key.startswith(f"callsign_mapping_{mapping_index}_")
+            for key in data.keys()
+        ):
             identifier_key = f"callsign_mapping_{mapping_index}_identifier"
             callsign_key = f"callsign_mapping_{mapping_index}_callsign"
             cot_type_key = f"callsign_mapping_{mapping_index}_cot_type"
