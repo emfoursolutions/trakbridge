@@ -48,8 +48,12 @@ class TestTakServerService:
         mock_certificate.subject.rfc4514_string.return_value = "CN=test,O=example"
         mock_certificate.issuer.rfc4514_string.return_value = "CN=CA,O=example"
         mock_certificate.serial_number = 12345
-        mock_certificate.not_valid_before_utc = datetime(2024, 1, 1, tzinfo=timezone.utc)
-        mock_certificate.not_valid_after_utc = datetime(2025, 12, 31, tzinfo=timezone.utc)
+        mock_certificate.not_valid_before_utc = datetime(
+            2024, 1, 1, tzinfo=timezone.utc
+        )
+        mock_certificate.not_valid_after_utc = datetime(
+            2025, 12, 31, tzinfo=timezone.utc
+        )
         mock_certificate.not_valid_before = datetime(2024, 1, 1)
         mock_certificate.not_valid_after = datetime(2025, 12, 31)
 

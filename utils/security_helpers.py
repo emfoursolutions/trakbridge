@@ -51,7 +51,9 @@ def mask_sensitive_value(value: str, show_chars: int = 2) -> str:
     return f"{value[:show_chars]}{'*' * (len(value) - show_chars * 2)}{value[-show_chars:]}"
 
 
-def safe_debug_log(logger_obj: logging.Logger, message: str, sensitive_data: dict = None) -> None:
+def safe_debug_log(
+    logger_obj: logging.Logger, message: str, sensitive_data: dict = None
+) -> None:
     """
     Safely log debug information with sensitive data masking.
 
@@ -143,7 +145,9 @@ def validate_safe_path(
                 # Path is not within this base directory
                 continue
 
-        logger.warning(f"Path validation failed: {file_path} not in allowed directories")
+        logger.warning(
+            f"Path validation failed: {file_path} not in allowed directories"
+        )
         return False
 
     except (OSError, ValueError) as e:
@@ -459,7 +463,9 @@ class SecureSubprocessRunner:
 
         try:
             # Remove potentially dangerous kwargs
-            safe_kwargs = {k: v for k, v in kwargs.items() if k not in ["shell", "executable"]}
+            safe_kwargs = {
+                k: v for k, v in kwargs.items() if k not in ["shell", "executable"]
+            }
 
             # Ensure shell is never True
             safe_kwargs["shell"] = False

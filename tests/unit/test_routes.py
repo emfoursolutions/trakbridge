@@ -152,7 +152,9 @@ class TestCallsignAPIRoutes:
 
         # Assert: Should NOT return 500 (internal server error) anymore
         # The core fix is that get_plugin_instance() method error is resolved
-        assert response.status_code != 500, f"Discover trackers returned 500 error, fix not applied"
+        assert (
+            response.status_code != 500
+        ), f"Discover trackers returned 500 error, fix not applied"
 
         # Should return proper status codes (200/400 for valid requests, 401/503 for auth/startup)
         assert response.status_code in [
@@ -225,8 +227,12 @@ class TestCallsignAPIRoutes:
             data = response.get_json()
             if data.get("success") and "trackers" in data:
                 for tracker in data["trackers"]:
-                    assert "enabled" in tracker, "Each tracker should have an enabled field"
-                    assert isinstance(tracker["enabled"], bool), "Enabled field should be boolean"
+                    assert (
+                        "enabled" in tracker
+                    ), "Each tracker should have an enabled field"
+                    assert isinstance(
+                        tracker["enabled"], bool
+                    ), "Enabled field should be boolean"
 
     def test_discover_trackers_preserves_existing_enabled_state(self, client):
         """Test discover-trackers endpoint preserves enabled state for existing trackers in edit mode"""
@@ -251,7 +257,7 @@ class TestCallsignAPIRoutes:
                     "enabled": True,
                 },
                 {
-                    "identifier_value": "987654321", 
+                    "identifier_value": "987654321",
                     "custom_callsign": "BRAVO-1",
                     "cot_type": "a-f-G-U-C",
                     "enabled": False,
@@ -269,7 +275,7 @@ class TestCallsignAPIRoutes:
         # Arrange: Prepare test data without explicit enabled field
         test_data = {
             "enable_callsign_mapping": True,
-            "callsign_identifier_field": "imei", 
+            "callsign_identifier_field": "imei",
             "mappings": [
                 {
                     "identifier_value": "123456789",
@@ -328,7 +334,9 @@ class TestCallsignAPIRoutes:
             response = client.get(f"/api/plugins/{plugin_type}/available-fields")
 
             # Assert: Should NOT return 500 (internal server error) anymore
-            assert response.status_code != 500, f"Plugin {plugin_type} still returns 500 error"
+            assert (
+                response.status_code != 500
+            ), f"Plugin {plugin_type} still returns 500 error"
 
             # Should return either proper JSON (if auth bypassed) or auth-related status
             assert response.status_code in [
@@ -383,7 +391,9 @@ class TestStreamRoutesCallsignIntegration:
             from models.tak_server import TakServer
 
             # Arrange: Create test TAK server
-            tak_server = TakServer(name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087)
+            tak_server = TakServer(
+                name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
+            )
             db_session.add(tak_server)
             db_session.commit()
 
@@ -421,10 +431,14 @@ class TestStreamRoutesCallsignIntegration:
                     assert stream.enable_callsign_mapping is True
                     assert stream.callsign_identifier_field == "imei"
 
-                    mappings = CallsignMapping.query.filter_by(stream_id=stream.id).all()
+                    mappings = CallsignMapping.query.filter_by(
+                        stream_id=stream.id
+                    ).all()
                     assert len(mappings) >= 1  # At least one mapping created
 
-    def test_edit_stream_form_with_callsign_updates(self, authenticated_client, app, db_session):
+    def test_edit_stream_form_with_callsign_updates(
+        self, authenticated_client, app, db_session
+    ):
         """Test editing stream via form with callsign mapping updates - FAILING TEST FIRST"""
         # Get authenticated client for admin user
         client = authenticated_client("admin")
@@ -437,7 +451,9 @@ class TestStreamRoutesCallsignIntegration:
             from models.tak_server import TakServer
 
             # Arrange: Create test stream
-            tak_server = TakServer(name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087)
+            tak_server = TakServer(
+                name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
+            )
             db_session.add(tak_server)
             db_session.commit()
 
@@ -489,7 +505,9 @@ class TestStreamRoutesCallsignIntegration:
             from models.tak_server import TakServer
 
             # Arrange: Create test TAK server
-            tak_server = TakServer(name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087)
+            tak_server = TakServer(
+                name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
+            )
             db_session.add(tak_server)
             db_session.commit()
 
@@ -517,7 +535,9 @@ class TestStreamRoutesCallsignIntegration:
                     assert stream.enable_callsign_mapping is False
                     assert stream.callsign_identifier_field is None
 
-    def test_stream_form_validation_handles_callsign_data(self, authenticated_client, app):
+    def test_stream_form_validation_handles_callsign_data(
+        self, authenticated_client, app
+    ):
         """Test stream form validation includes callsign fields - FAILING TEST FIRST"""
         # Get authenticated client for admin user
         client = authenticated_client("admin")
@@ -551,7 +571,9 @@ class TestStreamRoutesCallsignIntegration:
         ):
             # Form response - should contain some indication of validation or form processing
             response_text = response.get_data(as_text=True)
-            assert len(response_text) > 100  # Basic check that we got a meaningful response
+            assert (
+                len(response_text) > 100
+            )  # Basic check that we got a meaningful response
 
         elif response.status_code in [400, 401, 503]:
             # Error responses are acceptable for validation failures
@@ -572,7 +594,9 @@ class TestStreamRoutesCallsignIntegration:
             from models.tak_server import TakServer
 
             # Arrange: Create test stream with callsign mappings
-            tak_server = TakServer(name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087)
+            tak_server = TakServer(
+                name=f"Test Server {uuid.uuid4()}", host="localhost", port=8087
+            )
             db_session.add(tak_server)
             db_session.commit()
 

@@ -153,11 +153,15 @@ class KeyRotationService:
             return backup_dir
         except (OSError, PermissionError) as e:
             logger.error(f"Cannot access mounted backup directory {backup_dir}: {e}")
-            logger.error("Ensure the backup volume is properly mounted in docker-compose.yml")
+            logger.error(
+                "Ensure the backup volume is properly mounted in docker-compose.yml"
+            )
             raise PermissionError(f"Cannot create backup directory: {e}")
 
     @staticmethod
-    def _backup_sqlite(db_info: Dict[str, Any], backup_dir: Path, timestamp: str) -> Dict[str, Any]:
+    def _backup_sqlite(
+        db_info: Dict[str, Any], backup_dir: Path, timestamp: str
+    ) -> Dict[str, Any]:
         """Backup SQLite database"""
         try:
             db_path = db_info["path"]
@@ -176,7 +180,9 @@ class KeyRotationService:
             return {"success": False, "error": str(e), "backup_path": None}
 
     @staticmethod
-    def _backup_mysql(db_info: Dict[str, Any], backup_dir: Path, timestamp: str) -> Dict[str, Any]:
+    def _backup_mysql(
+        db_info: Dict[str, Any], backup_dir: Path, timestamp: str
+    ) -> Dict[str, Any]:
         """Backup MySQL database with security validation"""
         try:
             # Validate backup directory
@@ -217,7 +223,9 @@ class KeyRotationService:
                     host = host_port
 
             except (IndexError, ValueError) as e:
-                logger.warning(f"Could not parse host/port from URI, using defaults: {e}")
+                logger.warning(
+                    f"Could not parse host/port from URI, using defaults: {e}"
+                )
 
             # Validate host and port
             if not host or not port:
@@ -270,7 +278,9 @@ class KeyRotationService:
                 env["MYSQL_PWD"] = password.strip()
                 cmd.extend(["-u", db_params["username"]])
             else:
-                logger.warning("Could not retrieve database credentials from secret manager")
+                logger.warning(
+                    "Could not retrieve database credentials from secret manager"
+                )
 
             # Validate command before execution
             if not runner.validate_command(cmd):
@@ -358,7 +368,9 @@ class KeyRotationService:
                     host = host_port
 
             except (IndexError, ValueError) as e:
-                logger.warning(f"Could not parse host/port from URI, using defaults: {e}")
+                logger.warning(
+                    f"Could not parse host/port from URI, using defaults: {e}"
+                )
 
             # Validate host and port
             if not host or not port:
@@ -409,7 +421,9 @@ class KeyRotationService:
                 # Set password environment variable (strip any whitespace/newlines)
                 env["PGPASSWORD"] = password.strip()
             else:
-                logger.warning("Could not retrieve database credentials from secret manager")
+                logger.warning(
+                    "Could not retrieve database credentials from secret manager"
+                )
 
             # Initialize secure subprocess runner and validate command
             runner = SecureSubprocessRunner(["pg_dump"])
@@ -648,13 +662,17 @@ class KeyRotationService:
 
                     if result["success"]:
                         self._log(f"{result['message']}")
-                        self._log(f"Rotated {result['rotated_count']} certificate passwords")
+                        self._log(
+                            f"Rotated {result['rotated_count']} certificate passwords"
+                        )
 
                         if result["errors"]:
                             for error in result["errors"]:
                                 self._log(f"Error: {error}")
                     else:
-                        self._log(f"Key rotation failed: {result.get('error', 'Unknown error')}")
+                        self._log(
+                            f"Key rotation failed: {result.get('error', 'Unknown error')}"
+                        )
                         return None
 
                     # Step 4: Update key storage
@@ -667,10 +685,14 @@ class KeyRotationService:
                             f"Key storage updated: {storage_result.get('message', 'Success')}"
                         )
                     else:
-                        self._log(f"Key storage update failed: {storage_result.get('error')}")
+                        self._log(
+                            f"Key storage update failed: {storage_result.get('error')}"
+                        )
 
                     self._log("Key rotation completed successfully!")
-                    self._log("IMPORTANT: Restart the application for changes to take effect.")
+                    self._log(
+                        "IMPORTANT: Restart the application for changes to take effect."
+                    )
 
             except Exception as e:
                 self._log(f"Key rotation failed: {e}")
@@ -700,7 +722,9 @@ class KeyRotationService:
         self.rotation_log.append(log_entry)
         logger.info(f"Key Rotation: {message}")
 
-    def _create_database_backup_with_data(self, db_info: Dict[str, Any]) -> Dict[str, Any]:
+    def _create_database_backup_with_data(
+        self, db_info: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Create a backup of the database using pre-fetched data"""
         try:
             db_type = db_info["type"]

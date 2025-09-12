@@ -25,21 +25,25 @@ class TakServer(db.Model, TimestampMixin):
     # TLS Configuration - Updated for P12 support
     cert_p12 = db.Column(db.LargeBinary)  # Store P12 certificate file as binary
     cert_p12_filename = db.Column(db.String(255))  # Store original filename
-    cert_password = db.Column(db.String(255))  # Password for P12 certificate (encrypted)
+    cert_password = db.Column(
+        db.String(255)
+    )  # Password for P12 certificate (encrypted)
     verify_ssl = db.Column(db.Boolean, default=True)
-    tls_version = db.Column(db.String(10), default="1.3", nullable=False)  # TLS version: 1.3, 1.2, 1.1, auto
+    tls_version = db.Column(
+        db.String(10), default="1.3", nullable=False
+    )  # TLS version: 1.3, 1.2, 1.1, auto
 
-    # Legacy single-server relationship (maintained for backward compatibility) 
+    # Legacy single-server relationship (maintained for backward compatibility)
     streams = db.relationship(
         "Stream", back_populates="tak_server", lazy=True, cascade="all, delete-orphan"
     )
-    
+
     # New many-to-many relationship with streams
     streams_many = db.relationship(
         "Stream",
-        secondary="stream_tak_servers", 
+        secondary="stream_tak_servers",
         back_populates="tak_servers",
-        lazy='dynamic'  # Use dynamic loading for better performance
+        lazy="dynamic",  # Use dynamic loading for better performance
     )
 
     def __repr__(self):
@@ -62,7 +66,9 @@ class TakServer(db.Model, TimestampMixin):
             import logging
 
             logger = logging.getLogger(__name__)
-            logger.error(f"Failed to decrypt certificate password for server {self.id}: {e}")
+            logger.error(
+                f"Failed to decrypt certificate password for server {self.id}: {e}"
+            )
             return ""
 
     def set_cert_password(self, password: str):
@@ -79,7 +85,9 @@ class TakServer(db.Model, TimestampMixin):
             import logging
 
             logger = logging.getLogger(__name__)
-            logger.error(f"Failed to encrypt certificate password for server {self.id}: {e}")
+            logger.error(
+                f"Failed to encrypt certificate password for server {self.id}: {e}"
+            )
             raise
 
     def to_dict(self):
@@ -104,12 +112,14 @@ class TakServer(db.Model, TimestampMixin):
         """Get all streams associated with this server (both relationships)"""
         # Get streams from legacy single-server relationship
         legacy_streams = list(self.streams)
-        
+
         # Get streams from Phase 2B multi-server relationship
         multi_streams = list(self.streams_many.all())
-        
+
         # Combine and avoid duplicates using dict comprehension (in case a stream uses both relationships)
-        all_streams = list({stream.id: stream for stream in legacy_streams + multi_streams}.values())
+        all_streams = list(
+            {stream.id: stream for stream in legacy_streams + multi_streams}.values()
+        )
         return all_streams
 
     def has_any_streams(self) -> bool:

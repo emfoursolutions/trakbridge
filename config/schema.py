@@ -118,7 +118,9 @@ class SecurityConfig:
 
     # CORS settings
     cors_origins: List[str] = field(default_factory=list)
-    cors_methods: List[str] = field(default_factory=lambda: ["GET", "POST", "PUT", "DELETE"])
+    cors_methods: List[str] = field(
+        default_factory=lambda: ["GET", "POST", "PUT", "DELETE"]
+    )
 
 
 @dataclass
@@ -376,7 +378,9 @@ def get_config_documentation() -> Dict[str, Any]:
     }
 
 
-def validate_config_against_schema(config: Dict[str, Any], schema: Dict[str, Any]) -> List[str]:
+def validate_config_against_schema(
+    config: Dict[str, Any], schema: Dict[str, Any]
+) -> List[str]:
     """Validate configuration against JSON schema."""
     errors = []
 
@@ -400,22 +404,34 @@ def validate_config_against_schema(config: Dict[str, Any], schema: Dict[str, Any
 
             # Enum validation
             if "enum" in field_schema and value not in field_schema["enum"]:
-                errors.append(f"{field_name} must be one of: {', '.join(field_schema['enum'])}")
+                errors.append(
+                    f"{field_name} must be one of: {', '.join(field_schema['enum'])}"
+                )
 
             # Range validation
             if isinstance(value, int):
                 if "minimum" in field_schema and value < field_schema["minimum"]:
-                    errors.append(f"{field_name} must be at least {field_schema['minimum']}")
+                    errors.append(
+                        f"{field_name} must be at least {field_schema['minimum']}"
+                    )
                 if "maximum" in field_schema and value > field_schema["maximum"]:
-                    errors.append(f"{field_name} must be at most {field_schema['maximum']}")
+                    errors.append(
+                        f"{field_name} must be at most {field_schema['maximum']}"
+                    )
 
             # String length validation
             if isinstance(value, str):
-                if "minLength" in field_schema and len(value) < field_schema["minLength"]:
+                if (
+                    "minLength" in field_schema
+                    and len(value) < field_schema["minLength"]
+                ):
                     errors.append(
                         f"{field_name} must be at least {field_schema['minLength']} characters"
                     )
-                if "maxLength" in field_schema and len(value) > field_schema["maxLength"]:
+                if (
+                    "maxLength" in field_schema
+                    and len(value) > field_schema["maxLength"]
+                ):
                     errors.append(
                         f"{field_name} must be at most {field_schema['maxLength']} characters"
                     )

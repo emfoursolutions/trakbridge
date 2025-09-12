@@ -122,10 +122,12 @@ def setup_logging(app):
         logging.INFO if app.config.get("SQLALCHEMY_RECORD_QUERIES") else logging.WARNING
     )
     logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
-    
+
     # Configure PyTAK logging level
     pytak_log_level = app.config.get("PYTAK_LOG_LEVEL", "WARNING")
-    logging.getLogger("pytak").setLevel(getattr(logging, pytak_log_level, logging.WARNING))
+    logging.getLogger("pytak").setLevel(
+        getattr(logging, pytak_log_level, logging.WARNING)
+    )
 
     app.logger.info(f"Logging Service Started - Version: {version}")
 
@@ -281,7 +283,9 @@ def log_primary_startup_banner(app, worker_count: Optional[int] = None):
     except Exception as e:
         app.logger.error(f"Failed to log primary startup banner: {e}")
         # Fallback to basic logging
-        app.logger.info(f"TrakBridge Primary Process starting - Version: {get_version()}")
+        app.logger.info(
+            f"TrakBridge Primary Process starting - Version: {get_version()}"
+        )
         if worker_count:
             app.logger.info(f"Starting with {worker_count} worker processes")
 
@@ -304,4 +308,6 @@ def log_worker_initialization(app, worker_pid: Optional[int] = None):
             f"Worker process initialized - PID: {worker_pid} - Version: {get_version()}"
         )
     except Exception as e:
-        app.logger.info(f"Worker process initialized - PID: {worker_pid} - Version: unknown")
+        app.logger.info(
+            f"Worker process initialized - PID: {worker_pid} - Version: unknown"
+        )

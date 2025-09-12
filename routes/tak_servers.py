@@ -85,7 +85,9 @@ def validate_certificate():
         # Validate file size (max 5MB)
         if len(cert_data) > 5 * 1024 * 1024:
             return (
-                jsonify({"success": False, "error": "Certificate file too large (max 5MB)"}),
+                jsonify(
+                    {"success": False, "error": "Certificate file too large (max 5MB)"}
+                ),
                 400,
             )
 
@@ -122,7 +124,9 @@ def validate_stored_certificate(server_id):
 
     except Exception as e:
         return (
-            jsonify({"success": False, "error": f"Certificate validation failed: {str(e)}"}),
+            jsonify(
+                {"success": False, "error": f"Certificate validation failed: {str(e)}"}
+            ),
             500,
         )
 
@@ -208,13 +212,17 @@ def create_tak_server():
                 cert_p12_data, cert_password
             )
             if not validation_result["success"]:
-                raise ValueError(f"Certificate validation failed: {validation_result['error']}")
+                raise ValueError(
+                    f"Certificate validation failed: {validation_result['error']}"
+                )
 
         # Log the data being inserted
         logger.info(
             f"Creating TAK server: {data.get('name')} at {data.get('host')}:{data.get('port')}"
         )
-        logger.info(f"Protocol: {data.get('protocol', 'tls')}, SSL Verify: {verify_ssl}")
+        logger.info(
+            f"Protocol: {data.get('protocol', 'tls')}, SSL Verify: {verify_ssl}"
+        )
         logger.info(f"Certificate: {'Yes' if cert_p12_data else 'No'}")
 
         server = TakServer(
@@ -352,7 +360,9 @@ def edit_tak_server(server_id):
                 cert_p12_data, cert_password
             )
             if not validation_result["success"]:
-                raise ValueError(f"Certificate validation failed: {validation_result['error']}")
+                raise ValueError(
+                    f"Certificate validation failed: {validation_result['error']}"
+                )
 
         server.name = data["name"]
         server.host = data["host"]
@@ -462,7 +472,9 @@ def test_tak_server_config():
         for field in required_fields:
             if not data.get(field):
                 return (
-                    jsonify({"success": False, "error": f"Missing required field: {field}"}),
+                    jsonify(
+                        {"success": False, "error": f"Missing required field: {field}"}
+                    ),
                     400,
                 )
 

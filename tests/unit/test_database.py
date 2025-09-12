@@ -78,7 +78,9 @@ class TestDatabaseOperations:
         """Test CRUD operations on TakServer model."""
         with app.app_context():
             # Create
-            server = TakServer(name="Test Server", host="localhost", port=8089, protocol="tcp")
+            server = TakServer(
+                name="Test Server", host="localhost", port=8089, protocol="tcp"
+            )
             db_session.add(server)
             db_session.commit()
 
@@ -92,7 +94,9 @@ class TestDatabaseOperations:
         """Test database relationships between models."""
         with app.app_context():
             # Create a user
-            user = User(username="owner", email="owner@example.com", role=UserRole.ADMIN)
+            user = User(
+                username="owner", email="owner@example.com", role=UserRole.ADMIN
+            )
             db_session.add(user)
             db_session.commit()
 

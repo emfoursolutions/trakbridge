@@ -110,7 +110,9 @@ class TestSessionManagement:
 
         with app.app_context():
             # Create a user
-            user = User(username="sessionuser", email="session@example.com", role=UserRole.USER)
+            user = User(
+                username="sessionuser", email="session@example.com", role=UserRole.USER
+            )
             db_session.add(user)
             db_session.commit()
 

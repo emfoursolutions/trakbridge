@@ -145,6 +145,7 @@ def api_status():
     # Handle stream_manager import carefully
     try:
         from services.stream_manager import get_stream_manager
+
         stream_manager = get_stream_manager()
 
         running_workers = len(stream_manager.workers) if stream_manager else 0
@@ -220,10 +221,16 @@ def detailed_health_check():
     start_time = time.time()
 
     checks = {
-        "database": get_cached_health_check("database", health_service.run_all_database_checks),
+        "database": get_cached_health_check(
+            "database", health_service.run_all_database_checks
+        ),
         "encryption": get_cached_health_check("encryption", check_encryption_health),
-        "configuration": get_cached_health_check("configuration", check_configuration_health),
-        "stream_manager": get_cached_health_check("stream_manager", check_stream_manager_health),
+        "configuration": get_cached_health_check(
+            "configuration", check_configuration_health
+        ),
+        "stream_manager": get_cached_health_check(
+            "stream_manager", check_stream_manager_health
+        ),
         "system": get_cached_health_check("system", check_system_health),
         "streams": get_cached_health_check("streams", check_streams_health),
         "tak_servers": get_cached_health_check("tak_servers", check_tak_servers_health),
@@ -290,7 +297,9 @@ def readiness_check():
                 503,
             )
 
-    return jsonify({"status": "ready", "timestamp": datetime.now(timezone.utc).isoformat()})
+    return jsonify(
+        {"status": "ready", "timestamp": datetime.now(timezone.utc).isoformat()}
+    )
 
 
 @bp.route("/health/live")
@@ -355,7 +364,9 @@ def check_configuration_health():
             message = f"{valid_configs}/{total_configs} configuration files are valid"
         else:
             overall_status = "unhealthy"
-            message = f"Only {valid_configs}/{total_configs} configuration files are valid"
+            message = (
+                f"Only {valid_configs}/{total_configs} configuration files are valid"
+            )
 
         # Build detailed response
         health_response = {
@@ -375,7 +386,9 @@ def check_configuration_health():
             invalid_details = []
             for config_name, result in results.items():
                 if result is not True:
-                    invalid_details.append({"config": config_name, "error": str(result)})
+                    invalid_details.append(
+                        {"config": config_name, "error": str(result)}
+                    )
             health_response["details"]["invalid_configs_details"] = invalid_details
 
         return health_response
@@ -487,7 +500,8 @@ def get_all_plugin_metadata():
         metadata = get_config_service().get_all_plugin_metadata()
         # Serialize all plugin metadata for safe JSON transmission
         serialized_metadata = {
-            k: get_config_service().serialize_plugin_metadata(v) for k, v in metadata.items()
+            k: get_config_service().serialize_plugin_metadata(v)
+            for k, v in metadata.items()
         }
         return jsonify(serialized_metadata)
 
@@ -601,7 +615,9 @@ def get_category_statistics():
 def export_stream_config(stream_id):
     """Export stream configuration (sensitive fields masked)"""
     try:
-        export_data = get_config_service().export_stream_config(stream_id, include_sensitive=False)
+        export_data = get_config_service().export_stream_config(
+            stream_id, include_sensitive=False
+        )
         return jsonify(export_data)
 
     except Exception as e:
@@ -635,24 +651,26 @@ def refresh_stream_tak_workers(stream_id):
 
         stream_manager = get_stream_manager()
         success = stream_manager.refresh_stream_tak_workers(stream_id)
-        
+
         if success:
-            return jsonify({
-                "success": True,
-                "message": f"TAK workers refreshed successfully for stream {stream_id}"
-            })
+            return jsonify(
+                {
+                    "success": True,
+                    "message": f"TAK workers refreshed successfully for stream {stream_id}",
+                }
+            )
         else:
-            return jsonify({
-                "success": False,
-                "error": "Failed to refresh TAK workers"
-            }), 500
+            return (
+                jsonify({"success": False, "error": "Failed to refresh TAK workers"}),
+                500,
+            )
 
     except Exception as e:
         logger.error(f"Error refreshing TAK workers for stream {stream_id}: {e}")
-        return jsonify({
-            "success": False,
-            "error": "Failed to refresh TAK workers"
-        }), 500
+        return (
+            jsonify({"success": False, "error": "Failed to refresh TAK workers"}),
+            500,
+        )
 
 
 @bp.route("/streams/security-status")
@@ -752,7 +770,9 @@ def discover_trackers():
 
         stream_manager = getattr(current_app, "stream_manager", None)
         connection_service = ConnectionTestService(plugin_manager, stream_manager)
-        result = connection_service.discover_plugin_trackers_sync(plugin_type, plugin_config)
+        result = connection_service.discover_plugin_trackers_sync(
+            plugin_type, plugin_config
+        )
 
         if not result["success"]:
             return (
@@ -767,12 +787,13 @@ def discover_trackers():
         existing_mappings = {}
         if stream_id:
             from models.callsign_mapping import CallsignMapping
+
             mappings = CallsignMapping.query.filter_by(stream_id=stream_id).all()
             for mapping in mappings:
                 existing_mappings[mapping.identifier_value] = {
                     "enabled": mapping.enabled,
                     "custom_callsign": mapping.custom_callsign,
-                    "cot_type": mapping.cot_type
+                    "cot_type": mapping.cot_type,
                 }
 
         # Add enabled field to each tracker, defaulting to True for new trackers
@@ -800,7 +821,9 @@ def discover_trackers():
                     for field in fields
                 ]
             except Exception as e:
-                logger.warning(f"Error getting available fields from {plugin_type}: {e}")
+                logger.warning(
+                    f"Error getting available fields from {plugin_type}: {e}"
+                )
 
         return jsonify(
             {
@@ -862,9 +885,13 @@ def update_callsign_mappings(stream_id):
         from utils.config_helpers import ConfigHelper
 
         helper = ConfigHelper(data)
-        stream.enable_callsign_mapping = helper.get_bool("enable_callsign_mapping", False)
+        stream.enable_callsign_mapping = helper.get_bool(
+            "enable_callsign_mapping", False
+        )
         stream.callsign_identifier_field = helper.get("callsign_identifier_field")
-        stream.callsign_error_handling = helper.get("callsign_error_handling", "fallback")
+        stream.callsign_error_handling = helper.get(
+            "callsign_error_handling", "fallback"
+        )
         stream.enable_per_callsign_cot_types = helper.get_bool(
             "enable_per_callsign_cot_types", False
         )
@@ -894,7 +921,9 @@ def update_callsign_mappings(stream_id):
 
         db.session.commit()
 
-        return jsonify({"success": True, "message": "Callsign mappings updated successfully"})
+        return jsonify(
+            {"success": True, "message": "Callsign mappings updated successfully"}
+        )
 
     except Exception as e:
         logger.error(f"Error updating callsign mappings for stream {stream_id}: {e}")
@@ -934,7 +963,9 @@ def get_plugin_available_fields(plugin_type):
                     for field in fields
                 ]
             except Exception as e:
-                logger.warning(f"Error getting available fields from {plugin_type}: {e}")
+                logger.warning(
+                    f"Error getting available fields from {plugin_type}: {e}"
+                )
 
         return jsonify(
             {
@@ -971,12 +1002,18 @@ def check_stream_manager_health():
         )
 
         # Count active workers
-        worker_count = len(stream_manager.workers) if hasattr(stream_manager, "workers") else 0
+        worker_count = (
+            len(stream_manager.workers) if hasattr(stream_manager, "workers") else 0
+        )
 
         # Check session manager
-        session_manager_healthy = getattr(stream_manager, "session_manager", None) is not None
+        session_manager_healthy = (
+            getattr(stream_manager, "session_manager", None) is not None
+        )
 
-        status = "healthy" if (loop_running and session_manager_healthy) else "unhealthy"
+        status = (
+            "healthy" if (loop_running and session_manager_healthy) else "unhealthy"
+        )
 
         return {
             "status": status,
@@ -1078,7 +1115,11 @@ def check_streams_health():
         error_threshold = datetime.now(timezone.utc) - timedelta(minutes=15)
 
         for stream in streams:
-            if stream.last_error and stream.updated_at and stream.updated_at > error_threshold:
+            if (
+                stream.last_error
+                and stream.updated_at
+                and stream.updated_at > error_threshold
+            ):
                 recent_errors += 1
 
         # Determine status
@@ -1154,7 +1195,8 @@ def clear_expired_cache():
         expired_keys = [
             key
             for key, value in _health_cache.items()
-            if now - value["timestamp"] > CACHE_DURATION * 2  # Clear after 2x cache duration
+            if now - value["timestamp"]
+            > CACHE_DURATION * 2  # Clear after 2x cache duration
         ]
         for key in expired_keys:
             del _health_cache[key]
@@ -1173,7 +1215,9 @@ def start_cache_cleanup():
                 logger.error(f"Cache cleanup failed: {e}")
                 # Continue running despite errors
 
-    cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True, name="CacheCleanup")
+    cleanup_thread = threading.Thread(
+        target=cleanup_loop, daemon=True, name="CacheCleanup"
+    )
     cleanup_thread.start()
 
 

@@ -94,10 +94,13 @@ def list_streams():
     """Display list of all streams"""
     try:
         streams = get_display_service().get_streams_for_listing()
-        plugin_stats, plugin_metadata = get_display_service().calculate_plugin_statistics(streams)
+        plugin_stats, plugin_metadata = (
+            get_display_service().calculate_plugin_statistics(streams)
+        )
         # Serialize all plugin metadata for JSON
         plugin_metadata = {
-            k: get_config_service().serialize_plugin_metadata(v) for k, v in plugin_metadata.items()
+            k: get_config_service().serialize_plugin_metadata(v)
+            for k, v in plugin_metadata.items()
         }
 
         return render_template(
@@ -134,7 +137,7 @@ def create_stream():
             # Handle checkbox array for tak_servers (note: HTML uses name="tak_servers[]")
             if "tak_servers[]" in request.form:
                 data["tak_servers"] = request.form.getlist("tak_servers[]")
-        
+
         result = operations_service.create_stream(data)
 
         if request.is_json:
@@ -142,7 +145,9 @@ def create_stream():
         else:
             flash(result["message"], "success" if result["success"] else "error")
             if result["success"]:
-                return redirect(url_for("streams.view_stream", stream_id=result["stream_id"]))
+                return redirect(
+                    url_for("streams.view_stream", stream_id=result["stream_id"])
+                )
             else:
                 return redirect(url_for("streams.create_stream"))
 
@@ -162,7 +167,8 @@ def _render_create_form():
     plugin_metadata = get_config_service().get_all_plugin_metadata()
     # Serialize all plugin metadata for JSON
     plugin_metadata = {
-        k: get_config_service().serialize_plugin_metadata(v) for k, v in plugin_metadata.items()
+        k: get_config_service().serialize_plugin_metadata(v)
+        for k, v in plugin_metadata.items()
     }
 
     return render_template(
@@ -326,7 +332,7 @@ def edit_stream(stream_id):
             # Handle checkbox array for tak_servers (note: HTML uses name="tak_servers[]")
             if "tak_servers[]" in request.form:
                 data["tak_servers"] = request.form.getlist("tak_servers[]")
-        
+
         result = operations_service.update_stream_safely(stream_id, data)
 
         if request.is_json:
@@ -338,7 +344,9 @@ def edit_stream(stream_id):
                 return redirect(url_for("streams.view_stream", stream_id=stream_id))
             else:
                 # Use error field if available, otherwise fall back to message
-                error_msg = result.get("error", result.get("message", "Unknown error occurred"))
+                error_msg = result.get(
+                    "error", result.get("message", "Unknown error occurred")
+                )
                 flash(f"Error updating stream: {error_msg}", "error")
                 return redirect(url_for("streams.edit_stream", stream_id=stream_id))
 
@@ -358,7 +366,8 @@ def _render_edit_form(stream_id):
     plugin_metadata = get_config_service().get_all_plugin_metadata()
     # Serialize all plugin metadata for JSON
     plugin_metadata = {
-        k: get_config_service().serialize_plugin_metadata(v) for k, v in plugin_metadata.items()
+        k: get_config_service().serialize_plugin_metadata(v)
+        for k, v in plugin_metadata.items()
     }
     cot_types = cot_type_service.get_template_data()
 
@@ -403,7 +412,9 @@ def test_stream_config():
         if "plugin_type" not in data or not data["plugin_type"]:
             logger.error("Missing required field: plugin_type")
             return (
-                jsonify({"success": False, "error": "Missing required field: plugin_type"}),
+                jsonify(
+                    {"success": False, "error": "Missing required field: plugin_type"}
+                ),
                 400,
             )
 
@@ -411,7 +422,9 @@ def test_stream_config():
         if "plugin_config" not in data:
             logger.error("Missing required field: plugin_config")
             return (
-                jsonify({"success": False, "error": "Missing required field: plugin_config"}),
+                jsonify(
+                    {"success": False, "error": "Missing required field: plugin_config"}
+                ),
                 400,
             )
 
@@ -432,7 +445,9 @@ def test_stream_config():
         # Get plugin instance with merged config
         plugin_instance = plugin_manager.get_plugin(data["plugin_type"], merged_config)
         if not plugin_instance:
-            logger.error(f"Plugin type not found or failed to create: {data['plugin_type']}")
+            logger.error(
+                f"Plugin type not found or failed to create: {data['plugin_type']}"
+            )
             return (
                 jsonify(
                     {
@@ -462,7 +477,9 @@ def test_stream_config():
         except Exception as e:
             logger.error(f"Connection test failed with exception: {e}", exc_info=True)
             return (
-                jsonify({"success": False, "error": f"Connection test failed: {str(e)}"}),
+                jsonify(
+                    {"success": False, "error": f"Connection test failed: {str(e)}"}
+                ),
                 500,
             )
 

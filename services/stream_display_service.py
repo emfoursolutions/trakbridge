@@ -44,7 +44,9 @@ logger = logging.getLogger(__name__)
 class StreamDisplayService:
     """Service for handling stream display and presentation logic"""
 
-    def __init__(self, plugin_manager, status_service: Optional[StreamStatusService] = None):
+    def __init__(
+        self, plugin_manager, status_service: Optional[StreamStatusService] = None
+    ):
         self.plugin_manager = plugin_manager
         self.status_service = status_service
 
@@ -53,8 +55,7 @@ class StreamDisplayService:
         try:
             # Use joinedload to eagerly load both single and multiple server relationships
             streams = Stream.query.options(
-                joinedload(Stream.tak_server),
-                joinedload(Stream.tak_servers)
+                joinedload(Stream.tak_server), joinedload(Stream.tak_servers)
             ).all()
 
             # Prepare each stream for display
@@ -72,8 +73,7 @@ class StreamDisplayService:
         # Use joinedload to eagerly load both single and multiple server relationships
         stream = (
             Stream.query.options(
-                joinedload(Stream.tak_server),
-                joinedload(Stream.tak_servers)
+                joinedload(Stream.tak_server), joinedload(Stream.tak_servers)
             )
             .filter_by(id=stream_id)
             .first_or_404()
@@ -90,8 +90,7 @@ class StreamDisplayService:
         # Use joinedload to eagerly load both single and multiple server relationships
         stream = (
             Stream.query.options(
-                joinedload(Stream.tak_server),
-                joinedload(Stream.tak_servers)
+                joinedload(Stream.tak_server), joinedload(Stream.tak_servers)
             )
             .filter_by(id=stream_id)
             .first_or_404()
@@ -143,13 +142,17 @@ class StreamDisplayService:
             else:
                 stream.plugin_metadata = None
         except Exception as e:
-            logger.warning(f"Could not load metadata for plugin {stream.plugin_type}: {e}")
+            logger.warning(
+                f"Could not load metadata for plugin {stream.plugin_type}: {e}"
+            )
             stream.plugin_metadata = None
 
     def _add_running_status(self, stream: Stream) -> None:
         """Add running status to stream"""
         if self.status_service:
-            stream.running_status = self.status_service.get_safe_stream_status(stream.id)
+            stream.running_status = self.status_service.get_safe_stream_status(
+                stream.id
+            )
         else:
             # Fallback if no status service provided
             stream.running_status = {
@@ -177,7 +180,9 @@ class StreamDisplayService:
                 stream.cot_type_description = "Unknown COT type"
                 stream.cot_type_sidc = ""
                 stream.cot_type_category = "unknown"
-                logger.warning(f"Unknown COT type: {stream.cot_type} for stream {stream.id}")
+                logger.warning(
+                    f"Unknown COT type: {stream.cot_type} for stream {stream.id}"
+                )
         except Exception as e:
             logger.error(f"Error adding COT type info for stream {stream.id}: {e}")
             # Set safe defaults
@@ -196,7 +201,9 @@ class StreamDisplayService:
                 stream.last_poll_time = stream.last_poll.strftime("%H:%M:%S")
                 stream.last_poll_iso = stream.last_poll.isoformat()
             except Exception as e:
-                logger.warning(f"Error formatting last_poll for stream {stream.id}: {e}")
+                logger.warning(
+                    f"Error formatting last_poll for stream {stream.id}: {e}"
+                )
                 stream.last_poll_date = None
                 stream.last_poll_time = None
                 stream.last_poll_iso = None
@@ -215,10 +222,14 @@ class StreamDisplayService:
                 return
 
             # Use the stream's to_dict method that masks sensitive data
-            stream.display_config = stream.to_dict(include_sensitive=False)["plugin_config"]
+            stream.display_config = stream.to_dict(include_sensitive=False)[
+                "plugin_config"
+            ]
 
         except Exception as e:
-            logger.warning(f"Could not prepare display config for stream {stream.id}: {e}")
+            logger.warning(
+                f"Could not prepare display config for stream {stream.id}: {e}"
+            )
             stream.display_config = {}
 
     @staticmethod
@@ -270,7 +281,9 @@ class StreamDisplayService:
                         attr_value = getattr(metadata, attr_name)
                         # Skip methods
                         if not callable(attr_value):
-                            result[attr_name] = self._serialize_plugin_metadata(attr_value)
+                            result[attr_name] = self._serialize_plugin_metadata(
+                                attr_value
+                            )
                     except Exception as e:
                         logging.debug(
                             f"Attributes: {e} skipped"
@@ -306,7 +319,9 @@ class StreamDisplayService:
                 "total_messages_sent": stream.total_messages_sent or 0,
                 "tak_servers": [s.name for s in stream.get_all_tak_servers()],
                 "tak_server_count": stream.get_tak_server_count(),
-                "tak_server": stream.tak_server.name if stream.tak_server else None,  # Keep for backwards compatibility
+                "tak_server": (
+                    stream.tak_server.name if stream.tak_server else None
+                ),  # Keep for backwards compatibility
                 "poll_interval": stream.poll_interval,
                 "cot_type": stream.cot_type,
                 "cot_type_label": getattr(stream, "cot_type_label", stream.cot_type),
@@ -335,7 +350,9 @@ class StreamDisplayService:
             "has_error": bool(stream.last_error),
             "tak_server_names": [s.name for s in stream.get_all_tak_servers()],
             "tak_server_count": stream.get_tak_server_count(),
-            "tak_server_name": stream.tak_server.name if stream.tak_server else None,  # Keep for backwards compatibility
+            "tak_server_name": (
+                stream.tak_server.name if stream.tak_server else None
+            ),  # Keep for backwards compatibility
             "cot_type_label": getattr(stream, "cot_type_label", stream.cot_type),
             "cot_type_sidc": getattr(stream, "cot_type_sidc", ""),
         }
@@ -344,8 +361,7 @@ class StreamDisplayService:
         """Get summary of plugin usage across all streams"""
         try:
             streams = Stream.query.options(
-                joinedload(Stream.tak_server),
-                joinedload(Stream.tak_servers)
+                joinedload(Stream.tak_server), joinedload(Stream.tak_servers)
             ).all()
 
             # Add running status to all streams

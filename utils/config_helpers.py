@@ -49,7 +49,9 @@ def safe_config_get(config: Dict[str, Any], key: str, default: Any = None) -> An
     return config.get(key, default)
 
 
-def nested_config_get(config: Dict[str, Any], key_path: str, default: Any = None) -> Any:
+def nested_config_get(
+    config: Dict[str, Any], key_path: str, default: Any = None
+) -> Any:
     """
     Get nested configuration value using dot notation.
 
@@ -97,7 +99,9 @@ def nested_config_set(config: Dict[str, Any], key_path: str, value: Any) -> None
             current[key] = {}
         elif not isinstance(current[key], dict):
             # Convert non-dict values to dicts to continue nesting
-            logger.warning(f"Overwriting non-dict value at {key} in config path {key_path}")
+            logger.warning(
+                f"Overwriting non-dict value at {key} in config path {key_path}"
+            )
             current[key] = {}
         current = current[key]
 
@@ -105,7 +109,9 @@ def nested_config_set(config: Dict[str, Any], key_path: str, value: Any) -> None
     current[keys[-1]] = value
 
 
-def config_get_typed(config: Dict[str, Any], key: str, expected_type: Type[T], default: T) -> T:
+def config_get_typed(
+    config: Dict[str, Any], key: str, expected_type: Type[T], default: T
+) -> T:
     """
     Get configuration value with type checking and conversion.
 
@@ -193,7 +199,11 @@ def merge_configs(*configs: Dict[str, Any]) -> Dict[str, Any]:
         result = base.copy()
 
         for key, value in override.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(value, dict)
+            ):
                 result[key] = deep_merge(result[key], value)
             else:
                 result[key] = value

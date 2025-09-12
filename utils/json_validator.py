@@ -142,12 +142,16 @@ class SecureJSONValidator:
                 schema_errors = self._validate_schema(result.data, schema)
                 if schema_errors:
                     result.errors.extend(schema_errors)
-                    logger.warning(f"Schema validation failed for {context}: {schema_errors}")
+                    logger.warning(
+                        f"Schema validation failed for {context}: {schema_errors}"
+                    )
                     return result
 
             # Success
             result.valid = True
-            logger.debug(f"JSON validation successful for {context}: {result.size_bytes} bytes")
+            logger.debug(
+                f"JSON validation successful for {context}: {result.size_bytes} bytes"
+            )
 
         except Exception as e:
             result.errors.append(f"Unexpected validation error: {str(e)}")
@@ -283,7 +287,9 @@ PLUGIN_CONFIG_SCHEMA = {
 json_validator = SecureJSONValidator()
 
 
-def validate_plugin_config(config_string: str, context: str = "plugin_config") -> ValidationResult:
+def validate_plugin_config(
+    config_string: str, context: str = "plugin_config"
+) -> ValidationResult:
     """
     Validate plugin configuration JSON with appropriate schema
 

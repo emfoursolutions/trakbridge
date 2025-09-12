@@ -57,7 +57,9 @@ class ConfigMonitor:
 
     def __init__(self, config_instance, config_dir: str = None):
         self.config_instance = config_instance
-        self.config_dir = Path(config_dir) if config_dir else Path(__file__).parent / "settings"
+        self.config_dir = (
+            Path(config_dir) if config_dir else Path(__file__).parent / "settings"
+        )
         self.observer = None
         self.is_monitoring = False
         self.reload_callbacks: List[Callable] = []
@@ -90,7 +92,9 @@ class ConfigMonitor:
             # Also monitor .env file if it exists
             env_file = Path(".env")
             if env_file.exists():
-                self.observer.schedule(event_handler, str(env_file.parent), recursive=False)
+                self.observer.schedule(
+                    event_handler, str(env_file.parent), recursive=False
+                )
 
             self.observer.start()
             self.is_monitoring = True
@@ -158,7 +162,9 @@ class ConfigMonitor:
                         "path": str(file_path),
                         "exists": file_path.exists(),
                         "size": file_path.stat().st_size if file_path.exists() else 0,
-                        "modified": (file_path.stat().st_mtime if file_path.exists() else 0),
+                        "modified": (
+                            file_path.stat().st_mtime if file_path.exists() else 0
+                        ),
                     }
                 )
 
@@ -270,7 +276,9 @@ class ConfigHealthChecker:
                 health["status"] = "unhealthy"
                 health["issues"].append("MAX_CONCURRENT_STREAMS must be at least 1")
             elif max_streams > 1000:
-                health["warnings"].append("MAX_CONCURRENT_STREAMS is very large (>1000)")
+                health["warnings"].append(
+                    "MAX_CONCURRENT_STREAMS is very large (>1000)"
+                )
 
             # Check timeouts
             timeouts = [
@@ -303,13 +311,19 @@ class ConfigHealthChecker:
                 health["issues"].append("SECRET_KEY is required")
             elif len(secret_key) < 16:
                 health["status"] = "unhealthy"
-                health["issues"].append("SECRET_KEY must be at least 16 characters long")
+                health["issues"].append(
+                    "SECRET_KEY must be at least 16 characters long"
+                )
             elif secret_key == "dev-secret-key-change-in-production":
                 if self.config_instance.environment == "production":
                     health["status"] = "unhealthy"
-                    health["issues"].append("SECRET_KEY must be changed from default in production")
+                    health["issues"].append(
+                        "SECRET_KEY must be changed from default in production"
+                    )
                 else:
-                    health["warnings"].append("Using default SECRET_KEY - change for production")
+                    health["warnings"].append(
+                        "Using default SECRET_KEY - change for production"
+                    )
 
         except Exception as e:
             health["status"] = "unhealthy"
@@ -326,7 +340,9 @@ class ConfigHealthChecker:
             valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
             if log_level not in valid_levels:
                 health["status"] = "unhealthy"
-                health["issues"].append(f"LOG_LEVEL must be one of: {', '.join(valid_levels)}")
+                health["issues"].append(
+                    f"LOG_LEVEL must be one of: {', '.join(valid_levels)}"
+                )
 
             log_dir = self.config_instance.LOG_DIR
             if log_dir:
@@ -336,7 +352,9 @@ class ConfigHealthChecker:
                         log_path.mkdir(parents=True, exist_ok=True)
                     except Exception as e:
                         health["status"] = "unhealthy"
-                        health["issues"].append(f"Cannot create log directory {log_dir}: {e}")
+                        health["issues"].append(
+                            f"Cannot create log directory {log_dir}: {e}"
+                        )
                 elif not os.access(log_path, os.W_OK):
                     health["status"] = "unhealthy"
                     health["issues"].append(f"Log directory is not writable: {log_dir}")

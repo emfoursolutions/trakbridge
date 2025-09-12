@@ -62,50 +62,48 @@ class StreamOperationsService:
     def _is_concurrency_error(self, e: Exception) -> bool:
         """
         Universal concurrency error detection for all database types.
-        
+
         Detects optimistic locking conflicts, deadlocks, and other concurrency issues
         that can occur when multiple processes try to update the same record.
         """
         from sqlalchemy.exc import IntegrityError, OperationalError
-        
+
         error_str = str(e).lower()
         error_type = type(e).__name__
-        
+
         # MariaDB/MySQL specific errors
         if "1020" in error_str or "record has changed since last read" in error_str:
             return True
-        
-        # PostgreSQL specific errors  
+
+        # PostgreSQL specific errors
         if isinstance(e, OperationalError):
             postgres_patterns = [
                 "could not serialize access due to concurrent update",
-                "deadlock detected", 
+                "deadlock detected",
                 "tuple concurrently updated",
-                "could not obtain lock on row"
+                "could not obtain lock on row",
             ]
             if any(pattern in error_str for pattern in postgres_patterns):
                 return True
-        
+
         # SQLite specific errors
         if isinstance(e, OperationalError):
             sqlite_patterns = [
                 "database is locked",
-                "database table is locked", 
+                "database table is locked",
                 "cannot start a transaction within a transaction",
-                "disk i/o error"  # Can indicate lock contention
+                "disk i/o error",  # Can indicate lock contention
             ]
             if any(pattern in error_str for pattern in sqlite_patterns):
                 return True
-        
+
         # Generic IntegrityError that might indicate concurrency issues
         if isinstance(e, IntegrityError):
             # Some integrity errors are actually concurrency-related
-            integrity_patterns = [
-                "concurrent", "deadlock", "lock", "transaction"
-            ]
+            integrity_patterns = ["concurrent", "deadlock", "lock", "transaction"]
             if any(pattern in error_str for pattern in integrity_patterns):
                 return True
-        
+
         # Generic OperationalError during UPDATE operations (safe fallback)
         if isinstance(e, OperationalError):
             # If it's an OperationalError during what should be a simple UPDATE,
@@ -113,7 +111,7 @@ class StreamOperationsService:
             update_patterns = ["update", "set", "where"]
             if any(pattern in error_str for pattern in update_patterns):
                 return True
-                
+
         return False
 
     def _get_database_type(self) -> str:
@@ -133,51 +131,68 @@ class StreamOperationsService:
             # Simplified approach: Extract server IDs from tak_servers field and automatically determine mode
             server_ids_data = data.get("tak_servers", [])
             selected_server_ids = []
-            
+
             # Handle both form data (list) and JSON data
             if isinstance(server_ids_data, list):
                 selected_server_ids = [int(sid) for sid in server_ids_data if sid]
             elif server_ids_data:
                 selected_server_ids = [int(server_ids_data)]
-            
+
             # Fallback: Check for legacy field names for backward compatibility
             if not selected_server_ids:
                 # Check legacy tak_server_id field
                 if data.get("tak_server_id"):
                     selected_server_ids = [int(data["tak_server_id"])]
-                # Check legacy tak_server_ids field 
+                # Check legacy tak_server_ids field
                 elif data.get("tak_server_ids"):
                     legacy_ids = data["tak_server_ids"]
                     if isinstance(legacy_ids, list):
                         selected_server_ids = [int(sid) for sid in legacy_ids if sid]
                     else:
                         selected_server_ids = [int(legacy_ids)]
-            
+
             if not selected_server_ids:
-                return {"success": False, "error": "At least one TAK server must be selected"}
-            
+                return {
+                    "success": False,
+                    "error": "At least one TAK server must be selected",
+                }
+
             # Verify all servers exist
             from models.tak_server import TakServer
-            existing_servers = TakServer.query.filter(TakServer.id.in_(selected_server_ids)).all()
+
+            existing_servers = TakServer.query.filter(
+                TakServer.id.in_(selected_server_ids)
+            ).all()
             if len(existing_servers) != len(selected_server_ids):
                 existing_ids = [s.id for s in existing_servers]
-                missing_ids = [sid for sid in selected_server_ids if sid not in existing_ids]
-                return {"success": False, "error": f"TAK servers not found: {missing_ids}"}
-            
-            # Automatic mode detection: 1 server = single mode, multiple = multi mode  
-            server_selection_mode = "single" if len(selected_server_ids) == 1 else "multi"
-            tak_server_id = selected_server_ids[0] if server_selection_mode == "single" else None
+                missing_ids = [
+                    sid for sid in selected_server_ids if sid not in existing_ids
+                ]
+                return {
+                    "success": False,
+                    "error": f"TAK servers not found: {missing_ids}",
+                }
+
+            # Automatic mode detection: 1 server = single mode, multiple = multi mode
+            server_selection_mode = (
+                "single" if len(selected_server_ids) == 1 else "multi"
+            )
+            tak_server_id = (
+                selected_server_ids[0] if server_selection_mode == "single" else None
+            )
 
             # Extract plugin config first to get cot_type_mode
             from plugins.plugin_manager import get_plugin_manager
             from services.stream_config_service import StreamConfigService
-            
+
             plugin_manager = get_plugin_manager()
             config_service = StreamConfigService(plugin_manager)
             plugin_config = config_service.extract_plugin_config_from_request(data)
-            
+
             # Get cot_type_mode from plugin config, fallback to form data, then default
-            cot_type_mode = plugin_config.get("cot_type_mode") or data.get("cot_type_mode", "stream")
+            cot_type_mode = plugin_config.get("cot_type_mode") or data.get(
+                "cot_type_mode", "stream"
+            )
 
             # Create stream with appropriate server configuration
             stream = Stream(
@@ -189,7 +204,9 @@ class StreamOperationsService:
                 tak_server_id=tak_server_id,  # Will be None for multi-server mode
                 cot_type_mode=cot_type_mode,
                 # Callsign mapping fields
-                enable_callsign_mapping=bool(data.get("enable_callsign_mapping", False)),
+                enable_callsign_mapping=bool(
+                    data.get("enable_callsign_mapping", False)
+                ),
                 callsign_identifier_field=data.get("callsign_identifier_field"),
                 callsign_error_handling=data.get("callsign_error_handling", "fallback"),
                 enable_per_callsign_cot_types=bool(
@@ -207,13 +224,20 @@ class StreamOperationsService:
             # Phase 2C: Create multi-server relationships if in multi-server mode
             if server_selection_mode == "multi" and selected_server_ids:
                 from models.tak_server import TakServer
-                servers = TakServer.query.filter(TakServer.id.in_(selected_server_ids)).all()
+
+                servers = TakServer.query.filter(
+                    TakServer.id.in_(selected_server_ids)
+                ).all()
                 for server in servers:
                     stream.tak_servers.append(server)
-                
-                logger.info(f"Created stream '{stream.name}' with {len(servers)} TAK servers: {[s.name for s in servers]}")
+
+                logger.info(
+                    f"Created stream '{stream.name}' with {len(servers)} TAK servers: {[s.name for s in servers]}"
+                )
             else:
-                logger.info(f"Created stream '{stream.name}' with single TAK server (ID: {tak_server_id})")
+                logger.info(
+                    f"Created stream '{stream.name}' with single TAK server (ID: {tak_server_id})"
+                )
 
             # Handle callsign mappings if enabled
             if stream.enable_callsign_mapping:
@@ -222,7 +246,9 @@ class StreamOperationsService:
             session.commit()
 
             # Refresh TAK workers for the new stream configuration
-            worker_refresh_success = self.stream_manager.refresh_stream_tak_workers(stream.id)
+            worker_refresh_success = self.stream_manager.refresh_stream_tak_workers(
+                stream.id
+            )
             if not worker_refresh_success:
                 logger.warning(f"TAK worker refresh failed for new stream {stream.id}")
 
@@ -349,15 +375,17 @@ class StreamOperationsService:
             self._get_session().rollback()
             return {"success": False, "error": str(e)}
 
-    def update_stream_safely(self, stream_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
+    def update_stream_safely(
+        self, stream_id: int, data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Update stream with universal optimistic locking for all database types"""
         import time
         from sqlalchemy.orm import joinedload
-        
+
         max_retries = 3
         retry_delay = 0.1  # 100ms initial delay
         db_type = self._get_database_type()
-        
+
         for attempt in range(max_retries):
             try:
                 # Get stream with eager loading - fresh copy for each attempt
@@ -376,7 +404,7 @@ class StreamOperationsService:
                     self.stream_manager.stop_stream_sync(stream_id)
                     # Give the stream worker a moment to finish any pending operations
                     time.sleep(0.1)
-                    
+
                 # Re-fetch the stream after stopping to get the latest state
                 # This prevents race conditions with the stream worker's final updates
                 if was_running:
@@ -393,63 +421,86 @@ class StreamOperationsService:
                 # Simplified approach: Handle server assignment with automatic mode detection
                 server_ids_data = data.get("tak_servers", [])
                 selected_server_ids = []
-                
+
                 # Handle both form data (list) and JSON data
                 if isinstance(server_ids_data, list):
                     selected_server_ids = [int(sid) for sid in server_ids_data if sid]
                 elif server_ids_data:
                     selected_server_ids = [int(server_ids_data)]
-                
+
                 # Fallback: Check for legacy field names for backward compatibility
                 if not selected_server_ids:
                     # Check legacy tak_server_id field
                     if data.get("tak_server_id"):
                         selected_server_ids = [int(data["tak_server_id"])]
-                    # Check legacy tak_server_ids field 
+                    # Check legacy tak_server_ids field
                     elif data.get("tak_server_ids"):
                         legacy_ids = data["tak_server_ids"]
                         if isinstance(legacy_ids, list):
-                            selected_server_ids = [int(sid) for sid in legacy_ids if sid]
+                            selected_server_ids = [
+                                int(sid) for sid in legacy_ids if sid
+                            ]
                         else:
                             selected_server_ids = [int(legacy_ids)]
-                
+
                 if not selected_server_ids:
-                    return {"success": False, "error": "At least one TAK server must be selected"}
-                
+                    return {
+                        "success": False,
+                        "error": "At least one TAK server must be selected",
+                    }
+
                 # Verify all servers exist
                 from models.tak_server import TakServer
-                existing_servers = TakServer.query.filter(TakServer.id.in_(selected_server_ids)).all()
+
+                existing_servers = TakServer.query.filter(
+                    TakServer.id.in_(selected_server_ids)
+                ).all()
                 if len(existing_servers) != len(selected_server_ids):
                     existing_ids = [s.id for s in existing_servers]
-                    missing_ids = [sid for sid in selected_server_ids if sid not in existing_ids]
-                    return {"success": False, "error": f"TAK servers not found: {missing_ids}"}
-                
-                # Automatic mode detection: 1 server = single mode, multiple = multi mode  
-                server_selection_mode = "single" if len(selected_server_ids) == 1 else "multi"
-                
+                    missing_ids = [
+                        sid for sid in selected_server_ids if sid not in existing_ids
+                    ]
+                    return {
+                        "success": False,
+                        "error": f"TAK servers not found: {missing_ids}",
+                    }
+
+                # Automatic mode detection: 1 server = single mode, multiple = multi mode
+                server_selection_mode = (
+                    "single" if len(selected_server_ids) == 1 else "multi"
+                )
+
                 if server_selection_mode == "single":
                     # Clear multi-server relationships and set single server
                     servers_to_remove = list(stream.tak_servers)
                     for existing_server in servers_to_remove:
                         stream.tak_servers.remove(existing_server)
                     stream.tak_server_id = selected_server_ids[0]
-                    logger.info(f"Updated stream '{stream.name}' to single TAK server: {existing_servers[0].name}")
+                    logger.info(
+                        f"Updated stream '{stream.name}' to single TAK server: {existing_servers[0].name}"
+                    )
                 else:
                     # Clear single server relationship and set multi-server relationships
                     stream.tak_server_id = None
                     servers_to_remove = list(stream.tak_servers)
                     for existing_server in servers_to_remove:
                         stream.tak_servers.remove(existing_server)
-                    
+
                     for server in existing_servers:
                         stream.tak_servers.append(server)
-                    
-                    logger.info(f"Updated stream '{stream.name}' to multi-server mode with {len(existing_servers)} servers: {[s.name for s in existing_servers]}")
+
+                    logger.info(
+                        f"Updated stream '{stream.name}' to multi-server mode with {len(existing_servers)} servers: {[s.name for s in existing_servers]}"
+                    )
 
                 # Update callsign mapping fields
-                stream.enable_callsign_mapping = bool(data.get("enable_callsign_mapping", False))
+                stream.enable_callsign_mapping = bool(
+                    data.get("enable_callsign_mapping", False)
+                )
                 stream.callsign_identifier_field = data.get("callsign_identifier_field")
-                stream.callsign_error_handling = data.get("callsign_error_handling", "fallback")
+                stream.callsign_error_handling = data.get(
+                    "callsign_error_handling", "fallback"
+                )
                 stream.enable_per_callsign_cot_types = bool(
                     data.get("enable_per_callsign_cot_types", False)
                 )
@@ -464,7 +515,9 @@ class StreamOperationsService:
 
                 # Extract plugin config from request data
                 plugin_config = config_service.extract_plugin_config_from_request(data)
-                logger.debug(f"Extracted plugin config for {plugin_type}: {plugin_config}")
+                logger.debug(
+                    f"Extracted plugin config for {plugin_type}: {plugin_config}"
+                )
 
                 # Merge with existing config to preserve encrypted password fields
                 merged_config = config_service.merge_plugin_config_with_existing(
@@ -477,7 +530,9 @@ class StreamOperationsService:
                 # Note: cot_type_mode is now handled during stream creation
                 if "cot_type_mode" in merged_config:
                     stream.cot_type_mode = merged_config["cot_type_mode"]
-                    logger.debug(f"Updated stream cot_type_mode to: {merged_config['cot_type_mode']}")
+                    logger.debug(
+                        f"Updated stream cot_type_mode to: {merged_config['cot_type_mode']}"
+                    )
 
                 # Handle missing checkbox fields for all plugins
                 if plugin_type:
@@ -485,12 +540,17 @@ class StreamOperationsService:
                     if metadata:
                         for field in metadata.get("config_fields", []):
                             # Handle both dict and object (e.g., PluginConfigField)
-                            if (isinstance(field, dict) and field.get("field_type") == "checkbox") or (
+                            if (
+                                isinstance(field, dict)
+                                and field.get("field_type") == "checkbox"
+                            ) or (
                                 hasattr(field, "field_type")
                                 and getattr(field, "field_type") == "checkbox"
                             ):
                                 field_name = (
-                                    field["name"] if isinstance(field, dict) else getattr(field, "name")
+                                    field["name"]
+                                    if isinstance(field, dict)
+                                    else getattr(field, "name")
                                 )
                                 if field_name not in merged_config:
                                     merged_config[field_name] = False
@@ -503,13 +563,19 @@ class StreamOperationsService:
 
                 # Attempt to commit the transaction
                 self._get_session().commit()
-                
-                logger.debug(f"Stream {stream_id} updated successfully on {db_type} (attempt {attempt + 1})")
+
+                logger.debug(
+                    f"Stream {stream_id} updated successfully on {db_type} (attempt {attempt + 1})"
+                )
 
                 # Refresh TAK workers to match new configuration
-                worker_refresh_success = self.stream_manager.refresh_stream_tak_workers(stream_id)
+                worker_refresh_success = self.stream_manager.refresh_stream_tak_workers(
+                    stream_id
+                )
                 if not worker_refresh_success:
-                    logger.warning(f"TAK worker refresh failed for stream {stream_id}, but update succeeded")
+                    logger.warning(
+                        f"TAK worker refresh failed for stream {stream_id}, but update succeeded"
+                    )
 
                 # Restart the stream if it was running before
                 if was_running:
@@ -520,13 +586,15 @@ class StreamOperationsService:
                     "stream_id": stream.id,
                     "message": "Stream updated successfully",
                 }
-                
+
             except Exception as e:
                 # Check if this is a concurrency error using universal detection
                 if self._is_concurrency_error(e):
                     self._get_session().rollback()
                     if attempt < max_retries - 1:
-                        retry_delay_with_jitter = retry_delay * (2 ** attempt) + (attempt * 0.05)
+                        retry_delay_with_jitter = retry_delay * (2**attempt) + (
+                            attempt * 0.05
+                        )
                         logger.warning(
                             f"Concurrency conflict on {db_type} updating stream {stream_id} "
                             f"(attempt {attempt + 1}/{max_retries}), retrying in {retry_delay_with_jitter:.2f}s"
@@ -539,16 +607,18 @@ class StreamOperationsService:
                             f"due to concurrency conflicts"
                         )
                         return {
-                            "success": False, 
+                            "success": False,
                             "error": "Stream update failed due to concurrent modifications. Please try again.",
-                            "error_type": "concurrency_conflict"
+                            "error_type": "concurrency_conflict",
                         }
                 else:
                     # Non-concurrency error, don't retry
                     self._get_session().rollback()
-                    logger.error(f"Non-retryable error updating stream {stream_id} on {db_type}: {e}")
+                    logger.error(
+                        f"Non-retryable error updating stream {stream_id} on {db_type}: {e}"
+                    )
                     return {"success": False, "error": str(e)}
-        
+
         # This should never be reached, but just in case
         return {"success": False, "error": "Unexpected error in update retry logic"}
 
@@ -669,8 +739,7 @@ class StreamOperationsService:
         # Extract callsign mapping data from form
         mapping_index = 0
         while any(
-            key.startswith(f"callsign_mapping_{mapping_index}_")
-            for key in data.keys()
+            key.startswith(f"callsign_mapping_{mapping_index}_") for key in data.keys()
         ):
             identifier_key = f"callsign_mapping_{mapping_index}_identifier"
             callsign_key = f"callsign_mapping_{mapping_index}_callsign"
@@ -680,14 +749,14 @@ class StreamOperationsService:
             identifier_value = data.get(identifier_key)
             custom_callsign = data.get(callsign_key)
             cot_type = data.get(cot_type_key) or None  # Empty string becomes None
-            
+
             # Handle enabled field - checkbox data comes as 'on' or not present
             enabled_value = data.get(enabled_key)
             enabled = True  # Default to enabled
-            
+
             if isinstance(enabled_value, str):
                 # Form checkbox data: 'on' means checked/enabled, missing means unchecked/disabled
-                enabled = enabled_value.lower() in ('on', 'true', '1')
+                enabled = enabled_value.lower() in ("on", "true", "1")
             elif isinstance(enabled_value, bool):
                 # Direct boolean value (from JSON)
                 enabled = enabled_value
@@ -701,7 +770,8 @@ class StreamOperationsService:
                 mapping = CallsignMapping(
                     stream_id=stream.id,
                     identifier_value=identifier_value,
-                    custom_callsign=custom_callsign or '',  # Form data should include callsign
+                    custom_callsign=custom_callsign
+                    or "",  # Form data should include callsign
                     cot_type=cot_type,
                     enabled=enabled,
                 )

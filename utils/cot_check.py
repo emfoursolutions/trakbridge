@@ -212,7 +212,9 @@ class CoTSender:
         self.loop = None
         self.thread = None
 
-    async def send_cot_message(self, server_ip, server_port, callsign, cot_type, lat, lon):
+    async def send_cot_message(
+        self, server_ip, server_port, callsign, cot_type, lat, lon
+    ):
         """Send a CoT message to the TAK server"""
         try:
             # Create CoT message
@@ -243,7 +245,9 @@ class CoTSender:
 
         # Get current time using timezone-aware datetime
         now = datetime.datetime.now(datetime.UTC)
-        time_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")  # Simplified format without microseconds
+        time_str = now.strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )  # Simplified format without microseconds
 
         # Calculate stale time (5 minutes from now to match your example)
         stale_time = now + datetime.timedelta(minutes=5)
@@ -302,7 +306,9 @@ def send_cot():
 
         # Validate required fields
         if not callsign or not cot_type:
-            return jsonify({"success": False, "error": "Callsign and CoT Type are required"})
+            return jsonify(
+                {"success": False, "error": "Callsign and CoT Type are required"}
+            )
 
         # Run async function in thread
         def run_async():

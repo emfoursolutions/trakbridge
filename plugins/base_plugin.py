@@ -216,17 +216,21 @@ class BaseGPSPlugin(ABC):
                 value = decrypted_config[field_name]
                 if value:
                     try:
-                        decrypted_config[field_name] = self.encryption_service.decrypt_value(
-                            str(value)
+                        decrypted_config[field_name] = (
+                            self.encryption_service.decrypt_value(str(value))
                         )
                     except Exception as e:
-                        get_logger().error(f"Failed to decrypt field '{field_name}': {e}")
+                        get_logger().error(
+                            f"Failed to decrypt field '{field_name}': {e}"
+                        )
                         # Keep original value if decryption fails
 
         return decrypted_config
 
     @staticmethod
-    def encrypt_config_for_storage(plugin_type: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    def encrypt_config_for_storage(
+        plugin_type: str, config: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Encrypt sensitive fields in configuration before storing in database
 
@@ -259,7 +263,9 @@ class BaseGPSPlugin(ABC):
         return config
 
     @staticmethod
-    def decrypt_config_from_storage(plugin_type: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    def decrypt_config_from_storage(
+        plugin_type: str, config: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Decrypt sensitive fields in configuration after loading from database
 
@@ -331,12 +337,16 @@ class BaseGPSPlugin(ABC):
                 self.apply_callsign_mapping(tracker_data, field_name, callsign_map)
                 return True
             except Exception as e:
-                get_logger().error(f"[{self.plugin_name}] Failed to apply callsign mapping: {e}")
+                get_logger().error(
+                    f"[{self.plugin_name}] Failed to apply callsign mapping: {e}"
+                )
                 return False
         return False
 
     @abstractmethod
-    async def fetch_locations(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
+    async def fetch_locations(
+        self, session: aiohttp.ClientSession
+    ) -> List[Dict[str, Any]]:
         """
         Fetch location data from the GPS service
 
@@ -352,7 +362,9 @@ class BaseGPSPlugin(ABC):
         """
         pass
 
-    async def process_and_enqueue_locations(self, locations: List[Dict[str, Any]], stream) -> None:
+    async def process_and_enqueue_locations(
+        self, locations: List[Dict[str, Any]], stream
+    ) -> None:
         """
         Process locations and enqueue COT events using persistent COT service.
 
@@ -376,20 +388,20 @@ class BaseGPSPlugin(ABC):
                 await cot_service.ensure_worker_running(stream.tak_server_id)
 
             # Temporarily set stream reference for helper method access
-            original_stream = getattr(self, 'stream', None)
+            original_stream = getattr(self, "stream", None)
             self.stream = stream
-            
+
             # Use helper methods for consistent configuration access
             cot_type = self.get_stream_config_value("cot_type", "a-f-G-U-C")
             stale_time = self.get_stream_config_value("cot_stale_time", 300)
-            
+
             # Create COT events from locations
             cot_events = await EnhancedCOTService().create_cot_events(
                 locations,
                 cot_type=cot_type,
                 stale_time=stale_time,
             )
-            
+
             # Restore original stream reference
             self.stream = original_stream
 
@@ -428,7 +440,9 @@ class BaseGPSPlugin(ABC):
 
             # Check required fields
             if field.required and (field_value is None or field_value == ""):
-                get_logger().error(f"Missing required configuration field: {field_name}")
+                get_logger().error(
+                    f"Missing required configuration field: {field_name}"
+                )
                 return False
 
             # Type-specific validation
@@ -453,11 +467,15 @@ class BaseGPSPlugin(ABC):
                             )
                             return False
                     except (ValueError, TypeError):
-                        get_logger().error(f"Field '{field_name}' must be a valid number")
+                        get_logger().error(
+                            f"Field '{field_name}' must be a valid number"
+                        )
                         return False
 
                 if field.field_type == "email" and "@" not in str(field_value):
-                    get_logger().error(f"Field '{field_name}' must be a valid email address")
+                    get_logger().error(
+                        f"Field '{field_name}' must be a valid email address"
+                    )
                     return False
 
         return True
@@ -465,27 +483,27 @@ class BaseGPSPlugin(ABC):
     def get_stream_config_value(self, key: str, default_value: Any = None) -> Any:
         """
         Get configuration value from stream object with fallback to plugin config.
-        
+
         Args:
             key: Configuration key name
             default_value: Default value if not found in either source
-            
+
         Returns:
             Configuration value from stream if available, otherwise from plugin config
         """
         # Try stream-level configuration first
-        if hasattr(self, 'stream') and self.stream is not None:
+        if hasattr(self, "stream") and self.stream is not None:
             stream_value = getattr(self.stream, key, None)
             if stream_value is not None:
                 return stream_value
-        
+
         # Fallback to plugin configuration
         return self.config.get(key, default_value)
 
     def log_config_source(self, key: str, value: Any, logger_instance=None) -> None:
         """
         Log the configuration source for debugging purposes.
-        
+
         Args:
             key: Configuration key name
             value: The configuration value being used
@@ -493,14 +511,14 @@ class BaseGPSPlugin(ABC):
         """
         if logger_instance is None:
             logger_instance = get_logger()
-            
-        stream_available = hasattr(self, 'stream') and self.stream is not None
+
+        stream_available = hasattr(self, "stream") and self.stream is not None
         source = "stream" if stream_available else "plugin config"
-        
+
         # Check if this looks like a health check scenario
-        is_health_check = not getattr(self, '_in_production_context', True)
+        is_health_check = not getattr(self, "_in_production_context", True)
         log_level = logger_instance.debug if is_health_check else logger_instance.debug
-        
+
         log_level(f"Using {source} for {key}={value}")
 
     async def health_check(self) -> dict:
@@ -605,7 +623,8 @@ class BaseGPSPlugin(ABC):
                         return {
                             "success": False,
                             "error": "No Devices Found",
-                            "message": "Successfully connected. " "No devices returned.",
+                            "message": "Successfully connected. "
+                            "No devices returned.",
                         }
                     else:
                         return {

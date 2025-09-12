@@ -11,7 +11,8 @@ from typing import List, Dict
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from services.cot_service import EnhancedCOTService
 from tests.fixtures.mock_location_data import (
@@ -19,7 +20,7 @@ from tests.fixtures.mock_location_data import (
     generate_invalid_gps_points,
     generate_mixed_valid_invalid_points,
     generate_performance_test_datasets,
-    get_expected_cot_count
+    get_expected_cot_count,
 )
 
 
@@ -40,7 +41,9 @@ class TestBasicParallelCOT:
         return generate_performance_test_datasets()
 
     @pytest.mark.asyncio
-    async def test_parallel_processing_300_points_faster_than_serial(self, cot_service, performance_datasets):
+    async def test_parallel_processing_300_points_faster_than_serial(
+        self, cot_service, performance_datasets
+    ):
         """
         Verify 300 points process significantly faster in parallel than serial
         REQUIREMENT: >5x performance improvement for large datasets
@@ -68,20 +71,28 @@ class TestBasicParallelCOT:
         # Verify performance improvement (realistic expectations for CPU-bound tasks)
         # For pure computation, async parallelism provides modest improvements
         improvement_ratio = serial_time / parallel_time
-        assert improvement_ratio >= 1.0, f"Parallel processing should not be slower than serial: {improvement_ratio:.2f}x"
+        assert (
+            improvement_ratio >= 1.0
+        ), f"Parallel processing should not be slower than serial: {improvement_ratio:.2f}x"
         # Note: Even modest improvements (1.03x+) are valuable for large datasets
 
         # Verify same number of events produced
-        assert len(parallel_events) == len(serial_events), "Parallel processing changed event count"
+        assert len(parallel_events) == len(
+            serial_events
+        ), "Parallel processing changed event count"
         assert len(parallel_events) == 300, "Should process all 300 points"
 
     @pytest.mark.asyncio
-    async def test_parallel_processing_maintains_accuracy(self, cot_service, performance_datasets):
+    async def test_parallel_processing_maintains_accuracy(
+        self, cot_service, performance_datasets
+    ):
         """
         Ensure parallel output matches serial output exactly (order-independent)
         STATUS: WILL FAIL - parallel method doesn't exist
         """
-        test_dataset = performance_datasets["medium"]  # 50 points for detailed comparison
+        test_dataset = performance_datasets[
+            "medium"
+        ]  # 50 points for detailed comparison
         cot_type = "a-f-G-U-C"
         stale_time = 300
         cot_type_mode = "stream"
@@ -100,8 +111,10 @@ class TestBasicParallelCOT:
         # Convert to sets for order-independent comparison
         serial_set = set(serial_events)
         parallel_set = set(parallel_events)
-        
-        assert serial_set == parallel_set, "Parallel processing produced different COT events"
+
+        assert (
+            serial_set == parallel_set
+        ), "Parallel processing produced different COT events"
 
     @pytest.mark.asyncio
     async def test_parallel_processing_handles_empty_list(self, cot_service):
@@ -147,7 +160,9 @@ class TestBasicParallelCOT:
         One bad point shouldn't crash entire batch - error isolation test
         STATUS: WILL FAIL - parallel method doesn't exist, error handling not implemented
         """
-        mixed_dataset = generate_mixed_valid_invalid_points(valid_count=20, invalid_count=5)
+        mixed_dataset = generate_mixed_valid_invalid_points(
+            valid_count=20, invalid_count=5
+        )
         cot_type = "a-f-G-U-C"
         stale_time = 300
         cot_type_mode = "stream"
@@ -159,12 +174,18 @@ class TestBasicParallelCOT:
 
         # Should process most points but some invalid ones may fail
         # Note: Some "invalid" data like out-of-bounds coords get processed gracefully
-        assert len(result) >= 18, f"Expected at least 18 valid events, got {len(result)}"
+        assert (
+            len(result) >= 18
+        ), f"Expected at least 18 valid events, got {len(result)}"
         assert len(result) <= 25, f"Expected at most 25 events, got {len(result)}"
-        assert all(isinstance(event, bytes) for event in result), "All results should be valid COT events"
+        assert all(
+            isinstance(event, bytes) for event in result
+        ), "All results should be valid COT events"
 
     @pytest.mark.asyncio
-    async def test_parallel_processing_medium_dataset_performance(self, cot_service, performance_datasets):
+    async def test_parallel_processing_medium_dataset_performance(
+        self, cot_service, performance_datasets
+    ):
         """
         Verify performance improvement on medium datasets (50 points)
         REQUIREMENT: >2x improvement for medium datasets
@@ -190,14 +211,18 @@ class TestBasicParallelCOT:
 
         # Verify improvement (realistic expectations for CPU-bound tasks)
         improvement_ratio = serial_time / parallel_time
-        assert improvement_ratio >= 1.0, f"Parallel processing should not be slower than serial: {improvement_ratio:.2f}x"
+        assert (
+            improvement_ratio >= 1.0
+        ), f"Parallel processing should not be slower than serial: {improvement_ratio:.2f}x"
         # Note: Even modest improvements (1.05x+) are beneficial for medium datasets
 
         # Verify correctness
         assert len(parallel_events) == len(serial_events) == 50
 
     @pytest.mark.asyncio
-    async def test_parallel_processing_small_dataset_no_degradation(self, cot_service, performance_datasets):
+    async def test_parallel_processing_small_dataset_no_degradation(
+        self, cot_service, performance_datasets
+    ):
         """
         Verify small datasets (1-5 points) don't get slower with parallel processing
         REQUIREMENT: No worse than 110% of serial processing time
@@ -223,7 +248,9 @@ class TestBasicParallelCOT:
 
         # Allow up to 10% slower for small datasets (overhead acceptable)
         degradation_ratio = parallel_time / serial_time
-        assert degradation_ratio <= 1.1, f"Small dataset {degradation_ratio:.2f}x slower, max allowed 1.1x"
+        assert (
+            degradation_ratio <= 1.1
+        ), f"Small dataset {degradation_ratio:.2f}x slower, max allowed 1.1x"
 
         # Verify correctness
         assert len(parallel_events) == len(serial_events) == 5
@@ -241,24 +268,24 @@ class TestBasicParallelCOT:
 
         # Mock asyncio.gather to verify it gets called, return awaitable
         mock_events = [b"<event>mock</event>"] * 10
-        
+
         async def mock_gather_return():
             return mock_events
-        
-        with patch('asyncio.gather') as mock_gather:
+
+        with patch("asyncio.gather") as mock_gather:
             mock_gather.return_value = mock_gather_return()
-            
+
             result = await cot_service._create_parallel_pytak_events(
                 test_dataset, cot_type, stale_time, cot_type_mode
             )
-            
+
             # Verify asyncio.gather was called (indicates parallel processing)
             assert mock_gather.called, "Parallel processing should use asyncio.gather"
             call_args = mock_gather.call_args
             assert len(call_args[0]) == 10, "Should create 10 concurrent tasks"
             assert len(result) == 10, "Should return all mock events"
 
-    @pytest.mark.asyncio 
+    @pytest.mark.asyncio
     async def test_parallel_method_exists_and_callable(self, cot_service):
         """
         Basic test that the parallel processing method exists and is callable
@@ -266,16 +293,18 @@ class TestBasicParallelCOT:
         STATUS: WILL FAIL - method doesn't exist yet
         """
         # Method should exist
-        assert hasattr(cot_service, '_create_parallel_pytak_events'), \
-            "COT service should have _create_parallel_pytak_events method"
-        
+        assert hasattr(
+            cot_service, "_create_parallel_pytak_events"
+        ), "COT service should have _create_parallel_pytak_events method"
+
         # Method should be callable
-        method = getattr(cot_service, '_create_parallel_pytak_events')
+        method = getattr(cot_service, "_create_parallel_pytak_events")
         assert callable(method), "_create_parallel_pytak_events should be callable"
-        
+
         # Method should be async
-        assert asyncio.iscoroutinefunction(method), \
-            "_create_parallel_pytak_events should be an async function"
+        assert asyncio.iscoroutinefunction(
+            method
+        ), "_create_parallel_pytak_events should be an async function"
 
 
 if __name__ == "__main__":

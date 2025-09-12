@@ -48,7 +48,9 @@ class SecureAuthenticationLoader:
         # CI/CD detection
         self.is_ci = bool(os.getenv("CI"))
 
-        logger.debug(f"Authentication loader initialized for environment: {environment}")
+        logger.debug(
+            f"Authentication loader initialized for environment: {environment}"
+        )
         logger.debug(f"CI/CD mode: {self.is_ci}")
 
     def load_authentication_config(self) -> Dict[str, Any]:
@@ -81,7 +83,9 @@ class SecureAuthenticationLoader:
 
             # Priority 4: Default safe configuration
             else:
-                logger.warning("No authentication config found - using default safe configuration")
+                logger.warning(
+                    "No authentication config found - using default safe configuration"
+                )
                 return self._get_default_config()
 
         except Exception as e:
@@ -103,7 +107,9 @@ class SecureAuthenticationLoader:
         # Parse the substituted YAML
         config = yaml.safe_load(substituted_content) or {}
 
-        logger.debug("Loaded authentication config from local file with environment substitution")
+        logger.debug(
+            "Loaded authentication config from local file with environment substitution"
+        )
         return self._apply_environment_overrides(config)
 
     def _load_template_config(self) -> Dict[str, Any]:
@@ -120,7 +126,9 @@ class SecureAuthenticationLoader:
         # Parse the substituted YAML
         config = yaml.safe_load(substituted_content) or {}
 
-        logger.debug("Loaded authentication config from template with environment substitution")
+        logger.debug(
+            "Loaded authentication config from template with environment substitution"
+        )
         return self._apply_environment_overrides(config)
 
     def _load_example_config(self) -> Dict[str, Any]:
@@ -240,12 +248,18 @@ class SecureAuthenticationLoader:
 
         return config
 
-    def _deep_merge(self, base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    def _deep_merge(
+        self, base: Dict[str, Any], override: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Deep merge two dictionaries."""
         result = base.copy()
 
         for key, value in override.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(value, dict)
+            ):
                 result[key] = self._deep_merge(result[key], value)
             else:
                 result[key] = value
@@ -373,7 +387,10 @@ def get_authentication_loader(environment: str = None) -> SecureAuthenticationLo
     if environment is None:
         environment = os.getenv("FLASK_ENV", "development")
 
-    if _authentication_loader is None or _authentication_loader.environment != environment:
+    if (
+        _authentication_loader is None
+        or _authentication_loader.environment != environment
+    ):
         _authentication_loader = SecureAuthenticationLoader(environment)
 
     return _authentication_loader
@@ -390,9 +407,13 @@ def load_authentication_config(environment: str = None) -> Dict[str, Any]:
     # Validate the configuration
     validation_error = loader.validate_config(config)
     if validation_error:
-        logger.error(f"Authentication configuration validation failed: {validation_error}")
+        logger.error(
+            f"Authentication configuration validation failed: {validation_error}"
+        )
         if environment == "production":
-            raise ValueError(f"Invalid authentication configuration: {validation_error}")
+            raise ValueError(
+                f"Invalid authentication configuration: {validation_error}"
+            )
         else:
             logger.warning("Using default configuration due to validation failure")
             config = loader._get_default_config()

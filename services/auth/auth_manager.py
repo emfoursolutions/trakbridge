@@ -76,9 +76,14 @@ class AuthenticationManager:
             self.lockout_duration = config_helper.get_int(
                 "authentication.session.lockout_duration_minutes", 30
             )
-            self.session_timeout = config_helper.get_int("authentication.session.lifetime_hours", 8)
+            self.session_timeout = config_helper.get_int(
+                "authentication.session.lifetime_hours", 8
+            )
             self.cleanup_interval = (
-                config_helper.get_int("authentication.session.cleanup_interval_minutes", 60) / 60
+                config_helper.get_int(
+                    "authentication.session.cleanup_interval_minutes", 60
+                )
+                / 60
             )  # Convert to hours
         else:
             # New format: default.security.*
@@ -119,11 +124,15 @@ class AuthenticationManager:
                 # Old nested format: authentication.providers.*
                 auth_config = self.config.get("authentication", {})
                 providers_config = auth_config.get("providers", {})
-                provider_priority = auth_config.get("provider_priority", ["local", "ldap", "oidc"])
+                provider_priority = auth_config.get(
+                    "provider_priority", ["local", "ldap", "oidc"]
+                )
             elif "providers" in self.config:
                 # New flat format: providers.*, provider_priority.*
                 providers_config = self.config.get("providers", {})
-                provider_priority = self.config.get("provider_priority", ["local", "ldap", "oidc"])
+                provider_priority = self.config.get(
+                    "provider_priority", ["local", "ldap", "oidc"]
+                )
             else:
                 # Legacy format: default.providers.*
                 providers_config = self.config.get("default", {}).get("providers", {})
@@ -141,7 +150,9 @@ class AuthenticationManager:
                     enabled = provider_data.get("enabled", False)
 
                     # Create a copy of provider_data for the config, excluding 'enabled'
-                    config_data = {k: v for k, v in provider_data.items() if k != "enabled"}
+                    config_data = {
+                        k: v for k, v in provider_data.items() if k != "enabled"
+                    }
 
                     provider_list.append(
                         {
@@ -223,7 +234,9 @@ class AuthenticationManager:
             self.providers[provider.provider_type] = provider
             self._update_provider_order()
 
-        logger.info(f"Registered authentication provider: {provider.provider_type.value}")
+        logger.info(
+            f"Registered authentication provider: {provider.provider_type.value}"
+        )
 
     def unregister_provider(self, provider_type: AuthProvider) -> None:
         """
@@ -242,11 +255,15 @@ class AuthenticationManager:
     def _update_provider_order(self) -> None:
         """Update provider order based on priority"""
         # Sort providers by priority (lower number = higher priority)
-        sorted_providers = sorted(self.providers.items(), key=lambda x: (x[1].priority, x[0].value))
+        sorted_providers = sorted(
+            self.providers.items(), key=lambda x: (x[1].priority, x[0].value)
+        )
 
         self.provider_order = [provider_type for provider_type, _ in sorted_providers]
 
-        logger.debug(f"Updated provider order: {[p.value for p in self.provider_order]}")
+        logger.debug(
+            f"Updated provider order: {[p.value for p in self.provider_order]}"
+        )
 
     def authenticate(
         self,
@@ -296,11 +313,17 @@ class AuthenticationManager:
                 # Get detailed health information for logging
                 try:
                     health_details = provider.health_check()
-                    error_info = health_details.get("error", "No error details available")
-                    logger.warning(f"Skipping unhealthy provider: {provider_type.value}")
+                    error_info = health_details.get(
+                        "error", "No error details available"
+                    )
+                    logger.warning(
+                        f"Skipping unhealthy provider: {provider_type.value}"
+                    )
                     logger.warning(f"Provider health check failed: {error_info}")
                 except Exception as health_error:
-                    logger.warning(f"Skipping unhealthy provider: {provider_type.value}")
+                    logger.warning(
+                        f"Skipping unhealthy provider: {provider_type.value}"
+                    )
                     logger.error(f"Failed to get health details: {health_error}")
                 continue
 
@@ -349,7 +372,9 @@ class AuthenticationManager:
                 return response
 
             except AuthenticationException as e:
-                logger.error(f"Authentication error with {provider_type.value} for {username}: {e}")
+                logger.error(
+                    f"Authentication error with {provider_type.value} for {username}: {e}"
+                )
                 last_error = AuthenticationResponse(
                     result=e.result, message=str(e), details=e.details
                 )
@@ -545,7 +570,9 @@ class AuthenticationManager:
                 cleaned = provider.cleanup_expired_sessions()
                 total_cleaned += cleaned
             except Exception as e:
-                logger.error(f"Failed to cleanup sessions for {provider.provider_type.value}: {e}")
+                logger.error(
+                    f"Failed to cleanup sessions for {provider.provider_type.value}: {e}"
+                )
 
         logger.info(f"Cleaned up {total_cleaned} expired sessions")
         return total_cleaned
@@ -607,7 +634,9 @@ class AuthenticationManager:
 
         return stats
 
-    def _get_provider_order(self, provider_hint: AuthProvider = None) -> List[AuthProvider]:
+    def _get_provider_order(
+        self, provider_hint: AuthProvider = None
+    ) -> List[AuthProvider]:
         """Get ordered list of providers to try"""
         if provider_hint and provider_hint in self.providers:
             # Try hinted provider first, then others
@@ -647,7 +676,9 @@ class AuthenticationManager:
 
         return healthy
 
-    def _check_provider_health(self, provider: BaseAuthenticationProvider) -> Dict[str, Any]:
+    def _check_provider_health(
+        self, provider: BaseAuthenticationProvider
+    ) -> Dict[str, Any]:
         """Perform detailed health check for a provider"""
         try:
             return provider.health_check()

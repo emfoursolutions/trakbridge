@@ -48,7 +48,9 @@ class DevelopmentConfig(BaseConfig):
     def SQLALCHEMY_ENGINE_OPTIONS(self) -> Dict[str, Any]:
         """Development-specific database engine options."""
         base_options = super().SQLALCHEMY_ENGINE_OPTIONS
-        db_type = self.secret_manager.get_secret("DB_TYPE", self.db_config.get("type", "sqlite"))
+        db_type = self.secret_manager.get_secret(
+            "DB_TYPE", self.db_config.get("type", "sqlite")
+        )
 
         # Development-specific overrides
         dev_overrides = {
@@ -123,7 +125,9 @@ class ProductionConfig(BaseConfig):
     def SQLALCHEMY_ENGINE_OPTIONS(self) -> Dict[str, Any]:
         """Production-optimized database engine options."""
         base_options = super().SQLALCHEMY_ENGINE_OPTIONS
-        db_type = self.secret_manager.get_secret("DB_TYPE", self.db_config.get("type", "sqlite"))
+        db_type = self.secret_manager.get_secret(
+            "DB_TYPE", self.db_config.get("type", "sqlite")
+        )
 
         # Production-specific overrides
         prod_overrides = {
@@ -211,7 +215,9 @@ class ProductionConfig(BaseConfig):
             db_host = self.secret_manager.get_secret("DB_HOST", "localhost")
             if db_host not in ["localhost", "127.0.0.1"]:
                 # External database - recommend SSL
-                logger.warning("Using external database without explicit SSL configuration")
+                logger.warning(
+                    "Using external database without explicit SSL configuration"
+                )
 
         return issues
 
@@ -274,7 +280,9 @@ class TestingConfig(BaseConfig):
                 )
         else:
             # Local: Use temporary file that gets cleaned up
-            db_file = os.path.join(tempfile.gettempdir(), f"trakbridge_test_{os.getpid()}.sqlite")
+            db_file = os.path.join(
+                tempfile.gettempdir(), f"trakbridge_test_{os.getpid()}.sqlite"
+            )
 
         return f"sqlite:///{db_file}"
 
@@ -380,7 +388,8 @@ class StagingConfig(ProductionConfig):
     def SQLALCHEMY_RECORD_QUERIES(self) -> bool:
         """Allow query recording in staging for debugging."""
         return (
-            self.secret_manager.get_secret("SQLALCHEMY_RECORD_QUERIES", "false").lower() == "true"
+            self.secret_manager.get_secret("SQLALCHEMY_RECORD_QUERIES", "false").lower()
+            == "true"
         )
 
     @property

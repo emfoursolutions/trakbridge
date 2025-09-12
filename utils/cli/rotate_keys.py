@@ -161,7 +161,9 @@ def backup_postgresql(db_info, backup_dir, timestamp):
             env = os.environ.copy()
 
         with open(backup_path, "w") as f:
-            result = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env)
+            result = subprocess.run(
+                cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env
+            )
 
         if result.returncode == 0:
             return {
@@ -213,7 +215,9 @@ def create_database_backup():
 @click.command()
 @click.option("--new-key", help="New encryption key (will prompt if not provided)")
 @click.option("--confirm", is_flag=True, help="Skip confirmation prompt")
-@click.option("--backup-db", is_flag=True, help="Create database backup before rotation")
+@click.option(
+    "--backup-db", is_flag=True, help="Create database backup before rotation"
+)
 @click.option("--generate-key", is_flag=True, help="Generate a new key automatically")
 def rotate_keys(new_key, confirm, backup_db, generate_key):
     """Rotate the encryption key and re-encrypt all data"""
@@ -234,7 +238,9 @@ def rotate_keys(new_key, confirm, backup_db, generate_key):
 
     # Confirmation check
     if not confirm:
-        click.echo("\n WARNING: This will re-encrypt all sensitive data with a new key.")
+        click.echo(
+            "\n WARNING: This will re-encrypt all sensitive data with a new key."
+        )
         click.echo("Make sure to backup your database before proceeding.")
         if not click.confirm("Do you want to continue?"):
             click.echo("Key rotation cancelled.")
@@ -291,12 +297,16 @@ def rotate_keys(new_key, confirm, backup_db, generate_key):
                     for error in result["errors"]:
                         click.echo(f"   - {error}")
             else:
-                click.echo(f"Key rotation failed: {result.get('error', 'Unknown error')}")
+                click.echo(
+                    f"Key rotation failed: {result.get('error', 'Unknown error')}"
+                )
                 return
 
         # Update environment variable or key file
         click.echo("\nKey rotation completed successfully!")
-        click.echo("Please update your TB_MASTER_KEY environment variable or key file with:")
+        click.echo(
+            "Please update your TB_MASTER_KEY environment variable or key file with:"
+        )
         click.echo(f" TB_MASTER_KEY='{new_key}'")
         click.echo(
             "\n IMPORTANT: Restart the application with the new key for changes to take effect."

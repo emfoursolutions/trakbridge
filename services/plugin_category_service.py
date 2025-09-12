@@ -108,7 +108,9 @@ class PluginCategoryService:
                 discovered_categories.add(display_category)
 
                 # Count plugins per category
-                category_counts[display_category] = category_counts.get(display_category, 0) + 1
+                category_counts[display_category] = (
+                    category_counts.get(display_category, 0) + 1
+                )
 
             # Build categories with counts
             for category_key in discovered_categories:
@@ -161,7 +163,9 @@ class PluginCategoryService:
                         PluginInfo(
                             key=plugin_key,
                             display_name=metadata.get("display_name", plugin_key),
-                            description=metadata.get("description", "No description available"),
+                            description=metadata.get(
+                                "description", "No description available"
+                            ),
                             icon=metadata.get("icon", "fas fa-puzzle-piece"),
                             category=display_category,
                         )

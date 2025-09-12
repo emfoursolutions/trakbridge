@@ -201,7 +201,9 @@ def foreign_key_exists(table_name: str, constraint_name: str) -> bool:
 def safe_add_column(table_name: str, column_name: str, column_def, **kwargs):
     """Safely add a column to a table if it doesn't already exist."""
     if not table_exists(table_name):
-        print(f"WARNING: Table '{table_name}' does not exist. Cannot add column '{column_name}'.")
+        print(
+            f"WARNING: Table '{table_name}' does not exist. Cannot add column '{column_name}'."
+        )
         return False
 
     if column_exists(table_name, column_name):
@@ -219,7 +221,9 @@ def safe_add_column(table_name: str, column_name: str, column_def, **kwargs):
 def safe_drop_column(table_name: str, column_name: str, **kwargs):
     """Safely drop a column from a table if it exists."""
     if not table_exists(table_name):
-        print(f"WARNING: Table '{table_name}' does not exist. Cannot drop column '{column_name}'.")
+        print(
+            f"WARNING: Table '{table_name}' does not exist. Cannot drop column '{column_name}'."
+        )
         return False
 
     if not column_exists(table_name, column_name):
@@ -237,7 +241,9 @@ def safe_drop_column(table_name: str, column_name: str, **kwargs):
 def safe_alter_column(table_name: str, column_name: str, **kwargs):
     """Safely alter a column if the table and column exist."""
     if not table_exists(table_name):
-        print(f"WARNING: Table '{table_name}' does not exist. Cannot alter column '{column_name}'.")
+        print(
+            f"WARNING: Table '{table_name}' does not exist. Cannot alter column '{column_name}'."
+        )
         return False
 
     if not column_exists(table_name, column_name):
@@ -280,7 +286,9 @@ def safe_drop_table(table_name: str):
 def safe_create_index(index_name: str, table_name: str, columns: list, **kwargs):
     """Safely create an index if it doesn't already exist."""
     if not table_exists(table_name):
-        print(f"WARNING: Table '{table_name}' does not exist. Cannot create index '{index_name}'.")
+        print(
+            f"WARNING: Table '{table_name}' does not exist. Cannot create index '{index_name}'."
+        )
         return False
 
     if index_exists(index_name):

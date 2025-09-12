@@ -107,12 +107,16 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
 
         # User search configuration - using ConfigHelper for cleaner access
         helper = ConfigHelper(config)
-        self.user_base_dn = helper.get("user_search.base_dn", helper.get("user_search_base", ""))
+        self.user_base_dn = helper.get(
+            "user_search.base_dn", helper.get("user_search_base", "")
+        )
         self.user_search_filter = helper.get(
             "user_search.search_filter",
             helper.get("user_search_filter", "(sAMAccountName={username})"),
         )
-        self.user_attributes = helper.get("user_search.attributes", helper.get("attributes", {}))
+        self.user_attributes = helper.get(
+            "user_search.attributes", helper.get("attributes", {})
+        )
 
         # Attribute mapping
         self.username_attr = self.user_attributes.get("username", "sAMAccountName")
@@ -123,7 +127,9 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
         self.groups_attr = self.user_attributes.get("groups", "memberOf")
 
         # Group and role mapping
-        self.group_mappings = config.get("group_mappings", {}) or config.get("role_mapping", {})
+        self.group_mappings = config.get("group_mappings", {}) or config.get(
+            "role_mapping", {}
+        )
         self.default_role = UserRole(config.get("default_role", "user"))
 
         # Settings
@@ -137,7 +143,9 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
         self._server = None
         self._initialize_server()
 
-        logger.info(f"LDAP authentication provider initialized (server: {self.host}:{self.port})")
+        logger.info(
+            f"LDAP authentication provider initialized (server: {self.host}:{self.port})"
+        )
 
     def _initialize_server(self) -> None:
         """Initialize LDAP server connection"""
@@ -169,9 +177,13 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
 
         except Exception as e:
             logger.error(f"Failed to initialize LDAP server: {e}")
-            raise ProviderConfigurationException(f"LDAP server initialization failed: {e}")
+            raise ProviderConfigurationException(
+                f"LDAP server initialization failed: {e}"
+            )
 
-    def authenticate(self, username: str, password: str = None, **kwargs) -> AuthenticationResponse:
+    def authenticate(
+        self, username: str, password: str = None, **kwargs
+    ) -> AuthenticationResponse:
         """
         Authenticate user against LDAP directory
 
@@ -274,7 +286,9 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
             )
 
         except Exception as e:
-            logger.error(f"LDAP authentication error for {username}: {e}", exc_info=True)
+            logger.error(
+                f"LDAP authentication error for {username}: {e}", exc_info=True
+            )
             return AuthenticationResponse(
                 result=AuthenticationResult.PROVIDER_ERROR,
                 message="Authentication service error",
@@ -393,7 +407,9 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
             logger.error(
                 f"LDAP server: {self.host}:{self.port} (SSL: {self.use_ssl}, TLS: {self.use_tls})"
             )
-            logger.error(f"LDAP bind password configured: {'Yes' if self.bind_password else 'No'}")
+            logger.error(
+                f"LDAP bind password configured: {'Yes' if self.bind_password else 'No'}"
+            )
             logger.error(
                 f"LDAP bind password length: {len(self.bind_password) if self.bind_password else 0} chars"
             )
@@ -448,7 +464,9 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
             )
         else:
             # Anonymous connection
-            connection = Connection(self._server, auto_bind=False, raise_exceptions=True)
+            connection = Connection(
+                self._server, auto_bind=False, raise_exceptions=True
+            )
 
         return connection
 
@@ -493,7 +511,9 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
             connection = self._get_connection()
 
             if not connection.bind():
-                raise LDAPException(f"Failed to bind for user search: {connection.result}")
+                raise LDAPException(
+                    f"Failed to bind for user search: {connection.result}"
+                )
 
             # Build search filter
             search_filter = self.user_search_filter.format(username=username)
@@ -538,7 +558,9 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
             connection.unbind()
 
             # Determine role from groups
-            logger.debug(f"LDAP user {username} retrieved groups: {user_info['groups']}")
+            logger.debug(
+                f"LDAP user {username} retrieved groups: {user_info['groups']}"
+            )
             user_info["role"] = self._determine_role_from_groups(user_info["groups"])
             logger.debug(
                 f"LDAP user {username} assigned role: {user_info['role']} ({user_info['role'].value})"
@@ -589,7 +611,9 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
         logger.debug(f"LDAP role determination - Default role: {self.default_role}")
 
         if not groups:
-            logger.debug("LDAP role determination - No groups found, using default role")
+            logger.debug(
+                "LDAP role determination - No groups found, using default role"
+            )
             return self.default_role
 
         # Check group mappings
@@ -620,7 +644,9 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
                         )
                         return role_obj
                     except ValueError:
-                        logger.warning(f"Invalid role mapping for group {mapped_group}: {role}")
+                        logger.warning(
+                            f"Invalid role mapping for group {mapped_group}: {role}"
+                        )
                         continue
 
         logger.info(
@@ -642,7 +668,9 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
         from database import db
 
         # Check if user already exists
-        user = User.query.filter_by(username=username, auth_provider=AuthProvider.LDAP).first()
+        user = User.query.filter_by(
+            username=username, auth_provider=AuthProvider.LDAP
+        ).first()
 
         if user:
             # Update existing user
@@ -719,7 +747,9 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
             # Users by role
             users_by_role = {}
             for role in UserRole:
-                count = User.query.filter_by(auth_provider=AuthProvider.LDAP, role=role).count()
+                count = User.query.filter_by(
+                    auth_provider=AuthProvider.LDAP, role=role
+                ).count()
                 users_by_role[role.value] = count
 
             return {

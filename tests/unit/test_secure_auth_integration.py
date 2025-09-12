@@ -49,7 +49,9 @@ class TestSecureAuthenticationIntegration(unittest.TestCase):
             # Verify at least one provider is enabled
             providers = auth_config.get("providers", {})
             enabled_providers = [
-                name for name, config in providers.items() if config.get("enabled", False)
+                name
+                for name, config in providers.items()
+                if config.get("enabled", False)
             ]
             self.assertGreater(
                 len(enabled_providers),
@@ -178,7 +180,9 @@ class TestSecureAuthenticationIntegration(unittest.TestCase):
             # If validation_error is None, the validation might not be implemented yet
             # or the default config includes enabled providers
             if validation_error is not None:
-                self.assertIn("No authentication providers are enabled", validation_error)
+                self.assertIn(
+                    "No authentication providers are enabled", validation_error
+                )
             else:
                 # Check that at least we got a config object
                 self.assertIsNotNone(config)

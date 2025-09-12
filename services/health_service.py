@@ -109,7 +109,9 @@ class HealthService:
                 "checked_out": pool.checkedout(),
                 "overflow": pool.overflow(),
                 "utilization_percent": (
-                    round((pool.checkedout() / pool.size()) * 100, 2) if pool.size() > 0 else 0
+                    round((pool.checkedout() / pool.size()) * 100, 2)
+                    if pool.size() > 0
+                    else 0
                 ),
             }
 
@@ -182,7 +184,9 @@ class HealthService:
             # Active streams count
             query_start = time.time()
             active_streams = (
-                db.session.query(func.count(Stream.id)).filter(Stream.is_active).scalar()
+                db.session.query(func.count(Stream.id))
+                .filter(Stream.is_active)
+                .scalar()
             )
             query_time = (time.time() - query_start) * 1000
             total_time += query_time
@@ -242,7 +246,9 @@ class HealthService:
                     "long_running_details": [
                         {
                             "duration_seconds": getattr(lock, "duration_seconds", 0),
-                            "query": getattr(lock, "trx_query", getattr(lock, "query", "N/A")),
+                            "query": getattr(
+                                lock, "trx_query", getattr(lock, "query", "N/A")
+                            ),
                         }
                         for lock in long_running
                     ],
@@ -340,7 +346,9 @@ class HealthService:
             # Check active streams
             try:
                 active_count = (
-                    db.session.query(func.count(Stream.id)).filter(Stream.is_active).scalar()
+                    db.session.query(func.count(Stream.id))
+                    .filter(Stream.is_active)
+                    .scalar()
                 )
                 results["active_streams"] = {"count": active_count, "status": "healthy"}
             except Exception as e:
@@ -361,7 +369,9 @@ class HealthService:
             warnings = []
             helper = ConfigHelper(results)
             if helper.get_int("error_streams.count", 0) > 0:
-                warnings.append(f"{results['error_streams']['count']} streams with errors")
+                warnings.append(
+                    f"{results['error_streams']['count']} streams with errors"
+                )
 
             if helper.get_int("active_streams.count", 0) == 0:
                 warnings.append("No active streams")

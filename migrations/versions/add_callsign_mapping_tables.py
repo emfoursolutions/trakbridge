@@ -51,7 +51,9 @@ def upgrade():
             sa.Column("updated_at", sa.DateTime(), nullable=False),
             sa.ForeignKeyConstraint(["stream_id"], ["streams.id"], ondelete="CASCADE"),
             sa.PrimaryKeyConstraint("id"),
-            sa.UniqueConstraint("stream_id", "identifier_value", name="unique_stream_identifier"),
+            sa.UniqueConstraint(
+                "stream_id", "identifier_value", name="unique_stream_identifier"
+            ),
         )
         print("Created callsign_mappings table")
     else:
@@ -77,7 +79,9 @@ def upgrade():
             identifier_field_col = sa.Column(
                 "callsign_identifier_field", sa.String(100), nullable=True
             )
-            safe_add_column("streams", "callsign_identifier_field", identifier_field_col)
+            safe_add_column(
+                "streams", "callsign_identifier_field", identifier_field_col
+            )
         else:
             print("Column 'callsign_identifier_field' already exists in streams table")
 
@@ -107,9 +111,13 @@ def upgrade():
                 nullable=False,
                 server_default="0",  # SQLite-compatible default for False
             )
-            safe_add_column("streams", "enable_per_callsign_cot_types", per_cot_types_col)
+            safe_add_column(
+                "streams", "enable_per_callsign_cot_types", per_cot_types_col
+            )
         else:
-            print("Column 'enable_per_callsign_cot_types' already exists in streams table")
+            print(
+                "Column 'enable_per_callsign_cot_types' already exists in streams table"
+            )
 
         print("Added callsign mapping columns to streams table")
     else:

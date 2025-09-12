@@ -31,21 +31,31 @@ class CallsignMapping(db.Model, TimestampMixin):
     __tablename__ = "callsign_mappings"
 
     id = db.Column(db.Integer, primary_key=True)
-    stream_id = db.Column(db.Integer, db.ForeignKey("streams.id"), nullable=False, index=True)
+    stream_id = db.Column(
+        db.Integer, db.ForeignKey("streams.id"), nullable=False, index=True
+    )
     identifier_value = db.Column(
         db.String(255), nullable=False
     )  # Raw identifier (IMEI, device_name, etc.)
-    custom_callsign = db.Column(db.String(100), nullable=False)  # User-assigned callsign
+    custom_callsign = db.Column(
+        db.String(100), nullable=False
+    )  # User-assigned callsign
     cot_type = db.Column(db.String(50), nullable=True)  # Per-callsign CoT type override
-    enabled = db.Column(db.Boolean, nullable=False, default=True)  # Enable/disable tracker
+    enabled = db.Column(
+        db.Boolean, nullable=False, default=True
+    )  # Enable/disable tracker
 
     # Relationships
     stream = db.relationship("Stream", back_populates="callsign_mappings")
 
     # Constraints and Indexes
     __table_args__ = (
-        db.UniqueConstraint("stream_id", "identifier_value", name="unique_stream_identifier"),
-        db.Index("ix_callsign_mappings_stream_identifier", "stream_id", "identifier_value"),
+        db.UniqueConstraint(
+            "stream_id", "identifier_value", name="unique_stream_identifier"
+        ),
+        db.Index(
+            "ix_callsign_mappings_stream_identifier", "stream_id", "identifier_value"
+        ),
     )
 
     def __init__(

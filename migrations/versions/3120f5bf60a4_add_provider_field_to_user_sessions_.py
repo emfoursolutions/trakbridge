@@ -44,12 +44,16 @@ def upgrade():
 
     # Check if user_sessions table exists
     if not table_exists("user_sessions"):
-        print("WARNING: Table 'user_sessions' does not exist. Skipping provider column addition.")
+        print(
+            "WARNING: Table 'user_sessions' does not exist. Skipping provider column addition."
+        )
         return
 
     # Check if provider column already exists
     if column_exists("user_sessions", "provider"):
-        print("Column 'provider' already exists in 'user_sessions' table. Skipping addition.")
+        print(
+            "Column 'provider' already exists in 'user_sessions' table. Skipping addition."
+        )
         # Ensure existing rows have a default value
         safe_execute(
             "UPDATE user_sessions SET provider = 'LOCAL' WHERE provider IS NULL",

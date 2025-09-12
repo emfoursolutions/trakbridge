@@ -218,7 +218,9 @@ class TestPluginCategoryAPI:
             assert "display_name" in category_info
             assert "description" in category_info
 
-    def test_category_api_authentication_required(self, client, mock_app_with_categories):
+    def test_category_api_authentication_required(
+        self, client, mock_app_with_categories
+    ):
         """Test that category APIs require authentication"""
         endpoints = [
             "/api/plugins/categories",
@@ -276,7 +278,9 @@ class TestStreamCreationWithCategories:
                 db.session.add(test_stream)
                 db.session.commit()
 
-                response = client.get(f"/streams/{test_stream.id}/edit", headers=auth_headers)
+                response = client.get(
+                    f"/streams/{test_stream.id}/edit", headers=auth_headers
+                )
 
                 # Expect redirect or success depending on route setup
                 assert response.status_code in [200, 302]
@@ -327,7 +331,9 @@ class TestCategoryMappingAccuracy:
 
             for plugin_key in all_metadata.keys():
                 category = category_service.get_plugin_category(plugin_key)
-                assert category is not None, f"Plugin {plugin_key} does not have a valid category"
+                assert (
+                    category is not None
+                ), f"Plugin {plugin_key} does not have a valid category"
                 assert isinstance(
                     category, str
                 ), f"Plugin {plugin_key} category should be string, got {type(category)}"
@@ -378,7 +384,9 @@ class TestCascadingDropdownBehavior:
 class TestCategoryPersistence:
     """Test that category information persists correctly"""
 
-    def test_stream_plugin_type_maintains_category_relationship(self, mock_app_with_categories, db_session):
+    def test_stream_plugin_type_maintains_category_relationship(
+        self, mock_app_with_categories, db_session
+    ):
         """Test that stream's plugin_type can be used to determine its category"""
         with mock_app_with_categories.app_context():
             from services.plugin_category_service import get_category_service
@@ -401,11 +409,15 @@ class TestCategoryPersistence:
 
             # Verify we can determine category from stream
             category_service = get_category_service(get_plugin_manager())
-            stream_category = category_service.get_plugin_category(test_stream.plugin_type)
+            stream_category = category_service.get_plugin_category(
+                test_stream.plugin_type
+            )
 
             assert stream_category == "Tracker"
 
-    def test_multiple_streams_different_categories(self, mock_app_with_categories, db_session):
+    def test_multiple_streams_different_categories(
+        self, mock_app_with_categories, db_session
+    ):
         """Test that streams with different plugin types maintain their categories"""
         with mock_app_with_categories.app_context():
             from services.plugin_category_service import get_category_service
@@ -441,7 +453,9 @@ class TestCategoryPersistence:
             category_service = get_category_service(get_plugin_manager())
 
             for stream, expected_category in created_streams:
-                actual_category = category_service.get_plugin_category(stream.plugin_type)
+                actual_category = category_service.get_plugin_category(
+                    stream.plugin_type
+                )
                 assert actual_category == expected_category
 
 
@@ -456,13 +470,19 @@ class TestCategorySystemIntegration:
 
             # Every plugin should have category information
             for plugin_key, metadata in all_metadata.items():
-                assert "category" in metadata, f"Plugin {plugin_key} missing category in metadata"
+                assert (
+                    "category" in metadata
+                ), f"Plugin {plugin_key} missing category in metadata"
                 assert isinstance(
                     metadata["category"], str
                 ), f"Plugin {plugin_key} category should be string"
-                assert len(metadata["category"]) > 0, f"Plugin {plugin_key} has empty category"
+                assert (
+                    len(metadata["category"]) > 0
+                ), f"Plugin {plugin_key} has empty category"
 
-    def test_category_service_initialization_on_app_startup(self, mock_app_with_categories):
+    def test_category_service_initialization_on_app_startup(
+        self, mock_app_with_categories
+    ):
         """Test that category service initializes properly with the application"""
         with mock_app_with_categories.app_context():
             from services.plugin_category_service import get_category_service
@@ -538,7 +558,9 @@ class TestBackwardCompatibility:
 
             assert category == "Tracker"
 
-    def test_plugin_metadata_api_still_works(self, client, mock_app_with_categories, auth_headers):
+    def test_plugin_metadata_api_still_works(
+        self, client, mock_app_with_categories, auth_headers
+    ):
         """Test that original plugin metadata API still functions"""
         response = client.get("/api/plugins/metadata", headers=auth_headers)
 
@@ -582,7 +604,9 @@ class TestCategorySystemRobustness:
     def test_api_error_handling(self, client, mock_app_with_categories, auth_headers):
         """Test API error handling for category endpoints"""
         # Test with invalid category
-        response = client.get("/api/plugins/by-category/Invalid%20Category", headers=auth_headers)
+        response = client.get(
+            "/api/plugins/by-category/Invalid%20Category", headers=auth_headers
+        )
         # Authentication redirect or success are both valid
         assert response.status_code in [200, 302]  # Should handle gracefully
 

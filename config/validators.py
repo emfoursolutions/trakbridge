@@ -75,16 +75,22 @@ class ConfigValidator:
                 if parsed.path and parsed.path != ":memory:":
                     db_path = Path(parsed.path)
                     if not db_path.parent.exists():
-                        self.errors.append(f"Database directory does not exist: {db_path.parent}")
+                        self.errors.append(
+                            f"Database directory does not exist: {db_path.parent}"
+                        )
                     elif not os.access(db_path.parent, os.W_OK):
-                        self.errors.append(f"Database directory is not writable: {db_path.parent}")
+                        self.errors.append(
+                            f"Database directory is not writable: {db_path.parent}"
+                        )
 
             # Validate MySQL/PostgreSQL
             elif parsed.scheme in ["mysql", "postgresql"]:
                 if not parsed.hostname:
                     self.errors.append("Database host is required for MySQL/PostgreSQL")
                 if not parsed.username:
-                    self.errors.append("Database username is required for MySQL/PostgreSQL")
+                    self.errors.append(
+                        "Database username is required for MySQL/PostgreSQL"
+                    )
                 if not parsed.path or parsed.path == "/":
                     self.errors.append("Database name is required for MySQL/PostgreSQL")
 
@@ -104,7 +110,9 @@ class ConfigValidator:
             if not isinstance(pool_size, int) or pool_size < 1:
                 self.errors.append("pool_size must be a positive integer")
             elif pool_size > 100:
-                self.warnings.append("pool_size is very large (>100), consider reducing")
+                self.warnings.append(
+                    "pool_size is very large (>100), consider reducing"
+                )
 
         if "max_overflow" in options:
             max_overflow = options["max_overflow"]
@@ -155,7 +163,9 @@ class ConfigValidator:
             self.errors.append("SECRET_KEY must be at least 16 characters long")
         elif secret_key == "dev-secret-key-change-in-production":
             if self.environment == "production":
-                self.errors.append("SECRET_KEY must be changed from default in production")
+                self.errors.append(
+                    "SECRET_KEY must be changed from default in production"
+                )
             else:
                 self.warnings.append("Using default SECRET_KEY - change for production")
 
@@ -168,7 +178,9 @@ class ConfigValidator:
 
         http_max_conn_per_host = config.HTTP_MAX_CONNECTIONS_PER_HOST
         if not isinstance(http_max_conn_per_host, int) or http_max_conn_per_host < 1:
-            self.errors.append("HTTP_MAX_CONNECTIONS_PER_HOST must be a positive integer")
+            self.errors.append(
+                "HTTP_MAX_CONNECTIONS_PER_HOST must be a positive integer"
+            )
 
         if http_max_conn_per_host > http_max_conn:
             self.warnings.append(
@@ -208,20 +220,28 @@ class ConfigValidator:
 
         # Validate timeouts for production
         if config.HTTP_TIMEOUT < 30:
-            self.warnings.append("HTTP_TIMEOUT should be at least 30 seconds in production")
+            self.warnings.append(
+                "HTTP_TIMEOUT should be at least 30 seconds in production"
+            )
 
         if config.MAX_WORKER_THREADS < 4:
-            self.warnings.append("MAX_WORKER_THREADS should be at least 4 in production")
+            self.warnings.append(
+                "MAX_WORKER_THREADS should be at least 4 in production"
+            )
 
         # Check for external database SSL
         db_uri = config.SQLALCHEMY_DATABASE_URI
         if db_uri and "localhost" not in db_uri and "127.0.0.1" not in db_uri:
-            self.warnings.append("External database detected - ensure SSL/TLS is configured")
+            self.warnings.append(
+                "External database detected - ensure SSL/TLS is configured"
+            )
 
     def _validate_development_config(self, config):
         """Development-specific validation."""
         if not config.DEBUG:
-            self.warnings.append("DEBUG should be True in development for better debugging")
+            self.warnings.append(
+                "DEBUG should be True in development for better debugging"
+            )
 
         if config.HTTP_TIMEOUT > 60:
             self.warnings.append("HTTP_TIMEOUT is very high for development")
@@ -232,12 +252,16 @@ class ConfigValidator:
             self.errors.append("TESTING must be True in testing environment")
 
         if config.DEBUG:
-            self.warnings.append("DEBUG should be False in testing for consistent behavior")
+            self.warnings.append(
+                "DEBUG should be False in testing for consistent behavior"
+            )
 
         # Validate test database
         db_uri = config.SQLALCHEMY_DATABASE_URI
         if ":memory:" not in db_uri and "test" not in db_uri.lower():
-            self.warnings.append("Testing should use in-memory or test-specific database")
+            self.warnings.append(
+                "Testing should use in-memory or test-specific database"
+            )
 
 
 class ConfigTypeChecker:

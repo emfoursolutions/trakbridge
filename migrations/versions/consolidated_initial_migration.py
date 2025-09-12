@@ -70,10 +70,14 @@ def upgrade():
         # Table exists, add cot_type_mode column if it doesn't exist
         if not column_exists("streams", "cot_type_mode"):
             with op.batch_alter_table("streams", schema=None) as batch_op:
-                batch_op.add_column(sa.Column("cot_type_mode", sa.String(length=20), nullable=True))
+                batch_op.add_column(
+                    sa.Column("cot_type_mode", sa.String(length=20), nullable=True)
+                )
 
             # Set default value for existing rows
-            op.execute("UPDATE streams SET cot_type_mode = 'stream' WHERE cot_type_mode IS NULL")
+            op.execute(
+                "UPDATE streams SET cot_type_mode = 'stream' WHERE cot_type_mode IS NULL"
+            )
 
             # Make the column non-nullable
             with op.batch_alter_table("streams", schema=None) as batch_op:
@@ -81,14 +85,20 @@ def upgrade():
         else:
             print("Column 'cot_type_mode' already exists in streams table")
     else:
-        print("WARNING: Table 'streams' does not exist. Skipping cot_type_mode column addition.")
+        print(
+            "WARNING: Table 'streams' does not exist. Skipping cot_type_mode column addition."
+        )
 
     # 2. Create users table if it doesn't exist
     if not table_exists("users"):
         # Get appropriate enum column type for the database dialect
-        auth_provider_column = get_enum_column(AuthProvider, "auth_provider", default="LOCAL")
+        auth_provider_column = get_enum_column(
+            AuthProvider, "auth_provider", default="LOCAL"
+        )
         user_role_column = get_enum_column(UserRole, "role", default="USER")
-        account_status_column = get_enum_column(AccountStatus, "status", default="ACTIVE")
+        account_status_column = get_enum_column(
+            AccountStatus, "status", default="ACTIVE"
+        )
 
         op.create_table(
             "users",
@@ -116,7 +126,9 @@ def upgrade():
         # Create indexes
         safe_create_index("ix_users_username", "users", ["username"], unique=True)
         safe_create_index("ix_users_email", "users", ["email"], unique=True)
-        safe_create_index("ix_users_provider_user_id", "users", ["provider_user_id"], unique=False)
+        safe_create_index(
+            "ix_users_provider_user_id", "users", ["provider_user_id"], unique=False
+        )
 
         # Add check constraints for PostgreSQL
         if get_dialect() == "postgresql":
@@ -131,7 +143,9 @@ def upgrade():
     # 3. Create user_sessions table if it doesn't exist
     if not table_exists("user_sessions"):
         # Get appropriate enum column type for auth provider
-        session_auth_provider_column = get_enum_column(AuthProvider, "provider", default="LOCAL")
+        session_auth_provider_column = get_enum_column(
+            AuthProvider, "provider", default="LOCAL"
+        )
 
         op.create_table(
             "user_sessions",
@@ -175,12 +189,16 @@ def upgrade():
             with op.batch_alter_table("user_sessions", schema=None) as batch_op:
                 # Add the provider column
                 if get_dialect() == "postgresql":
-                    batch_op.add_column(sa.Column("provider", sa.String(length=10), nullable=True))
+                    batch_op.add_column(
+                        sa.Column("provider", sa.String(length=10), nullable=True)
+                    )
                 else:
                     batch_op.add_column(provider_column)
 
             # Set default values for existing sessions
-            safe_execute("UPDATE user_sessions SET provider = 'LOCAL' WHERE provider IS NULL")
+            safe_execute(
+                "UPDATE user_sessions SET provider = 'LOCAL' WHERE provider IS NULL"
+            )
 
             # Add check constraint for PostgreSQL
             if get_dialect() == "postgresql":
@@ -197,7 +215,9 @@ def upgrade():
 
         if expires_at_col and not getattr(expires_at_col["type"], "timezone", False):
             needs_timezone_fix = True
-        if last_activity_col and not getattr(last_activity_col["type"], "timezone", False):
+        if last_activity_col and not getattr(
+            last_activity_col["type"], "timezone", False
+        ):
             needs_timezone_fix = True
 
         if needs_timezone_fix:

@@ -85,7 +85,9 @@ def safe_database_operation(operation_func, *args, **kwargs):
             with database_transaction():
                 return operation_func(*args, **kwargs)
         except SQLAlchemyError as e:
-            logger.warning(f"Database operation failed (attempt {attempt + 1}/{max_retries}): {e}")
+            logger.warning(
+                f"Database operation failed (attempt {attempt + 1}/{max_retries}): {e}"
+            )
             if attempt == max_retries - 1:
                 logger.error(f"Database operation failed after {max_retries} attempts")
                 return None
@@ -137,9 +139,13 @@ def find_by_field(model_class: Type[T], field_name: str, value: Any) -> Optional
         user = find_by_field(User, 'username', 'admin')
     """
     try:
-        return model_class.query.filter(getattr(model_class, field_name) == value).first()
+        return model_class.query.filter(
+            getattr(model_class, field_name) == value
+        ).first()
     except (SQLAlchemyError, AttributeError) as e:
-        logger.error(f"Failed to find {model_class.__name__} by {field_name}={value}: {e}")
+        logger.error(
+            f"Failed to find {model_class.__name__} by {field_name}={value}: {e}"
+        )
         return None
 
 
@@ -161,7 +167,9 @@ def find_all_by_field(model_class: Type[T], field_name: str, value: Any) -> List
     try:
         return model_class.query.filter(getattr(model_class, field_name) == value).all()
     except (SQLAlchemyError, AttributeError) as e:
-        logger.error(f"Failed to find {model_class.__name__} records by {field_name}={value}: {e}")
+        logger.error(
+            f"Failed to find {model_class.__name__} records by {field_name}={value}: {e}"
+        )
         return []
 
 
@@ -209,7 +217,9 @@ def update_record(record: T, **kwargs) -> Optional[T]:
             if hasattr(record, field):
                 setattr(record, field, value)
             else:
-                logger.warning(f"Field {field} not found on {record.__class__.__name__}")
+                logger.warning(
+                    f"Field {field} not found on {record.__class__.__name__}"
+                )
 
         db.session.flush()  # Flush to validate changes
         return record
@@ -394,7 +404,9 @@ def get_or_create(
     Usage:
         user, created = get_or_create(User, username='admin', defaults={'role': 'admin'})
     """
-    record = find_by_field(model_class, list(kwargs.keys())[0], list(kwargs.values())[0])
+    record = find_by_field(
+        model_class, list(kwargs.keys())[0], list(kwargs.values())[0]
+    )
 
     if record:
         return record, False
@@ -409,7 +421,9 @@ def get_or_create(
         return new_record, True
     else:
         # Fallback: try to find again in case of race condition
-        record = find_by_field(model_class, list(kwargs.keys())[0], list(kwargs.values())[0])
+        record = find_by_field(
+            model_class, list(kwargs.keys())[0], list(kwargs.values())[0]
+        )
         return record, False if record else (None, False)
 
 

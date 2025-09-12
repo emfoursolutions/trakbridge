@@ -86,7 +86,9 @@ class User(db.Model, TimestampMixin):
     auth_provider = Column(
         SQLEnum(AuthProvider), nullable=False, default=AuthProvider.LOCAL, index=True
     )
-    provider_user_id = Column(String(255), nullable=True, index=True)  # External provider user ID
+    provider_user_id = Column(
+        String(255), nullable=True, index=True
+    )  # External provider user ID
     provider_metadata = Column(Text, nullable=True)  # JSON metadata from provider
 
     # Local authentication (only used for LOCAL provider)
@@ -109,7 +111,9 @@ class User(db.Model, TimestampMixin):
     language = Column(String(10), default="en")
 
     # Relationships
-    sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
+    sessions = relationship(
+        "UserSession", back_populates="user", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<User {self.username} ({self.auth_provider.value})>"
@@ -125,7 +129,9 @@ class User(db.Model, TimestampMixin):
             raise ValueError("Password can only be set for local authentication users")
 
         salt = bcrypt.gensalt()
-        self.password_hash = bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
+        self.password_hash = bcrypt.hashpw(password.encode("utf-8"), salt).decode(
+            "utf-8"
+        )
         self.password_changed_at = datetime.now(timezone.utc)
 
     def check_password(self, password: str) -> bool:
@@ -141,7 +147,9 @@ class User(db.Model, TimestampMixin):
         if self.auth_provider != AuthProvider.LOCAL or not self.password_hash:
             return False
 
-        return bcrypt.checkpw(password.encode("utf-8"), self.password_hash.encode("utf-8"))
+        return bcrypt.checkpw(
+            password.encode("utf-8"), self.password_hash.encode("utf-8")
+        )
 
     def is_active(self) -> bool:
         """Check if user account is active"""
@@ -182,7 +190,9 @@ class User(db.Model, TimestampMixin):
         Args:
             duration_minutes: How long to lock the account in minutes
         """
-        self.locked_until = datetime.now(timezone.utc) + timedelta(minutes=duration_minutes)
+        self.locked_until = datetime.now(timezone.utc) + timedelta(
+            minutes=duration_minutes
+        )
         self.status = AccountStatus.LOCKED
 
     def unlock_account(self) -> None:
@@ -341,9 +351,13 @@ class User(db.Model, TimestampMixin):
                 {
                     "provider_user_id": self.provider_user_id,
                     "failed_login_attempts": self.failed_login_attempts,
-                    "locked_until": (self.locked_until.isoformat() if self.locked_until else None),
+                    "locked_until": (
+                        self.locked_until.isoformat() if self.locked_until else None
+                    ),
                     "password_changed_at": (
-                        self.password_changed_at.isoformat() if self.password_changed_at else None
+                        self.password_changed_at.isoformat()
+                        if self.password_changed_at
+                        else None
                     ),
                 }
             )

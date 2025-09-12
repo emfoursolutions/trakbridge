@@ -48,7 +48,9 @@ class TestDatabaseRelationships:
         """Test that Stream-TakServer relationship loads efficiently without N+1 queries."""
         with app.app_context():
             # Create TAK server
-            server = TakServer(name="Test Server", host="localhost", port=8089, protocol="tls")
+            server = TakServer(
+                name="Test Server", host="localhost", port=8089, protocol="tls"
+            )
             db_session.add(server)
             db_session.flush()
 
@@ -69,7 +71,9 @@ class TestDatabaseRelationships:
             # This test will initially fail until we implement eager loading
             query_count_before = self._get_query_count(db_session)
 
-            loaded_streams = db_session.query(Stream).options(joinedload(Stream.tak_server)).all()
+            loaded_streams = (
+                db_session.query(Stream).options(joinedload(Stream.tak_server)).all()
+            )
 
             query_count_after = self._get_query_count(db_session)
 
@@ -141,7 +145,9 @@ class TestDatabaseRelationships:
             db_session.commit()
 
             # Verify mappings are deleted (cascade)
-            remaining_mappings = CallsignMapping.query.filter_by(stream_id=stream.id).count()
+            remaining_mappings = CallsignMapping.query.filter_by(
+                stream_id=stream.id
+            ).count()
             # This will fail initially until cascade is properly configured
             assert (
                 remaining_mappings == 0
@@ -189,22 +195,30 @@ class TestDatabaseRelationships:
             # Test Stream table indexes
             stream_indexes = inspector.get_indexes("streams")
             index_columns = {
-                idx["column_names"][0] for idx in stream_indexes if len(idx["column_names"]) == 1
+                idx["column_names"][0]
+                for idx in stream_indexes
+                if len(idx["column_names"]) == 1
             }
 
             # These will fail initially until indexes are added
-            assert "tak_server_id" in index_columns, "Missing index on streams.tak_server_id"
+            assert (
+                "tak_server_id" in index_columns
+            ), "Missing index on streams.tak_server_id"
             assert "is_active" in index_columns, "Missing index on streams.is_active"
 
             # Test User table indexes
             user_indexes = inspector.get_indexes("users")
             user_index_columns = {
-                idx["column_names"][0] for idx in user_indexes if len(idx["column_names"]) == 1
+                idx["column_names"][0]
+                for idx in user_indexes
+                if len(idx["column_names"]) == 1
             }
 
             assert "username" in user_index_columns, "Missing index on users.username"
             assert "email" in user_index_columns, "Missing index on users.email"
-            assert "auth_provider" in user_index_columns, "Missing index on users.auth_provider"
+            assert (
+                "auth_provider" in user_index_columns
+            ), "Missing index on users.auth_provider"
 
             # Test CallsignMapping compound index
             callsign_indexes = inspector.get_indexes("callsign_mappings")
@@ -217,9 +231,7 @@ class TestDatabaseRelationships:
             assert (
                 "stream_id",
                 "identifier_value",
-            ) in compound_indexes, (
-                "Missing compound index on callsign_mappings(stream_id, identifier_value)"
-            )
+            ) in compound_indexes, "Missing compound index on callsign_mappings(stream_id, identifier_value)"
 
     def _get_query_count(self, session):
         """Get approximate query count for testing N+1 prevention."""
@@ -271,7 +283,9 @@ class TestDatabaseConstraints:
         """Test TakServer unique name constraint."""
         with app.app_context():
             # Create first server
-            server1 = TakServer(name="Unique Server", host="localhost", port=8089, protocol="tls")
+            server1 = TakServer(
+                name="Unique Server", host="localhost", port=8089, protocol="tls"
+            )
             db_session.add(server1)
             db_session.commit()
 
@@ -298,7 +312,9 @@ class TestDatabaseConstraints:
             try:
                 # Use raw SQL to test constraint enforcement
                 db.session.execute(
-                    text("INSERT INTO streams (plugin_type, name) VALUES ('garmin', NULL)")
+                    text(
+                        "INSERT INTO streams (plugin_type, name) VALUES ('garmin', NULL)"
+                    )
                 )
                 db.session.commit()
                 assert False, "Should have failed with null name constraint"
@@ -311,7 +327,9 @@ class TestDatabaseConstraints:
             # Test TakServer required fields
             with pytest.raises(IntegrityError):
                 # This should fail at database level for missing host/port
-                db.session.execute(text("INSERT INTO tak_servers (name) VALUES ('Test Server')"))
+                db.session.execute(
+                    text("INSERT INTO tak_servers (name) VALUES ('Test Server')")
+                )
                 db.session.commit()
 
             db_session.rollback()
@@ -319,7 +337,9 @@ class TestDatabaseConstraints:
             # Test User required fields
             with pytest.raises(IntegrityError):
                 # This should fail at database level for missing username
-                db.session.execute(text("INSERT INTO users (email) VALUES ('test@example.com')"))
+                db.session.execute(
+                    text("INSERT INTO users (email) VALUES ('test@example.com')")
+                )
                 db.session.commit()
 
             db_session.rollback()
@@ -362,7 +382,9 @@ class TestQueryPerformanceOptimization:
 
             duration = end_time - start_time
             # This assertion will fail initially until bulk operations are optimized
-            assert duration < 1.0, f"Bulk creation took {duration:.2f}s, should be under 1.0s"
+            assert (
+                duration < 1.0
+            ), f"Bulk creation took {duration:.2f}s, should be under 1.0s"
 
             # Verify all records created
             count = CallsignMapping.query.filter_by(stream_id=stream.id).count()
@@ -402,7 +424,10 @@ class TestQueryPerformanceOptimization:
 
             # This query should be optimized to avoid N+1
             results = (
-                db_session.query(Stream).join(TakServer).filter(TakServer.protocol == "tls").all()
+                db_session.query(Stream)
+                .join(TakServer)
+                .filter(TakServer.protocol == "tls")
+                .all()
             )
 
             # Access related objects to trigger loading
@@ -413,5 +438,7 @@ class TestQueryPerformanceOptimization:
             duration = end_time - start_time
 
             # Should complete efficiently - this will fail initially
-            assert duration < 0.5, f"Join query took {duration:.2f}s, should be under 0.5s"
+            assert (
+                duration < 0.5
+            ), f"Join query took {duration:.2f}s, should be under 0.5s"
             assert len(results) == 50  # All streams should match

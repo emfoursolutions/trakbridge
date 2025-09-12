@@ -48,7 +48,9 @@ class TestBootstrapServiceCore:
         # Create temporary directory for bootstrap file
         temp_dir = tempfile.mkdtemp()
         bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-        return BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
+        return BootstrapService(
+            bootstrap_file_path=bootstrap_file_path, skip_migration_check=True
+        )
 
     def test_bootstrap_service_creation(self, bootstrap_service):
         """Test creating a bootstrap service instance."""
@@ -90,7 +92,9 @@ class TestBootstrapServiceCore:
             result = bootstrap_service.should_create_initial_admin()
             assert result is False
 
-    def test_create_initial_admin_success(self, app, clean_database, db_session, bootstrap_service):
+    def test_create_initial_admin_success(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
         """Test successful initial admin creation."""
         with app.app_context():
             # Ensure clean state
@@ -168,7 +172,9 @@ class TestBootstrapServiceCore:
             # Should not create additional admin
             assert bootstrap_service.should_create_initial_admin() is False
 
-    def test_bootstrap_info_collection(self, app, clean_database, db_session, bootstrap_service):
+    def test_bootstrap_info_collection(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
         """Test comprehensive bootstrap info collection."""
         with app.app_context():
             # Ensure clean state first
@@ -204,7 +210,9 @@ class TestBootstrapServiceCore:
             assert info["should_create_admin"] is False
             assert info["bootstrap_completed"] is True
 
-    def test_force_password_change_logic(self, app, clean_database, db_session, bootstrap_service):
+    def test_force_password_change_logic(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
         """Test force password change requirement detection."""
         with app.app_context():
             # Create admin user with no password change date (should require change)
@@ -359,7 +367,9 @@ class TestBootstrapServiceErrorHandling:
         # Create temporary directory for bootstrap file
         temp_dir = tempfile.mkdtemp()
         bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-        return BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
+        return BootstrapService(
+            bootstrap_file_path=bootstrap_file_path, skip_migration_check=True
+        )
 
     def test_database_error_handling(self, app, bootstrap_service):
         """Test handling of database errors."""
@@ -369,7 +379,9 @@ class TestBootstrapServiceErrorHandling:
                 result = bootstrap_service.should_create_initial_admin()
                 assert result is False
 
-    def test_file_system_error_resilience(self, app, clean_database, db_session, bootstrap_service):
+    def test_file_system_error_resilience(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
         """Test that file system errors don't prevent database-based operation."""
         with app.app_context():
             # Create admin user
@@ -413,7 +425,9 @@ class TestBootstrapServiceCoordination:
         """Create a bootstrap service instance for testing."""
         temp_dir = tempfile.mkdtemp()
         bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-        return BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
+        return BootstrapService(
+            bootstrap_file_path=bootstrap_file_path, skip_migration_check=True
+        )
 
     def test_database_coordination_with_existing_admin(
         self, app, clean_database, db_session, bootstrap_service
@@ -435,13 +449,17 @@ class TestBootstrapServiceCoordination:
             # Database coordination should detect existing admin
             assert bootstrap_service._database_bootstrap_coordination() is False
 
-    def test_database_coordination_no_admin(self, app, clean_database, bootstrap_service):
+    def test_database_coordination_no_admin(
+        self, app, clean_database, bootstrap_service
+    ):
         """Test database coordination when no admin exists."""
         with app.app_context():
             # Database coordination should allow bootstrap
             assert bootstrap_service._database_bootstrap_coordination() is True
 
-    def test_lock_coordination_in_test_environment(self, app, clean_database, bootstrap_service):
+    def test_lock_coordination_in_test_environment(
+        self, app, clean_database, bootstrap_service
+    ):
         """Test that lock coordination is skipped in test environment."""
         with app.app_context():
             # In test environment, locks should be skipped
@@ -471,7 +489,9 @@ class TestAuthenticationFlowIntegration:
         """Create a bootstrap service instance for testing."""
         temp_dir = tempfile.mkdtemp()
         bootstrap_file_path = os.path.join(temp_dir, ".bootstrap_completed")
-        return BootstrapService(bootstrap_file_path=bootstrap_file_path, skip_migration_check=True)
+        return BootstrapService(
+            bootstrap_file_path=bootstrap_file_path, skip_migration_check=True
+        )
 
     def test_initial_admin_password_expiry_bypass(
         self, app, clean_database, db_session, bootstrap_service
@@ -483,7 +503,9 @@ class TestAuthenticationFlowIntegration:
             # Create initial admin user (simulating bootstrap)
             admin_user = bootstrap_service.create_initial_admin()
             assert admin_user is not None
-            assert admin_user.password_changed_at is None  # Should be None for initial setup
+            assert (
+                admin_user.password_changed_at is None
+            )  # Should be None for initial setup
 
             # Test authentication with LocalAuthProvider
             auth_provider = LocalAuthProvider({"password_policy": {"max_age_days": 90}})
@@ -500,7 +522,9 @@ class TestAuthenticationFlowIntegration:
             # Should succeed without password expired error
             assert result.result.name != "PASSWORD_EXPIRED"
 
-    def test_non_admin_password_expiry_still_enforced(self, app, clean_database, db_session):
+    def test_non_admin_password_expiry_still_enforced(
+        self, app, clean_database, db_session
+    ):
         """Test that non-admin users still have password expiry enforced."""
         from services.auth.local_provider import LocalAuthProvider
 

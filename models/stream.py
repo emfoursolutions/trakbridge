@@ -21,12 +21,23 @@ from utils.json_validator import JSONValidationError, safe_json_loads
 logger = logging.getLogger(__name__)
 
 # Association table for many-to-many relationship between streams and TAK servers
-stream_tak_servers = db.Table('stream_tak_servers',
-    db.Column('stream_id', db.Integer, db.ForeignKey('streams.id', ondelete='CASCADE'), primary_key=True),
-    db.Column('tak_server_id', db.Integer, db.ForeignKey('tak_servers.id', ondelete='CASCADE'), primary_key=True),
+stream_tak_servers = db.Table(
+    "stream_tak_servers",
+    db.Column(
+        "stream_id",
+        db.Integer,
+        db.ForeignKey("streams.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    db.Column(
+        "tak_server_id",
+        db.Integer,
+        db.ForeignKey("tak_servers.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
     # Add indexes for performance
-    db.Index('idx_stream_tak_servers_stream_id', 'stream_id'),
-    db.Index('idx_stream_tak_servers_tak_server_id', 'tak_server_id')
+    db.Index("idx_stream_tak_servers_stream_id", "stream_id"),
+    db.Index("idx_stream_tak_servers_tak_server_id", "tak_server_id"),
 )
 
 
@@ -47,26 +58,34 @@ class Stream(db.Model, TimestampMixin):
     last_poll = db.Column(db.DateTime)
     last_error = db.Column(db.Text)  # Last error message
     total_messages_sent = db.Column(db.Integer, default=0)  # Statistics
-    cot_type_mode = db.Column(db.String(20), default="stream")  # "stream" or "per_point"
+    cot_type_mode = db.Column(
+        db.String(20), default="stream"
+    )  # "stream" or "per_point"
 
     # New minimal fields for callsign mapping functionality
     enable_callsign_mapping = db.Column(db.Boolean, default=False)
-    callsign_identifier_field = db.Column(db.String(100), nullable=True)  # Selected field name
-    callsign_error_handling = db.Column(db.String(20), default="fallback")  # "fallback" or "skip"
-    enable_per_callsign_cot_types = db.Column(db.Boolean, default=False)  # Feature toggle
+    callsign_identifier_field = db.Column(
+        db.String(100), nullable=True
+    )  # Selected field name
+    callsign_error_handling = db.Column(
+        db.String(20), default="fallback"
+    )  # "fallback" or "skip"
+    enable_per_callsign_cot_types = db.Column(
+        db.Boolean, default=False
+    )  # Feature toggle
 
     # Relationships
     # Legacy single-server relationship (maintained for backward compatibility)
     tak_server = db.relationship("TakServer", back_populates="streams")
-    
+
     # New many-to-many relationship with TAK servers
     tak_servers = db.relationship(
         "TakServer",
         secondary=stream_tak_servers,
         back_populates="streams_many",
-        lazy='select'  # Allow eager loading with joinedload
+        lazy="select",  # Allow eager loading with joinedload
     )
-    
+
     callsign_mappings = db.relationship(
         "CallsignMapping", back_populates="stream", cascade="all, delete-orphan"
     )
@@ -131,12 +150,16 @@ class Stream(db.Model, TimestampMixin):
             try:
                 # Validate the config dict structure before encryption
                 if not isinstance(config_dict, dict):
-                    raise ValueError(f"Plugin config must be a dictionary, got {type(config_dict)}")
+                    raise ValueError(
+                        f"Plugin config must be a dictionary, got {type(config_dict)}"
+                    )
 
                 # Check the serialized size before storage
                 test_json = json.dumps(config_dict)
                 if len(test_json.encode("utf-8")) > 256 * 1024:  # 256KB limit
-                    raise ValueError("Plugin configuration exceeds maximum size limit (256KB)")
+                    raise ValueError(
+                        "Plugin configuration exceeds maximum size limit (256KB)"
+                    )
 
                 # Encrypt sensitive fields before storage
                 encrypted_config = BaseGPSPlugin.encrypt_config_for_storage(
@@ -144,7 +167,9 @@ class Stream(db.Model, TimestampMixin):
                 )
                 self.plugin_config = json.dumps(encrypted_config)
 
-                logger.debug(f"Set plugin config for stream {self.id}: {len(test_json)} bytes")
+                logger.debug(
+                    f"Set plugin config for stream {self.id}: {len(test_json)} bytes"
+                )
                 logger.debug(f"Plugin config content: {config_dict}")
                 logger.debug(f"Encrypted config content: {encrypted_config}")
 
@@ -152,7 +177,9 @@ class Stream(db.Model, TimestampMixin):
                 logger.error(f"Failed to set plugin config for stream {self.id}: {e}")
                 raise ValueError(f"Invalid plugin configuration: {e}")
             except Exception as e:
-                logger.error(f"Unexpected error setting plugin config for stream {self.id}: {e}")
+                logger.error(
+                    f"Unexpected error setting plugin config for stream {self.id}: {e}"
+                )
                 raise
         else:
             self.plugin_config = None
@@ -270,18 +297,18 @@ class Stream(db.Model, TimestampMixin):
     def get_all_tak_servers(self):
         """Get all TAK servers (combines legacy single server and new multiple servers)"""
         servers = []
-        
+
         # Add legacy single server if it exists and is not already in the many-to-many relationship
         if self.tak_server:
             servers.append(self.tak_server)
-        
+
         # Add servers from the many-to-many relationship
         many_to_many_servers = self.tak_servers
         for server in many_to_many_servers:
             # Only add if not already in list (avoid duplicates)
             if server not in servers:
                 servers.append(server)
-        
+
         return servers
 
     def get_tak_server_count(self):
@@ -292,29 +319,29 @@ class Stream(db.Model, TimestampMixin):
         """Get display information for TAK servers in templates"""
         all_servers = self.get_all_tak_servers()
         server_count = len(all_servers)
-        
+
         if server_count == 0:
             return {
-                'has_servers': False,
-                'count': 0,
-                'single_server': None,
-                'multiple_servers': [],
-                'display_text': 'Not configured'
+                "has_servers": False,
+                "count": 0,
+                "single_server": None,
+                "multiple_servers": [],
+                "display_text": "Not configured",
             }
         elif server_count == 1:
             server = all_servers[0]
             return {
-                'has_servers': True,
-                'count': 1,
-                'single_server': server,
-                'multiple_servers': [],
-                'display_text': server.name if server.name else 'Unnamed'
+                "has_servers": True,
+                "count": 1,
+                "single_server": server,
+                "multiple_servers": [],
+                "display_text": server.name if server.name else "Unnamed",
             }
         else:
             return {
-                'has_servers': True,
-                'count': server_count,
-                'single_server': None,
-                'multiple_servers': all_servers,
-                'display_text': f'{server_count} servers'
+                "has_servers": True,
+                "count": server_count,
+                "single_server": None,
+                "multiple_servers": all_servers,
+                "display_text": f"{server_count} servers",
             }
