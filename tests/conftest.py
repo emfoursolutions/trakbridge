@@ -79,7 +79,19 @@ def app():
             except Exception as db_error:
                 print(f"Database setup warning: {db_error}")
 
-            yield app
+            try:
+                yield app
+            finally:
+                # Clean up database connections before app context closes
+                try:
+                    if db.session:
+                        db.session.close()
+                        db.session.remove()
+                    if db.engine:
+                        db.engine.dispose()
+                except Exception as cleanup_error:
+                    print(f"App fixture database cleanup warning: {cleanup_error}")
+                    # Don't fail tests due to cleanup issues
 
     except Exception as app_error:
         print(f"App creation failed: {app_error}")
