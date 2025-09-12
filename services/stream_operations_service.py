@@ -672,18 +672,35 @@ class StreamOperationsService:
             identifier_key = f"callsign_mapping_{mapping_index}_identifier"
             callsign_key = f"callsign_mapping_{mapping_index}_callsign"
             cot_type_key = f"callsign_mapping_{mapping_index}_cot_type"
+            enabled_key = f"callsign_mapping_{mapping_index}_enabled"
 
             identifier_value = data.get(identifier_key)
             custom_callsign = data.get(callsign_key)
             cot_type = data.get(cot_type_key) or None  # Empty string becomes None
+            
+            # Handle enabled field - checkbox data comes as 'on' or not present
+            enabled_value = data.get(enabled_key)
+            enabled = True  # Default to enabled
+            
+            if isinstance(enabled_value, str):
+                # Form checkbox data: 'on' means checked/enabled, missing means unchecked/disabled
+                enabled = enabled_value.lower() in ('on', 'true', '1')
+            elif isinstance(enabled_value, bool):
+                # Direct boolean value (from JSON)
+                enabled = enabled_value
+            elif enabled_value is None:
+                # Missing checkbox means disabled (unchecked)
+                enabled = False
 
-            # Only create mapping if both identifier and callsign are provided
-            if identifier_value and custom_callsign:
+            # Create mapping if identifier is provided (even for disabled trackers)
+            # This ensures disabled trackers are saved with enabled=False
+            if identifier_value:
                 mapping = CallsignMapping(
                     stream_id=stream.id,
                     identifier_value=identifier_value,
-                    custom_callsign=custom_callsign,
+                    custom_callsign=custom_callsign or '',  # Form data should include callsign
                     cot_type=cot_type,
+                    enabled=enabled,
                 )
                 self._get_session().add(mapping)
 

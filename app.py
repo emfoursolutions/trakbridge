@@ -281,6 +281,16 @@ def should_run_delayed_startup() -> bool:
     Determine if this process should run the delayed startup tasks.
     Uses environment-aware coordination that works optimally with different servers.
     """
+    # Skip delayed startup in testing environment to prevent race conditions
+    try:
+        from flask import current_app
+        if hasattr(current_app, 'config') and current_app.config.get('TESTING', False):
+            logger.debug("Testing environment detected - skipping delayed startup")
+            return False
+    except RuntimeError:
+        # No application context available, continue with normal logic
+        pass
+
     # For Hypercorn environments - let each worker handle its own startup
     # Hypercorn already provides process coordination via the master process
     if is_hypercorn_environment():
