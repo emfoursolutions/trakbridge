@@ -303,7 +303,6 @@ class TestingConfig(BaseConfig):
             return {
                 "pool_pre_ping": False,
                 "connect_args": connect_args,
-                "pool_timeout": 30,
                 "pool_recycle": 300,
             }
         elif db_type == "postgresql":
