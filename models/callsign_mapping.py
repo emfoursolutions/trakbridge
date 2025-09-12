@@ -37,6 +37,7 @@ class CallsignMapping(db.Model, TimestampMixin):
     )  # Raw identifier (IMEI, device_name, etc.)
     custom_callsign = db.Column(db.String(100), nullable=False)  # User-assigned callsign
     cot_type = db.Column(db.String(50), nullable=True)  # Per-callsign CoT type override
+    enabled = db.Column(db.Boolean, nullable=False, default=True)  # Enable/disable tracker
 
     # Relationships
     stream = db.relationship("Stream", back_populates="callsign_mappings")
@@ -53,6 +54,7 @@ class CallsignMapping(db.Model, TimestampMixin):
         identifier_value: str,
         custom_callsign: str,
         cot_type: str = None,
+        enabled: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -60,6 +62,7 @@ class CallsignMapping(db.Model, TimestampMixin):
         self.identifier_value = identifier_value
         self.custom_callsign = custom_callsign
         self.cot_type = cot_type
+        self.enabled = enabled
 
     def __repr__(self):
         return f"<CallsignMapping {self.identifier_value} -> {self.custom_callsign}>"
@@ -72,6 +75,7 @@ class CallsignMapping(db.Model, TimestampMixin):
             "identifier_value": self.identifier_value,
             "custom_callsign": self.custom_callsign,
             "cot_type": self.cot_type,
+            "enabled": self.enabled,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
