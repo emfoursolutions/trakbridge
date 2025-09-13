@@ -29,7 +29,7 @@ Created: 18-Jul-2025
 
 # Standard library imports
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 # Local application imports
 from models.stream import Stream
@@ -114,15 +114,18 @@ class StreamConfigService:
                 "security_issues": [],
             }
 
-    @staticmethod
-    def extract_plugin_config_from_request(data: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract plugin configuration from request data"""
+    def extract_plugin_config_from_request(
+        self, data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Extract plugin configuration from request data with proper checkbox handling"""
         plugin_config: Dict[str, Any] = {}
+        plugin_type = data.get("plugin_type")
 
         logger.debug(f"Extracting plugin config from request data: {list(data.keys())}")
 
+        # First pass: Extract all present plugin fields
         for key, value in data.items():
-            if key.startswith("plugin_"):
+            if key.startswith("plugin_") and key != "plugin_type":
                 # Remove 'plugin_' prefix
                 config_key = key[7:]
                 plugin_config[config_key] = value
@@ -130,8 +133,43 @@ class StreamConfigService:
                     f"Found plugin config field: {key} -> {config_key} = {value}"
                 )
 
+        # Second pass: Handle missing checkbox fields
+        if plugin_type:
+            metadata = self.plugin_manager.get_plugin_metadata(plugin_type)
+            if metadata:
+                checkbox_fields = self._get_checkbox_fields(metadata)
+
+                for field_name in checkbox_fields:
+                    if field_name not in plugin_config:
+                        # Missing checkbox field means it was unchecked
+                        plugin_config[field_name] = False
+                        logger.debug(
+                            f"Setting missing checkbox field to False: {field_name}"
+                        )
+
         logger.debug(f"Extracted plugin config: {plugin_config}")
         return plugin_config
+
+    def _get_checkbox_fields(self, metadata: Dict[str, Any]) -> List[str]:
+        """Get list of checkbox field names from plugin metadata"""
+        checkbox_fields = []
+
+        for field_data in metadata.get("config_fields", []):
+            # Handle both dict and object field definitions
+            field_type = None
+            field_name = None
+
+            if isinstance(field_data, dict):
+                field_type = field_data.get("field_type") or field_data.get("type")
+                field_name = field_data.get("name")
+            elif hasattr(field_data, "field_type"):
+                field_type = getattr(field_data, "field_type")
+                field_name = getattr(field_data, "name", None)
+
+            if field_type == "checkbox" and field_name:
+                checkbox_fields.append(field_name)
+
+        return checkbox_fields
 
     def merge_plugin_config_with_existing(
         self,
