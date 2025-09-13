@@ -913,14 +913,14 @@ class SampleCustomTrackerPlugin(BaseGPSPlugin, CallsignMappable):
 
         DEVELOPER GUIDE:
 
-        🕒 TIMESTAMP FORMAT HANDLING:
+        TIMESTAMP FORMAT HANDLING:
         Support multiple common timestamp formats your API might return:
         - ISO 8601 with Z suffix: "2024-01-15T10:30:00Z"
         - ISO 8601 with timezone: "2024-01-15T10:30:00+00:00"
         - Unix timestamp: 1705312200
         - Custom formats specific to your tracker service
 
-        ⚠️ ERROR HANDLING:
+        ERROR HANDLING:
         - Log parsing failures for debugging but return None
         - Caller should fall back to current timestamp
         - Never raise exceptions from timestamp parsing
