@@ -10,16 +10,14 @@ End-to-end tests for the tracker enable/disable feature covering:
 5. Edge cases and performance scenarios
 6. Multi-GPS provider testing
 
-Author: TrakBridge Implementation Team  
+Author: TrakBridge Implementation Team
 Created: 2025-12-13 (Phase 6 E2E Implementation)
 """
 
 import pytest
 import uuid
-from unittest.mock import Mock, patch, AsyncMock
-from flask import url_for
+from unittest.mock import Mock, patch
 import asyncio
-import json
 
 from models.stream import Stream
 from models.callsign_mapping import CallsignMapping
@@ -33,9 +31,12 @@ from services.stream_operations_service import StreamOperationsService
 class TestTrackerEnableDisableE2E:
     """End-to-end tests for complete tracker enable/disable workflows"""
 
-    def test_complete_user_workflow_create_stream(self, app, db_session, authenticated_client, test_users):
+    def test_complete_user_workflow_create_stream(
+        self, app, db_session, authenticated_client, test_users
+    ):
         """
-        Test complete user workflow: create stream → discover trackers → disable some → verify CoT output
+        Test complete user workflow: create stream → discover trackers →
+        disable some → verify CoT output
 
         This is the primary E2E test that covers the full user experience:
         1. User creates a stream with callsign mapping enabled
@@ -144,29 +145,36 @@ class TestTrackerEnableDisableE2E:
             # 4. Verify only enabled trackers are processed
             # Check that we have the expected enabled trackers
             enabled_names = [loc["name"] for loc in mock_gps_locations]
-            
+
             # Should have mapped names for enabled trackers
             assert "E2E-Alpha" in enabled_names  # E2E001 (enabled)
             assert "E2E-Charlie" in enabled_names  # E2E003 (enabled)
-            
-            # E2E002 (disabled) should either be filtered out or remain with original name
+
+            # E2E002 (disabled) should either be filtered out or remain with
+            # original name
             # The exact behavior depends on the filtering implementation
-            disabled_device_names = [name for name in enabled_names if "Original Device 2" in name]
+            disabled_device_names = [
+                name for name in enabled_names if "Original Device 2" in name
+            ]
             if disabled_device_names:
-                # If disabled tracker is still in the list, it should have original name
+                # If disabled tracker is still in the list, it should have
+                # original name
                 assert any("Original Device 2" in name for name in enabled_names)
-            
+
             # Verify we don't have more than the expected enabled trackers mapped
             mapped_names = [name for name in enabled_names if name.startswith("E2E-")]
-            assert len(mapped_names) == 2  # Only the 2 enabled trackers should be mapped
+            assert (
+                len(mapped_names) == 2
+            )  # Only the 2 enabled trackers should be mapped
 
             # 5. Test tracker discovery and state preservation
             with patch(
-                "services.connection_test_service.ConnectionTestService.discover_trackers"
+                "services.connection_test_service.ConnectionTestService."
+                "discover_plugin_trackers_sync"
             ) as mock_discover:
                 mock_discover.return_value = {
                     "success": True,
-                    "trackers": [
+                    "tracker_data": [
                         {"identifier": "E2E001", "name": "Device 1", "uid": "uid001"},
                         {"identifier": "E2E002", "name": "Device 2", "uid": "uid002"},
                         {"identifier": "E2E003", "name": "Device 3", "uid": "uid003"},
@@ -209,12 +217,14 @@ class TestTrackerEnableDisableE2E:
                 # New tracker should default to enabled
                 assert tracker_dict["E2E004"]["enabled"] is True
 
-    def test_edge_case_no_trackers_discovered(self, app, db_session, authenticated_client, test_users):
+    def test_edge_case_no_trackers_discovered(
+        self, app, db_session, authenticated_client, test_users
+    ):
         """Test edge case: no trackers discovered from GPS provider"""
         with app.app_context():
             # Use authenticated admin client for API operations
             client = authenticated_client("admin")
-            
+
             # Create stream with callsign mapping enabled
             tak_server = TakServer(name="No Trackers Test", host="localhost", port=8087)
             db_session.add(tak_server)
@@ -227,17 +237,24 @@ class TestTrackerEnableDisableE2E:
                 enable_callsign_mapping=True,
                 callsign_identifier_field="imei",
             )
-            stream.set_plugin_config({"username": "test", "password": "test", "url": "https://test.example.com/feed.kml"})
+            stream.set_plugin_config(
+                {
+                    "username": "test",
+                    "password": "test",
+                    "url": "https://test.example.com/feed.kml",
+                }
+            )
             db_session.add(stream)
             db_session.commit()
 
             # Mock empty tracker discovery
             with patch(
-                "services.connection_test_service.ConnectionTestService.discover_trackers"
+                "services.connection_test_service.ConnectionTestService."
+                "discover_plugin_trackers_sync"
             ) as mock_discover:
                 mock_discover.return_value = {
                     "success": True,
-                    "trackers": [],  # No trackers found
+                    "tracker_data": [],  # No trackers found
                 }
 
                 response = client.post(
@@ -245,7 +262,11 @@ class TestTrackerEnableDisableE2E:
                     json={
                         "stream_id": stream.id,
                         "plugin_type": "garmin",
-                        "plugin_config": {"username": "test", "password": "test", "url": "https://test.example.com/feed.kml"},
+                        "plugin_config": {
+                            "username": "test",
+                            "password": "test",
+                            "url": "https://test.example.com/feed.kml",
+                        },
                     },
                     headers={"Content-Type": "application/json"},
                 )
@@ -291,7 +312,13 @@ class TestTrackerEnableDisableE2E:
                 enable_callsign_mapping=True,
                 callsign_identifier_field="imei",
             )
-            stream.set_plugin_config({"username": "test", "password": "test", "url": "https://test.example.com/feed.kml"})
+            stream.set_plugin_config(
+                {
+                    "username": "test",
+                    "password": "test",
+                    "url": "https://test.example.com/feed.kml",
+                }
+            )
             db_session.add(stream)
             db_session.commit()
 
@@ -395,7 +422,8 @@ class TestTrackerEnableDisableE2E:
                 db_session.add(mapping)
             db_session.commit()
 
-            # Verify migration default behavior - all existing mappings should be enabled
+            # Verify migration default behavior - all existing mappings should
+            # be enabled
             mappings = CallsignMapping.query.filter_by(stream_id=stream.id).all()
             for mapping in mappings:
                 assert mapping.enabled is True  # Migration should set default to True
@@ -501,11 +529,14 @@ class TestTrackerEnableDisableE2E:
                 # Check if this tracker should be enabled based on the mapping logic
                 mapping_enabled = i % 3 != 0
                 if mapping_enabled:
-                    # Count enabled trackers (the exact callsign matching isn't critical for this performance test)
-                    # Just verify that enabled trackers get some kind of mapped name (not the original)
+                    # Count enabled trackers (the exact callsign matching isn't
+                    # critical for this performance test)
+                    # Just verify that enabled trackers get some kind of mapped
+                    # name (not the original)
                     if not location["name"].startswith("Performance Device"):
                         enabled_count += 1
-                # Note: The important thing for this performance test is that the processing completes quickly
+                # Note: The important thing for this performance test is that
+                # the processing completes quickly
                 # and the right number of trackers are processed
 
             # Should have processed ~67% of trackers as enabled (i % 3 != 0)
@@ -649,13 +680,13 @@ class TestTrackerEnableDisableE2E:
                 ).all()
                 assert len(rollback_mappings) == 0
 
-            except Exception as e:
+            except Exception:
                 db_session.rollback()
                 # Expected behavior - transaction should be rolled back
 
             # Test 2: Migration rollback capability
             # Verify that the enabled column can be safely added and removed
-            from sqlalchemy import inspect, text
+            from sqlalchemy import inspect
 
             # Check if session has a bind before inspecting
             if db_session.bind is not None:
@@ -688,7 +719,7 @@ class TestPhase6UserDocumentationAndPolish:
         with app.app_context():
             # Use authenticated admin client for UI access
             client = authenticated_client("admin")
-            
+
             # Test create stream page has help text for tracker enable/disable
             response = client.get("/streams/create")
             assert response.status_code == 200
@@ -703,12 +734,14 @@ class TestPhase6UserDocumentationAndPolish:
             # Should have proper form structure for callsign mapping
             assert "callsign_mapping" in html_content.lower()
 
-    def test_ui_styling_and_visual_feedback(self, app, db_session, authenticated_client, test_users):
+    def test_ui_styling_and_visual_feedback(
+        self, app, db_session, authenticated_client, test_users
+    ):
         """Test UI styling and visual feedback for disabled trackers"""
         with app.app_context():
             # Use authenticated admin client for UI access
             client = authenticated_client("admin")
-            
+
             # Create test stream for editing
             tak_server = TakServer(name="UI Test Server", host="localhost", port=8087)
             db_session.add(tak_server)
