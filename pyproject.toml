@@ -157,7 +157,8 @@ markers = [
     "slow: Slow-running tests that may be skipped in quick runs",
     "benchmark: Performance benchmarking tests for optimization validation",
     "cot_service: Tests that require COT service functionality",
-    "final_validation: Final validation tests for complete feature implementation"
+    "final_validation: Final validation tests for complete feature implementation",
+    "e2e: End-to-end tests covering complete user workflows"
 ]
 
 # Warning filters

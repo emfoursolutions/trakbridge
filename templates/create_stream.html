@@ -178,29 +178,29 @@
                 </div>
             </div>
 
-            <!-- Callsign Mapping Configuration -->
+            <!-- Tracker Configuration -->
             <div id="callsign-mapping-section" class="card" style="display: none;">
                 <div class="card-header">
                     <h5 class="mb-0">
                         <i class="fas fa-tags"></i>
-                        Callsign Mapping Configuration
+                        Tracker Management & Configuration
                     </h5>
                 </div>
                 <div class="card-body">
-                    <!-- Enable callsign mapping toggle -->
+                    <!-- Enable tracker configuration toggle -->
                     <div class="mb-3">
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="enable_callsign_mapping" name="enable_callsign_mapping" onchange="toggleCallsignMapping()">
                             <label class="form-check-label" for="enable_callsign_mapping">
-                                <strong>Enable custom callsign mapping</strong>
+                                <strong>Enable individual tracker configuration</strong>
                             </label>
                         </div>
                         <div class="form-text">
-                            When enabled, you can assign custom callsigns to individual trackers instead of using the provider's default names.
+                            When enabled, you can assign custom configurations to individual trackers instead of using the provider's default settings.
                         </div>
                     </div>
 
-                    <!-- Callsign mapping configuration (hidden by default) -->
+                    <!-- Tracker configuration (hidden by default) -->
                     <div id="callsign-config-section" style="display: none;">
                         <!-- Identifier field selection -->
                         <div class="row">
@@ -217,10 +217,10 @@
                                 <div class="mb-3">
                                     <label for="callsign_error_handling" class="form-label">Error Handling</label>
                                     <select class="form-select" id="callsign_error_handling" name="callsign_error_handling">
-                                        <option value="fallback" selected>Fallback to default name</option>
+                                        <option value="fallback" selected>Fallback to default configuration</option>
                                         <option value="skip">Skip problematic trackers</option>
                                     </select>
-                                    <div class="form-text">How to handle trackers with missing callsign mappings</div>
+                                    <div class="form-text">How to handle trackers with missing device configurations</div>
                                 </div>
                             </div>
                         </div>
@@ -230,7 +230,7 @@
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" id="enable_per_callsign_cot_types" name="enable_per_callsign_cot_types" onchange="togglePerCallsignCotTypes()">
                                 <label class="form-check-label" for="enable_per_callsign_cot_types">
-                                    Enable per-callsign CoT type overrides
+                                    Enable per-tracker CoT type overrides
                                 </label>
                             </div>
                             <div class="form-text">Allow different CoT types for individual trackers</div>
@@ -238,17 +238,38 @@
 
                         <!-- Tracker discovery and mapping -->
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="mb-0">Tracker Discovery & Callsign Assignment</h6>
+                            <h6 class="mb-0">
+                                Tracker Discovery & Configuration
+                                <i class="fas fa-question-circle text-muted ms-1" 
+                                   style="cursor: pointer;" 
+                                   onclick="toggleTrackerHelp()"
+                                   title="Click for help"></i>
+                            </h6>
                             <div class="btn-group" role="group">
-                                <button type="button" class="btn btn-outline-success btn-sm" onclick="bulkEnableTrackers(true)" title="Enable all trackers">
+                                <button type="button" class="btn btn-outline-success btn-sm" onclick="bulkEnableTrackers(true)">
                                     <i class="fas fa-check-square"></i> Enable All
                                 </button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="bulkEnableTrackers(false)" title="Disable all trackers">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="bulkEnableTrackers(false)">
                                     <i class="fas fa-square"></i> Disable All
                                 </button>
                                 <button type="button" class="btn btn-outline-primary btn-sm" onclick="refreshTrackerDiscovery()">
                                     <i class="fas fa-sync"></i> Refresh Trackers
                                 </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Collapsible help text -->
+                        <div id="tracker-help" class="alert alert-info mb-3" style="display: none;">
+                            <div class="d-flex">
+                                <i class="fas fa-info-circle me-2 mt-1"></i>
+                                <div>
+                                    <strong>Tracker Enable/Disable Control:</strong>
+                                    <ul class="mb-0 mt-1">
+                                        <li><strong>Enabled trackers</strong> will send location data to TAK servers</li>
+                                        <li><strong>Disabled trackers</strong> are preserved in your configuration but won't generate CoT messages</li>
+                                        <li>Refreshing trackers preserves your enable/disable settings for existing trackers</li>
+                                    </ul>
+                                </div>
                             </div>
                         </div>
 
@@ -1188,32 +1209,65 @@ function toggleTrackerEnabled(checkbox, index) {
     const cotTypeSelect = document.getElementById(`cot_type_${index}`);
     const row = checkbox.closest('tr');
     
+    // Add smooth transition
+    row.style.transition = 'all 0.3s ease-in-out';
+    
     if (checkbox.checked) {
         // Enable tracker - remove disabled states
         if (callsignInput) {
             callsignInput.readOnly = false;
             callsignInput.classList.remove('text-muted');
             callsignInput.style.backgroundColor = '';
+            callsignInput.setAttribute('aria-label', `Callsign for tracker ${index + 1} - enabled`);
         }
         if (cotTypeSelect) {
             cotTypeSelect.disabled = false;
             cotTypeSelect.classList.remove('text-muted');
+            cotTypeSelect.setAttribute('aria-label', `CoT type for tracker ${index + 1} - enabled`);
         }
         row.classList.remove('table-secondary');
         row.style.opacity = '1';
+        row.setAttribute('aria-label', `Tracker ${index + 1} - enabled`);
+        
+        // Visual feedback - brief highlight
+        row.style.backgroundColor = '#d4edda';
+        setTimeout(() => {
+            row.style.backgroundColor = '';
+        }, 800);
     } else {
         // Disable tracker - add visual disabled states while preserving form submission
         if (callsignInput) {
             callsignInput.readOnly = true;  // Use readonly instead of disabled
             callsignInput.classList.add('text-muted');
             callsignInput.style.backgroundColor = '#e9ecef';  // Visual disabled appearance
+            callsignInput.setAttribute('aria-label', `Callsign for tracker ${index + 1} - disabled`);
         }
         if (cotTypeSelect) {
             cotTypeSelect.disabled = true;  // CoT select can still be disabled
             cotTypeSelect.classList.add('text-muted');
+            cotTypeSelect.setAttribute('aria-label', `CoT type for tracker ${index + 1} - disabled`);
         }
         row.classList.add('table-secondary');
         row.style.opacity = '0.6';
+        row.setAttribute('aria-label', `Tracker ${index + 1} - disabled`);
+        
+        // Visual feedback - brief highlight
+        row.style.backgroundColor = '#f8d7da';
+        setTimeout(() => {
+            row.style.backgroundColor = '';
+        }, 800);
+    }
+}
+
+/**
+ * Toggle the tracker help text visibility
+ */
+function toggleTrackerHelp() {
+    const helpDiv = document.getElementById('tracker-help');
+    if (helpDiv.style.display === 'none') {
+        helpDiv.style.display = 'block';
+    } else {
+        helpDiv.style.display = 'none';
     }
 }
 

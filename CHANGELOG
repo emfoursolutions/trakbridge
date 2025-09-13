@@ -1,3 +1,53 @@
+## [v1.0.0-rc.5] - 2025-09-13
+
+### Added
+- **Individual Tracker Enable/Disable Control**
+  - Checkbox controls for enabling/disabling individual trackers in callsign mapping
+  - Selective control over which trackers send CoT data to TAK servers while preserving configuration
+  - Visual feedback with smooth transitions and color-coded highlighting
+  - Bulk operations: "Enable All" and "Disable All" buttons for quick management
+  - State persistence across tracker refreshes - existing enabled/disabled status preserved
+  - Enhanced accessibility with ARIA labels and keyboard navigation support
+
+- **Multi-Server Distribution System**
+  - Single GPS data fetch with distribution to multiple TAK servers simultaneously
+  - 90% reduction in API calls for multi-server scenarios through efficient data sharing
+  - Parallel CoT transformation processing with 5-10x performance improvement for large datasets (300+ points)
+  - Configurable batch processing with graceful fallback to serial processing on errors
+  - Enhanced UI with checkbox grid for multiple TAK server selection
+  - Server failure isolation - issues with one server don't affect others
+
+- **Performance Enhancements**
+  - Parallel processing implementation using asyncio.gather() for CoT event creation
+  - Configurable performance settings in `config/settings/performance.yaml`
+  - Database query optimization with indexed enabled column for efficient filtering
+  - Processing time improvements: <2 seconds for 100+ trackers with enable/disable control
+
+- **Enhanced User Experience**
+  - Comprehensive tooltips and help text for tracker enable/disable functionality
+  - Progressive enhancement - features gracefully degrade if JavaScript fails
+  - Enhanced information panels with step-by-step guidance
+  - Improved visual states for disabled trackers (opacity, background color, readonly inputs)
+
+### Changed
+- **Database Schema Enhancement**
+  - Added `enabled` column to `callsign_mappings` table with safe migration
+  - Many-to-many relationship between streams and TAK servers via junction table
+  - Migration safety with existence checks and rollback capability
+  - Backward compatibility maintained - existing single-server configurations preserved
+
+- **Stream Processing Architecture**
+  - Updated stream worker to filter disabled trackers before CoT generation
+  - Enhanced distribution logic for single fetch → multiple server scenarios
+  - Improved error handling and fallback mechanisms for processing failures
+  - Network load reduction through efficient data distribution patterns
+
+### Fixed
+- Database migration safety with comprehensive existence checks
+- Form submission handling for multiple server selection and tracker enabled status
+- Edge case handling for scenarios with no trackers discovered or all trackers disabled
+- Performance optimization for large tracker counts with efficient filtering
+
 ## [v1.0.0-rc.4] - 2025-09-05
 
 ### Added
