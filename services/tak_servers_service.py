@@ -61,8 +61,10 @@ class TakServerService:
         """
         try:
             # Load the P12 certificate
-            private_key, certificate, additional_certificates = pkcs12.load_key_and_certificates(
-                cert_data, password.encode("utf-8") if password else None
+            private_key, certificate, additional_certificates = (
+                pkcs12.load_key_and_certificates(
+                    cert_data, password.encode("utf-8") if password else None
+                )
             )
 
             if not certificate:
@@ -96,7 +98,10 @@ class TakServerService:
         except ValueError as e:
             # Usually password-related errors
             error_msg = str(e)
-            if "mac verify failure" in error_msg.lower() or "invalid" in error_msg.lower():
+            if (
+                "mac verify failure" in error_msg.lower()
+                or "invalid" in error_msg.lower()
+            ):
                 return {"success": False, "error": "Invalid certificate password"}
             return {
                 "success": False,
@@ -175,7 +180,9 @@ class TakServerService:
                 # Subject information
                 subject_components = []
                 for attribute in certificate.subject:
-                    subject_components.append(f"{attribute.oid._name}={attribute.value}")
+                    subject_components.append(
+                        f"{attribute.oid._name}={attribute.value}"
+                    )
                 cert_info["subject"] = ", ".join(subject_components)
 
                 # Issuer information
@@ -191,13 +198,17 @@ class TakServerService:
                 cert_info["not_after"] = certificate.not_valid_after_utc.strftime(
                     "%Y-%m-%d %H:%M:%S UTC"
                 )
-                cert_info["not_before_iso"] = certificate.not_valid_before_utc.isoformat()
+                cert_info["not_before_iso"] = (
+                    certificate.not_valid_before_utc.isoformat()
+                )
                 cert_info["not_after_iso"] = certificate.not_valid_after_utc.isoformat()
 
                 # Check if certificate is currently valid
                 now = datetime.now().astimezone()  # Get current time with timezone
                 cert_info["is_valid"] = (
-                    certificate.not_valid_before_utc <= now <= certificate.not_valid_after_utc
+                    certificate.not_valid_before_utc
+                    <= now
+                    <= certificate.not_valid_after_utc
                 )
 
                 # Days until expiration
@@ -302,13 +313,17 @@ class TakServerService:
             if result["success"]:
                 logger.info(f"Connection test successful for server {server.id}")
             else:
-                logger.warning(f"Connection test failed for server {server.id}: {result['error']}")
+                logger.warning(
+                    f"Connection test failed for server {server.id}: {result['error']}"
+                )
 
             return result
 
         except Exception as e:
-            logger.error(f"Connection test error for server {server.id}: {str(e)}")
-            return {"success": False, "error": str(e)}
+            # Handle potential encoding errors
+            error_msg = str(e) if e is not None else "Unknown connection error"
+            logger.error(f"Connection test error for server {server.id}: {error_msg}")
+            return {"success": False, "error": error_msg}
 
 
 class TakServerConnectionTester:
@@ -323,11 +338,15 @@ class TakServerConnectionTester:
         try:
             # Prepare certificate if provided
             if server.cert_p12:
-                cert_file = await TakServerConnectionTester.prepare_certificate(server, temp_files)
+                cert_file = await TakServerConnectionTester.prepare_certificate(
+                    server, temp_files
+                )
 
             # Create pytak configuration - disable interpolation to handle special characters in passwords
             config = ConfigParser(interpolation=None)
-            config_dict = {"COT_URL": f"{server.protocol}://{server.host}:{server.port}"}
+            config_dict = {
+                "COT_URL": f"{server.protocol}://{server.host}:{server.port}"
+            }
 
             # Add TLS configuration if needed
             if server.protocol.lower() == "tls":
@@ -346,14 +365,18 @@ class TakServerConnectionTester:
             config_section = config["test_section"]
 
             # Test connection with timeout
-            connection_result = await TakServerConnectionTester.test_connection_with_timeout(
-                config_section, timeout=10
+            connection_result = (
+                await TakServerConnectionTester.test_connection_with_timeout(
+                    config_section, timeout=10
+                )
             )
 
             return connection_result
 
         except Exception as e:
-            return {"success": False, "error": f"Connection test failed: {str(e)}"}
+            # Handle potential encoding errors
+            error_msg = str(e) if e is not None else "Unknown error"
+            return {"success": False, "error": f"Connection test failed: {error_msg}"}
         finally:
             # Clean up temporary files
             TakServerConnectionTester.cleanup_temp_files(temp_files)
@@ -435,7 +458,9 @@ class TakServerConnectionTester:
                 }
 
         except Exception as e:
-            return {"success": False, "error": f"Connection test failed: {str(e)}"}
+            # Handle potential encoding errors
+            error_msg = str(e) if e is not None else "Unknown error"
+            return {"success": False, "error": f"Connection test failed: {error_msg}"}
 
     @staticmethod
     async def attempt_connection(config):

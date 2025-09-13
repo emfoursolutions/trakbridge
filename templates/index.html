@@ -159,7 +159,7 @@
                                         <span class="version-badge">{{ server.protocol.upper() }}</span>
                                     </td>
                                     <td>
-                                        <span class="text-muted">{{ server.streams|length }}</span>
+                                        <span class="text-muted">{{ server.get_total_stream_count() }}</span>
                                     </td>
                                 </tr>
                                 {% endfor %}

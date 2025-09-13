@@ -181,7 +181,9 @@ class DotEnvSecretProvider(SecretProvider):
                             if key:  # Ignore empty keys
                                 self._secrets[key] = value
                         except ValueError:
-                            logger.warning(f"Invalid line {line_num} in {self.env_file}: {line}")
+                            logger.warning(
+                                f"Invalid line {line_num} in {self.env_file}: {line}"
+                            )
 
             logger.debug(f"Loaded {len(self._secrets)} secrets from {self.env_file}")
         except Exception as e:
@@ -293,7 +295,9 @@ class SecretManager:
         if self.enable_caching and key in self._cache:
             cached_value, metadata = self._cache[key]
             if not metadata.is_expired():
-                logger.debug(f"Retrieved secret '{key}' from cache (provider: {metadata.provider})")
+                logger.debug(
+                    f"Retrieved secret '{key}' from cache (provider: {metadata.provider})"
+                )
                 return cached_value
             else:
                 # Remove expired entry
@@ -314,7 +318,9 @@ class SecretManager:
 
                     return value
             except Exception as e:
-                logger.warning(f"Provider '{provider.name}' failed for key '{key}': {e}")
+                logger.warning(
+                    f"Provider '{provider.name}' failed for key '{key}': {e}"
+                )
                 continue
 
         # Third: check _FILE secret convention (Docker/Kubernetes)
@@ -332,7 +338,9 @@ class SecretManager:
                     logger.debug(f"Loaded secret '{key}' from file '{file_path}'")
                     return value
             except Exception as e:
-                logger.warning(f"Failed to read secret file '{file_path}' for key '{key}': {e}")
+                logger.warning(
+                    f"Failed to read secret file '{file_path}' for key '{key}': {e}"
+                )
         if required and default is None:
             available_providers = [p.name for p in self.providers]
             raise ValueError(
@@ -365,7 +373,9 @@ class SecretManager:
                         logger.info(f"Refreshed secret '{key}' from {provider.name}")
                         return True
                 except Exception as e:
-                    logger.warning(f"Failed to refresh secret '{key}' from {provider.name}: {e}")
+                    logger.warning(
+                        f"Failed to refresh secret '{key}' from {provider.name}: {e}"
+                    )
 
         return False
 
@@ -428,17 +438,23 @@ class SecretManager:
 _secret_manager: Optional[SecretManager] = None
 
 
-def get_secret_manager(environment: str = None, enable_caching: bool = True) -> SecretManager:
+def get_secret_manager(
+    environment: str = None, enable_caching: bool = True
+) -> SecretManager:
     """Get or create the global secret manager instance."""
     global _secret_manager
 
-    if _secret_manager is None or (environment and _secret_manager.environment != environment):
+    if _secret_manager is None or (
+        environment and _secret_manager.environment != environment
+    ):
         env = environment or os.environ.get("FLASK_ENV", "development")
         _secret_manager = SecretManager(env, enable_caching)
 
     return _secret_manager
 
 
-def get_secret(key: str, default: Optional[str] = None, required: bool = False) -> Optional[str]:
+def get_secret(
+    key: str, default: Optional[str] = None, required: bool = False
+) -> Optional[str]:
     """Convenience function to get a secret."""
     return get_secret_manager().get_secret(key, default, required)

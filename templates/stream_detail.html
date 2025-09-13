@@ -113,12 +113,19 @@
                         <div class="info-group mb-3">
                             <label class="info-label">TAK Server</label>
                             <div class="info-value">
-                                {% if stream.tak_server %}
-                                    <strong>{{ stream.tak_server.name }}</strong>
-                                    <br>
-                                    <span class="text-mono text-muted">
-                                        {{ stream.tak_server.host }}:{{ stream.tak_server.port }}
-                                    </span>
+                                {% set server_info = stream.get_tak_server_display_info() %}
+                                {% if server_info.has_servers %}
+                                    {% if server_info.count == 1 %}
+                                        <strong>{{ server_info.single_server.name if server_info.single_server.name else 'Unnamed' }}</strong>
+                                        <br>
+                                        <span class="text-mono text-muted">
+                                            {{ server_info.single_server.host }}:{{ server_info.single_server.port }}
+                                        </span>
+                                    {% else %}
+                                        <strong>{{ server_info.display_text }}</strong>
+                                        <br>
+                                        <small class="text-muted">See details below for complete server list</small>
+                                    {% endif %}
                                 {% else %}
                                     <span class="text-muted">Not configured</span>
                                 {% endif %}
@@ -168,6 +175,40 @@
                 {% endif %}
             </div>
         </div>
+
+        <!-- TAK Servers Card (only show for multiple servers) -->
+        {% set server_info = stream.get_tak_server_display_info() %}
+        {% if server_info.count > 1 %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-server"></i> TAK Servers ({{ server_info.count }})
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for server in server_info.multiple_servers %}
+                    <div class="col-md-6 mb-3">
+                        <div class="card border-0 bg-light">
+                            <div class="card-body p-3">
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-server me-3 text-primary"></i>
+                                    <div>
+                                        <div class="fw-semibold">{{ server.name if server.name else 'Unnamed Server' }}</div>
+                                        <small class="text-mono text-muted">{{ server.host }}:{{ server.port }}</small>
+                                        {% if server.description %}
+                                        <br><small class="text-muted">{{ server.description }}</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Configuration Card -->
         <div class="card mb-4">

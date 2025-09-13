@@ -100,7 +100,9 @@ class TestMigrationUtils:
         """Test PostgreSQL enum column creation with proper Python Enum"""
         mock_get_dialect.return_value = "postgresql"
 
-        column = get_enum_column(MockProperEnum, "auth_provider", nullable=False, default="local")
+        column = get_enum_column(
+            MockProperEnum, "auth_provider", nullable=False, default="local"
+        )
 
         # Verify column properties
         assert column.name == "auth_provider"
@@ -119,7 +121,9 @@ class TestMigrationUtils:
         """Test PostgreSQL enum column creation with legacy string-based Enum"""
         mock_get_dialect.return_value = "postgresql"
 
-        column = get_enum_column(MockLegacyEnum, "auth_provider", nullable=True, default="LOCAL")
+        column = get_enum_column(
+            MockLegacyEnum, "auth_provider", nullable=True, default="LOCAL"
+        )
 
         # Verify column properties
         assert column.name == "auth_provider"
@@ -137,7 +141,9 @@ class TestMigrationUtils:
         """Test MySQL enum column creation with proper Python Enum"""
         mock_get_dialect.return_value = "mysql"
 
-        column = get_enum_column(MockProperEnum, "auth_provider", nullable=False, default="local")
+        column = get_enum_column(
+            MockProperEnum, "auth_provider", nullable=False, default="local"
+        )
 
         # Verify column properties
         assert column.name == "auth_provider"
@@ -154,7 +160,9 @@ class TestMigrationUtils:
         """Test SQLite enum column creation with legacy string-based Enum"""
         mock_get_dialect.return_value = "sqlite"
 
-        column = get_enum_column(MockLegacyEnum, "auth_provider", nullable=True, default="LOCAL")
+        column = get_enum_column(
+            MockLegacyEnum, "auth_provider", nullable=True, default="LOCAL"
+        )
 
         # Verify column properties
         assert column.name == "auth_provider"
@@ -186,7 +194,9 @@ class TestMigrationUtils:
         """Test enum column creation with Enum member as default"""
         mock_get_dialect.return_value = "postgresql"
 
-        column = get_enum_column(MockProperEnum, "auth_provider", default=MockProperEnum.LOCAL)
+        column = get_enum_column(
+            MockProperEnum, "auth_provider", default=MockProperEnum.LOCAL
+        )
 
         # Should handle enum member as default value
         assert str(column.default.arg) == str(MockProperEnum.LOCAL)
@@ -314,10 +324,16 @@ class TestMigrationIntegration:
             LOCKED = "LOCKED"
 
         # These are the exact calls from the migration file (after our fixes)
-        auth_provider_column = get_enum_column(AuthProvider, "auth_provider", default="LOCAL")
+        auth_provider_column = get_enum_column(
+            AuthProvider, "auth_provider", default="LOCAL"
+        )
         user_role_column = get_enum_column(UserRole, "role", default="USER")
-        account_status_column = get_enum_column(AccountStatus, "status", default="ACTIVE")
-        session_provider_column = get_enum_column(AuthProvider, "provider", default="LOCAL")
+        account_status_column = get_enum_column(
+            AccountStatus, "status", default="ACTIVE"
+        )
+        session_provider_column = get_enum_column(
+            AuthProvider, "provider", default="LOCAL"
+        )
 
         # All should succeed without AttributeError
         assert auth_provider_column.name == "auth_provider"
@@ -379,6 +395,77 @@ class TestMigrationIntegration:
                     else:
                         assert isinstance(column.type, sa.String)
                     assert str(column.default.arg) == "LOCAL"
+
+
+class TestCallsignMappingEnabledMigration:
+    """Test migration for enabled column in callsign_mappings table"""
+
+    @patch("migrations.migration_utils.op")
+    @patch("migrations.migration_utils.get_dialect")
+    def test_enabled_column_migration_safe_add(self, mock_get_dialect, mock_op):
+        """Test that enabled column migration uses safe_add_column with proper boolean column"""
+        from migrations.migration_utils import get_boolean_column, safe_add_column
+
+        # Mock SQLite dialect (most common in tests)
+        mock_get_dialect.return_value = "sqlite"
+
+        # Mock inspection to simulate column doesn't exist
+        mock_inspector = Mock()
+        mock_inspector.get_table_names.return_value = ["callsign_mappings"]
+        mock_inspector.get_columns.return_value = [
+            {"name": "id"},
+            {"name": "stream_id"},
+            {"name": "identifier_value"},
+            {"name": "custom_callsign"},
+            {"name": "cot_type"},
+        ]
+
+        with patch("sqlalchemy.inspect", return_value=mock_inspector):
+            # Test that get_boolean_column creates appropriate column
+            enabled_column = get_boolean_column("enabled", nullable=False, default=True)
+
+            assert enabled_column.name == "enabled"
+            assert isinstance(enabled_column.type, sa.Boolean)
+            assert enabled_column.nullable is False
+            assert enabled_column.default.arg is True
+
+    @patch("migrations.migration_utils.op")
+    def test_enabled_column_migration_skip_existing(self, mock_op):
+        """Test that migration skips if enabled column already exists"""
+        from migrations.migration_utils import column_exists
+
+        # Mock inspection to simulate column already exists
+        mock_inspector = Mock()
+        mock_inspector.get_table_names.return_value = ["callsign_mappings"]
+        mock_inspector.get_columns.return_value = [
+            {"name": "id"},
+            {"name": "stream_id"},
+            {"name": "identifier_value"},
+            {"name": "custom_callsign"},
+            {"name": "cot_type"},
+            {"name": "enabled"},  # Column already exists
+        ]
+
+        with patch("sqlalchemy.inspect", return_value=mock_inspector):
+            # Test that column_exists returns True when column exists
+            exists = column_exists("callsign_mappings", "enabled")
+            assert exists is True
+
+    @patch("migrations.migration_utils.get_dialect")
+    def test_enabled_column_migration_defaults(self, mock_get_dialect):
+        """Test that enabled column defaults are properly configured"""
+        from migrations.migration_utils import get_boolean_column
+
+        # Mock SQLite dialect
+        mock_get_dialect.return_value = "sqlite"
+
+        # Test enabled column with default True
+        enabled_column = get_boolean_column("enabled", nullable=False, default=True)
+
+        # Verify column properties match migration requirements
+        assert enabled_column.nullable is False
+        assert enabled_column.default.arg is True
+        assert isinstance(enabled_column.type, sa.Boolean)
 
 
 if __name__ == "__main__":

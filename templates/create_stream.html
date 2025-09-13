@@ -60,15 +60,79 @@
                         <div class="form-text">Specific provider within the selected category</div>
                     </div>
 
+                    <!-- Simplified TAK Server Selection with Checkbox Grid -->
                     <div class="mb-3">
-                        <label for="tak_server_id" class="form-label">TAK Server</label>
-                        <select class="form-select" id="tak_server_id" name="tak_server_id" required>
-                            <option value="">Select TAK Server</option>
-                            {% for server in tak_servers %}
-                            <option value="{{ server.id }}">{{ server.name }} ({{ server.host }}:{{ server.port }})</option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text">TAK server where stream data will be sent</div>
+                        <label class="form-label">TAK Servers</label>
+                        <div class="form-text mb-3">
+                            <i class="fas fa-info-circle"></i> 
+                            Select one server for single-server mode, or multiple servers for multi-server distribution.
+                        </div>
+                        
+                        <!-- Server Selection Controls -->
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <button type="button" class="btn btn-outline-primary btn-sm me-2" onclick="selectAllServers()">
+                                    <i class="fas fa-check-double"></i> Select All
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearServerSelection()">
+                                    <i class="fas fa-times"></i> Clear All
+                                </button>
+                            </div>
+                            <div id="server_selection_mode_hint" class="text-muted small"></div>
+                        </div>
+                        
+                        <!-- Server Checkbox Grid -->
+                        <div class="border rounded p-3">
+                            {% if tak_servers %}
+                                <div class="row g-3">
+                                    {% for server in tak_servers %}
+                                    <div class="col-lg-4 col-md-6">
+                                        <div class="server-card p-3 border rounded h-100">
+                                            <div class="form-check h-100 d-flex flex-column">
+                                                <input class="form-check-input" type="checkbox" 
+                                                       id="tak_server_{{ server.id }}" 
+                                                       name="tak_servers[]" 
+                                                       value="{{ server.id }}"
+                                                       onchange="updateServerSelectionDisplay()">
+                                                <label class="form-check-label flex-grow-1 d-flex flex-column" for="tak_server_{{ server.id }}">
+                                                    <div class="server-name fw-bold text-dark mb-1">{{ server.name }}</div>
+                                                    <div class="server-details text-muted small">
+                                                        <div><i class="fas fa-server me-1"></i>{{ server.host }}:{{ server.port }}</div>
+                                                        <div><i class="fas fa-shield-alt me-1"></i>{{ server.protocol.upper() }}</div>
+                                                        {% if server.verify_ssl %}
+                                                        <div><i class="fas fa-lock me-1 text-success"></i>SSL Verified</div>
+                                                        {% else %}
+                                                        <div><i class="fas fa-unlock me-1 text-warning"></i>SSL Not Verified</div>
+                                                        {% endif %}
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <div class="text-center py-4 text-muted">
+                                    <i class="fas fa-server fa-3x mb-3 opacity-25"></i>
+                                    <p class="mb-2">No TAK servers configured</p>
+                                    <p class="small">You need to add TAK servers before creating streams.</p>
+                                    <a href="{{ url_for('tak_servers.create_tak_server') }}" class="btn btn-primary btn-sm">
+                                        <i class="fas fa-plus"></i> Add TAK Server
+                                    </a>
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Selection Summary -->
+                        <div id="selected_servers_summary" class="mt-3 p-3 bg-light rounded" style="display: none;">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-info-circle text-primary me-2"></i>
+                                <div>
+                                    <div class="fw-bold" id="selection_mode_text"></div>
+                                    <div class="text-muted small" id="selected_servers_text"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="row">
@@ -114,29 +178,29 @@
                 </div>
             </div>
 
-            <!-- Callsign Mapping Configuration -->
+            <!-- Tracker Configuration -->
             <div id="callsign-mapping-section" class="card" style="display: none;">
                 <div class="card-header">
                     <h5 class="mb-0">
                         <i class="fas fa-tags"></i>
-                        Callsign Mapping Configuration
+                        Tracker Management & Configuration
                     </h5>
                 </div>
                 <div class="card-body">
-                    <!-- Enable callsign mapping toggle -->
+                    <!-- Enable tracker configuration toggle -->
                     <div class="mb-3">
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="enable_callsign_mapping" name="enable_callsign_mapping" onchange="toggleCallsignMapping()">
                             <label class="form-check-label" for="enable_callsign_mapping">
-                                <strong>Enable custom callsign mapping</strong>
+                                <strong>Enable individual tracker configuration</strong>
                             </label>
                         </div>
                         <div class="form-text">
-                            When enabled, you can assign custom callsigns to individual trackers instead of using the provider's default names.
+                            When enabled, you can assign custom configurations to individual trackers instead of using the provider's default settings.
                         </div>
                     </div>
 
-                    <!-- Callsign mapping configuration (hidden by default) -->
+                    <!-- Tracker configuration (hidden by default) -->
                     <div id="callsign-config-section" style="display: none;">
                         <!-- Identifier field selection -->
                         <div class="row">
@@ -153,10 +217,10 @@
                                 <div class="mb-3">
                                     <label for="callsign_error_handling" class="form-label">Error Handling</label>
                                     <select class="form-select" id="callsign_error_handling" name="callsign_error_handling">
-                                        <option value="fallback" selected>Fallback to default name</option>
+                                        <option value="fallback" selected>Fallback to default configuration</option>
                                         <option value="skip">Skip problematic trackers</option>
                                     </select>
-                                    <div class="form-text">How to handle trackers with missing callsign mappings</div>
+                                    <div class="form-text">How to handle trackers with missing device configurations</div>
                                 </div>
                             </div>
                         </div>
@@ -166,7 +230,7 @@
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" id="enable_per_callsign_cot_types" name="enable_per_callsign_cot_types" onchange="togglePerCallsignCotTypes()">
                                 <label class="form-check-label" for="enable_per_callsign_cot_types">
-                                    Enable per-callsign CoT type overrides
+                                    Enable per-tracker CoT type overrides
                                 </label>
                             </div>
                             <div class="form-text">Allow different CoT types for individual trackers</div>
@@ -174,10 +238,39 @@
 
                         <!-- Tracker discovery and mapping -->
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="mb-0">Tracker Discovery & Callsign Assignment</h6>
-                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="refreshTrackerDiscovery()">
-                                <i class="fas fa-sync"></i> Refresh Trackers
-                            </button>
+                            <h6 class="mb-0">
+                                Tracker Discovery & Configuration
+                                <i class="fas fa-question-circle text-muted ms-1" 
+                                   style="cursor: pointer;" 
+                                   onclick="toggleTrackerHelp()"
+                                   title="Click for help"></i>
+                            </h6>
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-outline-success btn-sm" onclick="bulkEnableTrackers(true)">
+                                    <i class="fas fa-check-square"></i> Enable All
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="bulkEnableTrackers(false)">
+                                    <i class="fas fa-square"></i> Disable All
+                                </button>
+                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="refreshTrackerDiscovery()">
+                                    <i class="fas fa-sync"></i> Refresh Trackers
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Collapsible help text -->
+                        <div id="tracker-help" class="alert alert-info mb-3" style="display: none;">
+                            <div class="d-flex">
+                                <i class="fas fa-info-circle me-2 mt-1"></i>
+                                <div>
+                                    <strong>Tracker Enable/Disable Control:</strong>
+                                    <ul class="mb-0 mt-1">
+                                        <li><strong>Enabled trackers</strong> will send location data to TAK servers</li>
+                                        <li><strong>Disabled trackers</strong> are preserved in your configuration but won't generate CoT messages</li>
+                                        <li>Refreshing trackers preserves your enable/disable settings for existing trackers</li>
+                                    </ul>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Discovery status -->
@@ -196,6 +289,7 @@
                                     <table class="table table-sm">
                                         <thead>
                                             <tr>
+                                                <th>Enabled</th>
                                                 <th>Identifier</th>
                                                 <th>Current Name</th>
                                                 <th>Assigned Callsign</th>
@@ -895,10 +989,21 @@ function populateTrackerMappingTable(identifierField) {
         
         const row = document.createElement('tr');
         row.innerHTML = `
+            <td>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" 
+                           id="tracker_enabled_${index}"
+                           name="callsign_mapping_${index}_enabled"
+                           checked
+                           onchange="toggleTrackerEnabled(this, ${index})"
+                           title="Enable/disable this tracker">
+                </div>
+            </td>
             <td class="text-mono">${identifierValue}</td>
             <td>${currentName}</td>
             <td>
                 <input type="text" class="form-control form-control-sm" 
+                       id="callsign_input_${index}"
                        name="callsign_mapping_${index}_callsign"
                        data-identifier="${identifierValue}"
                        value="${cleanCallsign}"
@@ -906,7 +1011,9 @@ function populateTrackerMappingTable(identifierField) {
                 <input type="hidden" name="callsign_mapping_${index}_identifier" value="${identifierValue}">
             </td>
             <td class="cot-type-cell" style="display: ${perCallsignCotEnabled ? 'table-cell' : 'none'}">
-                <select class="form-select form-select-sm" name="callsign_mapping_${index}_cot_type">
+                <select class="form-select form-select-sm" 
+                        id="cot_type_${index}"
+                        name="callsign_mapping_${index}_cot_type">
                     <option value="">Use stream default</option>
                     {% for cot_type in cot_types %}
                     <option value="{{ cot_type.value }}">{{ cot_type.label }}</option>
@@ -969,5 +1076,340 @@ function clearTrackerMappingTable() {
         <p>Select an identifier field and ensure your provider credentials are configured to discover trackers.</p>
     `;
 }
+
+// Simplified Automatic Mode Detection Functions
+function updateServerSelectionDisplay() {
+    const checkboxes = document.querySelectorAll('input[name="tak_servers[]"]:checked');
+    const summaryDiv = document.getElementById('selected_servers_summary');
+    const modeHint = document.getElementById('server_selection_mode_hint');
+    const modeText = document.getElementById('selection_mode_text');
+    const serversText = document.getElementById('selected_servers_text');
+    
+    if (checkboxes.length === 0) {
+        summaryDiv.style.display = 'none';
+        modeHint.textContent = '';
+    } else if (checkboxes.length === 1) {
+        // Single server mode
+        summaryDiv.style.display = 'block';
+        modeText.textContent = 'Single Server Mode';
+        const serverName = checkboxes[0].parentElement.querySelector('.server-name').textContent;
+        serversText.textContent = serverName;
+        modeHint.textContent = 'Automatic single-server mode';
+        modeHint.className = 'text-success small';
+    } else {
+        // Multi-server mode
+        summaryDiv.style.display = 'block';
+        modeText.textContent = `Multi-Server Mode (${checkboxes.length} servers)`;
+        const serverNames = Array.from(checkboxes).map(cb => 
+            cb.parentElement.querySelector('.server-name').textContent
+        ).join(', ');
+        serversText.textContent = serverNames;
+        modeHint.textContent = 'Automatic multi-server mode - parallel distribution';
+        modeHint.className = 'text-primary small';
+    }
+    
+    // Update server card styling
+    updateServerCardStyling();
+}
+
+function updateServerCardStyling() {
+    const allCards = document.querySelectorAll('.server-card');
+    allCards.forEach(card => {
+        const checkbox = card.querySelector('input[type="checkbox"]');
+        if (checkbox.checked) {
+            card.classList.add('border-primary', 'bg-primary', 'bg-opacity-10');
+            card.classList.remove('border-secondary');
+        } else {
+            card.classList.remove('border-primary', 'bg-primary', 'bg-opacity-10');
+            card.classList.add('border-secondary');
+        }
+    });
+}
+
+function clearServerSelection() {
+    const checkboxes = document.querySelectorAll('input[name="tak_servers[]"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateServerSelectionDisplay();
+}
+
+function selectAllServers() {
+    const checkboxes = document.querySelectorAll('input[name="tak_servers[]"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    updateServerSelectionDisplay();
+}
+
+function validateServerSelection() {
+    const checkboxes = document.querySelectorAll('input[name="tak_servers[]"]:checked');
+    
+    if (checkboxes.length === 0) {
+        showAlert('Please select at least one TAK server for this stream.', 'warning');
+        return false;
+    }
+    
+    return true;
+}
+
+// Initialize server selection validation and display
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('streamForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (!validateServerSelection()) {
+                e.preventDefault();
+                return false;
+            }
+        });
+    }
+    
+    // Initialize server selection display
+    updateServerSelectionDisplay();
+});
+
+// Simplified form data collection for testing with automatic mode detection
+function collectFormDataForTest() {
+    const formData = {
+        name: document.getElementById('name').value,
+        plugin_type: document.getElementById('plugin_type').value,
+        plugin_config: {}
+    };
+    
+    // Collect selected servers from checkboxes
+    const checkboxes = document.querySelectorAll('input[name="tak_servers[]"]:checked');
+    const selectedServers = Array.from(checkboxes).map(cb => cb.value);
+    
+    // Use the new simplified format that backend expects
+    formData.tak_servers = selectedServers;
+    
+    // Collect plugin-specific configuration
+    const pluginType = formData.plugin_type;
+    const configFields = document.querySelectorAll(`[data-plugin="${pluginType}"]`);
+    
+    configFields.forEach(field => {
+        const fieldName = field.name.replace('plugin_', '');
+        const fieldValue = field.type === 'checkbox' ? field.checked : field.value;
+        formData.plugin_config[fieldName] = fieldValue;
+    });
+    
+    return formData;
+}
+
+// Phase 3: Tracker Enable/Disable Functionality
+
+/**
+ * Toggle tracker enabled state and update UI accordingly
+ * @param {HTMLInputElement} checkbox - The enabled checkbox that was clicked
+ * @param {number} index - The tracker index
+ */
+function toggleTrackerEnabled(checkbox, index) {
+    const callsignInput = document.getElementById(`callsign_input_${index}`);
+    const cotTypeSelect = document.getElementById(`cot_type_${index}`);
+    const row = checkbox.closest('tr');
+    
+    // Add smooth transition
+    row.style.transition = 'all 0.3s ease-in-out';
+    
+    if (checkbox.checked) {
+        // Enable tracker - remove disabled states
+        if (callsignInput) {
+            callsignInput.readOnly = false;
+            callsignInput.classList.remove('text-muted');
+            callsignInput.style.backgroundColor = '';
+            callsignInput.setAttribute('aria-label', `Callsign for tracker ${index + 1} - enabled`);
+        }
+        if (cotTypeSelect) {
+            cotTypeSelect.disabled = false;
+            cotTypeSelect.classList.remove('text-muted');
+            cotTypeSelect.setAttribute('aria-label', `CoT type for tracker ${index + 1} - enabled`);
+        }
+        row.classList.remove('table-secondary');
+        row.style.opacity = '1';
+        row.setAttribute('aria-label', `Tracker ${index + 1} - enabled`);
+        
+        // Visual feedback - brief highlight
+        row.style.backgroundColor = '#d4edda';
+        setTimeout(() => {
+            row.style.backgroundColor = '';
+        }, 800);
+    } else {
+        // Disable tracker - add visual disabled states while preserving form submission
+        if (callsignInput) {
+            callsignInput.readOnly = true;  // Use readonly instead of disabled
+            callsignInput.classList.add('text-muted');
+            callsignInput.style.backgroundColor = '#e9ecef';  // Visual disabled appearance
+            callsignInput.setAttribute('aria-label', `Callsign for tracker ${index + 1} - disabled`);
+        }
+        if (cotTypeSelect) {
+            cotTypeSelect.disabled = true;  // CoT select can still be disabled
+            cotTypeSelect.classList.add('text-muted');
+            cotTypeSelect.setAttribute('aria-label', `CoT type for tracker ${index + 1} - disabled`);
+        }
+        row.classList.add('table-secondary');
+        row.style.opacity = '0.6';
+        row.setAttribute('aria-label', `Tracker ${index + 1} - disabled`);
+        
+        // Visual feedback - brief highlight
+        row.style.backgroundColor = '#f8d7da';
+        setTimeout(() => {
+            row.style.backgroundColor = '';
+        }, 800);
+    }
+}
+
+/**
+ * Toggle the tracker help text visibility
+ */
+function toggleTrackerHelp() {
+    const helpDiv = document.getElementById('tracker-help');
+    if (helpDiv.style.display === 'none') {
+        helpDiv.style.display = 'block';
+    } else {
+        helpDiv.style.display = 'none';
+    }
+}
+
+/**
+ * Bulk enable/disable all trackers
+ * @param {boolean} enabled - Whether to enable (true) or disable (false) all trackers
+ */
+function bulkEnableTrackers(enabled) {
+    const enabledCheckboxes = document.querySelectorAll('input[name*="_enabled"]');
+    
+    enabledCheckboxes.forEach((checkbox, index) => {
+        if (checkbox.checked !== enabled) {
+            checkbox.checked = enabled;
+            // Trigger the change event to update UI
+            checkbox.onchange();
+        }
+    });
+    
+    // Show feedback message
+    const action = enabled ? 'enabled' : 'disabled';
+    const count = enabledCheckboxes.length;
+    showAlert(`${count} tracker${count === 1 ? '' : 's'} ${action}.`, enabled ? 'success' : 'info');
+}
+
+/**
+ * Get tracker form data including enabled status
+ * Enhanced version of existing form data collection
+ * @returns {Object} Form data with tracker mappings including enabled status
+ */
+function getTrackerFormData() {
+    const trackerMappings = [];
+    const enabledCheckboxes = document.querySelectorAll('input[name*="_enabled"]');
+    
+    enabledCheckboxes.forEach((checkbox, index) => {
+        const identifierInput = document.querySelector(`input[name="callsign_mapping_${index}_identifier"]`);
+        const callsignInput = document.querySelector(`input[name="callsign_mapping_${index}_callsign"]`);
+        const cotTypeSelect = document.querySelector(`select[name="callsign_mapping_${index}_cot_type"]`);
+        
+        if (identifierInput && callsignInput) {
+            trackerMappings.push({
+                identifier: identifierInput.value,
+                callsign: callsignInput.value,
+                enabled: checkbox.checked,
+                cot_type: cotTypeSelect ? cotTypeSelect.value : ''
+            });
+        }
+    });
+    
+    return {
+        tracker_mappings: trackerMappings,
+        total_trackers: trackerMappings.length,
+        enabled_trackers: trackerMappings.filter(t => t.enabled).length
+    };
+}
+
+/**
+ * Enhanced version of populateTrackerMappingTable that preserves state
+ * Called when refreshing trackers to maintain enabled/disabled state
+ * @param {string} identifierField - The field to use as identifier
+ */
+function populateTrackerMappingTableWithState(identifierField) {
+    // Get current state before repopulating
+    const currentState = {};
+    const existingCheckboxes = document.querySelectorAll('input[name*="_enabled"]');
+    
+    existingCheckboxes.forEach((checkbox, index) => {
+        const identifierInput = document.querySelector(`input[name="callsign_mapping_${index}_identifier"]`);
+        const callsignInput = document.querySelector(`input[name="callsign_mapping_${index}_callsign"]`);
+        
+        if (identifierInput) {
+            currentState[identifierInput.value] = {
+                enabled: checkbox.checked,
+                callsign: callsignInput ? callsignInput.value : ''
+            };
+        }
+    });
+    
+    // Call original populate function
+    populateTrackerMappingTable(identifierField);
+    
+    // Restore state for existing trackers
+    const newCheckboxes = document.querySelectorAll('input[name*="_enabled"]');
+    
+    newCheckboxes.forEach((checkbox, index) => {
+        const identifierInput = document.querySelector(`input[name="callsign_mapping_${index}_identifier"]`);
+        const callsignInput = document.querySelector(`input[name="callsign_mapping_${index}_callsign"]`);
+        
+        if (identifierInput && currentState[identifierInput.value]) {
+            const savedState = currentState[identifierInput.value];
+            checkbox.checked = savedState.enabled;
+            
+            if (callsignInput && savedState.callsign) {
+                callsignInput.value = savedState.callsign;
+            }
+            
+            // Apply the saved state to UI
+            toggleTrackerEnabled(checkbox, index);
+        }
+    });
+}
 </script>
+
+<style>
+.server-card {
+    transition: all 0.2s ease;
+    cursor: pointer;
+    border: 1px solid #dee2e6;
+}
+
+.server-card:hover {
+    border-color: #6c757d !important;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.server-card.border-primary {
+    border-color: #0d6efd !important;
+}
+
+.server-card .form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.server-card .server-name {
+    font-weight: 600;
+}
+
+.server-card .server-details {
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.server-card .server-details i {
+    width: 14px;
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    .col-lg-4, .col-md-6 {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+}
+</style>
 {% endblock %}

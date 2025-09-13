@@ -51,8 +51,8 @@ safety check
 # Initialize database
 flask db init
 
-# Create migration
-flask db migrate -m "Description"
+# Create migration (use descriptive names)
+flask db migrate -m "Add user notification preferences table"
 
 # Apply migrations
 flask db upgrade
@@ -60,6 +60,12 @@ flask db upgrade
 # Downgrade
 flask db downgrade
 ```
+
+**Migration Naming Convention:**
+- Use descriptive filenames: `add_feature_description.py`
+- Avoid hash prefixes and date/phase references
+- See `migrations/NAMING_CONVENTION.md` for detailed guidelines
+- Migration order documented in `migrations/MIGRATION_ORDER.md`
 
 ### Docker Operations
 ```bash

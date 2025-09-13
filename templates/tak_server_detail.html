@@ -32,7 +32,7 @@
                 <a href="{{ url_for('tak_servers.edit_tak_server', server_id=server.id) }}" class="btn btn-outline-primary btn-sm">
                     <i class="fas fa-edit"></i> Edit
                 </a>
-                <button class="btn btn-outline-danger btn-sm" onclick="deleteServer({{ server.id }})" {% if server.streams %}disabled{% endif %}>
+                <button class="btn btn-outline-danger btn-sm" onclick="deleteServer({{ server.id }})" {% if server.has_any_streams() %}disabled{% endif %}>
                     <i class="fas fa-trash"></i> Delete
                 </button>
                 {% endif %}
@@ -164,9 +164,9 @@
                             <span class="input-group-text">
                                 <i class="fas fa-stream"></i>
                             </span>
-                            <input type="text" class="form-control" value="{{ server.streams|length }} streams" readonly>
-                            <span class="input-group-text bg-{% if server.streams %}primary{% else %}secondary{% endif %}">
-                                <i class="fas fa-{% if server.streams %}check{% else %}times{% endif %}"></i>
+                            <input type="text" class="form-control" value="{{ server.get_total_stream_count() }} streams" readonly>
+                            <span class="input-group-text bg-{% if server.has_any_streams() %}primary{% else %}secondary{% endif %}">
+                                <i class="fas fa-{% if server.has_any_streams() %}check{% else %}times{% endif %}"></i>
                             </span>
                         </div>
                     </div>
@@ -293,7 +293,7 @@
 </div>
 
 <!-- Associated Streams -->
-{% if server.streams %}
+{% if server.has_any_streams() %}
 <div class="row mb-4">
     <div class="col-12">
         <div class="card">
@@ -301,7 +301,7 @@
                 <div class="d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">
                         <i class="fas fa-stream"></i> Associated Streams
-                        <span class="badge bg-primary ms-2">{{ server.streams|length }}</span>
+                        <span class="badge bg-primary ms-2">{{ server.get_total_stream_count() }}</span>
                     </h5>
                 </div>
             </div>
@@ -318,7 +318,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for stream in server.streams %}
+                            {% for stream in server.get_all_associated_streams() %}
                             <tr>
                                 <td>
                                     <a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}" class="text-decoration-none">

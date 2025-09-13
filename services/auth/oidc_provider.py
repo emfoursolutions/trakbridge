@@ -109,7 +109,9 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
             raise ProviderConfigurationException("No OIDC provider is enabled")
 
         # Set up provider-specific properties before base class validation
-        provider_helper = ConfigHelper(self.providers_config.get(self.active_provider, {}))
+        provider_helper = ConfigHelper(
+            self.providers_config.get(self.active_provider, {})
+        )
         self.client_id = provider_helper.get("client_id", "")
         self.client_secret = provider_helper.get("client_secret", "")
         self.discovery_url = provider_helper.get("discovery_url", "")
@@ -135,7 +137,9 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
         # Initialize provider discovery
         self._load_discovery_document()
 
-        logger.info(f"OIDC authentication provider initialized (provider: {self.active_provider})")
+        logger.info(
+            f"OIDC authentication provider initialized (provider: {self.active_provider})"
+        )
 
     def _determine_active_provider(self) -> Optional[str]:
         """Determine which OIDC provider is active"""
@@ -176,7 +180,9 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
                 message="OIDC authentication requires authorization code flow",
             )
 
-    def get_authorization_url(self, redirect_uri: str, state: str = None) -> Tuple[str, str]:
+    def get_authorization_url(
+        self, redirect_uri: str, state: str = None
+    ) -> Tuple[str, str]:
         """
         Get authorization URL for OIDC login
 
@@ -196,7 +202,9 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
 
         auth_endpoint = discovery.get("authorization_endpoint")
         if not auth_endpoint:
-            raise ProviderConfigurationException("No authorization endpoint in discovery document")
+            raise ProviderConfigurationException(
+                "No authorization endpoint in discovery document"
+            )
 
         # Build authorization URL
         params = {
@@ -214,10 +222,14 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
 
         auth_url = f"{auth_endpoint}?{urllib.parse.urlencode(params)}"
 
-        logger.info(f"Generated OIDC authorization URL for provider: {self.active_provider}")
+        logger.info(
+            f"Generated OIDC authorization URL for provider: {self.active_provider}"
+        )
         return auth_url, state
 
-    def _handle_authorization_code(self, code: str, state: str = None) -> AuthenticationResponse:
+    def _handle_authorization_code(
+        self, code: str, state: str = None
+    ) -> AuthenticationResponse:
         """
         Handle authorization code from OIDC callback
 
@@ -389,7 +401,9 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
             issues.append(f"Discovery URL is required for {self.active_provider}")
 
         # Validate discovery URL format
-        if self.discovery_url and not self.discovery_url.startswith(("http://", "https://")):
+        if self.discovery_url and not self.discovery_url.startswith(
+            ("http://", "https://")
+        ):
             issues.append("Discovery URL must be a valid HTTP/HTTPS URL")
 
         # Validate default role
@@ -575,12 +589,16 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
                 "Accept": "application/json",
             }
 
-            response = requests.post(token_endpoint, data=data, headers=headers, timeout=30)
+            response = requests.post(
+                token_endpoint, data=data, headers=headers, timeout=30
+            )
 
             if response.status_code == 200:
                 return response.json()
             else:
-                logger.error(f"Token exchange failed: {response.status_code} - {response.text}")
+                logger.error(
+                    f"Token exchange failed: {response.status_code} - {response.text}"
+                )
                 return None
 
         except Exception as e:
@@ -735,7 +753,9 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
         from database import db
 
         # Check if user already exists
-        user = User.query.filter_by(username=username, auth_provider=AuthProvider.OIDC).first()
+        user = User.query.filter_by(
+            username=username, auth_provider=AuthProvider.OIDC
+        ).first()
 
         if user:
             # Update existing user
@@ -813,7 +833,9 @@ class OIDCAuthProvider(BaseAuthenticationProvider):
             # Users by role
             users_by_role = {}
             for role in UserRole:
-                count = User.query.filter_by(auth_provider=AuthProvider.OIDC, role=role).count()
+                count = User.query.filter_by(
+                    auth_provider=AuthProvider.OIDC, role=role
+                ).count()
                 users_by_role[role.value] = count
 
             return {

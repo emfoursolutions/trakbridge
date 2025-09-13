@@ -191,7 +191,9 @@ class TraccarPlugin(BaseGPSPlugin, CallsignMappable):
                 identifier_value = location.get("name")
             elif field_name == "device_id":
                 # Extract device_id from additional_data
-                identifier_value = str(location.get("additional_data", {}).get("device_id", ""))
+                identifier_value = str(
+                    location.get("additional_data", {}).get("device_id", "")
+                )
             elif field_name == "unique_id":
                 # Extract unique_id from additional_data device info
                 device_info = location.get("additional_data", {}).get("device_info", {})
@@ -244,7 +246,9 @@ class TraccarPlugin(BaseGPSPlugin, CallsignMappable):
             ssl_shutdown_timeout=5,  # Set SSL shutdown timeout to prevent hanging
         )
 
-    async def fetch_locations(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
+    async def fetch_locations(
+        self, session: aiohttp.ClientSession
+    ) -> List[Dict[str, Any]]:
         """
         Fetch location data from Traccar API
 
@@ -264,7 +268,9 @@ class TraccarPlugin(BaseGPSPlugin, CallsignMappable):
                 async with aiohttp.ClientSession(
                     connector=connector, timeout=timeout
                 ) as custom_session:
-                    return await self._fetch_locations_with_session(custom_session, config)
+                    return await self._fetch_locations_with_session(
+                        custom_session, config
+                    )
             else:
                 return await self._fetch_locations_with_session(session, config)
 
@@ -277,7 +283,9 @@ class TraccarPlugin(BaseGPSPlugin, CallsignMappable):
                 try:
                     await connector.close()
                 except Exception as close_error:
-                    logger.debug(f"Error closing connector (non-critical): {close_error}")
+                    logger.debug(
+                        f"Error closing connector (non-critical): {close_error}"
+                    )
 
     async def _fetch_locations_with_session(
         self, session: aiohttp.ClientSession, config: Dict[str, Any]
@@ -311,10 +319,14 @@ class TraccarPlugin(BaseGPSPlugin, CallsignMappable):
 
         for position in positions:
             device_info = device_map.get(position.get("deviceId"), {})
-            device_name = device_info.get("name", f"Device {position.get('deviceId', 'Unknown')}")
+            device_name = device_info.get(
+                "name", f"Device {position.get('deviceId', 'Unknown')}"
+            )
 
             # Apply device filter if specified
-            if device_filter and not self._device_matches_filter(device_name, device_filter):
+            if device_filter and not self._device_matches_filter(
+                device_name, device_filter
+            ):
                 continue
 
             location = {
@@ -370,14 +382,20 @@ class TraccarPlugin(BaseGPSPlugin, CallsignMappable):
         ssl_context = ssl.create_default_context(cafile=certifi.where())
 
         try:
-            async with session.get(url, auth=auth, timeout=timeout, ssl=ssl_context) as response:
+            async with session.get(
+                url, auth=auth, timeout=timeout, ssl=ssl_context
+            ) as response:
                 if response.status == 200:
                     data = await response.json()
-                    logger.info(f"Successfully fetched {len(data)} positions from Traccar API")
+                    logger.info(
+                        f"Successfully fetched {len(data)} positions from Traccar API"
+                    )
                     return data
                 elif response.status == 401:
                     error_text = await response.text(encoding="utf-8")
-                    logger.error("Unauthorized access (401). Check Traccar credentials.")
+                    logger.error(
+                        "Unauthorized access (401). Check Traccar credentials."
+                    )
                     # Return error indicator instead of empty list
                     return [{"_error": "401", "_error_message": "Unauthorized access"}]
                 elif response.status == 403:
@@ -386,11 +404,15 @@ class TraccarPlugin(BaseGPSPlugin, CallsignMappable):
                     return [{"_error": "403", "_error_message": "Forbidden access"}]
                 elif response.status == 404:
                     error_text = await response.text(encoding="utf-8")
-                    logger.error("Resource not found (404). Check server URL and API endpoint.")
+                    logger.error(
+                        "Resource not found (404). Check server URL and API endpoint."
+                    )
                     return [{"_error": "404", "_error_message": "Resource not found"}]
                 else:
                     error_text = await response.text(encoding="utf-8")
-                    logger.error(f"API request failed with status {response.status}: {error_text}")
+                    logger.error(
+                        f"API request failed with status {response.status}: {error_text}"
+                    )
                     return [
                         {
                             "_error": str(response.status),
@@ -438,10 +460,14 @@ class TraccarPlugin(BaseGPSPlugin, CallsignMappable):
         ssl_context = ssl.create_default_context(cafile=certifi.where())
 
         try:
-            async with session.get(url, auth=auth, timeout=timeout, ssl=ssl_context) as response:
+            async with session.get(
+                url, auth=auth, timeout=timeout, ssl=ssl_context
+            ) as response:
                 if response.status == 200:
                     data = await response.json()
-                    logger.debug(f"Successfully fetched {len(data)} devices from Traccar API")
+                    logger.debug(
+                        f"Successfully fetched {len(data)} devices from Traccar API"
+                    )
                     return data
                 else:
                     logger.warning(f"Could not fetch devices: HTTP {response.status}")
@@ -470,10 +496,12 @@ class TraccarPlugin(BaseGPSPlugin, CallsignMappable):
             # Handle both with and without timezone info
             if timestamp_str.endswith("Z"):
                 # UTC timezone
-                return datetime.fromisoformat(timestamp_str.replace("Z", "+00:00")).replace(
-                    tzinfo=None
-                )
-            elif "+" in timestamp_str[-6:] or timestamp_str.endswith(("00", "30", "45")):
+                return datetime.fromisoformat(
+                    timestamp_str.replace("Z", "+00:00")
+                ).replace(tzinfo=None)
+            elif "+" in timestamp_str[-6:] or timestamp_str.endswith(
+                ("00", "30", "45")
+            ):
                 # Has timezone offset
                 dt = datetime.fromisoformat(timestamp_str)
                 return dt.astimezone(timezone.utc).replace(tzinfo=None)
@@ -485,7 +513,9 @@ class TraccarPlugin(BaseGPSPlugin, CallsignMappable):
             logger.debug(f"Could not parse timestamp '{timestamp_str}': {e}")
             return datetime.now(timezone.utc)
 
-    def _build_description(self, position: Dict[str, Any], device_info: Dict[str, Any]) -> str:
+    def _build_description(
+        self, position: Dict[str, Any], device_info: Dict[str, Any]
+    ) -> str:
         """
         Build description string from position and device data
 
@@ -525,7 +555,9 @@ class TraccarPlugin(BaseGPSPlugin, CallsignMappable):
             parts.append(f"Accuracy: {accuracy:.0f}m")
 
         # Add timestamp
-        timestamp = self._parse_timestamp(position.get("deviceTime") or position.get("fixTime"))
+        timestamp = self._parse_timestamp(
+            position.get("deviceTime") or position.get("fixTime")
+        )
         parts.append(f"Time: {timestamp.strftime('%Y-%m-%d %H:%M:%S')} UTC")
 
         # Add any notable attributes

@@ -24,11 +24,15 @@ def upgrade():
 
     if "cot_type_mode" not in columns:
         with op.batch_alter_table("streams", schema=None) as batch_op:
-            batch_op.add_column(sa.Column("cot_type_mode", sa.String(length=20), nullable=True))
+            batch_op.add_column(
+                sa.Column("cot_type_mode", sa.String(length=20), nullable=True)
+            )
 
         # Set default value for existing rows
         op.execute(
-            sa.text("UPDATE streams SET cot_type_mode = 'stream' WHERE cot_type_mode IS NULL")
+            sa.text(
+                "UPDATE streams SET cot_type_mode = 'stream' WHERE cot_type_mode IS NULL"
+            )
         )
 
         # (Optional) Make the column non-nullable
@@ -37,7 +41,9 @@ def upgrade():
     else:
         # Column already exists, just ensure it has the correct default values
         op.execute(
-            sa.text("UPDATE streams SET cot_type_mode = 'stream' WHERE cot_type_mode IS NULL")
+            sa.text(
+                "UPDATE streams SET cot_type_mode = 'stream' WHERE cot_type_mode IS NULL"
+            )
         )
 
 

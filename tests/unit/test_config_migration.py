@@ -219,8 +219,12 @@ class TestHealthServiceConfigMigration:
                 old_pattern1 = 'results.get("error_streams", {}).get("count", 0)'
                 old_pattern2 = 'results.get("active_streams", {}).get("count", 0)'
 
-                assert old_pattern1 not in content, "Health service still has old nested pattern"
-                assert old_pattern2 not in content, "Health service still has old nested pattern"
+                assert (
+                    old_pattern1 not in content
+                ), "Health service still has old nested pattern"
+                assert (
+                    old_pattern2 not in content
+                ), "Health service still has old nested pattern"
 
     def test_health_service_config_pattern_functionality(self):
         """Test that Health Service config pattern improvements work correctly"""
@@ -256,7 +260,9 @@ class TestConfigMigrationBenefits:
 
     def test_config_helper_reduces_boilerplate(self):
         """Test that ConfigHelper reduces config access boilerplate"""
-        complex_config = {"level1": {"level2": {"level3": {"target_value": "found_it"}}}}
+        complex_config = {
+            "level1": {"level2": {"level3": {"target_value": "found_it"}}}
+        }
 
         # Old way (what we migrated from)
         old_way = (
@@ -330,7 +336,9 @@ class TestConfigMigrationBenefits:
             helper = ConfigHelper(config)
 
             # This is the pattern used in migrated LDAP provider
-            base_dn = helper.get("user_search.base_dn", helper.get("user_search_base", ""))
+            base_dn = helper.get(
+                "user_search.base_dn", helper.get("user_search_base", "")
+            )
             search_filter = helper.get(
                 "user_search.search_filter",
                 helper.get("user_search_filter", "(sAMAccountName={username})"),

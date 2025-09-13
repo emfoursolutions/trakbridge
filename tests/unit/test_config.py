@@ -247,9 +247,13 @@ class TestConfigManagerPluginValidation:
         unsupported_keywords = ["oneOf", "anyOf", "allOf", "$ref"]
 
         for schema_name, schema in manager.schemas.items():
-            self._check_schema_for_unsupported_keywords(schema, unsupported_keywords, schema_name)
+            self._check_schema_for_unsupported_keywords(
+                schema, unsupported_keywords, schema_name
+            )
 
-    def _check_schema_for_unsupported_keywords(self, schema, unsupported_keywords, path=""):
+    def _check_schema_for_unsupported_keywords(
+        self, schema, unsupported_keywords, path=""
+    ):
         """Recursively check schema for unsupported keywords."""
         if isinstance(schema, dict):
             for keyword in unsupported_keywords:

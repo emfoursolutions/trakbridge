@@ -48,7 +48,8 @@ def app():
     test_env_vars = {
         "FLASK_ENV": "testing",
         "DB_TYPE": "sqlite",
-        "TRAKBRIDGE_ENCRYPTION_KEY": ci_encryption_key or "test-encryption-key-for-testing-12345",
+        "TRAKBRIDGE_ENCRYPTION_KEY": ci_encryption_key
+        or "test-encryption-key-for-testing-12345",
         "SECRET_KEY": ci_secret_key or "test-secret-key-for-sessions",
     }
 
@@ -69,20 +70,34 @@ def app():
 
         # Create app using the testing configuration
         app = create_app("testing")
-        print(f"✅ Flask app created successfully with config: {app.config.get('ENV', 'unknown')}")
+        print(
+            f"Flask app created successfully with config: {app.config.get('ENV', 'unknown')}"
+        )
 
         with app.app_context():
             # Verify database is working
             try:
                 db.create_all()
-                print("✅ Database tables created successfully")
+                print("Database tables created successfully")
             except Exception as db_error:
-                print(f"⚠️ Database setup warning: {db_error}")
+                print(f"Database setup warning: {db_error}")
 
-            yield app
+            try:
+                yield app
+            finally:
+                # Clean up database connections before app context closes
+                try:
+                    if db.session:
+                        db.session.close()
+                        db.session.remove()
+                    if db.engine:
+                        db.engine.dispose()
+                except Exception as cleanup_error:
+                    print(f"App fixture database cleanup warning: {cleanup_error}")
+                    # Don't fail tests due to cleanup issues
 
     except Exception as app_error:
-        print(f"❌ App creation failed: {app_error}")
+        print(f"App creation failed: {app_error}")
         print("Environment variables:")
         for key, value in test_env_vars.items():
             print(f"  {key}={value}")
@@ -124,15 +139,17 @@ def db_session(app):
 
             inspector = inspect(db.engine)
             tables = inspector.get_table_names()
-            print(f"✅ Database tables created: {tables}")
+            print(f"Database tables created: {tables}")
 
             # Provide the session
             yield db.session
 
         except Exception as e:
             # Enhanced error handling for CI debugging
-            print(f"❌ Database session setup error: {e}")
-            print(f"Database URI: {app.config.get('SQLALCHEMY_DATABASE_URI', 'Not set')}")
+            print(f"Database session setup error: {e}")
+            print(
+                f"Database URI: {app.config.get('SQLALCHEMY_DATABASE_URI', 'Not set')}"
+            )
             print(f"Database type: {os.environ.get('DB_TYPE', 'Not set')}")
 
             # Try to recover by creating tables if they don't exist
@@ -140,22 +157,30 @@ def db_session(app):
                 print("Attempting database recovery...")
                 db.create_all()
                 db.session.commit()
-                print("✅ Database recovery successful")
+                print("Database recovery successful")
                 yield db.session
             except Exception as recovery_error:
-                print(f"❌ Database recovery failed: {recovery_error}")
+                print(f"Database recovery failed: {recovery_error}")
                 # Create a minimal session for tests that don't need database
                 yield db.session
         finally:
             # Enhanced cleanup for CI environment
             try:
-                db.session.rollback()
-                db.session.close()
-                db.session.remove()
+                # Only attempt cleanup if session is active
+                if db.session and db.session.is_active:
+                    db.session.rollback()
+                if db.session:
+                    db.session.close()
+                    db.session.remove()
+            except Exception as session_cleanup_error:
+                print(f"Database session cleanup warning: {session_cleanup_error}")
+
+            try:
                 # Dispose engine connections to prevent hanging connections
-                db.engine.dispose()
-            except Exception as cleanup_error:
-                print(f"⚠️ Database cleanup warning: {cleanup_error}")
+                if db.engine:
+                    db.engine.dispose()
+            except Exception as engine_cleanup_error:
+                print(f"Database engine cleanup warning: {engine_cleanup_error}")
                 # Don't fail the test due to cleanup issues
 
 
@@ -516,7 +541,9 @@ def test_callsign_mappings(app, db_session, test_users):
                 name=f"Test {plugin_type.title()} Stream",
                 plugin_type=plugin_type,
                 enable_callsign_mapping=True,
-                callsign_identifier_field=("imei" if plugin_type == "garmin" else "device_name"),
+                callsign_identifier_field=(
+                    "imei" if plugin_type == "garmin" else "device_name"
+                ),
             )
             db_session.add(stream)
             test_streams[plugin_type] = stream
@@ -609,7 +636,9 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "performance: mark test as performance test")
     config.addinivalue_line("markers", "security: mark test as security test")
     config.addinivalue_line("markers", "callsign: mark test as callsign mapping test")
-    config.addinivalue_line("markers", "database: mark test as requiring specific database")
+    config.addinivalue_line(
+        "markers", "database: mark test as requiring specific database"
+    )
 
 
 def pytest_sessionstart(session):

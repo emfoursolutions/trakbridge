@@ -186,7 +186,9 @@ class VersionInfo:
             # Execute Git commands
             for key, cmd in git_commands.items():
                 try:
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                    result = subprocess.run(
+                        cmd, capture_output=True, text=True, timeout=5
+                    )
                     if result.returncode == 0:
                         output = result.stdout.strip()
 
@@ -275,7 +277,8 @@ class VersionInfo:
             "working_directory": str(Path.cwd()),
             "script_directory": str(Path(__file__).parent),
             "user": os.environ.get("USER") or os.environ.get("USERNAME", "unknown"),
-            "hostname": os.environ.get("HOSTNAME") or os.environ.get("COMPUTERNAME", "unknown"),
+            "hostname": os.environ.get("HOSTNAME")
+            or os.environ.get("COMPUTERNAME", "unknown"),
             "virtual_env": os.environ.get("VIRTUAL_ENV"),
             "flask_env": os.environ.get("FLASK_ENV", "development"),
             "debug_mode": os.environ.get("FLASK_DEBUG", "false").lower() == "true",
@@ -386,7 +389,9 @@ class VersionInfo:
     ) -> str:
         """Format version information for display."""
         version = (
-            self.get_development_version() if self.is_development_build() else self.get_version()
+            self.get_development_version()
+            if self.is_development_build()
+            else self.get_version()
         )
         parts = [f"TrakBridge {version}"]
 
@@ -411,7 +416,9 @@ class VersionInfo:
             if env_info["virtual_env"]:
                 venv_name = Path(env_info["virtual_env"]).name
                 env_parts.append(f"venv: {venv_name}")
-            env_parts.append(f"python: {sys.version_info.major}.{sys.version_info.minor}")
+            env_parts.append(
+                f"python: {sys.version_info.major}.{sys.version_info.minor}"
+            )
 
             if env_parts:
                 parts.append(f"[{', '.join(env_parts)}]")
@@ -466,7 +473,9 @@ def format_version(
     include_build_info: bool = False,
 ) -> str:
     """Format version information for display."""
-    return _get_version_instance().format_version(include_git, include_env, include_build_info)
+    return _get_version_instance().format_version(
+        include_git, include_env, include_build_info
+    )
 
 
 def is_development_build() -> bool:
@@ -490,7 +499,9 @@ def get_full_development_info() -> Dict[str, Any]:
     return get_version_info()
 
 
-def format_development_version(include_git: bool = True, include_env: bool = False) -> str:
+def format_development_version(
+    include_git: bool = True, include_env: bool = False
+) -> str:
     """Format development version for display (alias for format_version)."""
     return format_version(include_git, include_env)
 

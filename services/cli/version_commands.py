@@ -28,7 +28,9 @@ def version():
 
 
 @version.command()
-@click.option("--detailed", "-d", is_flag=True, help="Show detailed version information")
+@click.option(
+    "--detailed", "-d", is_flag=True, help="Show detailed version information"
+)
 @click.option("--json", "-j", is_flag=True, help="Output in JSON format")
 @click.option("--dev", is_flag=True, help="Show development version format")
 @click.option("--git", is_flag=True, help="Include Git information")
@@ -47,7 +49,11 @@ def show(detailed, json, dev, git, env):
                 "version": version_instance.get_version(),
                 "development_version": version_instance.get_development_version(),
                 "is_development": version_instance.is_development_build(),
-                "type": ("development" if version_instance.is_development_build() else "release"),
+                "type": (
+                    "development"
+                    if version_instance.is_development_build()
+                    else "release"
+                ),
             }
 
         click.echo(json.dumps(data, indent=2, default=str))
@@ -65,7 +71,9 @@ def show(detailed, json, dev, git, env):
         version_str = version_instance.get_version()
         version_label = "Version"
 
-    version_type = "Development" if version_instance.is_development_build() else "Release"
+    version_type = (
+        "Development" if version_instance.is_development_build() else "Release"
+    )
 
     click.echo(f"{version_label}: {click.style(version_str, fg='green', bold=True)}")
     click.echo(f"Type: {click.style(version_type, fg='yellow')}")
@@ -146,7 +154,9 @@ def validate():
     if source == "fallback":
         issues.append("Using fallback version - no Git tags or version file found")
     elif source == "git-tag":
-        warnings.append("Using Git tag version directly - consider using setuptools-scm")
+        warnings.append(
+            "Using Git tag version directly - consider using setuptools-scm"
+        )
     elif source == "environment":
         warnings.append("Using environment variable version")
 
@@ -225,7 +235,9 @@ def refresh(force):
     """Refresh cached version information."""
 
     if not force:
-        click.confirm("This will refresh the cached version information. Continue?", abort=True)
+        click.confirm(
+            "This will refresh the cached version information. Continue?", abort=True
+        )
 
     # Get the version instance and clear its cache
     version_instance = _get_version_instance()
@@ -351,7 +363,9 @@ def export(output, output_format, include_git, include_env):
 
 @version.command()
 @click.argument("version_string", required=False)
-@click.option("--strict", is_flag=True, help="Use strict semantic versioning validation")
+@click.option(
+    "--strict", is_flag=True, help="Use strict semantic versioning validation"
+)
 @with_appcontext
 def check(version_string, strict):
     """Check if a version string is valid semantic version."""
@@ -461,7 +475,9 @@ def debug():
     styled_dev_version = click.style(
         version_instance.get_development_version(), fg="blue", bold=True
     )
-    styled_is_dev = click.style(str(version_instance.is_development_build()), fg="yellow")
+    styled_is_dev = click.style(
+        str(version_instance.is_development_build()), fg="yellow"
+    )
 
     click.echo(f"Selected base version: {styled_base_version}")
     click.echo(f"Version source: {base_version['source']}")
@@ -512,7 +528,9 @@ def status(git, env):  # <-- FIXED: Added missing parameters
 
     click.echo(f"Status: {click.style(status_text, fg=status_color, bold=True)}")
     click.echo(f"Version: {version_instance.get_development_version()}")
-    click.echo(f"Formatted: {version_instance.format_version(include_git=git, include_env=env)}")
+    click.echo(
+        f"Formatted: {version_instance.format_version(include_git=git, include_env=env)}"
+    )
 
     # Quick indicators
     if is_dev:
@@ -524,7 +542,9 @@ def status(git, env):  # <-- FIXED: Added missing parameters
         if git_info.get("branch") and git_info["branch"] not in ["main", "master"]:
             indicators.append(click.style(f"branch:{git_info['branch']}", fg="yellow"))
         if git_info.get("distance_from_tag"):
-            indicators.append(click.style(f"ahead:{git_info['distance_from_tag']}", fg="blue"))
+            indicators.append(
+                click.style(f"ahead:{git_info['distance_from_tag']}", fg="blue")
+            )
 
         if indicators:
             click.echo(f"Indicators: {' '.join(indicators)}")

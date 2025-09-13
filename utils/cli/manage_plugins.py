@@ -82,7 +82,9 @@ def main():
     add_parser = subparsers.add_parser(
         "add", help="Add a plugin module to allowed list (temporary)"
     )
-    add_parser.add_argument("module_name", help="Module name to add (e.g., plugins.my_plugin)")
+    add_parser.add_argument(
+        "module_name", help="Module name to add (e.g., plugins.my_plugin)"
+    )
 
     # Reload command
     subparsers.add_parser("reload", help="Reload plugin configuration from files")

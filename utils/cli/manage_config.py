@@ -68,7 +68,9 @@ class ConfigManager:
                     with open(external_file, "r") as f:
                         external_content = f.read()
 
-                    configs[filename]["files_differ"] = bundled_content != external_content
+                    configs[filename]["files_differ"] = (
+                        bundled_content != external_content
+                    )
                 except Exception as e:
                     configs[filename]["error"] = str(e)
 
@@ -86,7 +88,9 @@ class ConfigManager:
 
         return configs
 
-    def install_config(self, filename: str = None, update_mode: str = "preserve") -> bool:
+    def install_config(
+        self, filename: str = None, update_mode: str = "preserve"
+    ) -> bool:
         """
         Install configuration files to external directory.
 
@@ -118,7 +122,9 @@ class ConfigManager:
             try:
                 if external_file.exists():
                     if update_mode == "preserve":
-                        self.logger.info(f"Preserving existing config: {bundled_file.name}")
+                        self.logger.info(
+                            f"Preserving existing config: {bundled_file.name}"
+                        )
                         skipped_count += 1
                         continue
                     elif update_mode == "overwrite":
@@ -201,14 +207,18 @@ class ConfigManager:
                         source = f"bundled:{bundled_path}"
                     else:
                         source = "missing"
-                        results["issues"].append(f"Configuration file '{filename}' not found")
+                        results["issues"].append(
+                            f"Configuration file '{filename}' not found"
+                        )
                         results["valid"] = False
 
                     results["config_sources"][filename] = source
 
                     # Basic YAML validation (already done by load_config_file)
                     if not config_data:
-                        results["warnings"].append(f"Configuration file '{filename}' is empty")
+                        results["warnings"].append(
+                            f"Configuration file '{filename}' is empty"
+                        )
 
                 except Exception as e:
                     results["issues"].append(f"Failed to load '{filename}': {e}")
@@ -223,11 +233,15 @@ class ConfigManager:
                     # Check for enabled providers
                     providers = auth_config.get("providers", {})
                     enabled_providers = [
-                        name for name, cfg in providers.items() if cfg.get("enabled", False)
+                        name
+                        for name, cfg in providers.items()
+                        if cfg.get("enabled", False)
                     ]
 
                     if not enabled_providers:
-                        results["issues"].append("No authentication providers are enabled")
+                        results["issues"].append(
+                            "No authentication providers are enabled"
+                        )
                         results["valid"] = False
                     else:
                         results["warnings"].append(
@@ -257,7 +271,9 @@ class ConfigManager:
                                 results["valid"] = False
 
             except Exception as e:
-                results["issues"].append(f"Authentication configuration validation failed: {e}")
+                results["issues"].append(
+                    f"Authentication configuration validation failed: {e}"
+                )
                 results["valid"] = False
 
         except Exception as e:
@@ -374,8 +390,12 @@ Examples:
     )
 
     # Install command
-    install_parser = subparsers.add_parser("install", help="Install configuration files")
-    install_parser.add_argument("--file", help="Specific file to install (default: all)")
+    install_parser = subparsers.add_parser(
+        "install", help="Install configuration files"
+    )
+    install_parser.add_argument(
+        "--file", help="Specific file to install (default: all)"
+    )
     install_parser.add_argument(
         "--update-mode",
         choices=["preserve", "overwrite", "merge"],
@@ -397,8 +417,12 @@ Examples:
     backup_parser.add_argument("--backup-dir", help="Backup directory path")
 
     # Restore command
-    restore_parser = subparsers.add_parser("restore", help="Restore configuration from backup")
-    restore_parser.add_argument("--backup-dir", required=True, help="Backup directory path")
+    restore_parser = subparsers.add_parser(
+        "restore", help="Restore configuration from backup"
+    )
+    restore_parser.add_argument(
+        "--backup-dir", required=True, help="Backup directory path"
+    )
 
     args = parser.parse_args()
 
@@ -415,7 +439,9 @@ Examples:
             if args.format == "json":
                 print(json.dumps(configs, indent=2))
             else:
-                print(f"Configuration files (External dir: {config_manager.external_config_dir}):")
+                print(
+                    f"Configuration files (External dir: {config_manager.external_config_dir}):"
+                )
                 print("-" * 80)
                 for filename, info in configs.items():
                     status = info["status"]
@@ -435,7 +461,9 @@ Examples:
             if args.format == "json":
                 print(json.dumps(results, indent=2))
             else:
-                print(f"Configuration validation for environment: {results['environment']}")
+                print(
+                    f"Configuration validation for environment: {results['environment']}"
+                )
                 print("-" * 60)
 
                 if results["valid"]:

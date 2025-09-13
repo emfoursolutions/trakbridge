@@ -106,7 +106,9 @@ class TestTakServerModel:
         with app.app_context():
             # Use unique name to avoid constraint violations between tests
             unique_name = f"Test Server {uuid.uuid4().hex[:8]}"
-            server = TakServer(name=unique_name, host="localhost", port=8089, protocol="tcp")
+            server = TakServer(
+                name=unique_name, host="localhost", port=8089, protocol="tcp"
+            )
             db_session.add(server)
             db_session.commit()
 
@@ -145,6 +147,7 @@ class TestCallsignMappingModel:
             assert mapping.identifier_value == "ABC123"
             assert mapping.custom_callsign == "Alpha-1"
             assert mapping.cot_type == "a-f-G-U-C"
+            assert mapping.enabled is True  # Default enabled value
 
     def test_stream_callsign_relationship(self, app, db_session):
         """Test Stream <-> CallsignMapping relationship - follows existing test patterns"""
@@ -237,6 +240,86 @@ class TestCallsignMappingModel:
             # Verify mapping was cascaded deleted
             assert db_session.get(CallsignMapping, mapping_id) is None
 
+    def test_callsign_mapping_enabled_field(self, app, db_session):
+        """Test enabled field functionality in CallsignMapping model"""
+        with app.app_context():
+            from models.callsign_mapping import CallsignMapping
+
+            # Create test stream
+            stream = Stream(name="Test Stream", plugin_type="garmin")
+            db_session.add(stream)
+            db_session.commit()
+
+            # Test default enabled value (True)
+            mapping_default = CallsignMapping(
+                stream_id=stream.id,
+                identifier_value="DEFAULT123",
+                custom_callsign="Default-1",
+            )
+            db_session.add(mapping_default)
+            db_session.commit()
+            assert mapping_default.enabled is True
+
+            # Test explicit enabled=True
+            mapping_enabled = CallsignMapping(
+                stream_id=stream.id,
+                identifier_value="ENABLED123",
+                custom_callsign="Enabled-1",
+                enabled=True,
+            )
+            db_session.add(mapping_enabled)
+            db_session.commit()
+            assert mapping_enabled.enabled is True
+
+            # Test explicit enabled=False
+            mapping_disabled = CallsignMapping(
+                stream_id=stream.id,
+                identifier_value="DISABLED123",
+                custom_callsign="Disabled-1",
+                enabled=False,
+            )
+            db_session.add(mapping_disabled)
+            db_session.commit()
+            assert mapping_disabled.enabled is False
+
+    def test_callsign_mapping_to_dict_includes_enabled(self, app, db_session):
+        """Test that to_dict method includes enabled field"""
+        with app.app_context():
+            from models.callsign_mapping import CallsignMapping
+
+            # Create test stream
+            stream = Stream(name="Test Stream", plugin_type="garmin")
+            db_session.add(stream)
+            db_session.commit()
+
+            # Test enabled=True in to_dict
+            mapping_enabled = CallsignMapping(
+                stream_id=stream.id,
+                identifier_value="TODICT123",
+                custom_callsign="ToDict-1",
+                enabled=True,
+            )
+            db_session.add(mapping_enabled)
+            db_session.commit()
+
+            mapping_dict = mapping_enabled.to_dict()
+            assert "enabled" in mapping_dict
+            assert mapping_dict["enabled"] is True
+
+            # Test enabled=False in to_dict
+            mapping_disabled = CallsignMapping(
+                stream_id=stream.id,
+                identifier_value="TODICT456",
+                custom_callsign="ToDict-2",
+                enabled=False,
+            )
+            db_session.add(mapping_disabled)
+            db_session.commit()
+
+            mapping_dict_disabled = mapping_disabled.to_dict()
+            assert "enabled" in mapping_dict_disabled
+            assert mapping_dict_disabled["enabled"] is False
+
 
 class TestCallsignMigrationIntegration:
     """Test callsign mapping database migration integration"""
@@ -255,7 +338,9 @@ class TestCallsignMigrationIntegration:
             assert "callsign_mappings" in tables
 
             # Check callsign_mappings table columns
-            callsign_columns = [col["name"] for col in inspector.get_columns("callsign_mappings")]
+            callsign_columns = [
+                col["name"] for col in inspector.get_columns("callsign_mappings")
+            ]
             expected_callsign_columns = [
                 "id",
                 "stream_id",
@@ -279,7 +364,9 @@ class TestCallsignMigrationIntegration:
                 "enable_per_callsign_cot_types",
             ]
             for col in expected_stream_callsign_columns:
-                assert col in stream_columns, f"Column '{col}' missing from streams table"
+                assert (
+                    col in stream_columns
+                ), f"Column '{col}' missing from streams table"
 
     def test_database_constraints_exist(self, app, db_session):
         """Test that database constraints are properly created"""
@@ -305,7 +392,10 @@ class TestCallsignMigrationIntegration:
             foreign_keys = inspector.get_foreign_keys("callsign_mappings")
             fk_found = False
             for fk in foreign_keys:
-                if fk["constrained_columns"] == ["stream_id"] and fk["referred_table"] == "streams":
+                if (
+                    fk["constrained_columns"] == ["stream_id"]
+                    and fk["referred_table"] == "streams"
+                ):
                     fk_found = True
                     break
             assert fk_found, "Foreign key constraint to streams table not found"

@@ -103,7 +103,9 @@ class ConfigLoader:
 
         # Log the effective configuration source
         if config_sources:
-            logger.info(f"Configuration '{filename}' loaded from: {', '.join(config_sources)}")
+            logger.info(
+                f"Configuration '{filename}' loaded from: {', '.join(config_sources)}"
+            )
         else:
             logger.warning(f"Configuration file '{filename}' not found in any source")
 
@@ -127,7 +129,11 @@ class ConfigLoader:
         result = base_config.copy()
 
         for key, value in override_config.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(value, dict)
+            ):
                 # Recursively merge nested dictionaries
                 result[key] = self._deep_merge_configs(result[key], value)
             else:
@@ -137,7 +143,9 @@ class ConfigLoader:
         return result
 
     @staticmethod
-    def get_config_value(config: Dict[str, Any], *keys: str, default: Any = None) -> Any:
+    def get_config_value(
+        config: Dict[str, Any], *keys: str, default: Any = None
+    ) -> Any:
         """Get a nested configuration value."""
         value = config
         for key in keys:
@@ -150,7 +158,9 @@ class ConfigLoader:
     def merge_environment_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Merge environment-specific configuration."""
         base_config = config.get("default", {}).copy()
-        env_config = self.get_config_value(config, "environments", self.environment, default={})
+        env_config = self.get_config_value(
+            config, "environments", self.environment, default={}
+        )
 
         # Deep merge environment config
         self._deep_merge(base_config, env_config)
@@ -253,7 +263,9 @@ class BaseConfig:
 
         db_name = self.secret_manager.get_secret(
             "DB_NAME",
-            self.db_config.get("defaults", {}).get("sqlite", {}).get("name", "data/app.db"),
+            self.db_config.get("defaults", {})
+            .get("sqlite", {})
+            .get("name", "data/app.db"),
         )
 
         if self.environment == "testing":
@@ -274,9 +286,15 @@ class BaseConfig:
 
         user = self.secret_manager.get_secret("DB_USER", defaults.get("user", "root"))
         password = self.secret_manager.get_secret("DB_PASSWORD", "")
-        host = self.secret_manager.get_secret("DB_HOST", defaults.get("host", "localhost"))
-        port = self.secret_manager.get_secret("DB_PORT", str(defaults.get("port", 3306)))
-        name = self.secret_manager.get_secret("DB_NAME", defaults.get("name", "trakbridge_db"))
+        host = self.secret_manager.get_secret(
+            "DB_HOST", defaults.get("host", "localhost")
+        )
+        port = self.secret_manager.get_secret(
+            "DB_PORT", str(defaults.get("port", 3306))
+        )
+        name = self.secret_manager.get_secret(
+            "DB_NAME", defaults.get("name", "trakbridge_db")
+        )
 
         password_encoded = quote_plus(password) if password else ""
         return f"mysql+pymysql://{user}:{password_encoded}@{host}:{port}/{name}?charset=utf8mb4"
@@ -285,11 +303,19 @@ class BaseConfig:
         """Build PostgreSQL database URI."""
         defaults = self.db_config.get("defaults", {}).get("postgresql", {})
 
-        user = self.secret_manager.get_secret("DB_USER", defaults.get("user", "postgres"))
+        user = self.secret_manager.get_secret(
+            "DB_USER", defaults.get("user", "postgres")
+        )
         password = self.secret_manager.get_secret("DB_PASSWORD", "")
-        host = self.secret_manager.get_secret("DB_HOST", defaults.get("host", "localhost"))
-        port = self.secret_manager.get_secret("DB_PORT", str(defaults.get("port", 5432)))
-        name = self.secret_manager.get_secret("DB_NAME", defaults.get("name", "trakbridge_db"))
+        host = self.secret_manager.get_secret(
+            "DB_HOST", defaults.get("host", "localhost")
+        )
+        port = self.secret_manager.get_secret(
+            "DB_PORT", str(defaults.get("port", 5432))
+        )
+        name = self.secret_manager.get_secret(
+            "DB_NAME", defaults.get("name", "trakbridge_db")
+        )
 
         password_encoded = quote_plus(password) if password else ""
         return f"postgresql://{user}:{password_encoded}@{host}:{port}/{name}"
@@ -312,9 +338,13 @@ class BaseConfig:
         # Try to detect from DATABASE_URL scheme
         database_url = self.secret_manager.get_secret("DATABASE_URL")
         if database_url:
-            if database_url.startswith("postgresql://") or database_url.startswith("postgres://"):
+            if database_url.startswith("postgresql://") or database_url.startswith(
+                "postgres://"
+            ):
                 return "postgresql"
-            elif database_url.startswith("mysql://") or database_url.startswith("mysql+"):
+            elif database_url.startswith("mysql://") or database_url.startswith(
+                "mysql+"
+            ):
                 return "mysql"
             elif database_url.startswith("sqlite://"):
                 return "sqlite"
@@ -326,11 +356,13 @@ class BaseConfig:
     def SQLALCHEMY_ENGINE_OPTIONS(self) -> Dict[str, Any]:
         """Get database engine options."""
         db_type = self._get_database_type()
-        engine_options = self.db_config.get("engine_options", {}).get(db_type, {}).copy()
+        engine_options = (
+            self.db_config.get("engine_options", {}).get(db_type, {}).copy()
+        )
 
         # SQLite validation: Remove pool settings that SQLite doesn't support
         if db_type == "sqlite":
-            invalid_sqlite_options = ["pool_size", "max_overflow"]
+            invalid_sqlite_options = ["pool_size", "max_overflow", "pool_timeout"]
             for option in invalid_sqlite_options:
                 if option in engine_options:
                     logger.warning(f"Removing invalid SQLite engine option: {option}")
@@ -414,7 +446,9 @@ class BaseConfig:
 
     @property
     def LOG_LEVEL(self) -> str:
-        return self.secret_manager.get_secret("LOG_LEVEL", self.logging_config.get("level", "INFO"))
+        return self.secret_manager.get_secret(
+            "LOG_LEVEL", self.logging_config.get("level", "INFO")
+        )
 
     @property
     def LOG_DIR(self) -> str:
@@ -535,7 +569,9 @@ class BaseConfig:
                     # Replace the placeholder with the actual value
                     placeholder = f"${{{var_name}}}"
                     resolved_value = resolved_value.replace(placeholder, secret_value)
-                    logger.debug(f"Resolved authentication config placeholder: {placeholder}")
+                    logger.debug(
+                        f"Resolved authentication config placeholder: {placeholder}"
+                    )
                 else:
                     # Log warning if environment variable is not found
                     logger.warning(
@@ -605,7 +641,9 @@ class BaseConfig:
         Returns:
             Setting value or default
         """
-        return self._get_nested_value(self.auth_config, setting_path.split(".")) or default
+        return (
+            self._get_nested_value(self.auth_config, setting_path.split(".")) or default
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary (for debugging/inspection)."""
@@ -632,9 +670,17 @@ class BaseConfig:
             },
             "authentication": {
                 "providers_enabled": len(
-                    [p for p in self.auth_config.get("providers", []) if p.get("enabled", False)]
+                    [
+                        p
+                        for p in self.auth_config.get("providers", [])
+                        if p.get("enabled", False)
+                    ]
                 ),
-                "max_login_attempts": self.get_auth_setting("security.max_login_attempts", 5),
-                "session_timeout": self.get_auth_setting("security.session_timeout_hours", 24),
+                "max_login_attempts": self.get_auth_setting(
+                    "security.max_login_attempts", 5
+                ),
+                "session_timeout": self.get_auth_setting(
+                    "security.session_timeout_hours", 24
+                ),
             },
         }

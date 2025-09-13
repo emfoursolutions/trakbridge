@@ -273,7 +273,9 @@ class DeepstatePlugin(BaseGPSPlugin):
         logger.debug(f"Processing Point feature: {name}")
         return True
 
-    async def fetch_locations(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
+    async def fetch_locations(
+        self, session: aiohttp.ClientSession
+    ) -> List[Dict[str, Any]]:
         """
         Fetch location data from Deepstate API
 
@@ -293,7 +295,9 @@ class DeepstatePlugin(BaseGPSPlugin):
                 async with aiohttp.ClientSession(
                     connector=connector, timeout=timeout
                 ) as custom_session:
-                    return await self._fetch_locations_with_session(custom_session, config)
+                    return await self._fetch_locations_with_session(
+                        custom_session, config
+                    )
             else:
                 return await self._fetch_locations_with_session(session, config)
 
@@ -306,7 +310,9 @@ class DeepstatePlugin(BaseGPSPlugin):
                 try:
                     await connector.close()
                 except Exception as close_error:
-                    logger.debug(f"Error closing connector (non-critical): {close_error}")
+                    logger.debug(
+                        f"Error closing connector (non-critical): {close_error}"
+                    )
 
     async def _fetch_locations_with_session(
         self, session: aiohttp.ClientSession, config: Dict[str, Any]
@@ -331,14 +337,18 @@ class DeepstatePlugin(BaseGPSPlugin):
             }
             logger.debug(f"API Url: {api_url}")
             logger.debug(f"Deepstate Plugin Config: {config}")
-            logger.debug(f"CoT Type Mode from config: {config.get('cot_type_mode', 'per_point')}")
+            logger.debug(
+                f"CoT Type Mode from config: {config.get('cot_type_mode', 'per_point')}"
+            )
 
             async with session.get(
                 api_url, timeout=timeout_config, headers=headers, ssl=ssl_context
             ) as response:
                 if response.status != 200:
                     error_text = await response.text(encoding="utf-8")
-                    logger.error(f"API request failed with status {response.status}: {error_text}")
+                    logger.error(
+                        f"API request failed with status {response.status}: {error_text}"
+                    )
                     return [
                         {
                             "_error": str(response.status),
@@ -356,10 +366,14 @@ class DeepstatePlugin(BaseGPSPlugin):
                     # Try different possible structures
                     if "map" in data and isinstance(data["map"], dict):
                         features = data["map"].get("features", [])
-                        logger.debug(f"Found {len(features)} features in nested map structure")
+                        logger.debug(
+                            f"Found {len(features)} features in nested map structure"
+                        )
                     elif "features" in data:
                         features = data.get("features", [])
-                        logger.debug(f"Found {len(features)} features in direct structure")
+                        logger.debug(
+                            f"Found {len(features)} features in direct structure"
+                        )
                     else:
                         logger.error(
                             f"No features found in dict response. Available keys: {list(data.keys())}"
@@ -388,9 +402,13 @@ class DeepstatePlugin(BaseGPSPlugin):
 
                 # Get the CoT type mode and stream's default CoT type from stream object
                 # Use new helper methods for configuration management
-                cot_type_mode = self.get_stream_config_value("cot_type_mode", "per_point")
-                stream_default_cot_type = self.get_stream_config_value("cot_type", "a-f-G-U-C")
-                
+                cot_type_mode = self.get_stream_config_value(
+                    "cot_type_mode", "per_point"
+                )
+                stream_default_cot_type = self.get_stream_config_value(
+                    "cot_type", "a-f-G-U-C"
+                )
+
                 # Log configuration source for debugging
                 self.log_config_source("cot_type_mode", cot_type_mode, logger)
                 self.log_config_source("cot_type", stream_default_cot_type, logger)
@@ -414,7 +432,9 @@ class DeepstatePlugin(BaseGPSPlugin):
                     geometry_type = feature.get("geometry", {}).get("type", "Unknown")
                     feature_name = feature.get("properties", {}).get("name", "Unknown")
 
-                    logger.debug(f"Checking feature: {feature_name} (geometry: {geometry_type})")
+                    logger.debug(
+                        f"Checking feature: {feature_name} (geometry: {geometry_type})"
+                    )
 
                     if not self._should_process_feature(feature):
                         continue
@@ -430,7 +450,9 @@ class DeepstatePlugin(BaseGPSPlugin):
                     if location:
                         locations.append(location)
                         processed_count += 1
-                        logger.debug(f"Successfully converted Point feature: {feature_name}")
+                        logger.debug(
+                            f"Successfully converted Point feature: {feature_name}"
+                        )
                     else:
                         logger.debug(f"Failed to convert Point feature: {feature_name}")
 
@@ -505,7 +527,9 @@ class DeepstatePlugin(BaseGPSPlugin):
                 )
             else:
                 # Use per-point COT type determination with stream COT type as fallback
-                cot_type = self._get_cot_type(english_name, properties, default_cot_type)
+                cot_type = self._get_cot_type(
+                    english_name, properties, default_cot_type
+                )
                 logger.debug(
                     f"DEBUG PER-POINT MODE: Analyzed COT type '{cot_type}' for '{english_name}'"
                 )
@@ -565,7 +589,9 @@ class DeepstatePlugin(BaseGPSPlugin):
         """
         # Convert to lowercase for case-insensitive matching
         name_id = english_name.lower()
-        cot_type = default_cot_type  # Use the passed default instead of hardcoded "a-n-G"
+        cot_type = (
+            default_cot_type  # Use the passed default instead of hardcoded "a-n-G"
+        )
 
         # Check properties first for specific markers
         # if properties and properties.get("description") == "{icon=enemy}":
@@ -608,7 +634,9 @@ class DeepstatePlugin(BaseGPSPlugin):
         elif "paratrooper" in name_id:
             cot_type = "a-h-G-U-C-I-A"  # Hostile ground unit combat infantry airborne
         elif "air assault" in name_id:
-            cot_type = "a-h-G-U-C-I-S"  # Hostile ground unit combat infantry air assault
+            cot_type = (
+                "a-h-G-U-C-I-S"  # Hostile ground unit combat infantry air assault
+            )
         elif "coastal defense" in name_id:
             cot_type = "a-h-G-U-C-I-N"  # Hostile ground unit combat infantry naval
         elif "marine" in name_id:
@@ -641,7 +669,9 @@ class DeepstatePlugin(BaseGPSPlugin):
             cot_type = "a-h-G-U-U-M"  # Hostile ground unit military intelligence
         # Weapons systems
         elif "cruise" in name_id:
-            cot_type = "a-h-S-C-L-C-C"  # Hostile sea surface combatant line combatant cruiser
+            cot_type = (
+                "a-h-S-C-L-C-C"  # Hostile sea surface combatant line combatant cruiser
+            )
         return cot_type
 
     def validate_config(self) -> bool:
@@ -673,7 +703,9 @@ class DeepstatePlugin(BaseGPSPlugin):
                     if field_name == "timeout" and (num_value < 5 or num_value > 120):
                         logger.error("Timeout must be between 5 and 120 seconds")
                         return False
-                    elif field_name == "max_events" and (num_value < 1 or num_value > 1000):
+                    elif field_name == "max_events" and (
+                        num_value < 1 or num_value > 1000
+                    ):
                         logger.error("Max events must be between 1 and 1000")
                         return False
                 except (ValueError, TypeError):

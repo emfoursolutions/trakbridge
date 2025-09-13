@@ -71,8 +71,10 @@ class ConnectionTestService:
                     return success, device_count, error
             else:
                 # Use shared session
-                success, device_count, error = await ConnectionTestService._perform_connection_test(
-                    plugin_instance, session
+                success, device_count, error = (
+                    await ConnectionTestService._perform_connection_test(
+                        plugin_instance, session
+                    )
                 )
                 return success, device_count, error
 
@@ -178,6 +180,28 @@ class ConnectionTestService:
                 "tracker_data": [],
                 "device_count": 0,
                 "error": f"Tracker discovery failed: {str(e)}",
+            }
+
+    def discover_trackers(self, plugin_type, plugin_config, timeout=30):
+        """Alias method for discover_plugin_trackers_sync for backward compatibility"""
+        result = self.discover_plugin_trackers_sync(plugin_type, plugin_config, timeout)
+        # Transform the result format to match expected test format
+        if result.get("success"):
+            trackers = []
+            for tracker_data in result.get("tracker_data", []):
+                # Extract relevant fields for callsign mapping
+                tracker = {
+                    "identifier": tracker_data.get("uid", ""),
+                    "name": tracker_data.get("name", ""),
+                    "uid": tracker_data.get("uid", ""),
+                }
+                trackers.append(tracker)
+            return {"success": True, "trackers": trackers}
+        else:
+            return {
+                "success": False,
+                "trackers": [],
+                "error": result.get("error", "Unknown error"),
             }
 
     async def discover_plugin_trackers(self, plugin_type, plugin_config):
@@ -291,7 +315,9 @@ class ConnectionTestService:
                 "error": "Connection test timed out",
             }
         except Exception as e:
-            logger.error(f"Error running sync connection test for stream {stream_id}: {e}")
+            logger.error(
+                f"Error running sync connection test for stream {stream_id}: {e}"
+            )
             return {
                 "success": False,
                 "device_count": 0,
@@ -372,7 +398,9 @@ class ConnectionTestService:
                     if required and (
                         field_name not in plugin_config or not plugin_config[field_name]
                     ):
-                        errors.append(f"Required field '{field_name}' is missing or empty")
+                        errors.append(
+                            f"Required field '{field_name}' is missing or empty"
+                        )
 
             return len(errors) == 0, errors
 
@@ -395,7 +423,9 @@ class ConnectionTestService:
             }
 
             # First validate configuration
-            valid, validation_errors = self.validate_plugin_config(plugin_type, plugin_config)
+            valid, validation_errors = self.validate_plugin_config(
+                plugin_type, plugin_config
+            )
             report["validation_passed"] = valid
             report["validation_errors"] = validation_errors
 

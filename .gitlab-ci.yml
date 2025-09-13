@@ -386,7 +386,7 @@ code-quality:
 # PostgreSQL service for integration tests
 .postgres_service: &postgres_service
   services:
-    - name: postgres:15-alpine
+    - name: postgres:17-alpine
       alias: postgres
       variables:
         POSTGRES_DB: test_db
@@ -1780,8 +1780,8 @@ deploy-feature-branch:
     # Authenticate with GitLab Container Registry for pulling
     echo "${CI_REGISTRY_PASSWORD}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
     
-    # Generate dynamic port based on branch hash (5001-5099 range)
-    export DYNAMIC_PORT=$((5001 + (0x$(echo -n "$CI_COMMIT_REF_SLUG" | sha256sum | head -c 2) % 99)))
+    # Generate dynamic port based on branch hash (5100-5199 range to avoid GitLab registry port 5050)
+    export DYNAMIC_PORT=$((5100 + (0x$(echo -n "$CI_COMMIT_REF_SLUG" | sha256sum | head -c 2) % 100)))
     echo "Deploying feature branch to dynamic environment..."
     echo "Branch: $CI_COMMIT_BRANCH"
     echo "Environment: review/$CI_COMMIT_REF_SLUG"

@@ -247,7 +247,9 @@ class TestRestartInfoEndpoint:
         route_found = False
         for deferred in bp.deferred_functions:
             # Look for route registration with our endpoint
-            if hasattr(deferred, "rule") and "/key-rotation/restart-info" in str(deferred):
+            if hasattr(deferred, "rule") and "/key-rotation/restart-info" in str(
+                deferred
+            ):
                 route_found = True
                 break
 

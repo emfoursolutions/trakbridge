@@ -57,9 +57,7 @@ class DatabaseManager:
             f"{app_context_factory is not None}"
         )
         if app_context_factory is None:
-            logger.warning(
-                "DatabaseManager created WITHOUT app_context_factory!"
-            )
+            logger.warning("DatabaseManager created WITHOUT app_context_factory!")
             logger.warning("Stack trace:")
             for line in traceback.format_stack():
                 logger.warning(line.strip())
@@ -77,10 +75,7 @@ class DatabaseManager:
         error_str = str(e).lower()
 
         # MariaDB/MySQL specific errors - including Error 1020
-        if (
-            "1020" in error_str
-            or "record has changed since last read" in error_str
-        ):
+        if "1020" in error_str or "record has changed since last read" in error_str:
             return True
 
         # PostgreSQL specific errors
@@ -113,10 +108,7 @@ class DatabaseManager:
                 "unique constraint",
                 "foreign key constraint",  # Can happen during concurrent deletes
             ]
-            if any(
-                pattern in error_str
-                for pattern in concurrency_integrity_patterns
-            ):
+            if any(pattern in error_str for pattern in concurrency_integrity_patterns):
                 return True
 
         return False
@@ -157,9 +149,7 @@ class DatabaseManager:
             try:
                 app_ctx = self.get_app_context()
                 if not app_ctx:
-                    logger.error(
-                        "No app context available for database operation"
-                    )
+                    logger.error("No app context available for database operation")
                     return None
 
                 with app_ctx:
@@ -204,9 +194,7 @@ class DatabaseManager:
                             time.sleep(retry_delay * (attempt + 1))
                     except Exception as e:
                         db.session.rollback()
-                        logger.error(
-                            f"Unexpected error in database operation: {e}"
-                        )
+                        logger.error(f"Unexpected error in database operation: {e}")
                         raise
 
             except Exception as e:
@@ -231,14 +219,26 @@ class DatabaseManager:
                 # This ensures all data is loaded while session is active
                 _ = stream.tak_server  # Access tak_server to load it
                 if stream.tak_server:
-                    _ = (
-                        stream.tak_server.name
-                    )  # Access name to ensure it's loaded
-                    _ = (
-                        stream.tak_server.host
-                    )  # Access other commonly used fields
+                    _ = stream.tak_server.name  # Access name to ensure it's loaded
+                    _ = stream.tak_server.host  # Access other commonly used fields
                     _ = stream.tak_server.port
                     _ = stream.tak_server.protocol
+
+                # Phase 2B: Eagerly load multi-server relationship
+                if hasattr(stream, "tak_servers"):
+                    try:
+                        # Access tak_servers to load the relationship
+                        tak_servers_list = list(stream.tak_servers)
+                        # Access commonly used fields for each server
+                        for server in tak_servers_list:
+                            _ = server.name
+                            _ = server.host
+                            _ = server.port
+                            _ = server.protocol
+                    except Exception as e:
+                        logger.debug(
+                            f"Error eagerly loading tak_servers for stream {stream_id}: {e}"
+                        )
 
                 # Create a detached copy with all necessary data
                 return DatabaseManager._create_detached_stream_copy(stream)
@@ -265,9 +265,7 @@ class DatabaseManager:
         stream_copy.cot_type = stream.cot_type
         stream_copy.cot_stale_time = stream.cot_stale_time
         stream_copy.plugin_config = stream.plugin_config
-        stream_copy.total_messages_sent = getattr(
-            stream, "total_messages_sent", 0
-        )
+        stream_copy.total_messages_sent = getattr(stream, "total_messages_sent", 0)
 
         # Copy TAK server data if it exists
         if stream.tak_server:
@@ -290,6 +288,102 @@ class DatabaseManager:
             stream_copy.tak_server = tak_copy
         else:
             stream_copy.tak_server = None
+
+        # Phase 2B: Copy multi-server relationships (tak_servers)
+        if hasattr(stream, "tak_servers"):
+            try:
+                # Get all servers from the relationship
+                tak_servers_list = list(stream.tak_servers)
+
+                # Create SimpleNamespace copies for each server
+                tak_servers_copies = []
+                for tak_server in tak_servers_list:
+                    server_copy = SimpleNamespace()
+                    server_copy.id = tak_server.id
+                    server_copy.name = tak_server.name
+                    server_copy.host = tak_server.host
+                    server_copy.port = tak_server.port
+                    server_copy.protocol = tak_server.protocol
+                    server_copy.verify_ssl = tak_server.verify_ssl
+                    server_copy.cert_p12 = tak_server.cert_p12
+                    server_copy.cert_password = tak_server.get_cert_password()
+                    server_copy.has_cert_password = tak_server.has_cert_password
+
+                    # Add method to get cert password (for compatibility)
+                    def make_get_cert_password(cert_password):
+                        def get_cert_password():
+                            return cert_password
+
+                        return get_cert_password
+
+                    server_copy.get_cert_password = make_get_cert_password(
+                        server_copy.cert_password
+                    )
+
+                    tak_servers_copies.append(server_copy)
+
+                # Create mock relationship object that supports count(), all(), and iteration
+                class MockTakServersRelationship:
+                    def __init__(self, servers_list):
+                        self._servers_list = servers_list
+
+                    def count(self):
+                        return len(self._servers_list)
+
+                    def all(self):
+                        return self._servers_list
+
+                    def __iter__(self):
+                        return iter(self._servers_list)
+
+                    def __len__(self):
+                        return len(self._servers_list)
+
+                stream_copy.tak_servers = MockTakServersRelationship(tak_servers_copies)
+
+            except Exception as e:
+                # If there's an error accessing tak_servers, create empty relationship
+                logger.debug(f"Error copying tak_servers for stream {stream.id}: {e}")
+
+                class MockTakServersRelationship:
+                    def __init__(self, servers_list=None):
+                        self._servers_list = servers_list or []
+
+                    def count(self):
+                        return 0
+
+                    def all(self):
+                        return []
+
+                    def __iter__(self):
+                        return iter([])
+
+                    def __len__(self):
+                        return 0
+
+                stream_copy.tak_servers = MockTakServersRelationship([])
+        else:
+            # Create empty relationship if tak_servers doesn't exist
+            class MockTakServersRelationship:
+                def __init__(self, servers_list=None):
+                    self._servers_list = servers_list or []
+
+                def count(self):
+                    return 0
+
+                def all(self):
+                    return []
+
+                def __iter__(self):
+                    return iter([])
+
+                def __len__(self):
+                    return 0
+
+            stream_copy.tak_servers = MockTakServersRelationship([])
+
+        # Copy missing fields needed for validation
+        stream_copy.tak_server_id = getattr(stream, "tak_server_id", None)
 
         # Add method to get plugin config
         def get_plugin_config():
@@ -314,9 +408,7 @@ class DatabaseManager:
         def _update_stream():
             stream = Stream.query.get(stream_id)
             if not stream:
-                logger.warning(
-                    f"Stream {stream_id} not found for status update"
-                )
+                logger.warning(f"Stream {stream_id} not found for status update")
                 return False
 
             if is_active is not None:
@@ -361,9 +453,7 @@ class DatabaseManager:
                     _ = stream.tak_server.protocol
 
                 # Create detached copy
-                detached_stream = DatabaseManager._create_detached_stream_copy(
-                    stream
-                )
+                detached_stream = DatabaseManager._create_detached_stream_copy(stream)
                 detached_streams.append(detached_stream)
 
             return detached_streams
@@ -407,9 +497,7 @@ class DatabaseManager:
                     _ = stream.tak_server.port
                     _ = stream.tak_server.protocol
 
-                detached_stream = DatabaseManager._create_detached_stream_copy(
-                    stream
-                )
+                detached_stream = DatabaseManager._create_detached_stream_copy(stream)
                 detached_streams.append(detached_stream)
 
             return detached_streams

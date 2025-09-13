@@ -107,7 +107,9 @@ def download_icons_parallel(base_url, symbols, output_dir, max_workers=5):
             results.append(result)
 
             if result["success"]:
-                print(f"✓ {result['label']} ({result['cot_type']}) - {result['size']} bytes")
+                print(
+                    f"✓ {result['label']} ({result['cot_type']}) - {result['size']} bytes"
+                )
             else:
                 print(f"✗ {result['label']} ({result['cot_type']}) - {result['error']}")
 
@@ -503,7 +505,9 @@ def main():
     # Test server connection
     print("Testing server connection...")
     if not test_server_connection(BASE_URL):
-        print("Cannot connect to server. Please check the URL and ensure the server is running.")
+        print(
+            "Cannot connect to server. Please check the URL and ensure the server is running."
+        )
         sys.exit(1)
     print()
 
