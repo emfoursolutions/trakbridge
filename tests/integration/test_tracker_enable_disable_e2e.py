@@ -187,6 +187,7 @@ class TestTrackerEnableDisableE2E:
                         "plugin_config": {
                             "username": "e2e_test",
                             "password": "test_pass",
+                            "url": "https://test.example.com/feed.kml",
                         },
                     },
                     headers={"Content-Type": "application/json"},
@@ -226,7 +227,7 @@ class TestTrackerEnableDisableE2E:
                 enable_callsign_mapping=True,
                 callsign_identifier_field="imei",
             )
-            stream.set_plugin_config({"username": "test", "password": "test"})
+            stream.set_plugin_config({"username": "test", "password": "test", "url": "https://test.example.com/feed.kml"})
             db_session.add(stream)
             db_session.commit()
 
@@ -244,7 +245,7 @@ class TestTrackerEnableDisableE2E:
                     json={
                         "stream_id": stream.id,
                         "plugin_type": "garmin",
-                        "plugin_config": {"username": "test", "password": "test"},
+                        "plugin_config": {"username": "test", "password": "test", "url": "https://test.example.com/feed.kml"},
                     },
                     headers={"Content-Type": "application/json"},
                 )
@@ -290,7 +291,7 @@ class TestTrackerEnableDisableE2E:
                 enable_callsign_mapping=True,
                 callsign_identifier_field="imei",
             )
-            stream.set_plugin_config({"username": "test", "password": "test"})
+            stream.set_plugin_config({"username": "test", "password": "test", "url": "https://test.example.com/feed.kml"})
             db_session.add(stream)
             db_session.commit()
 
@@ -702,9 +703,12 @@ class TestPhase6UserDocumentationAndPolish:
             # Should have proper form structure for callsign mapping
             assert "callsign_mapping" in html_content.lower()
 
-    def test_ui_styling_and_visual_feedback(self, app, db_session, client):
+    def test_ui_styling_and_visual_feedback(self, app, db_session, authenticated_client, test_users):
         """Test UI styling and visual feedback for disabled trackers"""
         with app.app_context():
+            # Use authenticated admin client for UI access
+            client = authenticated_client("admin")
+            
             # Create test stream for editing
             tak_server = TakServer(name="UI Test Server", host="localhost", port=8087)
             db_session.add(tak_server)
