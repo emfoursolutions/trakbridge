@@ -182,6 +182,28 @@ class ConnectionTestService:
                 "error": f"Tracker discovery failed: {str(e)}",
             }
 
+    def discover_trackers(self, plugin_type, plugin_config, timeout=30):
+        """Alias method for discover_plugin_trackers_sync for backward compatibility"""
+        result = self.discover_plugin_trackers_sync(plugin_type, plugin_config, timeout)
+        # Transform the result format to match expected test format
+        if result.get("success"):
+            trackers = []
+            for tracker_data in result.get("tracker_data", []):
+                # Extract relevant fields for callsign mapping
+                tracker = {
+                    "identifier": tracker_data.get("uid", ""),
+                    "name": tracker_data.get("name", ""),
+                    "uid": tracker_data.get("uid", ""),
+                }
+                trackers.append(tracker)
+            return {"success": True, "trackers": trackers}
+        else:
+            return {
+                "success": False,
+                "trackers": [],
+                "error": result.get("error", "Unknown error"),
+            }
+
     async def discover_plugin_trackers(self, plugin_type, plugin_config):
         """Discover actual tracker data for callsign mapping configuration"""
         try:

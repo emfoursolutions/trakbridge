@@ -58,7 +58,7 @@ class TestDisabledTrackerFiltering:
                 name="Filter Test Stream",
                 plugin_type="garmin",
                 enable_callsign_mapping=True,
-                callsign_identifier_field="imei"
+                callsign_identifier_field="imei",
             )
             db_session.add(stream)
             db_session.commit()
@@ -68,21 +68,21 @@ class TestDisabledTrackerFiltering:
                 stream_id=stream.id,
                 identifier_value="DISABLED001",
                 custom_callsign="Disabled-Alpha",
-                enabled=False
+                enabled=False,
             )
             disabled_mapping2 = CallsignMapping(
                 stream_id=stream.id,
-                identifier_value="DISABLED002", 
+                identifier_value="DISABLED002",
                 custom_callsign="Disabled-Bravo",
-                enabled=False
+                enabled=False,
             )
             enabled_mapping = CallsignMapping(
                 stream_id=stream.id,
                 identifier_value="ENABLED001",
                 custom_callsign="Enabled-Charlie",
-                enabled=True
+                enabled=True,
             )
-            
+
             db_session.add_all([disabled_mapping1, disabled_mapping2, enabled_mapping])
             db_session.commit()
 
@@ -100,7 +100,7 @@ class TestDisabledTrackerFiltering:
                     },
                 },
                 {
-                    "name": "Device 2", 
+                    "name": "Device 2",
                     "lat": 41.0,
                     "lon": -121.0,
                     "additional_data": {
@@ -110,7 +110,7 @@ class TestDisabledTrackerFiltering:
                 {
                     "name": "Device 3",
                     "lat": 42.0,
-                    "lon": -122.0, 
+                    "lon": -122.0,
                     "additional_data": {
                         "raw_placemark": {"extended_data": {"IMEI": "DISABLED002"}}
                     },
@@ -128,12 +128,10 @@ class TestDisabledTrackerFiltering:
             # Create disabled mappings dict for filtering
             disabled_mappings = {
                 "DISABLED001": disabled_mapping1,
-                "DISABLED002": disabled_mapping2
+                "DISABLED002": disabled_mapping2,
             }
-            
-            fresh_stream_config = {
-                "callsign_identifier_field": "imei"
-            }
+
+            fresh_stream_config = {"callsign_identifier_field": "imei"}
 
             # Run the filtering
             async def test_filtering():
@@ -145,7 +143,7 @@ class TestDisabledTrackerFiltering:
 
             # Verify disabled trackers were removed
             assert len(test_locations) == 2  # Only enabled and unmapped should remain
-            
+
             remaining_names = [loc["name"] for loc in test_locations]
             assert "Device 2" in remaining_names  # Enabled tracker
             assert "Device 4" in remaining_names  # Unmapped tracker (not filtered)
@@ -181,9 +179,7 @@ class TestDisabledTrackerFiltering:
         assert len(test_locations) == 1
         assert test_locations[0]["name"] == "Device 1"
 
-    def test_filter_disabled_trackers_handles_no_identifier_field(
-        self, stream_worker
-    ):
+    def test_filter_disabled_trackers_handles_no_identifier_field(self, stream_worker):
         """Test that filtering is skipped when no identifier field is configured"""
         test_locations = [
             {
@@ -219,7 +215,7 @@ class TestDisabledTrackerFiltering:
             stream = Stream(
                 name="Disabled Load Test Stream",
                 plugin_type="garmin",
-                enable_callsign_mapping=True
+                enable_callsign_mapping=True,
             )
             db_session.add(stream)
             db_session.commit()
@@ -229,21 +225,21 @@ class TestDisabledTrackerFiltering:
                 stream_id=stream.id,
                 identifier_value="ENABLED001",
                 custom_callsign="Enabled-Test",
-                enabled=True
+                enabled=True,
             )
             disabled_mapping1 = CallsignMapping(
                 stream_id=stream.id,
-                identifier_value="DISABLED001", 
+                identifier_value="DISABLED001",
                 custom_callsign="Disabled-Test-1",
-                enabled=False
+                enabled=False,
             )
             disabled_mapping2 = CallsignMapping(
                 stream_id=stream.id,
                 identifier_value="DISABLED002",
-                custom_callsign="Disabled-Test-2", 
-                enabled=False
+                custom_callsign="Disabled-Test-2",
+                enabled=False,
             )
-            
+
             db_session.add_all([enabled_mapping, disabled_mapping1, disabled_mapping2])
             db_session.commit()
 
@@ -275,9 +271,9 @@ class TestDisabledTrackerFiltering:
         with app.app_context():
             # Create test stream in database
             stream = Stream(
-                name="Enabled Load Test Stream", 
+                name="Enabled Load Test Stream",
                 plugin_type="garmin",
-                enable_callsign_mapping=True
+                enable_callsign_mapping=True,
             )
             db_session.add(stream)
             db_session.commit()
@@ -287,21 +283,21 @@ class TestDisabledTrackerFiltering:
                 stream_id=stream.id,
                 identifier_value="ENABLED001",
                 custom_callsign="Enabled-Test-1",
-                enabled=True
+                enabled=True,
             )
             enabled_mapping2 = CallsignMapping(
                 stream_id=stream.id,
                 identifier_value="ENABLED002",
-                custom_callsign="Enabled-Test-2", 
-                enabled=True
+                custom_callsign="Enabled-Test-2",
+                enabled=True,
             )
             disabled_mapping = CallsignMapping(
                 stream_id=stream.id,
                 identifier_value="DISABLED001",
                 custom_callsign="Disabled-Test",
-                enabled=False
+                enabled=False,
             )
-            
+
             db_session.add_all([enabled_mapping1, enabled_mapping2, disabled_mapping])
             db_session.commit()
 
@@ -337,7 +333,7 @@ class TestDisabledTrackerFiltering:
                 plugin_type="garmin",
                 enable_callsign_mapping=True,
                 callsign_identifier_field="imei",
-                callsign_error_handling="fallback"
+                callsign_error_handling="fallback",
             )
             db_session.add(stream)
             db_session.commit()
@@ -347,15 +343,15 @@ class TestDisabledTrackerFiltering:
                 stream_id=stream.id,
                 identifier_value="ENABLED001",
                 custom_callsign="Enabled-Alpha",
-                enabled=True
+                enabled=True,
             )
             disabled_mapping = CallsignMapping(
                 stream_id=stream.id,
-                identifier_value="DISABLED001", 
+                identifier_value="DISABLED001",
                 custom_callsign="Disabled-Bravo",
-                enabled=False
+                enabled=False,
             )
-            
+
             db_session.add_all([enabled_mapping, disabled_mapping])
             db_session.commit()
 
@@ -398,9 +394,11 @@ class TestDisabledTrackerFiltering:
 
             # Verify results
             assert len(test_locations) == 2  # Only enabled and unmapped should remain
-            
+
             location_names = [loc["name"] for loc in test_locations]
-            assert "Enabled-Alpha" in location_names  # Enabled tracker with mapping applied
+            assert (
+                "Enabled-Alpha" in location_names
+            )  # Enabled tracker with mapping applied
             assert "Unmapped Device" in location_names  # Unmapped tracker (fallback)
             assert "Disabled Device" not in location_names  # Disabled tracker removed
 
@@ -417,71 +415,53 @@ class TestDisabledTrackerFiltering:
                     },
                 },
                 "imei",
-                "GARMIN123"
+                "GARMIN123",
             ),
             # SPOT messenger name extraction
             (
                 {
                     "name": "SPOT Device",
-                    "additional_data": {
-                        "raw_message": {"messengerName": "SPOT456"}
-                    },
+                    "additional_data": {"raw_message": {"messengerName": "SPOT456"}},
                 },
                 "messenger_name",
-                "SPOT456"
+                "SPOT456",
             ),
             # Traccar device ID extraction
             (
                 {
                     "name": "Traccar Device",
-                    "additional_data": {"device_id": "TRACCAR789"}
+                    "additional_data": {"device_id": "TRACCAR789"},
                 },
-                "device_id", 
-                "TRACCAR789"
+                "device_id",
+                "TRACCAR789",
             ),
             # Direct name field extraction
             (
-                {
-                    "name": "Direct Name",
-                    "lat": 40.0,
-                    "lon": -120.0
-                },
+                {"name": "Direct Name", "lat": 40.0, "lon": -120.0},
                 "name",
-                "Direct Name"
+                "Direct Name",
             ),
             # UID field extraction
             (
-                {
-                    "name": "UID Device",
-                    "uid": "UID123",
-                    "lat": 40.0,
-                    "lon": -120.0
-                },
+                {"name": "UID Device", "uid": "UID123", "lat": 40.0, "lon": -120.0},
                 "uid",
-                "UID123"
+                "UID123",
             ),
             # Generic field extraction
             (
-                {
-                    "name": "Generic Device",
-                    "custom_field": "GENERIC456"
-                },
+                {"name": "Generic Device", "custom_field": "GENERIC456"},
                 "custom_field",
-                "GENERIC456"
+                "GENERIC456",
             ),
             # Missing field returns None
-            (
-                {
-                    "name": "Missing Field Device"
-                },
-                "nonexistent_field",
-                None
-            ),
+            ({"name": "Missing Field Device"}, "nonexistent_field", None),
         ]
 
         for location, field_name, expected_result in test_cases:
             result = stream_worker._extract_identifier(location, field_name)
-            assert result == expected_result, f"Failed for field '{field_name}': expected '{expected_result}', got '{result}'"
+            assert (
+                result == expected_result
+            ), f"Failed for field '{field_name}': expected '{expected_result}', got '{result}'"
 
 
 class TestFilteringPerformance:
@@ -505,14 +485,16 @@ class TestFilteringPerformance:
 
         test_locations = []
         for i in range(num_locations):
-            test_locations.append({
-                "name": f"Device {i}",
-                "lat": 40.0 + (i * 0.001),
-                "lon": -120.0 + (i * 0.001),
-                "additional_data": {
-                    "raw_placemark": {"extended_data": {"IMEI": f"IMEI{i:04d}"}}
-                },
-            })
+            test_locations.append(
+                {
+                    "name": f"Device {i}",
+                    "lat": 40.0 + (i * 0.001),
+                    "lon": -120.0 + (i * 0.001),
+                    "additional_data": {
+                        "raw_placemark": {"extended_data": {"IMEI": f"IMEI{i:04d}"}}
+                    },
+                }
+            )
 
         # Create disabled mappings for first 200 locations
         disabled_mappings = {}
@@ -536,11 +518,12 @@ class TestFilteringPerformance:
             return end_time - start_time
 
         import asyncio
+
         duration = asyncio.run(test_performance())
 
         # Verify results
         assert len(test_locations) == (num_locations - num_disabled)
-        
+
         # Performance should be reasonable (less than 1 second for 1000 locations)
         assert duration < 1.0, f"Filtering took too long: {duration:.3f} seconds"
 
@@ -553,6 +536,6 @@ class TestFilteringPerformance:
         # First 200 (disabled) should be gone, rest should remain
         for i in range(num_disabled):
             assert f"IMEI{i:04d}" not in remaining_imeis
-        
+
         for i in range(num_disabled, num_locations):
             assert f"IMEI{i:04d}" in remaining_imeis
