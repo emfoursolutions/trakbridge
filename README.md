@@ -1,6 +1,6 @@
 # TrakBridge
 
-A comprehensive web application for bridging tracking devices and services to TAK (Team Awareness Kit) servers. Provides real-time data streaming from various GPS sources to TAK servers for situational awareness.
+A web application for bridging tracking devices and services to TAK (Team Awareness Kit) servers. Provides real-time data streaming from various GPS sources to TAK servers for situational awareness.
 
 ## Features
 
@@ -111,6 +111,7 @@ hypercorn app.py
 - [Plugin Development](docs/PLUGIN_DEVELOPMENT.md) - Creating custom plugins
 - [API Reference](docs/API_REFERENCE.md) - Complete API documentation
 - [Upgrade Guide](docs/UPGRADE_GUIDE.md) - Version upgrade procedures
+- [Performance Guide](docs/PERFORMANCE_CONFIGURATION.md) - Performance Tuning Guide
 
 ## Supported Providers
 
