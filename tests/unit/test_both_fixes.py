@@ -7,6 +7,7 @@ Test script to verify both fixes:
 
 import sys
 import os
+import pytest
 
 sys.path.append(".")
 
@@ -46,11 +47,9 @@ def test_cot_service_workers_access():
         print(f"  - Count: {worker_count}")
         print(f"  - Exists: {worker_exists}")
 
-        return True
-
     except Exception as e:
         print(f"❌ FAILED: {e}")
-        return False
+        pytest.fail(f"COT service workers access test failed: {e}")
 
 
 def test_plugin_config_extraction():
@@ -83,11 +82,9 @@ def test_plugin_config_extraction():
         cot_type_mode = plugin_config.get("cot_type_mode", "stream")
         print(f"  - cot_type_mode: {cot_type_mode}")
 
-        return True
-
     except Exception as e:
         print(f"❌ FAILED: {e}")
-        return False
+        pytest.fail(f"Plugin config extraction test failed: {e}")
 
 
 def test_stream_constructor():
@@ -110,27 +107,25 @@ def test_stream_constructor():
         print(f"✅ SUCCESS: Stream constructor accepts cot_type_mode")
         print(f"  - Value: {stream.cot_type_mode}")
 
-        return True
-
     except Exception as e:
         print(f"❌ FAILED: {e}")
-        return False
+        pytest.fail(f"Stream constructor test failed: {e}")
 
 
 if __name__ == "__main__":
     print("Testing both fixes...")
 
-    success1 = test_cot_service_workers_access()
-    success2 = test_plugin_config_extraction()
-    success3 = test_stream_constructor()
-
-    if success1 and success2 and success3:
+    try:
+        test_cot_service_workers_access()
+        test_plugin_config_extraction()
+        test_stream_constructor()
+        
         print("\n🎉 ALL TESTS PASSED!")
         print("Both fixes are working correctly:")
         print("  1. ✅ PersistentCOTService.workers direct access")
         print("  2. ✅ Plugin config cot_type_mode extraction")
         print("  3. ✅ Stream constructor accepts cot_type_mode")
         sys.exit(0)
-    else:
-        print("\n❌ SOME TESTS FAILED!")
+    except Exception as e:
+        print(f"\n❌ TEST FAILED: {e}")
         sys.exit(1)

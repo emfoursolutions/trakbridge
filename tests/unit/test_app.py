@@ -12,13 +12,15 @@ class TestAppCreation:
     def test_create_app_development(self):
         """Test creating app with development config."""
         # Set environment variables for testing to avoid file system issues
-        # Clear DB_TYPE to ensure DATABASE_URL takes precedence (fixes CI issues)
+        # Clear DB_TYPE to ensure DATABASE_URL takes precedence (fixes CI)
         test_env = {
             "FLASK_ENV": "testing",
             "SECRET_KEY": "test-secret-key",
-            "TRAKBRIDGE_ENCRYPTION_KEY": ("test-encryption-key-for-testing-12345"),
+            "TRAKBRIDGE_ENCRYPTION_KEY": (
+                "test-encryption-key-for-testing-12345"
+            ),
             "DATABASE_URL": "sqlite:///:memory:",
-            "DB_TYPE": "",  # Clear CI-set DB_TYPE to allow DATABASE_URL precedence
+            "DB_TYPE": "",  # Clear CI-set DB_TYPE for DATABASE_URL precedence
         }
 
         with patch.dict(os.environ, test_env, clear=False):
@@ -35,13 +37,15 @@ class TestAppCreation:
     def test_create_app_production(self):
         """Test creating app with production config."""
         # Set environment variables for testing to avoid file system issues
-        # Clear DB_TYPE to ensure DATABASE_URL takes precedence (fixes CI issues)
+        # Clear DB_TYPE to ensure DATABASE_URL takes precedence (fixes CI)
         test_env = {
             "FLASK_ENV": "testing",
             "SECRET_KEY": "test-secret-key-for-production-test",
-            "TRAKBRIDGE_ENCRYPTION_KEY": ("test-encryption-key-for-testing-12345"),
+            "TRAKBRIDGE_ENCRYPTION_KEY": (
+                "test-encryption-key-for-testing-12345"
+            ),
             "DATABASE_URL": "sqlite:///:memory:",
-            "DB_TYPE": "",  # Clear CI-set DB_TYPE to allow DATABASE_URL precedence
+            "DB_TYPE": "",  # Clear CI-set DB_TYPE for DATABASE_URL precedence
         }
 
         with patch.dict(os.environ, test_env, clear=False):
@@ -117,7 +121,9 @@ class TestAppBlueprints:
         ]
 
         for expected in expected_blueprints:
-            assert expected in blueprint_names, f"Blueprint '{expected}' not registered"
+            assert expected in blueprint_names, (
+                f"Blueprint '{expected}' not registered"
+            )
 
 
 class TestAppHelpers:

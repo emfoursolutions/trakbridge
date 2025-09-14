@@ -296,7 +296,28 @@ class TestingConfig(BaseConfig):
     @property
     def SQLALCHEMY_ENGINE_OPTIONS(self) -> Dict[str, Any]:
         """Engine options appropriate for the testing database type."""
-        db_type = self._get_database_type()
+        # Use same precedence logic as SQLALCHEMY_DATABASE_URI to ensure consistency
+        # Check explicit DB_TYPE first (highest priority - same as database URI logic)
+        explicit_db_type = self.secret_manager.get_secret("DB_TYPE")
+        
+        if explicit_db_type:
+            db_type = explicit_db_type
+        else:
+            # Check if DATABASE_URL is set and detect type from it
+            database_url = self.secret_manager.get_secret("DATABASE_URL")
+            if database_url:
+                if database_url.startswith("postgresql://") or database_url.startswith("postgres://"):
+                    db_type = "postgresql"
+                elif database_url.startswith("mysql://") or database_url.startswith("mysql+"):
+                    db_type = "mysql"
+                elif database_url.startswith("sqlite://"):
+                    db_type = "sqlite"
+                else:
+                    # Fall back to config detection
+                    db_type = self._get_database_type()
+            else:
+                # Fall back to config detection
+                db_type = self._get_database_type()
 
         if db_type == "sqlite":
             # Enhanced SQLite options for CI/testing compatibility
