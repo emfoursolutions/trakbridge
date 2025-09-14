@@ -46,6 +46,44 @@ semgrep --config=auto --severity=ERROR --severity=WARNING .
 safety check
 ```
 
+### Testing Guidelines
+
+#### Database Configuration in Tests
+
+**Phase 1 Integration Test Fix**: Database type detection now properly respects environment variable precedence to fix CI test failures.
+
+**Database Type Precedence**:
+1. `DB_TYPE` environment variable (highest priority)
+2. `DATABASE_URL` scheme detection
+3. Configuration file defaults
+4. Fallback to SQLite
+
+**Testing Environment Variables**:
+```bash
+# Force SQLite for tests (overrides any DATABASE_URL in CI)
+export DB_TYPE=sqlite
+
+# Test PostgreSQL locally
+export DB_TYPE=postgresql
+export DB_HOST=localhost
+export DB_USER=test_user
+export DB_PASSWORD=test_pass
+export DB_NAME=test_db
+
+# Test MySQL locally  
+export DB_TYPE=mysql
+export DB_HOST=localhost
+export DB_USER=root
+export DB_PASSWORD=password
+export DB_NAME=test_db
+```
+
+**Test Environment Isolation**:
+- All integration tests use `clean_database_env()` context manager
+- This prevents CI environment variables from interfering with tests
+- Tests can safely set `DB_TYPE` without worrying about existing `DATABASE_URL`
+- Use `patch.dict(os.environ, {...}, clear=False)` for proper isolation
+
 ### Database Management
 ```bash
 # Initialize database

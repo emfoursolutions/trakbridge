@@ -238,12 +238,27 @@ class BaseConfig:
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         """Build database URI from configuration and secrets."""
-        # Check for explicit DATABASE_URL first (common in CI/production)
+        # Check if explicit DB_TYPE is set - this takes precedence over DATABASE_URL
+        explicit_db_type = self.secret_manager.get_secret("DB_TYPE")
+        
+        if explicit_db_type:
+            # DB_TYPE explicitly set - build URI from components regardless of DATABASE_URL
+            db_type = explicit_db_type
+            if db_type == "sqlite":
+                return self._build_sqlite_uri()
+            elif db_type == "mysql":
+                return self._build_mysql_uri()
+            elif db_type == "postgresql":
+                return self._build_postgresql_uri()
+            else:
+                raise ValueError(f"Unsupported database type: {db_type}")
+        
+        # Check for explicit DATABASE_URL (fallback when DB_TYPE not set)
         database_url = self.secret_manager.get_secret("DATABASE_URL")
         if database_url:
             return database_url
 
-        # Fall back to building URI from components
+        # Fall back to building URI from configuration defaults
         db_type = self._get_database_type()
 
         if db_type == "sqlite":
@@ -257,10 +272,9 @@ class BaseConfig:
 
     def _build_sqlite_uri(self) -> str:
         """Build SQLite database URI."""
-        db_uri = self.secret_manager.get_secret("DATABASE_URL")
-        if db_uri:
-            return db_uri
-
+        # Note: DATABASE_URL precedence is handled in SQLALCHEMY_DATABASE_URI property
+        # This method builds URI from individual components when DB_TYPE=sqlite is explicitly set
+        
         db_name = self.secret_manager.get_secret(
             "DB_NAME",
             self.db_config.get("defaults", {})
@@ -297,22 +311,22 @@ class BaseConfig:
         )
 
         password_encoded = quote_plus(password) if password else ""
-        
+
         # Build base URI with MariaDB 11 compatibility parameters
         base_uri = f"mysql+pymysql://{user}:{password_encoded}@{host}:{port}/{name}"
-        
+
         # Add connection parameters optimized for MariaDB 11
         params = [
             "charset=utf8mb4",
-            "autocommit=true",           # Prevent connection packet errors
-            "local_infile=0",            # Security: Disable local file loading
+            "autocommit=true",  # Prevent connection packet errors
+            "local_infile=0",  # Security: Disable local file loading
         ]
-        
+
         # Add optional SQL mode for MariaDB 11 strict mode compatibility
         # This helps prevent data inconsistencies and connection issues
         sql_mode = "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO"
         params.append(f"init_command=SET sql_mode='{sql_mode}'")
-        
+
         return f"{base_uri}?{'&'.join(params)}"
 
     def _build_postgresql_uri(self) -> str:
@@ -341,12 +355,12 @@ class BaseConfig:
         Determine database type from configuration or DATABASE_URL.
 
         Priority order:
-        1. Explicit DB_TYPE environment variable
+        1. Explicit DB_TYPE environment variable (highest priority)
         2. Database type from DATABASE_URL scheme
         3. Configuration file default
         4. Fallback to sqlite
         """
-        # Check explicit DB_TYPE first
+        # Check explicit DB_TYPE first (highest priority)
         explicit_type = self.secret_manager.get_secret("DB_TYPE")
         if explicit_type:
             return explicit_type

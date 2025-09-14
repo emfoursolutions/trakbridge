@@ -11,10 +11,34 @@ Created: 2025-09-14
 import os
 import pytest
 from unittest.mock import patch
+from contextlib import contextmanager
 
 from config.base import BaseConfig
 from config.environments import get_config
 from app import create_app
+
+
+@contextmanager
+def clean_database_env():
+    """Context manager to clear all database-related environment variables for testing."""
+    database_env_vars = [
+        'DATABASE_URL', 'DB_TYPE', 'DB_HOST', 'DB_PORT', 
+        'DB_USER', 'DB_PASSWORD', 'DB_NAME'
+    ]
+    
+    # Save original values
+    original_values = {}
+    for var in database_env_vars:
+        if var in os.environ:
+            original_values[var] = os.environ[var]
+            del os.environ[var]
+    
+    try:
+        yield
+    finally:
+        # Restore original values
+        for var, value in original_values.items():
+            os.environ[var] = value
 
 
 @pytest.mark.integration
@@ -23,8 +47,8 @@ class TestCrossDatabaseCompatibility:
 
     def test_sqlite_configuration_unchanged(self):
         """Test that SQLite configuration remains unchanged"""
-        # Mock SQLite environment
-        with patch.dict(os.environ, {"DB_TYPE": "sqlite"}):
+        # Clean environment and mock SQLite configuration
+        with clean_database_env(), patch.dict(os.environ, {"DB_TYPE": "sqlite"}, clear=False):
             test_config = BaseConfig("testing")
 
             # Should build SQLite URI without issues
@@ -41,8 +65,8 @@ class TestCrossDatabaseCompatibility:
 
     def test_postgresql_configuration_unchanged(self):
         """Test that PostgreSQL configuration remains unchanged"""
-        # Mock PostgreSQL environment
-        with patch.dict(
+        # Clean environment and mock PostgreSQL configuration
+        with clean_database_env(), patch.dict(
             os.environ,
             {
                 "DB_TYPE": "postgresql",
@@ -52,6 +76,7 @@ class TestCrossDatabaseCompatibility:
                 "DB_PASSWORD": "password",
                 "DB_NAME": "trakbridge",
             },
+            clear=False
         ):
             config = BaseConfig("testing")
 
@@ -66,8 +91,8 @@ class TestCrossDatabaseCompatibility:
 
     def test_mysql_configuration_backward_compatible(self):
         """Test that existing MySQL configuration remains backward compatible"""
-        # Mock standard MySQL environment
-        with patch.dict(
+        # Clean environment and mock standard MySQL configuration
+        with clean_database_env(), patch.dict(
             os.environ,
             {
                 "DB_TYPE": "mysql",
@@ -77,6 +102,7 @@ class TestCrossDatabaseCompatibility:
                 "DB_PASSWORD": "password",
                 "DB_NAME": "trakbridge",
             },
+            clear=False
         ):
             config = BaseConfig("testing")
 
@@ -92,6 +118,91 @@ class TestCrossDatabaseCompatibility:
             # For testing environment, pool_size might be configured
             if "pool_size" in engine_options:
                 assert engine_options.get("pool_size", 0) > 0
+
+    def test_db_type_overrides_database_url(self):
+        """Test that DB_TYPE environment variable takes precedence over DATABASE_URL"""
+        # This test verifies the fix for the CI configuration precedence issue
+        with clean_database_env(), patch.dict(
+            os.environ,
+            {
+                # CI often sets DATABASE_URL to PostgreSQL, but tests expect SQLite
+                "DATABASE_URL": "postgresql://ci_user:ci_pass@postgres:5432/ci_db",
+                "DB_TYPE": "sqlite",  # This should override DATABASE_URL
+            },
+            clear=False
+        ):
+            config = BaseConfig("testing")
+            
+            # Should use SQLite despite DATABASE_URL being PostgreSQL
+            uri = config.SQLALCHEMY_DATABASE_URI
+            assert uri.startswith("sqlite:///"), f"Expected SQLite URI, got: {uri}"
+            
+            # Database type detection should also return sqlite
+            db_type = config._get_database_type()
+            assert db_type == "sqlite"
+
+    def test_database_url_fallback_when_no_db_type(self):
+        """Test that DATABASE_URL is used when DB_TYPE is not set"""
+        with clean_database_env(), patch.dict(
+            os.environ,
+            {
+                "DATABASE_URL": "postgresql://test_user:test_pass@localhost:5432/test_db",
+                # No DB_TYPE set - should use DATABASE_URL
+            },
+            clear=False
+        ):
+            config = BaseConfig("testing")
+            
+            # Should use the DATABASE_URL directly
+            uri = config.SQLALCHEMY_DATABASE_URI
+            assert uri == "postgresql://test_user:test_pass@localhost:5432/test_db"
+
+    def test_db_type_precedence_with_various_database_urls(self):
+        """Test DB_TYPE precedence with various DATABASE_URL formats"""
+        test_cases = [
+            {
+                "name": "PostgreSQL DATABASE_URL with SQLite DB_TYPE",
+                "DATABASE_URL": "postgresql://user:pass@host:5432/db",
+                "DB_TYPE": "sqlite",
+                "expected_prefix": "sqlite:///"
+            },
+            {
+                "name": "MySQL DATABASE_URL with PostgreSQL DB_TYPE", 
+                "DATABASE_URL": "mysql://user:pass@host:3306/db",
+                "DB_TYPE": "postgresql",
+                "expected_prefix": "postgresql+psycopg2://",
+                "additional_env": {
+                    "DB_HOST": "localhost", "DB_USER": "test", 
+                    "DB_PASSWORD": "test", "DB_NAME": "test"
+                }
+            },
+            {
+                "name": "SQLite DATABASE_URL with MySQL DB_TYPE",
+                "DATABASE_URL": "sqlite:///test.db", 
+                "DB_TYPE": "mysql",
+                "expected_prefix": "mysql+pymysql://",
+                "additional_env": {
+                    "DB_HOST": "localhost", "DB_USER": "test",
+                    "DB_PASSWORD": "test", "DB_NAME": "test"
+                }
+            },
+        ]
+        
+        for case in test_cases:
+            with clean_database_env(), patch.dict(
+                os.environ,
+                {
+                    "DATABASE_URL": case["DATABASE_URL"],
+                    "DB_TYPE": case["DB_TYPE"],
+                    **case.get("additional_env", {})
+                },
+                clear=False
+            ):
+                config = BaseConfig("testing")
+                uri = config.SQLALCHEMY_DATABASE_URI
+                assert uri.startswith(case["expected_prefix"]), (
+                    f"{case['name']}: Expected {case['expected_prefix']}, got: {uri}"
+                )
 
     def test_flask_app_creation_all_databases(self):
         """Test Flask app creation works with all database types"""
@@ -114,7 +225,7 @@ class TestCrossDatabaseCompatibility:
         ]
 
         for db_config in database_configs:
-            with patch.dict(os.environ, db_config):
+            with clean_database_env(), patch.dict(os.environ, db_config, clear=False):
                 app = create_app("testing")
                 assert app is not None
                 assert "SQLALCHEMY_DATABASE_URI" in app.config
@@ -221,7 +332,7 @@ class TestCrossDatabaseCompatibility:
                 }
             )
 
-        with patch.dict(os.environ, env_config):
+        with clean_database_env(), patch.dict(os.environ, env_config, clear=False):
             config = BaseConfig("testing")
             uri = config.SQLALCHEMY_DATABASE_URI
 
@@ -245,7 +356,7 @@ class TestCrossDatabaseCompatibility:
                     }
                 )
 
-            with patch.dict(os.environ, env_config):
+            with clean_database_env(), patch.dict(os.environ, env_config, clear=False):
                 config = BaseConfig("testing")
 
                 # Configuration validation should pass
@@ -276,7 +387,7 @@ class TestMariaDBBackwardCompatibility:
             "DB_NAME": "trakbridge",
         }
 
-        with patch.dict(os.environ, existing_config):
+        with clean_database_env(), patch.dict(os.environ, existing_config, clear=False):
             config = BaseConfig("production")
 
             # Should build proper URI with MariaDB 11 compatibility
@@ -302,7 +413,7 @@ class TestMariaDBBackwardCompatibility:
             "DB_NAME": "trakbridge",
         }
 
-        with patch.dict(os.environ, docker_mysql_config):
+        with clean_database_env(), patch.dict(os.environ, docker_mysql_config, clear=False):
             config = BaseConfig("production")
             uri = config.SQLALCHEMY_DATABASE_URI
 

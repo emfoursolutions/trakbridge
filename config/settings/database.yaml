@@ -3,6 +3,21 @@
 # Non-sensitive database configuration options
 # =============================================================================
 
+# Database Type Detection Precedence
+# 
+# The system determines which database to use based on the following priority order:
+# 1. DB_TYPE environment variable (HIGHEST PRIORITY) - explicitly sets database type
+# 2. DATABASE_URL detection - infers type from URL scheme (postgresql://, mysql://, sqlite:///) 
+# 3. Configuration file default - uses 'type' setting below
+# 4. Fallback to SQLite - final default if nothing else specified
+#
+# Testing Environment Behavior:
+# - Tests can set DB_TYPE to override any CI DATABASE_URL setting
+# - This ensures test isolation and prevents CI environment interference
+# - Example: DB_TYPE=sqlite will use SQLite even if DATABASE_URL=postgresql://...
+#
+# This precedence order fixes the issue where CI sets DATABASE_URL but tests expect SQLite.
+
 # Default database settings
 default:
   type: sqlite
@@ -92,8 +107,13 @@ environments:
         pool_timeout: 60
 
   testing:
-    # Testing environment adapts to DATABASE_URL if provided (for CI/CD)
-    # Otherwise falls back to in-memory SQLite
+    # Testing Environment Configuration
+    # 
+    # The testing environment now properly respects DB_TYPE over DATABASE_URL:
+    # - If DB_TYPE is set, it takes precedence over any DATABASE_URL
+    # - This allows tests to force SQLite even in CI environments with PostgreSQL DATABASE_URL
+    # - Without DB_TYPE, falls back to DATABASE_URL detection or in-memory SQLite default
+    # - This configuration provides defaults for all database types used in testing
     type: sqlite
     database_uri: "sqlite:///:memory:"
     engine_options:
