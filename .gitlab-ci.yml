@@ -407,7 +407,7 @@ code-quality:
 # MySQL/MariaDB service for integration tests
 .mysql_service: &mysql_service
   services:
-    - name: mariadb:11-alpine
+    - name: mariadb:11.8
       alias: mariadb
       variables:
         MYSQL_ROOT_PASSWORD: test_password
@@ -550,8 +550,8 @@ integration-tests-postgresql:
   script: |
     echo "Running integration tests against PostgreSQL..."
     
-    # Run integration tests with PostgreSQL backend, excluding database compatibility tests
-    pytest tests/integration/ -v --tb=short --maxfail=5 --durations=10 --junitxml=integration-postgresql-results.xml --ignore=tests/integration/test_database_compatibility.py
+    # Run integration tests with PostgreSQL backend, excluding database compatibility and MySQL/MariaDB specific tests
+    pytest tests/integration/ -v --tb=short --maxfail=5 --durations=10 --junitxml=integration-postgresql-results.xml -m "not mysql" --ignore=tests/integration/test_database_compatibility.py
     
     echo "PostgreSQL integration tests completed"
   
