@@ -113,7 +113,7 @@ class TakServer(db.Model, TimestampMixin):
         # Get streams from legacy single-server relationship
         legacy_streams = list(self.streams)
 
-        # Get streams from Phase 2B multi-server relationship
+        # Get streams from multi-server relationship
         multi_streams = list(self.streams_many.all())
 
         # Combine and avoid duplicates using dict comprehension (in case a stream uses both relationships)

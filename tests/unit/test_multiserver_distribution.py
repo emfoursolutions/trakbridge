@@ -1,8 +1,8 @@
 """
-ABOUTME: Phase 2B TDD test suite for multi-server distribution logic
+ABOUTME: TDD test suite for multi-server distribution logic
 ABOUTME: Tests single fetch → multiple server distribution functionality
 
-This test module follows the TDD specification for Phase 2B implementation,
+This test module follows the TDD specification for implementation,
 testing the core business logic to use the many-to-many relationship schema
 for distributing data from one API fetch to multiple TAK servers.
 
@@ -14,7 +14,7 @@ Key test scenarios:
 - Performance validation for large datasets
 
 Author: TrakBridge Implementation Team
-Created: 2025-09-06 (Phase 2B TDD Implementation)
+Created: 2025-09-06 (TDD Implementation)
 """
 
 import pytest
@@ -29,17 +29,17 @@ from services.stream_manager import StreamManager
 
 
 class TestMultiServerDistribution:
-    """Test multi-server distribution logic following Phase 2B specification"""
+    """Test multi-server distribution logic following specification"""
 
     def test_single_fetch_multiple_server_distribution(self):
         """
         FAIL initially - distribution logic doesn't exist
 
         Test that a single GPS API fetch can distribute data to multiple TAK servers
-        This is the core functionality of Phase 2B - reducing API calls while
+        This is the core functionality of - reducing API calls while
         supporting multiple server destinations.
         """
-        # This test should FAIL initially until Phase 2B is implemented
+        # This test should FAIL initially until is implemented
 
         # Create a stream with multiple TAK servers
         stream = Mock()
@@ -80,7 +80,7 @@ class TestMultiServerDistribution:
             },
         ]
 
-        # This should work when Phase 2B is implemented
+        # This should work when is implemented
         # For now, this test FAILS as expected per TDD
         # Test that the multi-server distribution method exists and accepts proper arguments
         worker = StreamWorker(stream, Mock(), Mock())
@@ -128,7 +128,7 @@ class TestMultiServerDistribution:
             {"uid": "test1", "lat": 0.0, "lon": 0.0, "name": "Test Point"}
         ]
 
-        # This should work when Phase 2B is implemented
+        # This should work when is implemented
         with pytest.raises((NotImplementedError, AttributeError)):
             worker = StreamWorker(stream, Mock(), Mock())
             # Distribution with failure isolation doesn't exist yet
@@ -139,8 +139,7 @@ class TestMultiServerDistribution:
         FAIL initially - need to verify 1 API call vs N API calls
 
         Test that multi-server distribution reduces API calls from N (one per server)
-        to 1 (single fetch distributed to all servers). This is a key performance
-        benefit of Phase 2B.
+        to 1 (single fetch distributed to all servers).
         """
         # This test should FAIL initially until API call tracking is implemented
 
@@ -166,7 +165,7 @@ class TestMultiServerDistribution:
             ]
         )
 
-        # This should work when Phase 2B is implemented
+        # This should work when is implemented
         with pytest.raises((NotImplementedError, AttributeError)):
             worker = StreamWorker(stream, Mock(), Mock())
             worker.plugin = plugin
@@ -212,7 +211,7 @@ class TestMultiServerDistribution:
             }
         ]
 
-        # This should work when Phase 2B is implemented
+        # This should work when is implemented
         with pytest.raises((NotImplementedError, AttributeError)):
             worker = StreamWorker(stream, Mock(), Mock())
 
@@ -242,7 +241,7 @@ class TestMultiServerDistribution:
             {"uid": "orphan", "lat": 0.0, "lon": 0.0, "name": "Orphaned Data"}
         ]
 
-        # This should work when Phase 2B is implemented
+        # This should work when is implemented
         with pytest.raises((NotImplementedError, AttributeError)):
             worker = StreamWorker(stream, Mock(), Mock())
 
@@ -287,7 +286,7 @@ class TestMultiServerDistribution:
                 }
             )
 
-        # This should work when Phase 2B is implemented
+        # This should work when is implemented
         with pytest.raises((NotImplementedError, AttributeError)):
             worker = StreamWorker(stream, Mock(), Mock())
 
@@ -328,7 +327,7 @@ class TestMultiServerDistribution:
             {"uid": "legacy", "lat": 1.0, "lon": 1.0, "name": "Legacy Data"}
         ]
 
-        # This should work when Phase 2B is implemented
+        # This should work when is implemented
         with pytest.raises((NotImplementedError, AttributeError)):
             worker = StreamWorker(legacy_stream, Mock(), Mock())
 
@@ -362,7 +361,7 @@ class TestMultiServerDistribution:
             {"uid": "concurrent", "lat": 2.0, "lon": 2.0, "name": "Concurrent Test"}
         ]
 
-        # This should work when Phase 2B is implemented
+        # This should work when is implemented
         with pytest.raises((NotImplementedError, AttributeError)):
             worker = StreamWorker(stream, Mock(), Mock())
 
@@ -399,7 +398,7 @@ class TestStreamManagerMultiServer:
         stream.tak_servers = Mock()
         stream.tak_servers.all.return_value = servers
 
-        # This should work when Phase 2B is implemented
+        # This should work when is implemented
         with pytest.raises((NotImplementedError, AttributeError)):
             manager = StreamManager(app_context_factory)
 
@@ -441,7 +440,7 @@ class TestStreamManagerMultiServer:
         stream2.tak_servers = Mock()
         stream2.tak_servers.all.return_value = [server_a]  # Only server A
 
-        # This should work when Phase 2B is implemented
+        # This should work when is implemented
         with pytest.raises((NotImplementedError, AttributeError)):
             manager = StreamManager(app_context_factory)
 
@@ -503,7 +502,7 @@ def mock_location_data():
     ]
 
 
-# Integration test placeholder for Phase 2B
+# Integration test placeholder
 class TestMultiServerIntegration:
     """Integration tests for multi-server distribution functionality"""
 

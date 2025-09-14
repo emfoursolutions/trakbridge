@@ -224,7 +224,7 @@ class DatabaseManager:
                     _ = stream.tak_server.port
                     _ = stream.tak_server.protocol
 
-                # Phase 2B: Eagerly load multi-server relationship
+                # Eagerly load multi-server relationship
                 if hasattr(stream, "tak_servers"):
                     try:
                         # Access tak_servers to load the relationship
@@ -289,7 +289,7 @@ class DatabaseManager:
         else:
             stream_copy.tak_server = None
 
-        # Phase 2B: Copy multi-server relationships (tak_servers)
+        # Copy multi-server relationships (tak_servers)
         if hasattr(stream, "tak_servers"):
             try:
                 # Get all servers from the relationship

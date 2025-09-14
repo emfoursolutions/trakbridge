@@ -102,7 +102,7 @@ class StreamWorker:
                     self.running = False
                     return False
 
-                # Phase 2B: Initialize persistent TAK server connections for all configured servers
+                # Initialize persistent TAK server connections for all configured servers
                 target_servers = await self._get_target_tak_servers()
                 if target_servers:
                     self.logger.info(
@@ -350,7 +350,7 @@ class StreamWorker:
                     # Apply callsign mapping if enabled
                     await self._apply_callsign_mapping(locations)
 
-                    # Phase 2B: Send to persistent TAK server(s) if configured
+                    # Send to persistent TAK server(s) if configured
                     if self._tak_worker_ensured:
                         success = await self._send_locations_to_persistent_tak(
                             locations
@@ -363,7 +363,7 @@ class StreamWorker:
                             self.logger.error(
                                 "Failed to send locations to TAK server(s)"
                             )
-                            # Phase 2B: Try to restart workers for all target servers
+                            # Try to restart workers for all target servers
                             self.logger.info(
                                 "Attempting to restart persistent TAK workers"
                             )
@@ -484,7 +484,7 @@ class StreamWorker:
         """
         Send locations to persistent TAK server(s) using the persistent service.
 
-        Phase 2B: Multi-Server Distribution Logic
+        Multi-Server Distribution Logic
         - Supports both legacy single-server and new multi-server approaches
         - Single API fetch distributed to multiple servers (major performance improvement)
         - Server failure isolation - if one server fails, others continue
@@ -495,7 +495,7 @@ class StreamWorker:
                 self.logger.error("Persistent COT service not available")
                 return False
 
-            # Phase 2B: Determine target servers (multi-server or legacy single-server)
+            # Determine target servers (multi-server or legacy single-server)
             target_servers = await self._get_target_tak_servers()
             if not target_servers:
                 self.logger.error("No target TAK servers found for stream")
@@ -520,7 +520,7 @@ class StreamWorker:
                 )
                 return True  # Don't treat this as a failure
 
-            # Phase 2B: Single API fetch → Multiple server distribution
+            # Single API fetch → Multiple server distribution
             self.logger.info(
                 f"Processing {len(locations)} locations for distribution to "
                 f"{len(target_servers)} TAK server(s): {[s.name for s in target_servers]}"
@@ -578,7 +578,7 @@ class StreamWorker:
                 self.logger.warning("No COT events created from locations")
                 return False
 
-            # Phase 2B: Distribute to multiple servers with failure isolation
+            # Distribute to multiple servers with failure isolation
             distribution_results = await self._distribute_to_multiple_servers(
                 cot_events, target_servers
             )
@@ -616,7 +616,7 @@ class StreamWorker:
             # Update total_messages_sent in database (total across all successful servers)
             await self._update_stream_status_async(messages_sent=total_events_sent)
 
-            # Phase 2B: Partial success is acceptable (server failure isolation)
+            # Partial success is acceptable (server failure isolation)
             # As long as at least one server received the data, consider it successful
             return len(successful_servers) > 0
 
@@ -988,7 +988,7 @@ class StreamWorker:
 
     async def _get_target_tak_servers(self) -> List:
         """
-        Phase 2B: Get target TAK servers for this stream.
+        Get target TAK servers for this stream.
         Supports both legacy single-server and new multi-server approaches.
 
         Returns:
@@ -997,7 +997,7 @@ class StreamWorker:
         try:
             target_servers = []
 
-            # Phase 2B: Check multi-server relationship first
+            # Check multi-server relationship first
             if hasattr(self.stream, "tak_servers"):
                 try:
                     # Use dynamic loading to get all associated servers
@@ -1037,7 +1037,7 @@ class StreamWorker:
     async def _ensure_persistent_tak_worker_for_server(self, tak_server) -> bool:
         """
         Ensure persistent PyTAK worker exists for a specific TAK server.
-        Phase 2B: Supports multiple servers with worker deduplication.
+        Supports multiple servers with worker deduplication.
         """
         try:
             if not cot_service:
@@ -1088,7 +1088,7 @@ class StreamWorker:
         self, cot_events: List, target_servers: List
     ) -> List[Dict]:
         """
-        Phase 2B: Distribute COT events to multiple TAK servers with failure isolation.
+        Distribute COT events to multiple TAK servers with failure isolation.
 
         Args:
             cot_events: List of COT events to distribute
@@ -1100,7 +1100,7 @@ class StreamWorker:
         distribution_results = []
 
         try:
-            # Phase 2B: Concurrent distribution to multiple servers
+            # Concurrent distribution to multiple servers
             distribution_tasks = []
             server_names = [server.name for server in target_servers]
 
@@ -1174,7 +1174,7 @@ class StreamWorker:
     async def _send_to_single_server(self, cot_events: List, server) -> Dict:
         """
         Send COT events to a single TAK server.
-        Phase 2B: Individual server distribution with error handling.
+        Individual server distribution with error handling.
         """
         try:
             self.logger.info(

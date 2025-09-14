@@ -107,7 +107,7 @@ class StreamManager:
             )
             return True
 
-        # Check Phase 2B multi-server configuration
+        # Check multi-server configuration
         if hasattr(stream, "tak_servers"):
             try:
                 # Use count() for dynamic relationships - more efficient
@@ -143,7 +143,7 @@ class StreamManager:
             if hasattr(stream, "tak_server") and stream.tak_server:
                 return stream.tak_server.name
 
-            # Check Phase 2B multi-server configuration
+            # Check multi-server configuration
             if hasattr(stream, "tak_servers"):
                 try:
                     server_count = stream.tak_servers.count()
@@ -208,7 +208,7 @@ class StreamManager:
                     if key:
                         tak_servers[key] = stream.tak_server
 
-                # Phase 2B: Multi-server relationship
+                # Multi-server relationship
                 if hasattr(stream, "tak_servers"):
                     try:
                         # Get all servers for this stream via many-to-many relationship
@@ -453,9 +453,9 @@ class StreamManager:
                 logger.warning(f"Stream {stream_id} ({stream.name}) is not active")
                 return False
 
-            # Phase 2B: Enhanced validation for both single and multi-server configurations
+            # Validation for both single and multi-server configurations
             has_tak_servers = self._has_tak_servers_configured(stream)
-            logger.info(
+            logger.debug(
                 f"Stream {stream_id} TAK server validation: has_servers={has_tak_servers}, tak_server={stream.tak_server}, tak_server_id={stream.tak_server_id}"
             )
 
@@ -860,17 +860,17 @@ class StreamManager:
     def ensure_tak_workers_running(self):
         """
         Ensure persistent workers are running for all active TAK servers.
-        Phase 2B: Enhanced for multi-server support with proper deduplication.
+        ulti-server support with proper deduplication.
         """
         try:
             logger.debug(
-                "Ensuring TAK workers are running for all active streams (Phase 2B multi-server)"
+                "Ensuring TAK workers are running for all active streams"
             )
 
             # Get currently active streams
             active_streams = self.db_manager.get_active_streams()
 
-            # Phase 2B: Enhanced deduplication for both legacy and multi-server relationships
+            # Deduplication for both legacy and multi-server relationships
             required_tak_servers = {}
 
             for stream in active_streams:
@@ -882,7 +882,7 @@ class StreamManager:
                     if key:
                         required_tak_servers[key] = stream.tak_server
 
-                # Phase 2B: Multi-server relationship
+                # Multi-server relationship
                 if hasattr(stream, "tak_servers"):
                     try:
                         # Get all servers for this stream via many-to-many relationship
