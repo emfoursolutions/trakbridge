@@ -281,7 +281,7 @@ class BaseConfig:
         return f"sqlite:///{db_path}"
 
     def _build_mysql_uri(self) -> str:
-        """Build MySQL database URI."""
+        """Build MySQL/MariaDB database URI with compatibility parameters."""
         defaults = self.db_config.get("defaults", {}).get("mysql", {})
 
         user = self.secret_manager.get_secret("DB_USER", defaults.get("user", "root"))
@@ -297,7 +297,23 @@ class BaseConfig:
         )
 
         password_encoded = quote_plus(password) if password else ""
-        return f"mysql+pymysql://{user}:{password_encoded}@{host}:{port}/{name}?charset=utf8mb4"
+        
+        # Build base URI with MariaDB 11 compatibility parameters
+        base_uri = f"mysql+pymysql://{user}:{password_encoded}@{host}:{port}/{name}"
+        
+        # Add connection parameters optimized for MariaDB 11
+        params = [
+            "charset=utf8mb4",
+            "autocommit=true",           # Prevent connection packet errors
+            "local_infile=0",            # Security: Disable local file loading
+        ]
+        
+        # Add optional SQL mode for MariaDB 11 strict mode compatibility
+        # This helps prevent data inconsistencies and connection issues
+        sql_mode = "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO"
+        params.append(f"init_command=SET sql_mode='{sql_mode}'")
+        
+        return f"{base_uri}?{'&'.join(params)}"
 
     def _build_postgresql_uri(self) -> str:
         """Build PostgreSQL database URI."""
@@ -318,7 +334,7 @@ class BaseConfig:
         )
 
         password_encoded = quote_plus(password) if password else ""
-        return f"postgresql://{user}:{password_encoded}@{host}:{port}/{name}"
+        return f"postgresql+psycopg2://{user}:{password_encoded}@{host}:{port}/{name}"
 
     def _get_database_type(self) -> str:
         """
