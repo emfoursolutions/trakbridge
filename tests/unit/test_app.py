@@ -12,8 +12,8 @@ class TestAppCreation:
     def test_create_app_development(self):
         """Test creating app with development config."""
         # Set environment variables for testing to avoid file system issues
+        # Don't set DB_TYPE - let it use DATABASE_URL directly for in-memory database
         test_env = {
-            "DB_TYPE": "sqlite",
             "FLASK_ENV": "testing",
             "SECRET_KEY": "test-secret-key",
             "TRAKBRIDGE_ENCRYPTION_KEY": ("test-encryption-key-for-testing-12345"),
@@ -34,8 +34,8 @@ class TestAppCreation:
     def test_create_app_production(self):
         """Test creating app with production config."""
         # Set environment variables for testing to avoid file system issues
+        # Don't set DB_TYPE - let it use DATABASE_URL directly for in-memory database
         test_env = {
-            "DB_TYPE": "sqlite",
             "FLASK_ENV": "testing",
             "SECRET_KEY": "test-secret-key-for-production-test",
             "TRAKBRIDGE_ENCRYPTION_KEY": ("test-encryption-key-for-testing-12345"),

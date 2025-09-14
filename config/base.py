@@ -282,7 +282,8 @@ class BaseConfig:
             .get("name", "data/app.db"),
         )
 
-        if self.environment == "testing":
+        # For testing environment, use in-memory database unless explicit DB_NAME is provided
+        if self.environment == "testing" and not self.secret_manager.get_secret("DB_NAME"):
             return self.db_config.get("database_uri", "sqlite:///:memory:")
 
         # For Docker/production, use absolute paths; for development, use relative to app root

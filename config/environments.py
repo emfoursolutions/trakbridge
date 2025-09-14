@@ -241,12 +241,19 @@ class TestingConfig(BaseConfig):
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         """Use database appropriate for testing - SQLite for unit tests, PostgreSQL/MySQL for integration tests."""
-        # Check if DATABASE_URL is explicitly set (for integration tests)
+        # Follow same precedence as base config: DB_TYPE takes precedence over DATABASE_URL
+        explicit_db_type = self.secret_manager.get_secret("DB_TYPE")
+        
+        if explicit_db_type:
+            # DB_TYPE explicitly set - use parent class logic to build appropriate URI
+            return super().SQLALCHEMY_DATABASE_URI
+            
+        # Fallback: Check if DATABASE_URL is explicitly set (for integration tests)
         database_url = self.secret_manager.get_secret("DATABASE_URL")
         if database_url:
             return database_url
 
-        # Check if specific DB_TYPE is set (for integration tests)
+        # Check if specific DB_TYPE is set via config detection (for integration tests)
         db_type = self._get_database_type()
         if db_type == "postgresql":
             # Use parent class logic to build PostgreSQL URI

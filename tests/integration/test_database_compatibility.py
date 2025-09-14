@@ -13,7 +13,6 @@ import pytest
 from unittest.mock import patch
 from contextlib import contextmanager
 
-from config.base import BaseConfig
 from config.environments import get_config
 from app import create_app
 
@@ -33,9 +32,20 @@ def clean_database_env():
             original_values[var] = os.environ[var]
             del os.environ[var]
     
+    # Also temporarily disable .env file loading during tests
+    # by setting a flag that the secret manager can check
+    original_skip_dotenv = os.environ.get('SKIP_DOTENV_FILE', None)
+    os.environ['SKIP_DOTENV_FILE'] = 'true'
+    
     try:
         yield
     finally:
+        # Restore .env file loading
+        if original_skip_dotenv is None:
+            os.environ.pop('SKIP_DOTENV_FILE', None)
+        else:
+            os.environ['SKIP_DOTENV_FILE'] = original_skip_dotenv
+            
         # Restore original values
         for var, value in original_values.items():
             os.environ[var] = value
@@ -49,7 +59,7 @@ class TestCrossDatabaseCompatibility:
         """Test that SQLite configuration remains unchanged"""
         # Clean environment and mock SQLite configuration
         with clean_database_env(), patch.dict(os.environ, {"DB_TYPE": "sqlite"}, clear=False):
-            test_config = BaseConfig("testing")
+            test_config = get_config("testing")
 
             # Should build SQLite URI without issues
             uri = test_config.SQLALCHEMY_DATABASE_URI
@@ -78,7 +88,7 @@ class TestCrossDatabaseCompatibility:
             },
             clear=False
         ):
-            config = BaseConfig("testing")
+            config = get_config("testing")
 
             # Should build PostgreSQL URI without issues
             uri = config._build_postgresql_uri()
@@ -104,7 +114,7 @@ class TestCrossDatabaseCompatibility:
             },
             clear=False
         ):
-            config = BaseConfig("testing")
+            config = get_config("testing")
 
             # Should build MySQL URI with existing parameters
             uri = config._build_mysql_uri()
@@ -131,7 +141,7 @@ class TestCrossDatabaseCompatibility:
             },
             clear=False
         ):
-            config = BaseConfig("testing")
+            config = get_config("testing")
             
             # Should use SQLite despite DATABASE_URL being PostgreSQL
             uri = config.SQLALCHEMY_DATABASE_URI
@@ -151,7 +161,7 @@ class TestCrossDatabaseCompatibility:
             },
             clear=False
         ):
-            config = BaseConfig("testing")
+            config = get_config("testing")
             
             # Should use the DATABASE_URL directly
             uri = config.SQLALCHEMY_DATABASE_URI
@@ -198,7 +208,7 @@ class TestCrossDatabaseCompatibility:
                 },
                 clear=False
             ):
-                config = BaseConfig("testing")
+                config = get_config("testing")
                 uri = config.SQLALCHEMY_DATABASE_URI
                 assert uri.startswith(case["expected_prefix"]), (
                     f"{case['name']}: Expected {case['expected_prefix']}, got: {uri}"
@@ -232,7 +242,7 @@ class TestCrossDatabaseCompatibility:
 
     def test_engine_options_by_database_type(self):
         """Test engine options are appropriate for each database type"""
-        config = BaseConfig("testing")
+        config = get_config("testing")
 
         # Test SQLite options
         with patch.object(config, "_get_database_type", return_value="sqlite"):
@@ -301,7 +311,7 @@ class TestCrossDatabaseCompatibility:
 
         for db_config in database_configs:
             with patch.dict(os.environ, db_config):
-                config = BaseConfig("testing")
+                config = get_config("testing")
                 uri = config.SQLALCHEMY_DATABASE_URI
 
                 # For network databases, special characters should be URL encoded
@@ -333,7 +343,7 @@ class TestCrossDatabaseCompatibility:
             )
 
         with clean_database_env(), patch.dict(os.environ, env_config, clear=False):
-            config = BaseConfig("testing")
+            config = get_config("testing")
             uri = config.SQLALCHEMY_DATABASE_URI
 
             assert uri.startswith(expected_driver)
@@ -357,7 +367,7 @@ class TestCrossDatabaseCompatibility:
                 )
 
             with clean_database_env(), patch.dict(os.environ, env_config, clear=False):
-                config = BaseConfig("testing")
+                config = get_config("testing")
 
                 # Configuration validation should pass
                 issues = config.validate_config()
@@ -388,7 +398,7 @@ class TestMariaDBBackwardCompatibility:
         }
 
         with clean_database_env(), patch.dict(os.environ, existing_config, clear=False):
-            config = BaseConfig("production")
+            config = get_config("production")
 
             # Should build proper URI with MariaDB 11 compatibility
             uri = config.SQLALCHEMY_DATABASE_URI
@@ -414,7 +424,7 @@ class TestMariaDBBackwardCompatibility:
         }
 
         with clean_database_env(), patch.dict(os.environ, docker_mysql_config, clear=False):
-            config = BaseConfig("production")
+            config = get_config("production")
             uri = config.SQLALCHEMY_DATABASE_URI
 
             # Should match expected Docker service connection
@@ -423,7 +433,7 @@ class TestMariaDBBackwardCompatibility:
 
     def test_legacy_mysql_engine_options_preserved(self):
         """Test that legacy MySQL engine options are preserved"""
-        config = BaseConfig("production")
+        config = get_config("production")
 
         with patch.object(config, "_get_database_type", return_value="mysql"):
             engine_options = config.SQLALCHEMY_ENGINE_OPTIONS
