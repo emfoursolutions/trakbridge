@@ -582,6 +582,13 @@ integration-tests-mysql:
     FLASK_ENV: "testing"
     SECRET_KEY: "test-secret-key-for-gitlab-ci"
     TRAKBRIDGE_ENCRYPTION_KEY: "test-encryption-key-for-gitlab-ci-12345"
+    # Force MySQL/MariaDB usage even in testing environment
+    DB_TYPE: "mysql"
+    DB_HOST: "mariadb"
+    DB_PORT: "3306"
+    DB_USER: "test_user"
+    DB_PASSWORD: "test_password"
+    DB_NAME: "test_db"
     # Ensure Python can find the project modules
     PYTHONPATH: "${CI_PROJECT_DIR}:${PYTHONPATH:-}"
   
@@ -593,6 +600,23 @@ integration-tests-mysql:
   
   script: |
     echo "Running integration tests against MySQL/MariaDB..."
+    
+    # Wait for MariaDB service to be ready
+    echo "Waiting for MariaDB to be ready..."
+    for i in {1..30}; do
+      if python -c "import pymysql; pymysql.connect(host='mariadb', user='test_user', password='test_password', database='test_db')" 2>/dev/null; then
+        echo "MariaDB is ready!"
+        break
+      fi
+      echo "Waiting for MariaDB... ($i/30)"
+      sleep 2
+    done
+    
+    # Verify database environment variables
+    echo "Database configuration:"
+    echo "DB_TYPE: $DB_TYPE"
+    echo "DATABASE_URL: $DATABASE_URL"
+    echo "FLASK_ENV: $FLASK_ENV"
     
     # Run integration tests with MySQL backend, excluding database compatibility tests
     pytest tests/integration/ -v --tb=short --maxfail=5 --durations=10 --junitxml=integration-mysql-results.xml --ignore=tests/integration/test_database_compatibility.py
