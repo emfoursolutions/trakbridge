@@ -506,8 +506,8 @@ integration-tests-sqlite:
   script: |
     echo "Running integration tests against SQLite..."
     
-    # Run integration tests with fast SQLite backend, excluding database compatibility tests
-    pytest tests/integration/ -v --tb=short --maxfail=5 --durations=10 --junitxml=integration-sqlite-results.xml -m "not slow" --ignore=tests/integration/test_database_compatibility.py
+    # Run integration tests with fast SQLite backend, excluding database compatibility and MySQL/MariaDB specific tests
+    pytest tests/integration/ -v --tb=short --maxfail=5 --durations=10 --junitxml=integration-sqlite-results.xml -m "not slow and not mysql" --ignore=tests/integration/test_database_compatibility.py
     
     echo "SQLite integration tests completed"
   

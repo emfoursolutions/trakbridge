@@ -20,6 +20,8 @@ from app import create_app
 
 
 @pytest.mark.integration
+@pytest.mark.mysql
+@pytest.mark.mariadb
 class TestMariaDB11Connectivity:
     """Test MariaDB 11 specific connectivity features"""
 
@@ -179,6 +181,8 @@ class TestMariaDB11Connectivity:
 
 
 @pytest.mark.integration
+@pytest.mark.mysql
+@pytest.mark.mariadb
 class TestMariaDB11ConfigurationIntegration:
     """Test MariaDB 11 configuration integration with Flask app"""
 

@@ -16,6 +16,8 @@ from config.environments import get_config
 
 
 @pytest.mark.integration
+@pytest.mark.mysql
+@pytest.mark.mariadb
 class TestMariaDB11EndToEnd:
     """End-to-end validation of MariaDB 11 compatibility fixes"""
 
