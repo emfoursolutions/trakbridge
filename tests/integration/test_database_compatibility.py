@@ -45,6 +45,7 @@ def clean_database_env():
     try:
         # Clear configuration cache to ensure fresh config loading with new environment
         from config.environments import TestingConfig
+        from config.secrets import get_secret_manager
 
         # Create a temporary config instance to access the cache clearing
         try:
@@ -54,6 +55,17 @@ def clean_database_env():
         except Exception as e:
             # If cache clearing fails, continue anyway - tests might still work
             print(f"WARNING: Could not clear config cache: {e}")
+
+        # Clear secret manager cache and force recreation
+        try:
+            secret_manager = get_secret_manager()
+            secret_manager.clear_cache()
+            
+            # Force recreation of the global secret manager instance
+            import config.secrets
+            config.secrets._secret_manager = None
+        except Exception as e:
+            print(f"WARNING: Could not clear secret manager cache: {e}")
 
         yield
     finally:
@@ -66,6 +78,18 @@ def clean_database_env():
         # Restore original values
         for var, value in original_values.items():
             os.environ[var] = value
+
+        # Clear secret manager cache and force recreation again to restore normal operation
+        try:
+            from config.secrets import get_secret_manager
+            secret_manager = get_secret_manager()
+            secret_manager.clear_cache()
+            
+            # Force recreation of the global secret manager instance
+            import config.secrets
+            config.secrets._secret_manager = None
+        except Exception as e:
+            print(f"WARNING: Could not clear secret manager cache in cleanup: {e}")
 
 
 @pytest.mark.integration

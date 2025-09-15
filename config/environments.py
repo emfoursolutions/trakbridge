@@ -9,7 +9,6 @@ Created: 2025-07-05
 """
 
 # Standard library imports
-import logging
 import os
 
 # Third-party imports
