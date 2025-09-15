@@ -143,10 +143,12 @@ class ProductionConfig(BaseConfig):
                 "max_overflow": 100,
                 "pool_timeout": 60,
                 "connect_args": {
-                    "connect_timeout": 30,
-                    "read_timeout": 60,
-                    "write_timeout": 60,
-                    "autocommit": False,
+                    "connect_timeout": 90,  # Longer timeout for production
+                    "read_timeout": 60,     # Extended read timeout  
+                    "write_timeout": 60,    # Extended write timeout
+                    "charset": "utf8mb4",   # Character set for MySQL
+                    "autocommit": True,     # MariaDB 11 compatibility
+                    "local_infile": 0,      # Security: Disable local file loading
                 },
             },
             "postgresql": {
