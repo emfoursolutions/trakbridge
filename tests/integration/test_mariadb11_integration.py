@@ -89,7 +89,9 @@ class TestMariaDB11EndToEnd:
                     print("INFO: autocommit properly configured as True")
             if "local_infile" in connect_args:
                 assert connect_args["local_infile"] == 0
-            assert "sql_mode" in connect_args
+
+            # SQL mode is configured in the database URI, not connect_args
+            assert "init_command=SET sql_mode=" in uri, "SQL mode set for compatibility"
 
     def test_mariadb11_backward_compatibility(self):
         """Test that existing MySQL configurations continue to work"""
