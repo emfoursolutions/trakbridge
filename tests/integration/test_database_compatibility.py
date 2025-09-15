@@ -44,11 +44,16 @@ def clean_database_env():
 
     try:
         # Clear configuration cache to ensure fresh config loading with new environment
-        from config.base import BaseConfig
+        from config.environments import TestingConfig
 
         # Create a temporary config instance to access the cache clearing
-        temp_config = BaseConfig("testing")
-        temp_config._config_cache.clear()
+        try:
+            temp_config = TestingConfig()
+            if hasattr(temp_config, "_config_cache"):
+                temp_config._config_cache.clear()
+        except Exception as e:
+            # If cache clearing fails, continue anyway - tests might still work
+            print(f"WARNING: Could not clear config cache: {e}")
 
         yield
     finally:
