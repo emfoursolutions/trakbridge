@@ -3,6 +3,21 @@
 # Non-sensitive database configuration options
 # =============================================================================
 
+# Database Type Detection Precedence
+# 
+# The system determines which database to use based on the following priority order:
+# 1. DB_TYPE environment variable (HIGHEST PRIORITY) - explicitly sets database type
+# 2. DATABASE_URL detection - infers type from URL scheme (postgresql://, mysql://, sqlite:///) 
+# 3. Configuration file default - uses 'type' setting below
+# 4. Fallback to SQLite - final default if nothing else specified
+#
+# Testing Environment Behavior:
+# - Tests can set DB_TYPE to override any CI DATABASE_URL setting
+# - This ensures test isolation and prevents CI environment interference
+# - Example: DB_TYPE=sqlite will use SQLite even if DATABASE_URL=postgresql://...
+#
+# This precedence order fixes the issue where CI sets DATABASE_URL but tests expect SQLite.
+
 # Default database settings
 default:
   type: sqlite
@@ -35,6 +50,10 @@ engine_options:
       read_timeout: 30
       write_timeout: 30
       charset: utf8mb4
+      # MariaDB 11 compatibility options to prevent communication packet errors
+      autocommit: true        # Ensures connections are properly committed
+      local_infile: 0         # Security: Disable local file loading
+      sql_mode: "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO"
 
   postgresql:
     pool_pre_ping: true
@@ -68,17 +87,33 @@ environments:
   production:
     engine_options:
       mysql:
-        pool_size: 50
-        max_overflow: 100
-        pool_timeout: 60
+        # Inherit base mysql configuration and override specific values
+        pool_pre_ping: true         # Inherit from base
+        pool_recycle: 3600          # Inherit from base
+        pool_size: 50               # Override for production
+        max_overflow: 100           # Override for production
+        pool_timeout: 60            # Override for production
+        connect_args:
+          connect_timeout: 90       # Longer timeout for production
+          read_timeout: 60          # Extended read timeout
+          write_timeout: 60         # Extended write timeout
+          charset: utf8mb4          # Inherit from base
+          autocommit: true          # Inherit from base
+          local_infile: 0           # Inherit from base
+          sql_mode: "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO"
       postgresql:
         pool_size: 50
         max_overflow: 100
         pool_timeout: 60
 
   testing:
-    # Testing environment adapts to DATABASE_URL if provided (for CI/CD)
-    # Otherwise falls back to in-memory SQLite
+    # Testing Environment Configuration
+    # 
+    # The testing environment now properly respects DB_TYPE over DATABASE_URL:
+    # - If DB_TYPE is set, it takes precedence over any DATABASE_URL
+    # - This allows tests to force SQLite even in CI environments with PostgreSQL DATABASE_URL
+    # - Without DB_TYPE, falls back to DATABASE_URL detection or in-memory SQLite default
+    # - This configuration provides defaults for all database types used in testing
     type: sqlite
     database_uri: "sqlite:///:memory:"
     engine_options:
@@ -86,6 +121,18 @@ environments:
         pool_pre_ping: false
         connect_args:
           check_same_thread: false
+      mysql:
+        pool_pre_ping: true
+        pool_recycle: 1800
+        pool_size: 5
+        max_overflow: 10
+        pool_timeout: 30
+        connect_args:
+          connect_timeout: 30
+          read_timeout: 15
+          write_timeout: 15
+          autocommit: true
+          local_infile: 0
       postgresql:
         pool_pre_ping: true
         pool_recycle: 1800

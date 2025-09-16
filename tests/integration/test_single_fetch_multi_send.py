@@ -119,9 +119,7 @@ class TestSingleFetchMultiSend:
     def _verify_remaining_servers_receive_data(self):
         """Helper to verify unaffected servers still receive data"""
         # This helper will fail until error isolation verification is implemented
-        raise NotImplementedError(
-            "failure isolation verification not implemented"
-        )
+        raise NotImplementedError("failure isolation verification not implemented")
 
     def _measure_legacy_api_calls(self):
         """Helper to measure API calls with legacy single-server approach"""
@@ -229,9 +227,7 @@ class TestRealDatabaseOperations:
     def _test_concurrent_server_assignment(self):
         """Helper to test concurrent server assignment"""
         # This helper will fail until concurrent safety is implemented
-        raise NotImplementedError(
-            "concurrent server assignment not implemented"
-        )
+        raise NotImplementedError("concurrent server assignment not implemented")
 
 
 class TestPersistentCOTIntegration:
@@ -417,16 +413,12 @@ class TestPhase2BPerformanceBenchmarks:
     def _measure_legacy_bandwidth_usage(self):
         """Helper to measure bandwidth usage with legacy approach"""
         # This helper will fail until bandwidth measurement is implemented
-        raise NotImplementedError(
-            "legacy bandwidth measurement not implemented"
-        )
+        raise NotImplementedError("legacy bandwidth measurement not implemented")
 
     def _measure_optimized_bandwidth_usage(self):
         """Helper to measure bandwidth usage with optimized approach"""
         # This helper will fail until bandwidth measurement is implemented
-        raise NotImplementedError(
-            "optimized bandwidth measurement not implemented"
-        )
+        raise NotImplementedError("optimized bandwidth measurement not implemented")
 
 
 # Final integration test - the ultimate validation
@@ -464,13 +456,9 @@ class TestPhase2BFinalValidation:
     def _execute_full_workflow(self):
         """Helper to execute the full workflow"""
         # This helper will fail until full workflow execution is implemented
-        raise NotImplementedError(
-            "Complete workflow execution not implemented"
-        )
+        raise NotImplementedError("Complete workflow execution not implemented")
 
     def _validate_all_requirements_met(self):
         """Helper to validate all requirements are met"""
         # This helper will fail until requirement validation is implemented
-        raise NotImplementedError(
-            "Complete requirement validation not implemented"
-        )
+        raise NotImplementedError("Complete requirement validation not implemented")

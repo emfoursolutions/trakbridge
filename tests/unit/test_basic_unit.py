@@ -1,6 +1,7 @@
 """Basic unit tests for TrakBridge."""
 
 import pytest
+import warnings
 from sqlalchemy import text
 
 from app import create_app
@@ -12,9 +13,16 @@ class TestBasicFunctionality:
 
     def test_app_creation(self):
         """Test that the Flask app can be created."""
-        app = create_app("testing")
-        assert app is not None
-        assert app.config["TESTING"] is True
+        # Filter the specific coroutine warning that's expected during testing
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="coroutine.*EnhancedCOTService.*_process_single_location_async.*was never awaited",
+                category=RuntimeWarning
+            )
+            app = create_app("testing")
+            assert app is not None
+            assert app.config["TESTING"] is True
 
     def test_health_endpoint(self, client):
         """Test the health endpoint."""

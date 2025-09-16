@@ -9,7 +9,6 @@ Created: 2025-07-05
 """
 
 # Standard library imports
-import logging
 import os
 
 # Third-party imports
@@ -144,10 +143,12 @@ class ProductionConfig(BaseConfig):
                 "max_overflow": 100,
                 "pool_timeout": 60,
                 "connect_args": {
-                    "connect_timeout": 30,
-                    "read_timeout": 60,
-                    "write_timeout": 60,
-                    "autocommit": False,
+                    "connect_timeout": 90,  # Longer timeout for production
+                    "read_timeout": 60,     # Extended read timeout  
+                    "write_timeout": 60,    # Extended write timeout
+                    "charset": "utf8mb4",   # Character set for MySQL
+                    "autocommit": True,     # MariaDB 11 compatibility
+                    "local_infile": 0,      # Security: Disable local file loading
                 },
             },
             "postgresql": {
@@ -241,12 +242,19 @@ class TestingConfig(BaseConfig):
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         """Use database appropriate for testing - SQLite for unit tests, PostgreSQL/MySQL for integration tests."""
-        # Check if DATABASE_URL is explicitly set (for integration tests)
+        # Follow same precedence as base config: DB_TYPE takes precedence over DATABASE_URL
+        explicit_db_type = self.secret_manager.get_secret("DB_TYPE")
+        
+        if explicit_db_type:
+            # DB_TYPE explicitly set - use parent class logic to build appropriate URI
+            return super().SQLALCHEMY_DATABASE_URI
+            
+        # Fallback: Check if DATABASE_URL is explicitly set (for integration tests)
         database_url = self.secret_manager.get_secret("DATABASE_URL")
         if database_url:
             return database_url
 
-        # Check if specific DB_TYPE is set (for integration tests)
+        # Check if specific DB_TYPE is set via config detection (for integration tests)
         db_type = self._get_database_type()
         if db_type == "postgresql":
             # Use parent class logic to build PostgreSQL URI
@@ -289,7 +297,28 @@ class TestingConfig(BaseConfig):
     @property
     def SQLALCHEMY_ENGINE_OPTIONS(self) -> Dict[str, Any]:
         """Engine options appropriate for the testing database type."""
-        db_type = self._get_database_type()
+        # Use same precedence logic as SQLALCHEMY_DATABASE_URI to ensure consistency
+        # Check explicit DB_TYPE first (highest priority - same as database URI logic)
+        explicit_db_type = self.secret_manager.get_secret("DB_TYPE")
+        
+        if explicit_db_type:
+            db_type = explicit_db_type
+        else:
+            # Check if DATABASE_URL is set and detect type from it
+            database_url = self.secret_manager.get_secret("DATABASE_URL")
+            if database_url:
+                if database_url.startswith("postgresql://") or database_url.startswith("postgres://"):
+                    db_type = "postgresql"
+                elif database_url.startswith("mysql://") or database_url.startswith("mysql+"):
+                    db_type = "mysql"
+                elif database_url.startswith("sqlite://"):
+                    db_type = "sqlite"
+                else:
+                    # Fall back to config detection
+                    db_type = self._get_database_type()
+            else:
+                # Fall back to config detection
+                db_type = self._get_database_type()
 
         if db_type == "sqlite":
             # Enhanced SQLite options for CI/testing compatibility

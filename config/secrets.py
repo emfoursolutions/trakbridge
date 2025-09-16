@@ -144,6 +144,9 @@ class DotEnvSecretProvider(SecretProvider):
         return 30  # Lowest priority
 
     def is_available(self) -> bool:
+        # Skip .env files during testing if explicitly requested
+        if os.environ.get('SKIP_DOTENV_FILE') == 'true':
+            return False
         return Path(self.env_file).exists()
 
     def _should_reload(self) -> bool:

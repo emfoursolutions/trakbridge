@@ -383,6 +383,7 @@ code-quality:
 # UNIT TESTING STAGE - Comprehensive Test Suite
 # =============================================================================
 
+# Database service definitions for multi-database integration testing
 # PostgreSQL service for integration tests
 .postgres_service: &postgres_service
   services:
@@ -393,6 +394,29 @@ code-quality:
         POSTGRES_USER: test_user
         POSTGRES_PASSWORD: test_password
         POSTGRES_HOST_AUTH_METHOD: trust
+  variables:
+    DB_TYPE: "postgresql"
+    DATABASE_URL: "postgresql://test_user:test_password@postgres:5432/test_db"
+
+# SQLite service for integration tests
+.sqlite_service: &sqlite_service
+  # No services needed - file-based
+  variables:
+    DB_TYPE: "sqlite"
+
+# MySQL/MariaDB service for integration tests
+.mysql_service: &mysql_service
+  services:
+    - name: mariadb:11.8
+      alias: mariadb
+      variables:
+        MYSQL_ROOT_PASSWORD: test_password
+        MYSQL_DATABASE: test_db
+        MYSQL_USER: test_user
+        MYSQL_PASSWORD: test_password
+  variables:
+    DB_TYPE: "mysql"
+    DATABASE_URL: "mysql+pymysql://test_user:test_password@mariadb:3306/test_db"
 
 # Unit tests with coverage
 unit-tests:
@@ -457,19 +481,16 @@ unit-tests:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
 
-# Integration tests
-integration-tests:
+# Integration tests - SQLite (fast execution for quick feedback)
+integration-tests-sqlite:
   stage: test
   image: python:${PYTHON_VERSION}-slim
-  <<: *postgres_service
+  <<: *sqlite_service
   tags:
     - trakbridge-ci
-  timeout: 15m
+  timeout: 10m
   
   variables:
-    # Use PostgreSQL for production-like integration tests
-    DB_TYPE: "postgresql"
-    DATABASE_URL: "postgresql://test_user:test_password@postgres:5432/test_db"
     FLASK_ENV: "testing"
     SECRET_KEY: "test-secret-key-for-gitlab-ci"
     TRAKBRIDGE_ENCRYPTION_KEY: "test-encryption-key-for-gitlab-ci-12345"
@@ -483,19 +504,177 @@ integration-tests:
     - pip install -e ".[dev]"
   
   script: |
-    echo "Running integration tests..."
+    echo "Running integration tests against SQLite..."
     
-    # Run integration tests
-    pytest tests/integration/ -v --tb=short --maxfail=5 --durations=10 --junitxml=integration-test-results.xml
+    # Run integration tests with fast SQLite backend, excluding database compatibility and MySQL/MariaDB specific tests
+    pytest tests/integration/ -v --tb=short --maxfail=5 --durations=10 --junitxml=integration-sqlite-results.xml -m "not slow and not mysql" --ignore=tests/integration/test_database_compatibility.py
     
-    echo "Integration tests completed"
+    echo "SQLite integration tests completed"
   
   artifacts:
     reports:
-      junit: integration-test-results.xml
+      junit: integration-sqlite-results.xml
     paths:
-      - integration-test-results.xml
+      - integration-sqlite-results.xml
       - tests/integration/
+    expire_in: 14 days
+  
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+
+# Integration tests - PostgreSQL (production-like testing)
+integration-tests-postgresql:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  <<: *postgres_service
+  tags:
+    - trakbridge-ci
+  timeout: 15m
+  
+  variables:
+    FLASK_ENV: "testing"
+    SECRET_KEY: "test-secret-key-for-gitlab-ci"
+    TRAKBRIDGE_ENCRYPTION_KEY: "test-encryption-key-for-gitlab-ci-12345"
+    # Ensure Python can find the project modules
+    PYTHONPATH: "${CI_PROJECT_DIR}:${PYTHONPATH:-}"
+  
+  before_script:
+    - *install_packages
+    - install_packages git curl build-essential
+    - pip install --upgrade pip
+    - pip install -e ".[dev]"
+  
+  script: |
+    echo "Running integration tests against PostgreSQL..."
+    
+    # Run integration tests with PostgreSQL backend, excluding database compatibility and MySQL/MariaDB specific tests
+    pytest tests/integration/ -v --tb=short --maxfail=5 --durations=10 --junitxml=integration-postgresql-results.xml -m "not mysql" --ignore=tests/integration/test_database_compatibility.py
+    
+    echo "PostgreSQL integration tests completed"
+  
+  artifacts:
+    reports:
+      junit: integration-postgresql-results.xml
+    paths:
+      - integration-postgresql-results.xml
+      - tests/integration/
+    expire_in: 14 days
+  
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+
+# Integration tests - MySQL/MariaDB (comprehensive database compatibility)
+integration-tests-mysql:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  <<: *mysql_service
+  tags:
+    - trakbridge-ci
+  timeout: 15m
+  
+  variables:
+    FLASK_ENV: "testing"
+    SECRET_KEY: "test-secret-key-for-gitlab-ci"
+    TRAKBRIDGE_ENCRYPTION_KEY: "test-encryption-key-for-gitlab-ci-12345"
+    # Force MySQL/MariaDB usage even in testing environment
+    DB_TYPE: "mysql"
+    DB_HOST: "mariadb"
+    DB_PORT: "3306"
+    DB_USER: "test_user"
+    DB_PASSWORD: "test_password"
+    DB_NAME: "test_db"
+    # Ensure Python can find the project modules
+    PYTHONPATH: "${CI_PROJECT_DIR}:${PYTHONPATH:-}"
+  
+  before_script:
+    - *install_packages
+    - install_packages git curl build-essential
+    - pip install --upgrade pip
+    - pip install -e ".[dev]"
+  
+  script: |
+    echo "Running integration tests against MySQL/MariaDB..."
+    
+    # Wait for MariaDB service to be ready
+    echo "Waiting for MariaDB to be ready..."
+    for i in {1..30}; do
+      if python -c "import pymysql; pymysql.connect(host='mariadb', user='test_user', password='test_password', database='test_db')" 2>/dev/null; then
+        echo "MariaDB is ready!"
+        break
+      fi
+      echo "Waiting for MariaDB... ($i/30)"
+      sleep 2
+    done
+    
+    # Verify database environment variables
+    echo "Database configuration:"
+    echo "DB_TYPE: $DB_TYPE"
+    echo "DATABASE_URL: $DATABASE_URL"
+    echo "FLASK_ENV: $FLASK_ENV"
+    
+    # Run integration tests with MySQL backend, excluding database compatibility tests
+    pytest tests/integration/ -v --tb=short --maxfail=5 --durations=10 --junitxml=integration-mysql-results.xml --ignore=tests/integration/test_database_compatibility.py
+    
+    echo "MySQL integration tests completed"
+  
+  artifacts:
+    reports:
+      junit: integration-mysql-results.xml
+    paths:
+      - integration-mysql-results.xml
+      - tests/integration/
+    expire_in: 14 days
+  
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+
+# Database compatibility tests - No database environment variables set
+# This job tests dynamic database configuration switching within the same test run
+database-compatibility-tests:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  tags:
+    - trakbridge-ci
+  timeout: 15m
+  
+  variables:
+    FLASK_ENV: "testing"
+    SECRET_KEY: "test-secret-key-for-gitlab-ci"
+    TRAKBRIDGE_ENCRYPTION_KEY: "test-encryption-key-for-gitlab-ci-12345"
+    # Ensure Python can find the project modules
+    PYTHONPATH: "${CI_PROJECT_DIR}:${PYTHONPATH:-}"
+    # Critical: No DB_TYPE or DATABASE_URL set - tests control database configuration
+  
+  before_script:
+    - *install_packages
+    - install_packages git curl build-essential
+    - pip install --upgrade pip
+    - pip install -e ".[dev]"
+  
+  script: |
+    echo "Running database compatibility tests..."
+    echo "These tests verify database configuration precedence and dynamic switching"
+    
+    # Run only the database compatibility tests with no database environment constraints
+    pytest tests/integration/test_database_compatibility.py -v --tb=short --maxfail=5 --durations=10 --junitxml=database-compatibility-results.xml
+    
+    echo "Database compatibility tests completed"
+  
+  artifacts:
+    reports:
+      junit: database-compatibility-results.xml
+    paths:
+      - database-compatibility-results.xml
+      - tests/integration/test_database_compatibility.py
     expire_in: 14 days
   
   rules:
@@ -2153,7 +2332,9 @@ success_notification:
   dependencies:
     - code-quality
     - unit-tests 
-    - integration-tests
+    - integration-tests-sqlite
+    - integration-tests-postgresql
+    - integration-tests-mysql
     - bandit-sast
     - safety-check
     - license-scanning
@@ -2180,7 +2361,9 @@ failure_notification:
   dependencies:
     - code-quality
     - unit-tests 
-    - integration-tests
+    - integration-tests-sqlite
+    - integration-tests-postgresql
+    - integration-tests-mysql
     - bandit-sast
     - safety-check
     - license-scanning

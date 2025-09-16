@@ -863,9 +863,7 @@ class StreamManager:
         ulti-server support with proper deduplication.
         """
         try:
-            logger.debug(
-                "Ensuring TAK workers are running for all active streams"
-            )
+            logger.debug("Ensuring TAK workers are running for all active streams")
 
             # Get currently active streams
             active_streams = self.db_manager.get_active_streams()

@@ -227,6 +227,12 @@ services:
       MYSQL_USER: ${DB_USER:-mysql}
       MYSQL_PASSWORD_FILE: /run/secrets/db_password
       MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_password
+      # MariaDB 11 optimization settings to prevent communication packet errors
+      MARIADB_AUTO_UPGRADE: "1"
+      MYSQL_INITDB_SKIP_TZINFO: "1"
+      # Connection and timeout settings
+      MARIADB_DEFAULT_CHARSET: "utf8mb4"
+      MARIADB_DEFAULT_COLLATION: "utf8mb4_unicode_ci"
 
     secrets:
       - db_password
