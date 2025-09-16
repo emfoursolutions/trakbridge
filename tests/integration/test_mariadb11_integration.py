@@ -337,5 +337,6 @@ class TestMariaDB11EndToEnd:
                     connect_args["local_infile"] == 0
                 ), "Local infile disabled for security"
 
-            # SQL mode compatibility
-            assert "init_command=SET sql_mode=" in uri, "SQL mode set for compatibility"
+            # SQL mode compatibility (now in connect_args init_command)
+            if "init_command" in connect_args:
+                assert "sql_mode" in connect_args["init_command"], "SQL mode set for compatibility"

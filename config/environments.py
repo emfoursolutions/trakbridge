@@ -78,7 +78,7 @@ class DevelopmentConfig(BaseConfig):
                     "use_unicode": True,
                     "sql_mode": "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO",
                     # Connection stability settings
-                    "init_command": "SET SESSION wait_timeout=28800, interactive_timeout=28800",
+                    "init_command": "SET SESSION wait_timeout=28800, interactive_timeout=28800, sql_mode='STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO'",
                 },
             },
             "postgresql": {
@@ -161,7 +161,7 @@ class ProductionConfig(BaseConfig):
                     "use_unicode": True,
                     "sql_mode": "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO",
                     # Connection stability for production
-                    "init_command": "SET SESSION wait_timeout=28800, interactive_timeout=28800, net_read_timeout=120, net_write_timeout=120",
+                    "init_command": "SET SESSION wait_timeout=28800, interactive_timeout=28800, net_read_timeout=120, net_write_timeout=120, sql_mode='STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO'",
                 },
             },
             "postgresql": {
