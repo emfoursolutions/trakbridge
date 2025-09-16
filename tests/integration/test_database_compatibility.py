@@ -483,7 +483,7 @@ class TestMariaDBBackwardCompatibility:
             uri = config.SQLALCHEMY_DATABASE_URI
             assert "mysql+pymysql://" in uri
             assert "charset=utf8mb4" in uri
-            assert "autocommit=true" in uri  # MariaDB 11 compatibility
+            # autocommit now configured in connect_args, not URI
 
             # Should have reasonable engine options including MariaDB 11 options
             engine_options = config.SQLALCHEMY_ENGINE_OPTIONS
@@ -529,7 +529,7 @@ class TestMariaDBBackwardCompatibility:
 
             # Verify that the production configuration includes both legacy and new options
             assert engine_options["pool_pre_ping"] is True
-            assert engine_options["pool_recycle"] == 3600
+            assert engine_options["pool_recycle"] == 1800
 
             # Legacy connect_args should be preserved
             if "connect_args" in engine_options:

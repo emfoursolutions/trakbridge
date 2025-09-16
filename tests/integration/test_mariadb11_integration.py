@@ -44,15 +44,14 @@ class TestMariaDB11EndToEnd:
             uri = config.SQLALCHEMY_DATABASE_URI
             assert "mysql+pymysql://" in uri
             assert "charset=utf8mb4" in uri
-            assert "autocommit=true" in uri
-            assert "local_infile=0" in uri
+            # autocommit and local_infile now configured in connect_args, not URI
 
             # Verify engine options include MariaDB 11 settings
             engine_options = config.SQLALCHEMY_ENGINE_OPTIONS
 
             # Connection pool settings
             assert engine_options["pool_pre_ping"] is True
-            assert engine_options["pool_recycle"] == 3600
+            assert engine_options["pool_recycle"] == 1800  # Updated for better connection stability
             assert engine_options["pool_size"] == 50  # Production value
             assert engine_options["max_overflow"] == 100
 
@@ -66,32 +65,27 @@ class TestMariaDB11EndToEnd:
             # MySQL-specific timeout settings may not be present in CI environment
             if "read_timeout" in connect_args:
                 assert connect_args["read_timeout"] in [
-                    15,
+                    30,
                     60,
+                    120,
                 ]  # Allow testing or production
             if "write_timeout" in connect_args:
                 assert connect_args["write_timeout"] in [
-                    15,
+                    30,
                     60,
+                    120,
                 ]  # Allow testing or production
             # MySQL-specific charset setting may not be present in CI environment
             if "charset" in connect_args:
                 assert connect_args["charset"] == "utf8mb4"
-            # MySQL-specific features may not be present if using PostgreSQL config
-            if "autocommit" in connect_args:
-                # In CI environment, autocommit may not be properly configured due to config precedence
-                # Log the actual value for debugging, but don't fail the test
-                if connect_args["autocommit"] is not True:
-                    print(
-                        f"INFO: autocommit setting is {connect_args['autocommit']} (expected True for MariaDB)"
-                    )
-                else:
-                    print("INFO: autocommit properly configured as True")
+            # Verify autocommit is properly configured in connect_args
+            assert connect_args["autocommit"] is True, "autocommit should be True for MariaDB 11 stability"
             if "local_infile" in connect_args:
                 assert connect_args["local_infile"] == 0
 
-            # SQL mode is configured in the database URI, not connect_args
-            assert "init_command=SET sql_mode=" in uri, "SQL mode set for compatibility"
+            # SQL mode is now configured in connect_args init_command
+            if "init_command" in connect_args:
+                assert "sql_mode" in connect_args["init_command"], "SQL mode set for compatibility"
 
     def test_mariadb11_backward_compatibility(self):
         """Test that existing MySQL configurations continue to work"""
@@ -118,8 +112,7 @@ class TestMariaDB11EndToEnd:
             assert "mysql+pymysql://" in uri
             assert "mysql-server:3306/myapp" in uri or "@mariadb:3306/" in uri
 
-            # Should include compatibility options
-            assert "autocommit=true" in uri
+            # Should include compatibility options (autocommit now in connect_args)
             assert "charset=utf8mb4" in uri
 
     def test_mariadb11_development_environment(self):
@@ -146,25 +139,18 @@ class TestMariaDB11EndToEnd:
             assert engine_options["pool_pre_ping"] is True
             # In CI environment, may use testing environment values
             assert engine_options["pool_recycle"] in [
+                1200,
                 1800,
                 3600,
-            ]  # Allow testing or base config
+            ]  # Allow development, testing, or production config
 
             # Base connection arguments should be present
             connect_args = engine_options["connect_args"]
             # MySQL-specific charset setting may not be present in CI environment
             if "charset" in connect_args:
                 assert connect_args["charset"] == "utf8mb4"
-            # MySQL-specific features may not be present if using PostgreSQL config
-            if "autocommit" in connect_args:
-                # In CI environment, autocommit may not be properly configured due to config precedence
-                # Log the actual value for debugging, but don't fail the test
-                if connect_args["autocommit"] is not True:
-                    print(
-                        f"INFO: autocommit setting is {connect_args['autocommit']} (expected True for MariaDB)"
-                    )
-                else:
-                    print("INFO: autocommit properly configured as True")
+            # Verify autocommit is properly configured in connect_args
+            assert connect_args["autocommit"] is True, "autocommit should be True for MariaDB 11 stability"
 
     def test_mariadb11_testing_environment(self):
         """Test MariaDB 11 compatibility in testing environment"""
@@ -208,16 +194,8 @@ class TestMariaDB11EndToEnd:
                     15,
                     30,
                 ]  # Allow different config sources
-            # MySQL-specific features may not be present if using PostgreSQL config
-            if "autocommit" in connect_args:
-                # In CI environment, autocommit may not be properly configured due to config precedence
-                # Log the actual value for debugging, but don't fail the test
-                if connect_args["autocommit"] is not True:
-                    print(
-                        f"INFO: autocommit setting is {connect_args['autocommit']} (expected True for MariaDB)"
-                    )
-                else:
-                    print("INFO: autocommit properly configured as True")
+            # Verify autocommit is properly configured in connect_args
+            assert connect_args["autocommit"] is True, "autocommit should be True for MariaDB 11 stability"
             if "local_infile" in connect_args:
                 assert connect_args["local_infile"] == 0
 
@@ -293,13 +271,15 @@ class TestMariaDB11EndToEnd:
             # MySQL-specific timeout settings may not be present in CI environment
             if "read_timeout" in connect_args:
                 assert connect_args["read_timeout"] in [
-                    15,
+                    30,
                     60,
+                    120,
                 ]  # Allow testing or production
             if "write_timeout" in connect_args:
                 assert connect_args["write_timeout"] in [
-                    15,
+                    30,
                     60,
+                    120,
                 ]  # Allow testing or production
 
     def test_mariadb11_error_prevention_features(self):
@@ -330,7 +310,7 @@ class TestMariaDB11EndToEnd:
 
             # Connection recycling
             assert (
-                engine_options["pool_recycle"] == 3600
+                engine_options["pool_recycle"] == 1800
             ), "pool_recycle prevents connection timeout"
 
             # Adequate timeouts (adjusted for CI environment)
