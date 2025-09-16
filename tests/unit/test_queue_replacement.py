@@ -311,7 +311,7 @@ class TestQueueReplacement:
             # Should log replacement statistics
             assert any(
                 "replacement statistics" in str(call)
-                for call in mock_logger.info.call_args_list
+                for call in mock_logger.debug.call_args_list
             ), "Should log replacement statistics"
 
     @pytest.mark.asyncio
