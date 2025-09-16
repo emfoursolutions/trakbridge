@@ -70,7 +70,7 @@ class CotTypesService:
 
             with open(yaml_path, "r", encoding="utf-8") as file:
                 data = yaml.safe_load(file)
-                logger.info(f"Loaded CoT types from {self.yaml_file_path}")
+                logger.debug(f"Loaded CoT types from {self.yaml_file_path}")
                 return data
 
         except yaml.YAMLError as e:

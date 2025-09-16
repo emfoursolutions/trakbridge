@@ -96,13 +96,13 @@ class StreamManager:
         Check if stream has TAK servers configured (single or multi-server).
         Validation supporting both legacy and multi-server configurations.
         """
-        logger.info(
+        logger.debug(
             f"Checking TAK servers for stream {stream.id}: tak_server={stream.tak_server}, has_tak_servers_attr={hasattr(stream, 'tak_servers')}"
         )
 
         # Check legacy single-server configuration
         if hasattr(stream, "tak_server") and stream.tak_server:
-            logger.info(
+            logger.debug(
                 f"Stream {stream.id} has single server configured: {stream.tak_server.name}"
             )
             return True
@@ -112,7 +112,7 @@ class StreamManager:
             try:
                 # Use count() for dynamic relationships - more efficient
                 count = stream.tak_servers.count()
-                logger.info(f"Stream {stream.id} tak_servers count: {count}")
+                logger.debug(f"Stream {stream.id} tak_servers count: {count}")
                 return count > 0
             except Exception as e:
                 logger.warning(
@@ -121,7 +121,7 @@ class StreamManager:
                 try:
                     # Fallback if dynamic relationship count fails
                     servers_list = list(stream.tak_servers)
-                    logger.info(
+                    logger.debug(
                         f"Stream {stream.id} tak_servers list length: {len(servers_list)}"
                     )
                     return len(servers_list) > 0

@@ -1265,7 +1265,7 @@ class EnhancedCOTService:
                         file_config = yaml.safe_load(f) or {}
                         if "parallel_processing" in file_config:
                             config = file_config["parallel_processing"]
-                            logger.info(
+                            logger.debug(
                                 f"Loaded performance configuration from {expanded_path}"
                             )
                             break
@@ -1794,7 +1794,7 @@ class EnhancedCOTService:
             queue_size_after = queue.qsize()
 
             # Log replacement statistics
-            logger.info(
+            logger.debug(
                 f"Queue replacement statistics for TAK server {tak_server_id}: "
                 f"new={new_events}, updated={updated_events}, skipped={skipped_events}, "
                 f"queue size: {queue_size_before} → {queue_size_after}"
@@ -2569,7 +2569,7 @@ class PersistentCOTService:
             queue_size_after = queue.qsize()
 
             # Log replacement statistics
-            logger.info(
+            logger.debug(
                 f"Queue replacement statistics for TAK server {tak_server_id}: "
                 f"new={new_events}, updated={updated_events}, skipped={skipped_events}, "
                 f"queue size: {queue_size_before} → {queue_size_after}"

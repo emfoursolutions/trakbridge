@@ -521,7 +521,7 @@ class StreamWorker:
                 return True  # Don't treat this as a failure
 
             # Single API fetch → Multiple server distribution
-            self.logger.info(
+            self.logger.debug(
                 f"Processing {len(locations)} locations for distribution to "
                 f"{len(target_servers)} TAK server(s): {[s.name for s in target_servers]}"
             )
@@ -754,7 +754,7 @@ class StreamWorker:
                             f"Applied per-callsign CoT type '{mapping.cot_type}' for identifier '{identifier}'"
                         )
 
-                    self.logger.info(
+                    self.logger.debug(
                         f"Applied callsign mapping: '{identifier}' → '{original_name}' → '{mapping.custom_callsign}'"
                     )
                 elif identifier:
@@ -796,7 +796,7 @@ class StreamWorker:
         skipped_count = len(locations_to_skip)
         processed_count = len(locations) - skipped_count
 
-        self.logger.info(
+        self.logger.debug(
             f"Callsign mapping summary: {processed_count} locations processed, "
             f"{applied_count} mappings applied, {skipped_count} locations skipped"
         )
@@ -1007,7 +1007,7 @@ class StreamWorker:
                         server_names = [s.name for s in target_servers]
                         server_ids = [s.id for s in target_servers]
                         self.logger.info(
-                            f"Using multi-server configuration: {len(target_servers)} servers found - Names: {server_names}, IDs: {server_ids}"
+                            f"Using multi-server configuration: {len(target_servers)} servers found - Names: {server_names}"
                         )
                 except Exception as e:
                     self.logger.error(f"Error accessing multi-server relationship: {e}")
@@ -1104,7 +1104,7 @@ class StreamWorker:
             distribution_tasks = []
             server_names = [server.name for server in target_servers]
 
-            self.logger.info(
+            self.logger.debug(
                 f"Starting distribution of {len(cot_events)} events to {len(target_servers)} servers: {server_names}"
             )
 
@@ -1142,7 +1142,7 @@ class StreamWorker:
                     # Server succeeded
                     events_sent = result.get("events_sent", 0)
                     success = result.get("success", False)
-                    self.logger.info(
+                    self.logger.debug(
                         f"Distribution to {server.name} (ID: {server.id}): success={success}, events_sent={events_sent}"
                     )
 
@@ -1183,7 +1183,7 @@ class StreamWorker:
 
             # Use smart queue replacement for large batches to prevent accumulation
             if len(cot_events) >= 10:  # Use replacement logic for large batches
-                self.logger.info(
+                self.logger.debug(
                     f"Using queue replacement for large batch of {len(cot_events)} events to {server.name}"
                 )
                 success = await cot_service.enqueue_with_replacement(
