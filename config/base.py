@@ -316,17 +316,10 @@ class BaseConfig:
         # Build base URI with MariaDB 11 compatibility parameters
         base_uri = f"mysql+pymysql://{user}:{password_encoded}@{host}:{port}/{name}"
 
-        # Add connection parameters optimized for MariaDB 11
+        # Basic connection parameters (detailed config handled in connect_args)
         params = [
-            "charset=utf8mb4",
-            "autocommit=true",  # Prevent connection packet errors
-            "local_infile=0",  # Security: Disable local file loading
+            "charset=utf8mb4",  # Ensure UTF-8 encoding
         ]
-
-        # Add optional SQL mode for MariaDB 11 strict mode compatibility
-        # This helps prevent data inconsistencies and connection issues
-        sql_mode = "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO"
-        params.append(f"init_command=SET sql_mode='{sql_mode}'")
 
         return f"{base_uri}?{'&'.join(params)}"
 

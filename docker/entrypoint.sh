@@ -916,6 +916,7 @@ start_server() {
             local keep_alive=${HYPERCORN_KEEP_ALIVE:-5}
             local log_level=${HYPERCORN_LOG_LEVEL:-warning}
             local graceful_timeout=${HYPERCORN_GRACEFUL_TIMEOUT:-30}
+            local max_requests=${HYPERCORN_MAX_REQUESTS:-1000}
 
             log_info "Using Hypercorn production server with inline configuration"
 
@@ -976,6 +977,7 @@ start_server() {
                 --keep-alive "$keep_alive" \
                 --log-level "$log_level" \
                 --graceful-timeout "$graceful_timeout" \
+                --max-requests "$max_requests" \
                 --access-logfile /app/logs/hypercorn-access.log \
                 --error-logfile /app/logs/hypercorn-error.log \
                 app:app

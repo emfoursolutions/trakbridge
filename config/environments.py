@@ -63,14 +63,22 @@ class DevelopmentConfig(BaseConfig):
             "mysql": {
                 "echo": self.get_feature_flag("enable_sql_echo", False),
                 "pool_pre_ping": True,
-                "pool_recycle": 1800,  # 30 minutes
+                "pool_recycle": 1200,  # 20 minutes - shorter for MariaDB 11
                 "pool_size": 10,
                 "max_overflow": 20,
                 "pool_timeout": 30,
                 "connect_args": {
                     "connect_timeout": 60,
-                    "read_timeout": 30,
-                    "write_timeout": 30,
+                    "read_timeout": 60,  # Increased for MariaDB 11 
+                    "write_timeout": 60,  # Increased for MariaDB 11
+                    "autocommit": True,  # Prevent connection packet errors
+                    "charset": "utf8mb4",
+                    "local_infile": 0,  # Security: disable local file loading
+                    # MariaDB 11 specific optimizations
+                    "use_unicode": True,
+                    "sql_mode": "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO",
+                    # Connection stability settings
+                    "init_command": "SET SESSION wait_timeout=28800, interactive_timeout=28800",
                 },
             },
             "postgresql": {
@@ -138,17 +146,22 @@ class ProductionConfig(BaseConfig):
             },
             "mysql": {
                 "pool_pre_ping": True,
-                "pool_recycle": 3600,  # 1 hour
+                "pool_recycle": 1800,  # 30 minutes - more frequent recycling for production stability
                 "pool_size": 50,
                 "max_overflow": 100,
                 "pool_timeout": 60,
                 "connect_args": {
                     "connect_timeout": 90,  # Longer timeout for production
-                    "read_timeout": 60,     # Extended read timeout  
-                    "write_timeout": 60,    # Extended write timeout
+                    "read_timeout": 120,     # Extended read timeout for MariaDB 11
+                    "write_timeout": 120,    # Extended write timeout for MariaDB 11
                     "charset": "utf8mb4",   # Character set for MySQL
-                    "autocommit": True,     # MariaDB 11 compatibility
+                    "autocommit": True,     # MariaDB 11 compatibility - prevent packet errors
                     "local_infile": 0,      # Security: Disable local file loading
+                    # MariaDB 11 production optimizations
+                    "use_unicode": True,
+                    "sql_mode": "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO",
+                    # Connection stability for production
+                    "init_command": "SET SESSION wait_timeout=28800, interactive_timeout=28800, net_read_timeout=120, net_write_timeout=120",
                 },
             },
             "postgresql": {
@@ -352,13 +365,21 @@ class TestingConfig(BaseConfig):
                 "connect_args": {"connect_timeout": 10},
             }
         elif db_type == "mysql":
-            # MySQL options for integration tests
+            # MySQL/MariaDB options for integration tests
             return {
                 "pool_pre_ping": True,
                 "pool_recycle": 300,
                 "pool_size": 5,
                 "max_overflow": 10,
-                "connect_args": {"connect_timeout": 10},
+                "connect_args": {
+                    "connect_timeout": 30,  # Increased for MariaDB 11 stability
+                    "read_timeout": 30,
+                    "write_timeout": 30,
+                    "autocommit": True,  # Prevent connection packet errors
+                    "charset": "utf8mb4",
+                    "local_infile": 0,
+                    "use_unicode": True,
+                },
             }
         else:
             # Default to SQLite options
