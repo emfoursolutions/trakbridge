@@ -23,6 +23,9 @@ build.sh
 
 # build artifacts
 build/
+*.egg-info/
+dist/
+.*cache*/
 
 # Logs
 logs/
@@ -55,9 +58,13 @@ local_*.yaml
 # Dev related documents
 dev/
 CLAUDE.md
+test-reports/
+.claude/
 
 # Database init scripts - track base files but ignore local customizations
 docker/init-scripts/*.local.sql
 docker/init-scripts/*/*.local.sql
 
-test-reports/
+# Backup directories
+backups/
+config_backups/

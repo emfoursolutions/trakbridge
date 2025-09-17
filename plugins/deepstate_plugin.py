@@ -577,7 +577,7 @@ class DeepstatePlugin(BaseGPSPlugin):
         default_cot_type: str = "a-n-G",
     ) -> str:
         """
-        Analyze English name and assign COT type based on content patterns
+        Analyse English name and assign COT type based on content patterns
 
         Args:
             english_name: The extracted English name

@@ -187,10 +187,36 @@ services:
     restart: unless-stopped
     profiles: ["postgres"]
 
+    command: |
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=4MB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+      -c max_connections=200
+      -c shared_preload_libraries='pg_stat_statements'
+      -c track_activity_query_size=2048
+      -c log_line_prefix='%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
+      -c log_checkpoints=on
+      -c log_connections=on
+      -c log_disconnections=on
+      -c log_lock_waits=on
+      -c log_min_duration_statement=1000
+      -c log_statement=none
+      -c log_temp_files=0
+
     environment:
       POSTGRES_DB: trakbridge
       POSTGRES_USER: trakbridge
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
 
     secrets:
       - db_password
@@ -200,13 +226,24 @@ services:
       - ./docker/init-scripts/postgres:/docker-entrypoint-initdb.d:ro
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U trakbridge -d trakbridge"]
-      interval: 10s
-      timeout: 5s
+      test: |
+        pg_isready -U trakbridge -d trakbridge &&
+        psql -U trakbridge -d trakbridge -c "SELECT 1" > /dev/null 2>&1 &&
+        psql -U trakbridge -d trakbridge -c "SELECT COUNT(*) FROM pg_stat_activity" > /dev/null 2>&1
+      interval: 30s
+      timeout: 10s
       retries: 5
+      start_period: 45s
 
     networks:
       - trakbridge
+
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+        reservations:
+          memory: 512M
 
   # =============================================================================
   # MySQL Database (Optional)
@@ -216,18 +253,31 @@ services:
     container_name: trakbridge-mysql
     restart: unless-stopped
     profiles: ["mysql"]
+    
+    command: |
+      --max-connections=200
+      --wait-timeout=300
+      --interactive-timeout=300
+      --net-read-timeout=60
+      --net-write-timeout=60
+      --max-allowed-packet=256M
+      --innodb-buffer-pool-load-at-startup=ON
+      --innodb-buffer-pool-dump-at-shutdown=ON
+      --innodb-log-file-size=256M
+      --innodb-flush-log-at-trx-commit=1
+      --bind-address=0.0.0.0
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --skip-name-resolve
+      --innodb-buffer-pool-size=512M
 
     environment:
-      MYSQL_DATABASE: trakbridge
-      MYSQL_USER: trakbridge
-      MYSQL_PASSWORD_FILE: /run/secrets/db_password
-      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_password
-      # MariaDB 11 optimization settings to prevent communication packet errors
+      MARIADB_DATABASE: trakbridge
+      MARIADB_USER: trakbridge  
+      MARIADB_PASSWORD_FILE: /run/secrets/db_password
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/db_password
       MARIADB_AUTO_UPGRADE: "1"
-      MYSQL_INITDB_SKIP_TZINFO: "1"
-      # Connection and timeout settings
-      MARIADB_DEFAULT_CHARSET: "utf8mb4"
-      MARIADB_DEFAULT_COLLATION: "utf8mb4_unicode_ci"
+      MARIADB_MYSQL_LOCALHOST_USER: "1"
 
     secrets:
       - db_password
@@ -237,13 +287,23 @@ services:
       - ./docker/init-scripts/mysql:/docker-entrypoint-initdb.d:ro
 
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
+      test: |
+        mysqladmin ping -h localhost -u root -p$$(cat /run/secrets/db_password) &&
+        mariadb -u root -p$$(cat /run/secrets/db_password) -e "SELECT 1" > /dev/null 2>&1
+      interval: 30s
+      timeout: 10s
       retries: 5
+      start_period: 45s
 
     networks:
       - trakbridge
+
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
 
   # =============================================================================
   # Nginx Reverse Proxy (Optional)

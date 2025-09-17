@@ -189,10 +189,37 @@ services:
       - postgres
       - db
 
+    command: |
+      postgres
+      -c shared_buffers=128MB
+      -c effective_cache_size=512MB
+      -c maintenance_work_mem=32MB
+      -c checkpoint_completion_target=0.7
+      -c wal_buffers=8MB
+      -c default_statistics_target=50
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=100
+      -c work_mem=2MB
+      -c min_wal_size=256MB
+      -c max_wal_size=1GB
+      -c max_connections=100
+      -c shared_preload_libraries='pg_stat_statements'
+      -c track_activity_query_size=1024
+      -c log_line_prefix='%t [%p]: user=%u,db=%d '
+      -c log_checkpoints=off
+      -c log_connections=off
+      -c log_disconnections=off
+      -c log_lock_waits=off
+      -c log_min_duration_statement=-1
+      -c log_statement=none
+      -c fsync=off
+      -c synchronous_commit=off
+
     environment:
       POSTGRES_DB: "trakbridge_dev"
       POSTGRES_USER: "trakbridge_dev"
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_INITDB_ARGS: "--auth-host=trust"
 
     secrets:
       - db_password
@@ -205,13 +232,20 @@ services:
       - ./docker/init-scripts/postgres:/docker-entrypoint-initdb.d:ro
 
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-trakbridge_db}" ]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U trakbridge_dev -d trakbridge_dev"]
+      interval: 15s
       timeout: 5s
-      retries: 5
+      retries: 3
 
     networks:
       - app-network
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
 
   # MySQL database (optional)
   mysql:
@@ -222,17 +256,30 @@ services:
       - mysql
       - db
 
+    command: |
+      --max-connections=100
+      --wait-timeout=180
+      --interactive-timeout=180
+      --net-read-timeout=30
+      --net-write-timeout=30
+      --max-allowed-packet=64M
+      --innodb-buffer-pool-load-at-startup=OFF
+      --innodb-buffer-pool-dump-at-shutdown=OFF
+      --innodb-log-file-size=64M
+      --innodb-flush-log-at-trx-commit=2
+      --bind-address=0.0.0.0
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --skip-name-resolve
+      --innodb-buffer-pool-size=128M
+
     environment:
-      MYSQL_DATABASE: ${DB_NAME:-trakbridge_db}
-      MYSQL_USER: ${DB_USER:-mysql}
-      MYSQL_PASSWORD_FILE: /run/secrets/db_password
-      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_password
-      # MariaDB 11 optimization settings to prevent communication packet errors
+      MARIADB_DATABASE: ${DB_NAME:-trakbridge_db}
+      MARIADB_USER: ${DB_USER:-trakbridge}
+      MARIADB_PASSWORD_FILE: /run/secrets/db_password
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/db_password
       MARIADB_AUTO_UPGRADE: "1"
-      MYSQL_INITDB_SKIP_TZINFO: "1"
-      # Connection and timeout settings
-      MARIADB_DEFAULT_CHARSET: "utf8mb4"
-      MARIADB_DEFAULT_COLLATION: "utf8mb4_unicode_ci"
+      MARIADB_MYSQL_LOCALHOST_USER: "1"
 
     secrets:
       - db_password
@@ -245,13 +292,20 @@ services:
       - ./docker/init-scripts/mysql:/docker-entrypoint-initdb.d:ro
 
     healthcheck:
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
-      interval: 10s
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 15s
       timeout: 5s
-      retries: 5
+      retries: 3
 
     networks:
       - app-network
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
 
   # Redis (optional, for caching/sessions)
   redis:

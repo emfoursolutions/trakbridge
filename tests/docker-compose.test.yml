@@ -93,25 +93,55 @@ services:
 
   # PostgreSQL for database testing
   test-postgres:
-    image: postgres:13-alpine
+    image: postgres:17-alpine
     container_name: trakbridge-test-postgres
+    
+    command: |
+      postgres
+      -c shared_buffers=64MB
+      -c effective_cache_size=256MB
+      -c maintenance_work_mem=16MB
+      -c checkpoint_completion_target=0.5
+      -c wal_buffers=4MB
+      -c default_statistics_target=10
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=50
+      -c work_mem=1MB
+      -c min_wal_size=128MB
+      -c max_wal_size=512MB
+      -c max_connections=50
+      -c log_line_prefix='%t [%p]: '
+      -c log_checkpoints=off
+      -c log_connections=off
+      -c log_disconnections=off
+      -c log_min_duration_statement=-1
+      -c log_statement=none
+      -c fsync=off
+      -c synchronous_commit=off
+      -c full_page_writes=off
+    
     environment:
       POSTGRES_DB: trakbridge_test
       POSTGRES_USER: trakbridge_test
       POSTGRES_PASSWORD: test_postgres_password
-      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+      POSTGRES_INITDB_ARGS: "--auth-host=trust"
+      
     ports:
       - "5432:5432"
+      
     volumes:
       - test-postgres-data:/var/lib/postgresql/data
       - ./fixtures/postgres-init:/docker-entrypoint-initdb.d
+      
     networks:
       - test-network
+      
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U trakbridge_test -d trakbridge_test"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   # TrakBridge test application
   trakbridge-test:
