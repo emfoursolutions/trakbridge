@@ -381,11 +381,11 @@ class BaseGPSPlugin(ABC):
 
         try:
             # Import here to avoid circular imports
-            from services.cot_service import EnhancedCOTService, cot_service
+            from services.cot_service import EnhancedCOTService, get_cot_service
 
             # Ensure persistent worker is running for this TAK server
             if hasattr(stream, "tak_server_id") and stream.tak_server_id:
-                await cot_service.ensure_worker_running(stream.tak_server_id)
+                await get_cot_service().ensure_worker_running(stream.tak_server_id)
 
             # Temporarily set stream reference for helper method access
             original_stream = getattr(self, "stream", None)
@@ -409,7 +409,7 @@ class BaseGPSPlugin(ABC):
             enqueued_count = 0
             for event in cot_events:
                 if hasattr(stream, "tak_server_id") and stream.tak_server_id:
-                    cot_service.enqueue_event(event, stream.tak_server_id)
+                    await get_cot_service().enqueue_event(event, stream.tak_server_id)
                     enqueued_count += 1
                 else:
                     get_logger().warning(

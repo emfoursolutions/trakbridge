@@ -28,7 +28,7 @@ from typing import Dict, List
 
 # Local application imports
 from plugins.plugin_manager import get_plugin_manager
-from services.cot_service import cot_service
+from services.cot_service import get_cot_service
 
 
 class StreamWorker:
@@ -232,7 +232,8 @@ class StreamWorker:
     async def _ensure_persistent_tak_worker(self) -> bool:
         """Ensure persistent PyTAK worker exists for TAK server connection"""
         try:
-            if not cot_service:
+            service = get_cot_service()
+            if not service:
                 self.logger.error("Persistent COT service not available")
                 return False
 
@@ -242,7 +243,7 @@ class StreamWorker:
             )
 
             # Check if worker is already running
-            worker_status = cot_service.get_worker_status(tak_server.id)
+            worker_status = get_cot_service().get_worker_status(tak_server.id)
             if worker_status and worker_status.get("worker_running", False):
                 self.logger.debug(
                     f"Persistent worker already running for TAK server {tak_server.name}"
@@ -251,7 +252,7 @@ class StreamWorker:
                 return True
 
             # Start the worker
-            success = await cot_service.start_worker(tak_server)
+            success = await get_cot_service().start_worker(tak_server)
             if not success:
                 self.logger.error(
                     f"Failed to start persistent worker for TAK server {tak_server.name}"
@@ -259,7 +260,7 @@ class StreamWorker:
                 return False
 
             # Verify worker started successfully
-            worker_status = cot_service.get_worker_status(tak_server.id)
+            worker_status = get_cot_service().get_worker_status(tak_server.id)
             if not worker_status or not worker_status.get("worker_running", False):
                 self.logger.error(
                     f"Worker failed to start for TAK server {tak_server.name}"
@@ -372,7 +373,7 @@ class StreamWorker:
                             # Stop all workers
                             for server in target_servers:
                                 try:
-                                    await cot_service.stop_worker(server.id)
+                                    await get_cot_service().stop_worker(server.id)
                                 except Exception as e:
                                     self.logger.warning(
                                         f"Error stopping worker for {server.name}: {e}"
@@ -491,7 +492,8 @@ class StreamWorker:
         - Backward compatibility maintained for existing streams
         """
         try:
-            if not cot_service:
+            service = get_cot_service()
+            if not service:
                 self.logger.error("Persistent COT service not available")
                 return False
 
@@ -631,10 +633,13 @@ class StreamWorker:
         """Get detailed health status of this worker"""
         # Get persistent worker status if available
         persistent_worker_status = None
-        if self.stream.tak_server and cot_service:
-            persistent_worker_status = cot_service.get_worker_status(
-                self.stream.tak_server.id
-            )
+        if self.stream.tak_server:
+            try:
+                persistent_worker_status = get_cot_service().get_worker_status(
+                    self.stream.tak_server.id
+                )
+            except Exception:
+                persistent_worker_status = None
 
         return {
             "running": self.running,
@@ -649,8 +654,8 @@ class StreamWorker:
             "task_done": self.task.done() if self.task else None,
             "task_cancelled": self.task.cancelled() if self.task else None,
             "persistent_worker_status": persistent_worker_status,
-            "total_persistent_workers": len(cot_service.workers) if cot_service else 0,
-            "total_persistent_queues": len(cot_service.queues) if cot_service else 0,
+            "total_persistent_workers": len(get_cot_service().workers),
+            "total_persistent_queues": len(get_cot_service().queues),
         }
 
     async def _apply_callsign_mapping(self, locations: List[Dict]) -> None:
@@ -1040,7 +1045,8 @@ class StreamWorker:
         Supports multiple servers with worker deduplication.
         """
         try:
-            if not cot_service:
+            service = get_cot_service()
+            if not service:
                 self.logger.error("Persistent COT service not available")
                 return False
 
@@ -1049,7 +1055,7 @@ class StreamWorker:
             )
 
             # Check if worker is already running
-            worker_status = cot_service.get_worker_status(tak_server.id)
+            worker_status = get_cot_service().get_worker_status(tak_server.id)
             if worker_status and worker_status.get("worker_running", False):
                 self.logger.debug(
                     f"Persistent worker already running for TAK server {tak_server.name}"
@@ -1057,7 +1063,7 @@ class StreamWorker:
                 return True
 
             # Start the worker
-            success = await cot_service.start_worker(tak_server)
+            success = await get_cot_service().start_worker(tak_server)
             if not success:
                 self.logger.error(
                     f"Failed to start persistent worker for TAK server {tak_server.name}"
@@ -1065,7 +1071,7 @@ class StreamWorker:
                 return False
 
             # Verify worker started successfully
-            worker_status = cot_service.get_worker_status(tak_server.id)
+            worker_status = get_cot_service().get_worker_status(tak_server.id)
             if not worker_status or not worker_status.get("worker_running", False):
                 self.logger.error(
                     f"Worker failed to start for TAK server {tak_server.name}"
@@ -1186,7 +1192,7 @@ class StreamWorker:
                 self.logger.debug(
                     f"Using queue replacement for large batch of {len(cot_events)} events to {server.name}"
                 )
-                success = await cot_service.enqueue_with_replacement(
+                success = await get_cot_service().enqueue_with_replacement(
                     cot_events, server.id
                 )
                 events_sent = len(cot_events) if success else 0
@@ -1197,7 +1203,7 @@ class StreamWorker:
                 # Use individual enqueueing for small batches
                 events_sent = 0
                 for event in cot_events:
-                    success = await cot_service.enqueue_event(event, server.id)
+                    success = await get_cot_service().enqueue_event(event, server.id)
                     if success:
                         events_sent += 1
                     else:

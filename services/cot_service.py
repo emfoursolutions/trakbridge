@@ -774,9 +774,10 @@ class EnhancedCOTService:
             )
 
             # Get initial queue size for comparison
+            service = get_cot_service()
             initial_queue_size = 0
-            if tak_server.id in cot_service.queues:
-                initial_queue_size = cot_service.queues[tak_server.id].qsize()
+            if tak_server.id in service.queues:
+                initial_queue_size = service.queues[tak_server.id].qsize()
                 logger.debug(
                     f"Initial queue size for TAK server {tak_server.name}: {initial_queue_size}"
                 )
@@ -784,7 +785,7 @@ class EnhancedCOTService:
             # Send events to persistent service
             success_count = 0
             for i, event in enumerate(events, 1):
-                success = await cot_service.enqueue_event(event, tak_server.id)
+                success = await service.enqueue_event(event, tak_server.id)
                 if success:
                     success_count += 1
                     logger.debug(
@@ -797,8 +798,8 @@ class EnhancedCOTService:
 
             # Log completion of queuing
             final_queue_size = 0
-            if tak_server.id in cot_service.queues:
-                final_queue_size = cot_service.queues[tak_server.id].qsize()
+            if tak_server.id in service.queues:
+                final_queue_size = service.queues[tak_server.id].qsize()
 
             logger.info(
                 f"Completed enqueueing for TAK server '{tak_server.name}': "
@@ -1237,6 +1238,21 @@ class EnhancedCOTService:
                 "failure_threshold": 3,
                 "recovery_timeout": 60.0,
             },
+            # Phase 2: Queue management defaults
+            "queue": {
+                "max_size": 500,
+                "batch_size": 8,
+                "overflow_strategy": "drop_oldest",
+                "flush_on_config_change": True,
+            },
+            "transmission": {
+                "batch_timeout_ms": 100,
+                "queue_check_interval_ms": 50,
+            },
+            "monitoring": {
+                "log_queue_stats": True,
+                "queue_warning_threshold": 400,
+            },
         }
 
     def load_performance_config(
@@ -1265,6 +1281,15 @@ class EnhancedCOTService:
                         file_config = yaml.safe_load(f) or {}
                         if "parallel_processing" in file_config:
                             config = file_config["parallel_processing"]
+                            
+                            # Phase 2: Load queue configuration
+                            if "queue" in file_config:
+                                config["queue"] = file_config["queue"]
+                            if "transmission" in file_config:
+                                config["transmission"] = file_config["transmission"]
+                            if "monitoring" in file_config:
+                                config["monitoring"] = file_config["monitoring"]
+                                
                             logger.debug(
                                 f"Loaded performance configuration from {expanded_path}"
                             )
@@ -1337,6 +1362,68 @@ class EnhancedCOTService:
                         f"Invalid value for {env_var}: {os.environ[env_var]}"
                     )
 
+        # Phase 2: Queue configuration environment overrides
+        queue_config = {}
+        if "QUEUE_MAX_SIZE" in os.environ:
+            try:
+                queue_config["max_size"] = int(os.environ["QUEUE_MAX_SIZE"])
+            except ValueError:
+                logger.warning(f"Invalid QUEUE_MAX_SIZE: {os.environ['QUEUE_MAX_SIZE']}")
+
+        if "QUEUE_BATCH_SIZE" in os.environ:
+            try:
+                queue_config["batch_size"] = int(os.environ["QUEUE_BATCH_SIZE"])
+            except ValueError:
+                logger.warning(f"Invalid QUEUE_BATCH_SIZE: {os.environ['QUEUE_BATCH_SIZE']}")
+
+        if "QUEUE_OVERFLOW_STRATEGY" in os.environ:
+            strategy = os.environ["QUEUE_OVERFLOW_STRATEGY"]
+            if strategy in ["drop_oldest", "drop_newest", "block"]:
+                queue_config["overflow_strategy"] = strategy
+            else:
+                logger.warning(f"Invalid QUEUE_OVERFLOW_STRATEGY: {strategy}")
+
+        if "QUEUE_FLUSH_ON_CONFIG_CHANGE" in os.environ:
+            queue_config["flush_on_config_change"] = (
+                os.environ["QUEUE_FLUSH_ON_CONFIG_CHANGE"].lower() == "true"
+            )
+
+        if queue_config:
+            env_config["queue"] = queue_config
+
+        # Transmission configuration
+        transmission_config = {}
+        if "TRANSMISSION_BATCH_TIMEOUT_MS" in os.environ:
+            try:
+                transmission_config["batch_timeout_ms"] = int(os.environ["TRANSMISSION_BATCH_TIMEOUT_MS"])
+            except ValueError:
+                logger.warning(f"Invalid TRANSMISSION_BATCH_TIMEOUT_MS: {os.environ['TRANSMISSION_BATCH_TIMEOUT_MS']}")
+
+        if "TRANSMISSION_QUEUE_CHECK_INTERVAL_MS" in os.environ:
+            try:
+                transmission_config["queue_check_interval_ms"] = int(os.environ["TRANSMISSION_QUEUE_CHECK_INTERVAL_MS"])
+            except ValueError:
+                logger.warning(f"Invalid TRANSMISSION_QUEUE_CHECK_INTERVAL_MS: {os.environ['TRANSMISSION_QUEUE_CHECK_INTERVAL_MS']}")
+
+        if transmission_config:
+            env_config["transmission"] = transmission_config
+
+        # Monitoring configuration
+        monitoring_config = {}
+        if "MONITORING_LOG_QUEUE_STATS" in os.environ:
+            monitoring_config["log_queue_stats"] = (
+                os.environ["MONITORING_LOG_QUEUE_STATS"].lower() == "true"
+            )
+
+        if "MONITORING_QUEUE_WARNING_THRESHOLD" in os.environ:
+            try:
+                monitoring_config["queue_warning_threshold"] = int(os.environ["MONITORING_QUEUE_WARNING_THRESHOLD"])
+            except ValueError:
+                logger.warning(f"Invalid MONITORING_QUEUE_WARNING_THRESHOLD: {os.environ['MONITORING_QUEUE_WARNING_THRESHOLD']}")
+
+        if monitoring_config:
+            env_config["monitoring"] = monitoring_config
+
         return env_config
 
     def validate_performance_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -1403,6 +1490,76 @@ class EnhancedCOTService:
             }
         else:
             validated["circuit_breaker"] = defaults["circuit_breaker"]
+
+        # Phase 2: Validate queue configuration
+        queue_config = config.get("queue", defaults["queue"])
+        if isinstance(queue_config, dict):
+            validated["queue"] = {}
+            
+            # Validate max_size (must be positive)
+            max_size = queue_config.get("max_size", defaults["queue"]["max_size"])
+            if isinstance(max_size, (int, float)) and max_size > 0:
+                validated["queue"]["max_size"] = int(max_size)
+            else:
+                validated["queue"]["max_size"] = defaults["queue"]["max_size"]
+                logger.warning(f"Invalid queue max_size: {max_size}, using default {defaults['queue']['max_size']}")
+            
+            # Validate batch_size (must be positive)
+            batch_size = queue_config.get("batch_size", defaults["queue"]["batch_size"])
+            if isinstance(batch_size, (int, float)) and batch_size > 0:
+                validated["queue"]["batch_size"] = int(batch_size)
+            else:
+                validated["queue"]["batch_size"] = defaults["queue"]["batch_size"]
+                logger.warning(f"Invalid queue batch_size: {batch_size}, using default {defaults['queue']['batch_size']}")
+            
+            # Validate overflow_strategy
+            strategy = queue_config.get("overflow_strategy", defaults["queue"]["overflow_strategy"])
+            if strategy in ["drop_oldest", "drop_newest", "block"]:
+                validated["queue"]["overflow_strategy"] = strategy
+            else:
+                validated["queue"]["overflow_strategy"] = defaults["queue"]["overflow_strategy"]
+                logger.warning(f"Invalid overflow_strategy: {strategy}, using default {defaults['queue']['overflow_strategy']}")
+            
+            # Validate flush_on_config_change
+            flush_on_change = queue_config.get("flush_on_config_change", defaults["queue"]["flush_on_config_change"])
+            validated["queue"]["flush_on_config_change"] = bool(flush_on_change)
+        else:
+            validated["queue"] = defaults["queue"]
+
+        # Validate transmission configuration
+        transmission_config = config.get("transmission", defaults["transmission"])
+        if isinstance(transmission_config, dict):
+            validated["transmission"] = {}
+            
+            # Validate timeouts (must be non-negative)
+            for key in ["batch_timeout_ms", "queue_check_interval_ms"]:
+                value = transmission_config.get(key, defaults["transmission"][key])
+                if isinstance(value, (int, float)) and value >= 0:
+                    validated["transmission"][key] = int(value)
+                else:
+                    validated["transmission"][key] = defaults["transmission"][key]
+                    logger.warning(f"Invalid transmission {key}: {value}, using default {defaults['transmission'][key]}")
+        else:
+            validated["transmission"] = defaults["transmission"]
+
+        # Validate monitoring configuration
+        monitoring_config = config.get("monitoring", defaults["monitoring"])
+        if isinstance(monitoring_config, dict):
+            validated["monitoring"] = {}
+            
+            # Validate log_queue_stats
+            log_stats = monitoring_config.get("log_queue_stats", defaults["monitoring"]["log_queue_stats"])
+            validated["monitoring"]["log_queue_stats"] = bool(log_stats)
+            
+            # Validate queue_warning_threshold (must be positive)
+            threshold = monitoring_config.get("queue_warning_threshold", defaults["monitoring"]["queue_warning_threshold"])
+            if isinstance(threshold, (int, float)) and threshold > 0:
+                validated["monitoring"]["queue_warning_threshold"] = int(threshold)
+            else:
+                validated["monitoring"]["queue_warning_threshold"] = defaults["monitoring"]["queue_warning_threshold"]
+                logger.warning(f"Invalid queue_warning_threshold: {threshold}, using default {defaults['monitoring']['queue_warning_threshold']}")
+        else:
+            validated["monitoring"] = defaults["monitoring"]
 
         return validated
 
@@ -1814,7 +1971,7 @@ class PersistentCOTService:
     Manages persistent PyTAK workers and queues for each TAK server.
     """
 
-    def __init__(self):
+    def __init__(self, queue_config: Optional[Dict[str, Any]] = None):
         self.workers: Dict[int, asyncio.Task] = {}  # tak_server_id -> worker task
         self.queues: Dict[int, asyncio.Queue] = {}  # tak_server_id -> event queue
         self.connections: Dict[int, Any] = {}  # tak_server_id -> pytak connection
@@ -1823,6 +1980,14 @@ class PersistentCOTService:
         self.device_state_managers: Dict[int, DeviceStateManager] = (
             {}
         )  # Per-server device state managers for queue replacement functionality
+        
+        # Phase 2: Queue configuration
+        self.queue_config = queue_config or {
+            "max_size": 500,
+            "batch_size": 8,
+            "overflow_strategy": "drop_oldest",
+            "flush_on_config_change": True,
+        }
 
     async def start_worker(self, tak_server):
         """
@@ -1838,7 +2003,8 @@ class PersistentCOTService:
             logger.error("PyTAK not available. Cannot start persistent worker.")
             return False
 
-        queue = asyncio.Queue()
+        # Phase 2: Create bounded queue with configured max size
+        queue = asyncio.Queue(maxsize=self.queue_config["max_size"])
         self.queues[tak_server_id] = queue
 
         # Create an event to signal when connection is established
@@ -1906,7 +2072,7 @@ class PersistentCOTService:
 
                 # Start the transmission worker
                 await self._transmission_worker(
-                    queue, self.connections[tak_server_id], tak_server
+                    queue, self.connections[tak_server_id], tak_server, self.queue_config
                 )
 
             except Exception as e:
@@ -1951,8 +2117,8 @@ class PersistentCOTService:
             return False
 
     @staticmethod
-    async def _transmission_worker(queue: asyncio.Queue, connection, tak_server):
-        """Handle transmission of COT events from queue"""
+    async def _transmission_worker(queue: asyncio.Queue, connection, tak_server, queue_config: Dict[str, Any]):
+        """Handle transmission of COT events from queue with batching"""
         logger.info(
             f"Starting transmission worker for TAK server '{tak_server.name}' (ID: {tak_server.id})"
         )
@@ -2008,79 +2174,110 @@ class PersistentCOTService:
                             )
                         last_queue_size_log = current_queue_size
 
+                    # Phase 2: Batch transmission with configurable batch size
+                    batch = []
+                    batch_size = queue_config.get("batch_size", 8)
+                    timeout_ms = queue_config.get("batch_timeout_ms", 100)
+                    timeout_seconds = timeout_ms / 1000.0
+
                     logger.debug(
-                        f"Waiting for events from queue for TAK server '{tak_server.name}'..."
+                        f"Collecting batch of up to {batch_size} events for TAK server '{tak_server.name}'"
                     )
 
-                    # Get event from queue with timeout
-                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    # Collect events for batch transmission
+                    while len(batch) < batch_size:
+                        try:
+                            event = await asyncio.wait_for(queue.get(), timeout=timeout_seconds)
+                            
+                            if event is None:  # Shutdown signal
+                                if batch:
+                                    # Process any remaining events in batch before shutdown
+                                    break
+                                logger.info(
+                                    f"Received shutdown signal for TAK server '{tak_server.name}'. "
+                                    f"Total events processed: {events_processed}"
+                                )
+                                return
+                            
+                            batch.append(event)
+                            
+                        except asyncio.TimeoutError:
+                            # Timeout waiting for events - transmit partial batch if we have any
+                            break
 
-                    if event is None:  # Shutdown signal
-                        logger.info(
-                            f"Received shutdown signal for TAK server '{tak_server.name}'. "
-                            f"Total events processed: {events_processed}"
+                    if not batch:
+                        # No events collected (timeout with empty queue)
+                        logger.debug(
+                            f"No events received (timeout) for TAK server '{tak_server.name}'"
                         )
-                        break
+                        continue
 
-                    # Reset queue empty flag when we get an event
+                    # Reset queue empty flag when we process events
                     if queue_empty_logged:
                         queue_empty_logged = False
                         logger.debug(
                             f"Queue activity resumed for TAK server '{tak_server.name}'"
                         )
 
+                    batch_start_num = events_processed + 1
                     logger.debug(
-                        f"Processing event {events_processed + 1} from queue for TAK server '{tak_server.name}'"
+                        f"Processing batch of {len(batch)} events ({batch_start_num}-{batch_start_num + len(batch) - 1}) "
+                        f"for TAK server '{tak_server.name}'"
                     )
 
-                    # Send the event using the appropriate method
-                    if use_writer and writer:
-                        # Use writer for TCP connections
-                        writer.write(event)
-                        await writer.drain()
+                    # Transmit all events in the batch
+                    batch_success = True
+                    for i, event in enumerate(batch):
+                        try:
+                            # Send the event using the appropriate method
+                            if use_writer and writer:
+                                # Use writer for TCP connections
+                                writer.write(event)
+                                await writer.drain()
+                            elif hasattr(reader, "send"):
+                                # Use reader.send for other connection types
+                                await reader.send(event)
+                            else:
+                                logger.error(
+                                    f"No suitable send method found for TAK server '{tak_server.name}'. "
+                                    f"Event {batch_start_num + i} not transmitted."
+                                )
+                                batch_success = False
+                                
+                            events_processed += 1
+                            
+                        except Exception as e:
+                            logger.error(
+                                f"Error transmitting event {batch_start_num + i} to TAK server '{tak_server.name}': {e}"
+                            )
+                            batch_success = False
+                            events_processed += 1  # Count as processed even if failed
+
+                    # Mark all batch events as done
+                    for _ in batch:
+                        queue.task_done()
+
+                    if batch_success:
                         logger.debug(
-                            f"Successfully transmitted COT event to TAK server '{tak_server.name}'"
-                        )
-                    elif hasattr(reader, "send"):
-                        # Use reader.send for other connection types
-                        await reader.send(event)
-                        logger.debug(
-                            f"Successfully transmitted COT event to TAK server '{tak_server.name}'"
+                            f"Successfully transmitted batch of {len(batch)} events to TAK server '{tak_server.name}'"
                         )
                     else:
-                        logger.error(
-                            f"No suitable send method found for TAK server '{tak_server.name}'. "
-                            f"Event {events_processed + 1} not transmitted."
+                        logger.warning(
+                            f"Some events in batch failed transmission to TAK server '{tak_server.name}'"
                         )
-                        queue.task_done()
-                        continue
-
-                    events_processed += 1
 
                     # Log milestone events (every 50 events)
                     if events_processed % 50 == 0:
                         logger.info(
                             f"Transmission milestone for TAK server '{tak_server.name}': "
-                            f"{events_processed} events successfully transmitted"
+                            f"{events_processed} events successfully processed"
                         )
-
-                    # Mark task as done
-                    queue.task_done()
-
-                except asyncio.TimeoutError:
-                    # Timeout is normal when no events are available
-                    logger.debug(
-                        f"No events received (timeout) for TAK server '{tak_server.name}'"
-                    )
-                    continue
 
                 except Exception as e:
                     logger.error(
-                        f"Error transmitting COT event to TAK server '{tak_server.name}': {e}. "
-                        f"Event {events_processed + 1} failed."
+                        f"Error in batch transmission worker for TAK server '{tak_server.name}': {e}"
                     )
-                    # Mark task as done even on error
-                    queue.task_done()
+                    continue
 
         except Exception as e:
             logger.error(
@@ -2237,7 +2434,8 @@ class PersistentCOTService:
                     f"Adding first event to empty queue for TAK server {tak_server_id}"
                 )
 
-            await queue.put(event)
+            # Phase 2: Handle queue overflow with configurable strategy
+            await self._enqueue_with_overflow_handling(queue, event, tak_server_id)
             queue_size_after = queue.qsize()
 
             logger.debug(
@@ -2249,6 +2447,49 @@ class PersistentCOTService:
         except Exception as e:
             logger.error(f"Failed to enqueue event for TAK server {tak_server_id}: {e}")
             return False
+
+    async def _enqueue_with_overflow_handling(self, queue: asyncio.Queue, event: bytes, tak_server_id: int):
+        """
+        Handle queue overflow according to configured strategy.
+        
+        Args:
+            queue: The asyncio queue to add the event to
+            event: The COT event to enqueue
+            tak_server_id: The TAK server ID for logging
+        """
+        strategy = self.queue_config["overflow_strategy"]
+        
+        if strategy == "block":
+            # Block until space is available (default asyncio.Queue behavior)
+            await queue.put(event)
+        elif queue.full():
+            # Queue is full, apply overflow strategy
+            if strategy == "drop_oldest":
+                try:
+                    # Remove oldest event to make room
+                    queue.get_nowait()
+                    logger.warning(
+                        f"Queue overflow: dropped oldest event for TAK server {tak_server_id} "
+                        f"(queue size: {queue.qsize()}, max: {self.queue_config['max_size']})"
+                    )
+                    # Add the new event
+                    await queue.put(event)
+                except asyncio.QueueEmpty:
+                    # Queue became empty between check and get, just add the event
+                    await queue.put(event)
+            elif strategy == "drop_newest":
+                # Drop the new event (don't add it)
+                logger.warning(
+                    f"Queue overflow: dropping newest event for TAK server {tak_server_id} "
+                    f"(queue size: {queue.qsize()}, max: {self.queue_config['max_size']})"
+                )
+            else:
+                # Unknown strategy, fall back to blocking
+                logger.warning(f"Unknown overflow strategy: {strategy}, falling back to blocking")
+                await queue.put(event)
+        else:
+            # Queue has space, add the event normally
+            await queue.put(event)
 
     async def ensure_workers(self):
         """
@@ -2584,5 +2825,19 @@ class PersistentCOTService:
             return False
 
 
-# Singleton instance
-cot_service = PersistentCOTService()
+# Singleton instance - will be initialized with configuration when first accessed
+cot_service = None
+
+def get_cot_service() -> PersistentCOTService:
+    """Get the singleton COT service instance with proper configuration"""
+    global cot_service
+    if cot_service is None:
+        # Load configuration using the same method as EnhancedCOTService
+        enhanced_service = EnhancedCOTService()
+        queue_config = enhanced_service.parallel_config.get("queue", {})
+        transmission_config = enhanced_service.parallel_config.get("transmission", {})
+        
+        # Merge queue and transmission config for the service
+        merged_config = {**queue_config, **transmission_config}
+        cot_service = PersistentCOTService(queue_config=merged_config)
+    return cot_service

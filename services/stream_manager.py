@@ -44,7 +44,7 @@ from datetime import datetime, timezone
 from typing import Dict, List
 
 # Local application imports
-from services.cot_service import cot_service
+from services.cot_service import get_cot_service
 from services.database_manager import DatabaseManager
 from services.exceptions import (
     StreamConfigurationError,
@@ -233,7 +233,7 @@ class StreamManager:
                     logger.info(
                         f"Starting persistent worker for TAK server: {tak_server.name}"
                     )
-                    success = await cot_service.start_worker(tak_server)
+                    success = await get_cot_service().start_worker(tak_server)
                     if success:
                         workers_started += 1
                     else:
@@ -483,7 +483,7 @@ class StreamManager:
 
             if success:
                 # The StreamWorker already ensures the persistent PyTAK worker is running
-                # No need to call cot_service.start_worker() again here
+                # No need to call get_cot_service().start_worker() again here
                 logger.debug(f"Stream {stream_id} started successfully.")
 
                 self.workers[stream_id] = worker
@@ -738,7 +738,7 @@ class StreamManager:
         try:
             if hasattr(self, "cot_service") and self.cot_service:
                 # Get running workers directly from the service
-                running_workers = self.cot_service.workers
+                running_workers = get_cot_service().workers
                 if running_workers:
                     logger.info(
                         f"Stopping {len(running_workers)} persistent COT workers"
@@ -897,7 +897,7 @@ class StreamManager:
                         )
 
             # Get currently running workers
-            running_workers = cot_service.workers
+            running_workers = get_cot_service().workers
 
             # Convert to set of keys for comparison
             running_tak_server_keys = set()
@@ -934,7 +934,7 @@ class StreamManager:
                     logger.info(
                         f"Starting missing persistent worker for TAK server: {tak_server.name}"
                     )
-                    success = cot_service.start_worker(tak_server)
+                    success = get_cot_service().start_worker(tak_server)
                     if success:
                         workers_started += 1
                         logger.info(
@@ -1072,7 +1072,7 @@ class StreamManager:
             logger.info("Checking persistent COT service health and worker status")
 
             # Get initial worker count for comparison
-            running_workers_before = cot_service.workers
+            running_workers_before = get_cot_service().workers
             workers_before_count = (
                 len(running_workers_before) if running_workers_before else 0
             )
@@ -1082,7 +1082,7 @@ class StreamManager:
             self.ensure_tak_workers_running()
 
             # Check worker health status after ensuring workers are running
-            running_workers_after = cot_service.workers
+            running_workers_after = get_cot_service().workers
             workers_after_count = (
                 len(running_workers_after) if running_workers_after else 0
             )
@@ -1115,7 +1115,7 @@ class StreamManager:
                             )
                             try:
                                 # Restart the unhealthy worker
-                                restart_success = cot_service.restart_worker(tak_server)
+                                restart_success = get_cot_service().restart_worker(tak_server)
                                 if restart_success:
                                     logger.info(
                                         f"Successfully restarted TAK worker for {server_name}"
@@ -1353,7 +1353,7 @@ class StreamManager:
                 return True  # Not an error if no servers are configured
 
             # Get currently running workers
-            running_workers = cot_service.workers
+            running_workers = get_cot_service().workers
             running_server_keys = set()
             if running_workers:
                 for tak_server in running_workers.keys():
@@ -1377,7 +1377,7 @@ class StreamManager:
                     logger.info(
                         f"Starting missing persistent worker for TAK server: {tak_server.name}"
                     )
-                    success = await cot_service.start_worker(tak_server)
+                    success = await get_cot_service().start_worker(tak_server)
                     if success:
                         workers_started += 1
                         logger.info(
