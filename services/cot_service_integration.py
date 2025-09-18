@@ -529,9 +529,6 @@ class QueuedCOTService:
                 # Validate and clean location data first
                 cleaned_location = QueuedCOTService._validate_location_data(location)
 
-                # Debug: Log the location data to see what we're working with
-                logger.debug(f"Processing location: {cleaned_location}")
-
                 # Parse timestamp - ensure we get a proper datetime object
                 if "timestamp" in cleaned_location and cleaned_location["timestamp"]:
                     if isinstance(cleaned_location["timestamp"], str):
@@ -562,46 +559,49 @@ class QueuedCOTService:
                 else:
                     point_cot_type = cot_type
 
-                # Create PyTAK event using correct API
-                event_bytes = pytak.gen_cot(
-                    uid=cleaned_location.get("id", "unknown"),
-                    lat=float(cleaned_location.get("latitude", 0.0)),
-                    lon=float(cleaned_location.get("longitude", 0.0)),
-                    cot_type=point_cot_type,
-                    stale=stale_time,  # Time in seconds
-                )
+                # Handle field mapping - plugins use lat/lon/uid/name, not latitude/longitude/id/callsign
+                uid_value = cleaned_location.get("uid", cleaned_location.get("id", "unknown"))
+                lat_value = float(cleaned_location.get("lat", cleaned_location.get("latitude", 0.0)))
+                lon_value = float(cleaned_location.get("lon", cleaned_location.get("longitude", 0.0)))
+                # Plugins use 'name' field for callsign/device name
+                callsign_value = cleaned_location.get("name", cleaned_location.get("callsign", ""))
                 
-                # PyTAK returns bytes, but we need to parse and modify XML for additional fields
-                # Convert bytes to ElementTree for modification
-                event = ET.fromstring(event_bytes)
-
-                # Add additional fields if present
-                if "altitude" in cleaned_location:
+                # Build event data for proper COT generation
+                event_data = {
+                    "uid": uid_value,
+                    "type": point_cot_type,
+                    "time": event_time,
+                    "start": event_time,
+                    "stale": event_time + timedelta(seconds=stale_time),
+                    "how": "h-g-i-g-o",
+                    "lat": lat_value,
+                    "lon": lon_value,
+                    "hae": float(cleaned_location.get("altitude", cleaned_location.get("hae", 0.0))),
+                    "ce": float(cleaned_location.get("accuracy", cleaned_location.get("ce", 10.0))),
+                    "le": float(cleaned_location.get("linear_error", cleaned_location.get("le", 10.0))),
+                    "callsign": callsign_value,
+                }
+                
+                # Add optional fields
+                if "speed" in cleaned_location:
                     try:
-                        altitude = float(cleaned_location["altitude"])
-                        # Find the detail element and add altitude
-                        detail = event.find("detail")
-                        if detail is not None:
-                            track_elem = detail.find("track")
-                            if track_elem is None:
-                                track_elem = ET.SubElement(detail, "track")
-                            track_elem.set("hae", str(altitude))
+                        event_data["speed"] = float(cleaned_location["speed"])
                     except (ValueError, TypeError):
-                        logger.warning(f"Invalid altitude value: {cleaned_location['altitude']}")
-
-                if "callsign" in cleaned_location and cleaned_location["callsign"]:
+                        pass
+                        
+                if "course" in cleaned_location or "heading" in cleaned_location:
                     try:
-                        detail = event.find("detail")
-                        if detail is not None:
-                            contact_elem = detail.find("contact")
-                            if contact_elem is None:
-                                contact_elem = ET.SubElement(detail, "contact")
-                            contact_elem.set("callsign", str(cleaned_location["callsign"]))
-                    except Exception as e:
-                        logger.warning(f"Failed to add callsign: {e}")
-
-                # Convert to bytes
-                event_xml = ET.tostring(event, encoding="utf-8")
+                        course_val = cleaned_location.get("course", cleaned_location.get("heading"))
+                        if course_val is not None:
+                            event_data["course"] = float(course_val)
+                    except (ValueError, TypeError):
+                        pass
+                        
+                if "description" in cleaned_location:
+                    event_data["remarks"] = str(cleaned_location["description"])
+                
+                # Generate complete COT XML using old logic
+                event_xml = QueuedCOTService._generate_cot_xml(event_data)
                 events.append(event_xml)
 
             except Exception as e:
@@ -635,10 +635,19 @@ class QueuedCOTService:
         """
         tak_server_id = tak_server.id
         
+        # Clean up any dead workers before checking status
         if tak_server_id in self.workers:
-            logger.debug(f"Worker for TAK server {tak_server_id} already running - skipping creation")
-            logger.debug(f"Existing worker task status: done={self.workers[tak_server_id].done()}, cancelled={self.workers[tak_server_id].cancelled()}")
-            return True
+            task = self.workers[tak_server_id]
+            if task.done() or task.cancelled():
+                logger.info(f"Cleaning up dead worker for TAK server {tak_server_id}: "
+                           f"done={task.done()}, cancelled={task.cancelled()}")
+                del self.workers[tak_server_id]
+                if tak_server_id in self.connections:
+                    del self.connections[tak_server_id]
+            else:
+                # Worker exists and is healthy
+                logger.debug(f"Healthy worker for TAK server {tak_server_id} already running - skipping creation")
+                return True
 
         try:
             logger.debug(f"Starting worker for TAK server {tak_server.name} (ID: {tak_server_id}) at {datetime.now()}")
@@ -693,6 +702,7 @@ class QueuedCOTService:
             logger.debug(f"Connection mapping established: TAK_server_{tak_server_id} -> connection_{id(connection)}")
             
             # Main transmission loop
+            batch_count = 0
             while self._running:
                 try:
                     # Get batch of events from queue manager
@@ -701,15 +711,25 @@ class QueuedCOTService:
                     if not batch:
                         # No events to process, short sleep
                         await asyncio.sleep(0.1)
-                        continue
+                        # Log periodic status every 100 iterations with no events
+                        batch_count += 1
+                        if batch_count % 100 == 0:
+                            queue_size = self.queue_manager.get_queue_status(tak_server_id).get("size", 0) if self.queue_manager.get_queue_status(tak_server_id) else 0
+                            logger.debug(f"Worker {tak_server_id} idle: checked {batch_count} times, queue_size={queue_size}")
+                        continue  # Skip transmission when no events
+                    
+                    # We have events to process
+                    batch_count = 0  # Reset counter when we have events
+                    logger.info(f"Worker {tak_server_id} processing batch of {len(batch)} events")
                     
                     # Transmit batch
                     success = await self._transmit_batch(batch, connection, tak_server)
                     
                     if success:
-                        logger.debug(f"Successfully transmitted {len(batch)} events to {tak_server.name}")
+                        if len(batch) > 0:  # Only log when actually transmitted events
+                            logger.info(f"Successfully transmitted {len(batch)} events to {tak_server.name}")
                     else:
-                        logger.warning(f"Failed to transmit batch to {tak_server.name}")
+                        logger.warning(f"Failed to transmit batch of {len(batch)} events to {tak_server.name}")
                         
                         # On failure, could implement retry logic here
                         # For now, events are lost (already dequeued)
@@ -995,9 +1015,27 @@ class QueuedCOTService:
         return base_status
 
     def get_worker_status(self, tak_server_id: int) -> Dict[str, Any]:
-        """Get status information for a specific worker"""
+        """Get status information for a specific worker with health validation"""
+        # Check if worker exists and validate its health
+        worker_healthy = False
+        worker_exists = tak_server_id in self.workers
+        
+        if worker_exists:
+            task = self.workers[tak_server_id]
+            worker_healthy = not task.done() and not task.cancelled()
+            
+            # Additional health check: verify event loop is active
+            try:
+                if hasattr(task, '_loop') and task._loop and task._loop.is_closed():
+                    worker_healthy = False
+                    logger.debug(f"Worker {tak_server_id} has closed event loop")
+            except Exception as e:
+                logger.debug(f"Error checking worker {tak_server_id} event loop: {e}")
+                worker_healthy = False
+        
         status = {
-            "worker_running": tak_server_id in self.workers,
+            "worker_running": worker_healthy,  # Only True if worker exists AND is healthy
+            "worker_exists": worker_exists,
             "connection_exists": tak_server_id in self.connections,
             "queue_size": 0,
         }
@@ -1007,10 +1045,15 @@ class QueuedCOTService:
         if queue_status:
             status["queue_size"] = queue_status.get("size", 0)
             
-        if tak_server_id in self.workers:
+        if worker_exists:
             task = self.workers[tak_server_id]
             status["worker_done"] = task.done()
             status["worker_cancelled"] = task.cancelled()
+            
+            # Log unhealthy worker detection
+            if not worker_healthy:
+                logger.warning(f"Detected unhealthy worker for TAK server {tak_server_id}: "
+                             f"done={task.done()}, cancelled={task.cancelled()}")
             
         return status
 
@@ -1188,6 +1231,63 @@ class QueuedCOTService:
                 f"using default {default}"
             )
             return default
+
+    @staticmethod
+    def _generate_cot_xml(event_data: Dict[str, Any]) -> bytes:
+        """Generate COT XML using proper detailed format"""
+        try:
+            # Always use manual formatting to avoid PyTAK time conversion issues
+            # PyTAK's cot_time() function may have issues with datetime objects
+            time_str = event_data["time"].strftime("%Y-%m-%dT%H:%M:%SZ")
+            start_str = event_data["start"].strftime("%Y-%m-%dT%H:%M:%SZ")
+            stale_str = event_data["stale"].strftime("%Y-%m-%dT%H:%M:%SZ")
+
+            # Create COT event element
+            cot_event = etree.Element("event")
+            cot_event.set("version", "2.0")
+            cot_event.set("uid", event_data["uid"])
+            cot_event.set("type", event_data["type"])
+            cot_event.set("time", time_str)
+            cot_event.set("start", start_str)
+            cot_event.set("stale", stale_str)
+            cot_event.set("how", event_data["how"])
+
+            # Add point element with proper attribute order and safe conversions
+            point_attr = {
+                "lat": f"{event_data['lat']:.8f}",
+                "lon": f"{event_data['lon']:.8f}",
+                "hae": f"{event_data['hae']:.2f}",  # Ensure float formatting
+                "ce": f"{event_data['ce']:.2f}",  # Ensure float formatting
+                "le": f"{event_data['le']:.2f}",  # Ensure float formatting
+            }
+            etree.SubElement(cot_event, "point", attrib=point_attr)
+
+            # Add detail element
+            detail = etree.SubElement(cot_event, "detail")
+
+            # Add contact info with endpoint (important for TAK Server)
+            contact = etree.SubElement(detail, "contact")
+            contact.set("callsign", event_data["callsign"])
+            # contact.set("endpoint", "*:-1:stcp")  # Standard endpoint format
+
+            # Add track information if available
+            if "speed" in event_data or "course" in event_data:
+                track = etree.SubElement(detail, "track")
+                if "speed" in event_data:
+                    track.set("speed", f"{event_data['speed']:.2f}")
+                if "course" in event_data:
+                    track.set("course", f"{event_data['course']:.2f}")
+
+            # Add remarks if available
+            if "remarks" in event_data:
+                remarks = etree.SubElement(detail, "remarks")
+                remarks.text = event_data["remarks"]
+
+            return etree.tostring(cot_event, pretty_print=False, xml_declaration=False)
+
+        except Exception as e:
+            logger.error(f"Error generating COT XML: {e}")
+            raise
 
     @staticmethod
     def _validate_location_data(location: Dict[str, Any]) -> Dict[str, Any]:

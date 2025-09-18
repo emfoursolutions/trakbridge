@@ -820,11 +820,8 @@ class StreamWorker:
     async def _get_fresh_stream_config(self) -> dict:
         """Get fresh stream configuration from database"""
         try:
-            from database import db
-            from models.stream import Stream
-
-            # Query fresh configuration from database
-            fresh_stream = db.session.query(Stream).filter_by(id=self.stream.id).first()
+            # Use database manager for thread-safe database access
+            fresh_stream = self.db_manager.get_stream_with_relationships(self.stream.id)
             if fresh_stream:
                 return {
                     "enable_callsign_mapping": getattr(
@@ -1011,7 +1008,6 @@ class StreamWorker:
                     if multi_servers:
                         target_servers = list(multi_servers)
                         server_names = [s.name for s in target_servers]
-                        server_ids = [s.id for s in target_servers]
                         self.logger.info(
                             f"Using multi-server configuration: {len(target_servers)} servers found - Names: {server_names}"
                         )

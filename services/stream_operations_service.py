@@ -44,6 +44,7 @@ from typing import Any, Dict, Optional
 # Local application imports
 from models.stream import Stream
 from services.exceptions import DatabaseError, StreamConfigurationError
+from services.worker_coordination_service import get_coordination_service
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ class StreamOperationsService:
     def __init__(self, stream_manager: Any, db: Any) -> None:
         self.stream_manager = stream_manager
         self.db = db
+        self.coordination_service = get_coordination_service()
 
     def _get_session(self):
         """Get the database session, handling both scoped session and db.session patterns"""
@@ -113,6 +115,25 @@ class StreamOperationsService:
                 return True
 
         return False
+
+    def _publish_config_change(self, stream: Stream) -> None:
+        """Publish configuration change to other workers via Redis"""
+        try:
+            # Update the config version timestamp
+            stream.update_config_version()
+            
+            # Publish notification to other workers
+            success = self.coordination_service.publish_config_change(
+                stream.id, stream.config_version
+            )
+            
+            if success:
+                logger.debug(f"Published config change notification for stream {stream.id}")
+            else:
+                logger.debug(f"Redis unavailable, skipped config change notification for stream {stream.id}")
+                
+        except Exception as e:
+            logger.warning(f"Error publishing config change for stream {stream.id}: {e}")
 
     def _get_database_type(self) -> str:
         """Get the current database type for logging purposes"""
@@ -243,6 +264,9 @@ class StreamOperationsService:
             if stream.enable_callsign_mapping:
                 self._create_callsign_mappings(stream, data)
 
+            # Publish configuration change notification
+            self._publish_config_change(stream)
+            
             session.commit()
 
             # Refresh TAK workers for the new stream configuration
@@ -560,6 +584,9 @@ class StreamOperationsService:
                 # Update callsign mappings if enabled
                 if stream.enable_callsign_mapping:
                     self._update_callsign_mappings(stream, data)
+
+                # Publish configuration change notification
+                self._publish_config_change(stream)
 
                 # Attempt to commit the transaction
                 self._get_session().commit()

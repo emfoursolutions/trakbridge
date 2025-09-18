@@ -73,6 +73,9 @@ class Stream(db.Model, TimestampMixin):
     enable_per_callsign_cot_types = db.Column(
         db.Boolean, default=False
     )  # Feature toggle
+    
+    # Worker coordination version tracking
+    config_version = db.Column(db.DateTime, default=db.func.now())
 
     # Relationships
     # Legacy single-server relationship (maintained for backward compatibility)
@@ -210,6 +213,11 @@ class Stream(db.Model, TimestampMixin):
         raw_config = self.get_raw_plugin_config()
         value = raw_config.get(field_name, "")
         return isinstance(value, str) and value.startswith("ENC:")
+
+    def update_config_version(self):
+        """Update the configuration version timestamp for worker coordination"""
+        from datetime import datetime
+        self.config_version = datetime.utcnow()
 
     def update_stats(self, messages_sent=0, error=None):
         """Update stream statistics and error state"""
