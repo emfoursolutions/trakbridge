@@ -64,9 +64,13 @@ class QueuedCOTService:
             _bypass_singleton_check: Internal parameter to bypass singleton enforcement
         """
         if not _bypass_singleton_check and QueuedCOTService._instance is not None:
-            raise RuntimeError(
-                "QueuedCOTService is a singleton. Use get_cot_service() instead of direct instantiation."
+            error_msg = (
+                f"QueuedCOTService is a singleton. Use get_cot_service() instead of direct instantiation. "
+                f"Existing instance: {id(QueuedCOTService._instance)}, attempted at {datetime.now()}"
             )
+            logger.error(f"Singleton violation detected: {error_msg}")
+            logger.debug(f"Singleton enforcement: existing_instance_id={id(QueuedCOTService._instance)}")
+            raise RuntimeError(error_msg)
         QueuedCOTService._instance = self
         
         # Use class-level attributes instead of instance attributes
@@ -84,8 +88,11 @@ class QueuedCOTService:
         
         # Configuration tracking for change detection
         self.last_config_hash = None
+        self.config_change_count = 0
+        self.last_config_change_timestamp = None
         
         logger.debug(f"QueuedCOTService singleton instance created at {datetime.now()}")
+        logger.debug(f"Singleton instance tracking: _instance set to {id(self)} at {datetime.now()}")
         logger.info("QueuedCOTService initialized with queue management integration")
 
     @property
@@ -112,10 +119,12 @@ class QueuedCOTService:
         
         if tak_server_id in self.workers:
             logger.debug(f"Worker for TAK server {tak_server_id} already running - skipping creation")
+            logger.debug(f"Existing worker task status: done={self.workers[tak_server_id].done()}, cancelled={self.workers[tak_server_id].cancelled()}")
             return True
 
         try:
             logger.debug(f"Starting worker for TAK server {tak_server.name} (ID: {tak_server_id}) at {datetime.now()}")
+            logger.debug(f"Worker creation context: total_existing_workers={len(self.workers)}, singleton_instance_id={id(self)}")
             
             # Create queue through queue manager
             queue_created = await self.queue_manager.create_queue(tak_server_id)
@@ -131,13 +140,17 @@ class QueuedCOTService:
                 self._enhanced_transmission_worker(tak_server_id, tak_server)
             )
             self.workers[tak_server_id] = worker_task
+            logger.debug(f"Worker-to-server mapping updated: TAK_server_{tak_server_id} -> worker_{id(worker_task)}")
+            logger.debug(f"Updated worker mappings: {[(k, id(v)) for k, v in self.workers.items()]}")
 
             logger.debug(f"Worker registry state: {list(self.workers.keys())} active workers")
+            logger.debug(f"New worker task created: task_id={id(worker_task)}, task_name={worker_task.get_name()}, for_server={tak_server_id}")
             logger.info(f"Started worker for TAK server {tak_server.name}")
             return True
 
         except Exception as e:
             logger.error(f"Failed to start worker for TAK server {tak_server_id}: {e}")
+            logger.debug(f"Worker creation failure context: existing_workers={list(self.workers.keys())}, singleton_id={id(self)}")
             return False
 
     async def _enhanced_transmission_worker(self, tak_server_id: int, tak_server):
@@ -150,6 +163,7 @@ class QueuedCOTService:
         """
         try:
             logger.info(f"Enhanced transmission worker started for TAK server {tak_server.name}")
+            logger.debug(f"Worker thread started: server_id={tak_server_id}, server_name={tak_server.name}, timestamp={datetime.now()}")
             
             # Create PyTAK connection (reusing existing logic)
             connection = await self._create_pytak_connection(tak_server)
@@ -158,6 +172,7 @@ class QueuedCOTService:
                 return
             
             self.connections[tak_server_id] = connection
+            logger.debug(f"Connection mapping established: TAK_server_{tak_server_id} -> connection_{id(connection)}")
             
             # Main transmission loop
             while self._running:
@@ -190,6 +205,7 @@ class QueuedCOTService:
         except Exception as e:
             logger.error(f"Enhanced transmission worker failed for TAK server {tak_server_id}: {e}")
         finally:
+            logger.debug(f"Worker cleanup starting for TAK server {tak_server_id} at {datetime.now()}")
             # Cleanup connection
             if tak_server_id in self.connections:
                 try:
@@ -197,6 +213,8 @@ class QueuedCOTService:
                 except Exception as e:
                     logger.error(f"Failed to cleanup connection for {tak_server_id}: {e}")
                 del self.connections[tak_server_id]
+                logger.debug(f"Connection cleanup completed for TAK server {tak_server_id}")
+                logger.debug(f"Connection mapping removed: TAK_server_{tak_server_id} connection deleted")
 
     async def _create_pytak_connection(self, tak_server):
         """
@@ -498,16 +516,30 @@ class QueuedCOTService:
         try:
             logger.info("Configuration change detected in COT service")
             logger.debug(f"Configuration change tracking - active workers before: {list(self.workers.keys())}")
+            logger.debug(f"Configuration change timestamp: {datetime.now()}")
+            logger.debug(f"Configuration change context: singleton_id={id(self)}, worker_count={len(self.workers)}")
             
             # Log configuration changes that might affect workers
+            affected_servers = []
             for tak_server_id in self.workers.keys():
                 logger.debug(f"Configuration change detected for TAK server {tak_server_id}, stopping existing workers")
+                affected_servers.append(tak_server_id)
+            
+            if affected_servers:
+                logger.debug(f"Configuration change will affect {len(affected_servers)} TAK servers: {affected_servers}")
+            else:
+                logger.debug("Configuration change detected but no active workers to affect")
+            
+            # Update configuration tracking
+            self.config_change_count += 1
+            self.last_config_change_timestamp = datetime.now()
             
             # Update queue manager configuration
             await self.queue_manager.on_configuration_change(new_config)
             
             # Log configuration change
             logger.debug(f"Configuration change tracking - active workers after: {list(self.workers.keys())}")
+            logger.debug(f"Configuration change #{self.config_change_count} processing completed at {self.last_config_change_timestamp}")
             logger.info("Queue configuration updated due to configuration change")
 
         except Exception as e:
@@ -520,7 +552,8 @@ class QueuedCOTService:
         Args:
             tak_server_id: TAK server identifier
         """
-        logger.debug(f"Stopping worker for TAK server {tak_server_id}")
+        logger.debug(f"Stopping worker for TAK server {tak_server_id} at {datetime.now()}")
+        logger.debug(f"Pre-stop worker registry state: {list(self.workers.keys())} active workers")
         
         # Cancel worker task with verification
         if tak_server_id in self.workers:
@@ -531,7 +564,9 @@ class QueuedCOTService:
             except (asyncio.CancelledError, asyncio.TimeoutError):
                 pass
             del self.workers[tak_server_id]
-            logger.debug(f"Worker task stopped for TAK server {tak_server_id}")
+            logger.debug(f"Worker task stopped and removed from registry for TAK server {tak_server_id} at {datetime.now()}")
+            logger.debug(f"Worker mapping removed: TAK_server_{tak_server_id} no longer mapped")
+            logger.debug(f"Remaining worker mappings: {[(k, id(v)) for k, v in self.workers.items()]}")
         
         # Remove queue and cleanup
         await self.queue_manager.remove_queue(tak_server_id)
@@ -540,7 +575,8 @@ class QueuedCOTService:
         if tak_server_id in self.device_state_managers:
             del self.device_state_managers[tak_server_id]
         
-        logger.debug(f"Complete cleanup finished for TAK server {tak_server_id}")
+        logger.debug(f"Complete cleanup finished for TAK server {tak_server_id} at {datetime.now()}")
+        logger.debug(f"Post-cleanup worker registry state: {list(self.workers.keys())} active workers")
 
     async def stop_all_workers_for_server(self, tak_server_id: int):
         """
@@ -549,7 +585,8 @@ class QueuedCOTService:
         Args:
             tak_server_id: TAK server identifier
         """
-        logger.debug(f"Comprehensive worker cleanup for TAK server {tak_server_id}")
+        logger.debug(f"Comprehensive worker cleanup for TAK server {tak_server_id} at {datetime.now()}")
+        logger.debug(f"Pre-comprehensive-cleanup worker registry: {list(self.workers.keys())}")
         
         # Force stop any remaining workers
         tasks_to_cancel = []
@@ -559,23 +596,29 @@ class QueuedCOTService:
         
         if tasks_to_cancel:
             logger.warning(f"Found {len(tasks_to_cancel)} workers to force-stop for TAK server {tak_server_id}")
+            logger.debug(f"Force-stopping tasks: {[id(task) for task in tasks_to_cancel]}")
             for task in tasks_to_cancel:
                 task.cancel()
             
             # Wait for all cancellations
             await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+            logger.debug(f"Force-cancelled worker mappings for TAK server {tak_server_id}")
         
         # Ensure cleanup
         await self.stop_worker(tak_server_id)
+        logger.debug(f"Comprehensive cleanup completed - final worker mappings: {[(k, id(v)) for k, v in self.workers.items()]}")
 
     async def shutdown(self):
         """Shutdown the COT service and all workers"""
         try:
             self._running = False
             
-            # Stop all workers
+            # Stop all workers  
+            worker_mappings_before = [(k, id(v)) for k, v in self.workers.items()]
+            logger.debug(f"Shutdown: stopping all workers with mappings: {worker_mappings_before}")
             for tak_server_id in list(self.workers.keys()):
                 await self.stop_worker(tak_server_id)
+            logger.debug(f"Shutdown: all worker mappings cleared, final state: {[(k, id(v)) for k, v in self.workers.items()]}")
 
             # Stop monitoring
             await self.stop_monitoring()
@@ -629,6 +672,7 @@ def get_queued_cot_service(queue_config: Optional[Dict[str, Any]] = None) -> Que
     global _queued_service
     if _queued_service is None:
         # This will now trigger RuntimeError if get_cot_service() was already called
+        logger.debug(f"Creating legacy queued COT service instance via get_queued_cot_service() at {datetime.now()}")
         _queued_service = QueuedCOTService(queue_config)
     return _queued_service
 
@@ -636,4 +680,10 @@ def get_queued_cot_service(queue_config: Optional[Dict[str, Any]] = None) -> Que
 def reset_queued_cot_service():
     """Reset the global queued COT service (mainly for testing)"""
     global _queued_service
+    if _queued_service is not None:
+        logger.debug(f"Resetting legacy queued COT service instance {id(_queued_service)} at {datetime.now()}")
     _queued_service = None
+    # Also reset the singleton instance
+    if QueuedCOTService._instance is not None:
+        logger.debug(f"Resetting singleton instance {id(QueuedCOTService._instance)} at {datetime.now()}")
+        QueuedCOTService._instance = None

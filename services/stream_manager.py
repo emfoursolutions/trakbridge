@@ -568,6 +568,7 @@ class StreamManager:
     async def restart_stream(self, stream_id: int) -> bool:
         """Enhanced restart with comprehensive worker cleanup"""
         logger.debug(f"Restarting stream {stream_id} with comprehensive worker cleanup")
+        logger.debug(f"Stream restart initiated at {datetime.now()} - potential configuration change trigger")
         
         # Get stream and flush queues (existing logic)
         try:
@@ -620,7 +621,9 @@ class StreamManager:
                     logger.info("Stream restart: no events to flush")
                     
                 # Enhanced worker cleanup before restart
+                logger.debug(f"Stream restart triggering comprehensive worker cleanup for stream {stream_id} at {datetime.now()}")
                 for tak_server in self._get_all_tak_servers(stream):
+                    logger.debug(f"Stream restart cleanup: stopping all workers for TAK server {tak_server.name} (ID: {tak_server.id})")
                     await get_cot_service().stop_all_workers_for_server(tak_server.id)
             else:
                 logger.warning(f"Stream {stream_id} has no TAK servers configured")
