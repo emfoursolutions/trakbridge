@@ -12,7 +12,7 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
-from services.cot_service import EnhancedCOTService
+from services.cot_service import get_cot_service
 from tests.fixtures.mock_location_data import generate_performance_test_datasets
 
 
@@ -25,7 +25,7 @@ class TestParallelConfiguration:
     @pytest.fixture
     def cot_service(self):
         """Create COT service instance for testing"""
-        return EnhancedCOTService(use_pytak=True)
+        return get_cot_service()
 
     @pytest.fixture
     def sample_config(self):

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
-from services.cot_service import EnhancedCOTService
+from services.cot_service import get_cot_service
 from tests.fixtures.mock_location_data import generate_performance_test_datasets
 
 
@@ -25,7 +25,7 @@ class TestFallbackMechanisms:
     @pytest.fixture
     def cot_service(self):
         """Create COT service instance for testing"""
-        service = EnhancedCOTService(use_pytak=True)
+        service = get_cot_service()
         # Set up for fallback testing
         service.parallel_config = {
             "enabled": True,

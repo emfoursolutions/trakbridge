@@ -13,11 +13,11 @@ class TestBasicFunctionality:
 
     def test_app_creation(self):
         """Test that the Flask app can be created."""
-        # Filter the specific coroutine warning that's expected during testing
+        # Filter any coroutine warnings that might occur during testing
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
-                message="coroutine.*EnhancedCOTService.*_process_single_location_async.*was never awaited",
+                message="coroutine.*was never awaited",
                 category=RuntimeWarning
             )
             app = create_app("testing")

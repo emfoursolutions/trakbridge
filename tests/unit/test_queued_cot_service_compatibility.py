@@ -32,8 +32,7 @@ class TestQueuedCOTServiceCompatibility:
     def test_queues_property_delegates_to_queue_manager(self, mock_queue_manager, mock_monitoring_service):
         """Test that the queues property correctly delegates to queue_manager.queues."""
         with patch('services.cot_service_integration.get_queue_manager', return_value=mock_queue_manager), \
-             patch('services.cot_service_integration.get_queue_monitoring_service', return_value=mock_monitoring_service), \
-             patch('services.cot_service.EnhancedCOTService'):
+             patch('services.cot_service_integration.get_queue_monitoring_service', return_value=mock_monitoring_service):
             
             # Create service using singleton
             service = get_cot_service()
@@ -45,8 +44,7 @@ class TestQueuedCOTServiceCompatibility:
     def test_queues_property_reflects_queue_manager_changes(self, mock_queue_manager, mock_monitoring_service):
         """Test that the queues property reflects changes in queue_manager.queues."""
         with patch('services.cot_service_integration.get_queue_manager', return_value=mock_queue_manager), \
-             patch('services.cot_service_integration.get_queue_monitoring_service', return_value=mock_monitoring_service), \
-             patch('services.cot_service.EnhancedCOTService'):
+             patch('services.cot_service_integration.get_queue_monitoring_service', return_value=mock_monitoring_service):
             
             # Create service using singleton
             service = get_cot_service()
@@ -64,8 +62,7 @@ class TestQueuedCOTServiceCompatibility:
     def test_backward_compatibility_with_len_access(self, mock_queue_manager, mock_monitoring_service):
         """Test that len(service.queues) works as expected for backward compatibility."""
         with patch('services.cot_service_integration.get_queue_manager', return_value=mock_queue_manager), \
-             patch('services.cot_service_integration.get_queue_monitoring_service', return_value=mock_monitoring_service), \
-             patch('services.cot_service.EnhancedCOTService'):
+             patch('services.cot_service_integration.get_queue_monitoring_service', return_value=mock_monitoring_service):
             
             # Create service using singleton
             service = get_cot_service()
@@ -76,8 +73,7 @@ class TestQueuedCOTServiceCompatibility:
     def test_backward_compatibility_with_key_access(self, mock_queue_manager, mock_monitoring_service):
         """Test that service.queues[key] works as expected for backward compatibility."""
         with patch('services.cot_service_integration.get_queue_manager', return_value=mock_queue_manager), \
-             patch('services.cot_service_integration.get_queue_monitoring_service', return_value=mock_monitoring_service), \
-             patch('services.cot_service.EnhancedCOTService'):
+             patch('services.cot_service_integration.get_queue_monitoring_service', return_value=mock_monitoring_service):
             
             # Create service using singleton
             service = get_cot_service()
@@ -89,8 +85,7 @@ class TestQueuedCOTServiceCompatibility:
     def test_backward_compatibility_with_iteration(self, mock_queue_manager, mock_monitoring_service):
         """Test that iterating over service.queues works as expected."""
         with patch('services.cot_service_integration.get_queue_manager', return_value=mock_queue_manager), \
-             patch('services.cot_service_integration.get_queue_monitoring_service', return_value=mock_monitoring_service), \
-             patch('services.cot_service.EnhancedCOTService'):
+             patch('services.cot_service_integration.get_queue_monitoring_service', return_value=mock_monitoring_service):
             
             # Create service using singleton
             service = get_cot_service()

@@ -14,7 +14,7 @@ import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
-from services.cot_service import EnhancedCOTService
+from services.cot_service import get_cot_service
 from tests.fixtures.mock_location_data import (
     generate_mock_gps_points,
     generate_invalid_gps_points,
@@ -33,7 +33,7 @@ class TestBasicParallelCOT:
     @pytest.fixture
     def cot_service(self):
         """Create COT service instance for testing"""
-        return EnhancedCOTService(use_pytak=True)
+        return get_cot_service()
 
     @pytest.fixture
     def performance_datasets(self):
