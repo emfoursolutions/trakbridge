@@ -251,10 +251,10 @@ Environment variables take precedence over file-based configuration.
 
 ### Configuration Loading
 
-The configuration system is implemented in `services/cot_service.py` within the `EnhancedCOTService` class:
+The configuration system is implemented in `services/cot_service_integration.py` within the `QueuedCOTService` class:
 
 ```python
-class EnhancedCOTService:
+class QueuedCOTService:
     def __init__(self, use_pytak: bool = True):
         # Initialize with default configuration
         self.parallel_config = self._get_default_performance_config()
@@ -552,16 +552,16 @@ monitoring:
 ```bash
 # Check current configuration
 python -c "
-from services.cot_service import EnhancedCOTService
-service = EnhancedCOTService()
+from services.cot_service_integration import get_queued_cot_service
+service = get_queued_cot_service()
 print('Configuration:', service.parallel_config)
-print('Statistics:', service.get_fallback_statistics())
+print('Queue Status:', service.get_comprehensive_status())
 "
 
 # Test configuration loading
 python -c "
-from services.cot_service import EnhancedCOTService
-service = EnhancedCOTService()
+from services.cot_service_integration import get_queued_cot_service
+service = get_queued_cot_service()
 config = service.load_performance_config('config/settings/performance.yaml')
 print('Loaded config:', config)
 "
@@ -570,8 +570,8 @@ print('Loaded config:', config)
 python -c "
 import os
 os.environ['TRAKBRIDGE_PARALLEL_ENABLED'] = 'false'
-from services.cot_service import EnhancedCOTService
-service = EnhancedCOTService()
+from services.cot_service_integration import get_queued_cot_service
+service = get_queued_cot_service()
 print('Parallel enabled:', service.parallel_config['enabled'])
 "
 

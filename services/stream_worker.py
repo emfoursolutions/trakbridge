@@ -548,7 +548,7 @@ class StreamWorker:
                 )
 
             # Create COT events once (shared across all servers)
-            from services.cot_service import EnhancedCOTService
+            from services.cot_service_integration import get_queued_cot_service
 
             try:
                 stream_default_cot_type = self.stream.cot_type or "a-f-G-U-C"
@@ -563,7 +563,8 @@ class StreamWorker:
                         f"First location cot_type: {first_location_cot_type}"
                     )
 
-                cot_events = await EnhancedCOTService().create_cot_events(
+                cot_service = get_queued_cot_service()
+                cot_events = await cot_service.create_cot_events(
                     locations,
                     stream_default_cot_type,
                     self.stream.cot_stale_time or 300,
