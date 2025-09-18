@@ -50,14 +50,23 @@ class QueuedCOTService:
     but uses the new QueueManager and QueueMonitoringService for improved
     performance, monitoring, and maintainability.
     """
+    
+    _instance = None
 
-    def __init__(self, queue_config: Optional[Dict[str, Any]] = None):
+    def __init__(self, queue_config: Optional[Dict[str, Any]] = None, _bypass_singleton_check: bool = False):
         """
         Initialize queued COT service with queue management integration.
 
         Args:
             queue_config: Queue configuration dictionary
+            _bypass_singleton_check: Internal parameter to bypass singleton enforcement
         """
+        if not _bypass_singleton_check and QueuedCOTService._instance is not None:
+            raise RuntimeError(
+                "QueuedCOTService is a singleton. Use get_cot_service() instead of direct instantiation."
+            )
+        QueuedCOTService._instance = self
+        
         self.workers: Dict[int, asyncio.Task] = {}
         self.connections: Dict[int, Any] = {}
         self.loop: Optional[asyncio.AbstractEventLoop] = None
@@ -117,7 +126,7 @@ class QueuedCOTService:
             )
             self.workers[tak_server_id] = worker_task
 
-            logger.info(f"Started enhanced worker for TAK server {tak_server.name}")
+            logger.info(f"Started worker for TAK server {tak_server.name}")
             return True
 
         except Exception as e:
@@ -567,6 +576,10 @@ _queued_service = None
 def get_queued_cot_service(queue_config: Optional[Dict[str, Any]] = None) -> QueuedCOTService:
     """
     Get the global queued COT service instance (singleton pattern).
+    
+    DEPRECATED: Use get_cot_service() from services.cot_service instead.
+    This function is maintained for backward compatibility but will trigger
+    singleton enforcement to prevent duplicate instances.
 
     Args:
         queue_config: Queue configuration dictionary (only used on first call)
@@ -576,6 +589,7 @@ def get_queued_cot_service(queue_config: Optional[Dict[str, Any]] = None) -> Que
     """
     global _queued_service
     if _queued_service is None:
+        # This will now trigger RuntimeError if get_cot_service() was already called
         _queued_service = QueuedCOTService(queue_config)
     return _queued_service
 

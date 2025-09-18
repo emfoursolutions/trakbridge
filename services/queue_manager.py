@@ -76,7 +76,7 @@ class QueueManager:
         self._last_config_hash = None
         self._config_change_callbacks = []
         
-        logger.info(f"QueueManager initialized with config: {self.config}")
+        logger.debug(f"QueueManager initialized with config: {self.config}")
 
     def _get_default_config(self) -> Dict[str, Any]:
         """Get default configuration for queue management"""
@@ -113,7 +113,7 @@ class QueueManager:
             self.queues[queue_id] = queue
             self.metrics[queue_id] = QueueMetrics()
             
-            logger.info(f"Created bounded queue {queue_id} with max size {max_size}")
+            logger.debug(f"Created bounded queue {queue_id} with max size {max_size}")
             return True
 
         except Exception as e:

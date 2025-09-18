@@ -2858,5 +2858,13 @@ def get_cot_service() -> QueuedCOTService:
         
         # Merge queue and transmission config for the service
         merged_config = {**queue_config, **transmission_config}
-        cot_service = QueuedCOTService(queue_config=merged_config)
+        cot_service = QueuedCOTService(queue_config=merged_config, _bypass_singleton_check=True)
     return cot_service
+
+
+def reset_cot_service():
+    """Reset the global COT service instance (mainly for testing)"""
+    global cot_service
+    from services.cot_service_integration import QueuedCOTService
+    cot_service = None
+    QueuedCOTService._instance = None
