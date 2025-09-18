@@ -24,7 +24,10 @@ Created: 2025-09-17
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+import os
+import yaml
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 from services.logging_service import get_module_logger
 from services.queue_manager import get_queue_manager
@@ -37,7 +40,7 @@ try:
     PYTAK_AVAILABLE = True
 except ImportError:
     PYTAK_AVAILABLE = False
-    logger.warning("PyTAK not available - falling back to custom COT transmission")
+    # Note: logger not yet initialized at module level
 
 logger = get_module_logger(__name__)
 
@@ -91,6 +94,10 @@ class QueuedCOTService:
         self.config_change_count = 0
         self.last_config_change_timestamp = None
         
+        # Phase 1: Initialize performance configuration with defaults
+        self.parallel_config = self._get_default_performance_config()
+        self._load_performance_config()
+        
         logger.debug(f"QueuedCOTService singleton instance created at {datetime.now()}")
         logger.debug(f"Singleton instance tracking: _instance set to {id(self)} at {datetime.now()}")
         logger.info("QueuedCOTService initialized with queue management integration")
@@ -104,6 +111,515 @@ class QueuedCOTService:
             Dict[int, asyncio.Queue]: Dictionary of TAK server ID to queue mappings
         """
         return self.queue_manager.queues
+
+    # Phase 1: Configuration methods extracted from EnhancedCOTService
+    
+    def _get_default_performance_config(self) -> Dict[str, Any]:
+        """Get default performance configuration values"""
+        return {
+            "enabled": True,
+            "batch_size_threshold": 10,
+            "max_concurrent_tasks": 50,
+            "fallback_on_error": True,
+            "processing_timeout": 30.0,
+            "enable_performance_logging": True,
+            "circuit_breaker": {
+                "enabled": True,
+                "failure_threshold": 3,
+                "recovery_timeout": 60.0,
+            },
+            # Phase 2: Queue management defaults
+            "queue": {
+                "max_size": 500,
+                "batch_size": 20,  # Changed from 8 to 20 to match performance.yaml
+                "overflow_strategy": "drop_oldest",
+                "flush_on_config_change": True,
+            },
+            "transmission": {
+                "batch_timeout_ms": 100,
+                "queue_check_interval_ms": 50,
+            },
+            "monitoring": {
+                "log_queue_stats": True,
+                "queue_warning_threshold": 400,
+            },
+        }
+
+    def get_config_file_search_paths(self) -> List[str]:
+        """Get list of paths to search for configuration files"""
+        return [
+            "config/settings/performance.yaml",
+            "/etc/trakbridge/performance.yaml",
+            "~/.trakbridge/performance.yaml",
+        ]
+
+    def load_performance_config(
+        self, config_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Load performance configuration from YAML file
+
+        Args:
+            config_path: Optional path to config file. If None, uses default paths.
+
+        Returns:
+            Configuration dictionary
+        """
+        if config_path:
+            config_paths = [config_path]
+        else:
+            config_paths = self.get_config_file_search_paths()
+
+        config = {}
+        for path in config_paths:
+            try:
+                expanded_path = os.path.expanduser(path)
+                if os.path.exists(expanded_path):
+                    with open(expanded_path, "r") as f:
+                        file_config = yaml.safe_load(f) or {}
+                        if "parallel_processing" in file_config:
+                            # Load the full configuration structure
+                            config = file_config.copy()
+                                
+                            logger.debug(
+                                f"Loaded performance configuration from {expanded_path}"
+                            )
+                            break
+                        elif (
+                            file_config
+                        ):  # File exists but no parallel_processing section
+                            logger.warning(
+                                f"Configuration file {expanded_path} missing 'parallel_processing' section"
+                            )
+            except Exception as e:
+                logger.warning(f"Failed to load configuration from {path}: {e}")
+                continue
+
+        # If no config found, return the full structure expected by tests
+        if not config:
+            return {"parallel_processing": self._get_default_performance_config()}
+
+        return config
+
+    def load_performance_config_with_env_override(self) -> Dict[str, Any]:
+        """Load configuration overrides from environment variables"""
+        env_config = {}
+
+        # Boolean environment variables
+        if "TRAKBRIDGE_PARALLEL_ENABLED" in os.environ:
+            env_config["enabled"] = (
+                os.environ["TRAKBRIDGE_PARALLEL_ENABLED"].lower() == "true"
+            )
+
+        if "TRAKBRIDGE_FALLBACK_ON_ERROR" in os.environ:
+            env_config["fallback_on_error"] = (
+                os.environ["TRAKBRIDGE_FALLBACK_ON_ERROR"].lower() == "true"
+            )
+
+        # Numeric environment variables
+        for env_var, config_key in [
+            ("TRAKBRIDGE_BATCH_SIZE_THRESHOLD", "batch_size_threshold"),
+            ("TRAKBRIDGE_MAX_CONCURRENT_TASKS", "max_concurrent_tasks"),
+        ]:
+            if env_var in os.environ:
+                try:
+                    env_config[config_key] = int(os.environ[env_var])
+                except ValueError:
+                    logger.warning(
+                        f"Invalid value for {env_var}: {os.environ[env_var]}"
+                    )
+
+        # Phase 2: Queue configuration environment overrides
+        queue_config = {}
+        if "QUEUE_MAX_SIZE" in os.environ:
+            try:
+                queue_config["max_size"] = int(os.environ["QUEUE_MAX_SIZE"])
+            except ValueError:
+                logger.warning(f"Invalid QUEUE_MAX_SIZE: {os.environ['QUEUE_MAX_SIZE']}")
+
+        if "QUEUE_BATCH_SIZE" in os.environ:
+            try:
+                queue_config["batch_size"] = int(os.environ["QUEUE_BATCH_SIZE"])
+            except ValueError:
+                logger.warning(f"Invalid QUEUE_BATCH_SIZE: {os.environ['QUEUE_BATCH_SIZE']}")
+
+        if "QUEUE_OVERFLOW_STRATEGY" in os.environ:
+            strategy = os.environ["QUEUE_OVERFLOW_STRATEGY"]
+            if strategy in ["drop_oldest", "drop_newest", "block"]:
+                queue_config["overflow_strategy"] = strategy
+            else:
+                logger.warning(f"Invalid QUEUE_OVERFLOW_STRATEGY: {strategy}")
+
+        if "QUEUE_FLUSH_ON_CONFIG_CHANGE" in os.environ:
+            queue_config["flush_on_config_change"] = (
+                os.environ["QUEUE_FLUSH_ON_CONFIG_CHANGE"].lower() == "true"
+            )
+
+        if queue_config:
+            env_config["queue"] = queue_config
+
+        # Transmission configuration
+        transmission_config = {}
+        if "TRANSMISSION_BATCH_TIMEOUT_MS" in os.environ:
+            try:
+                transmission_config["batch_timeout_ms"] = int(os.environ["TRANSMISSION_BATCH_TIMEOUT_MS"])
+            except ValueError:
+                logger.warning(f"Invalid TRANSMISSION_BATCH_TIMEOUT_MS: {os.environ['TRANSMISSION_BATCH_TIMEOUT_MS']}")
+
+        if "TRANSMISSION_QUEUE_CHECK_INTERVAL_MS" in os.environ:
+            try:
+                transmission_config["queue_check_interval_ms"] = int(os.environ["TRANSMISSION_QUEUE_CHECK_INTERVAL_MS"])
+            except ValueError:
+                logger.warning(f"Invalid TRANSMISSION_QUEUE_CHECK_INTERVAL_MS: {os.environ['TRANSMISSION_QUEUE_CHECK_INTERVAL_MS']}")
+
+        if transmission_config:
+            env_config["transmission"] = transmission_config
+
+        # Monitoring configuration
+        monitoring_config = {}
+        if "MONITORING_LOG_QUEUE_STATS" in os.environ:
+            monitoring_config["log_queue_stats"] = (
+                os.environ["MONITORING_LOG_QUEUE_STATS"].lower() == "true"
+            )
+
+        if "MONITORING_QUEUE_WARNING_THRESHOLD" in os.environ:
+            try:
+                monitoring_config["queue_warning_threshold"] = int(os.environ["MONITORING_QUEUE_WARNING_THRESHOLD"])
+            except ValueError:
+                logger.warning(f"Invalid MONITORING_QUEUE_WARNING_THRESHOLD: {os.environ['MONITORING_QUEUE_WARNING_THRESHOLD']}")
+
+        if monitoring_config:
+            env_config["monitoring"] = monitoring_config
+
+        return env_config
+
+    def validate_performance_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate and sanitize performance configuration
+
+        Args:
+            config: Raw configuration dictionary
+
+        Returns:
+            Validated configuration with defaults for missing values
+        """
+        defaults = self._get_default_performance_config()
+        validated = {}
+
+        # Validate boolean values
+        for key in ["enabled", "fallback_on_error", "enable_performance_logging"]:
+            value = config.get(key, defaults[key])
+            validated[key] = (
+                bool(value) if isinstance(value, (bool, str)) else defaults[key]
+            )
+
+        # Validate positive integers
+        for key in ["batch_size_threshold", "max_concurrent_tasks"]:
+            value = config.get(key, defaults[key])
+            if isinstance(value, (int, float)) and value > 0:
+                validated[key] = int(value)
+            else:
+                validated[key] = defaults[key]
+                logger.warning(f"Invalid {key}: {value}, using default {defaults[key]}")
+
+        # Validate timeout (allow 0 for no timeout)
+        timeout = config.get("processing_timeout", defaults["processing_timeout"])
+        if isinstance(timeout, (int, float)) and timeout >= 0:
+            validated["processing_timeout"] = float(timeout)
+        else:
+            validated["processing_timeout"] = defaults["processing_timeout"]
+
+        # Validate circuit breaker config
+        cb_config = config.get("circuit_breaker", defaults["circuit_breaker"])
+        if isinstance(cb_config, dict):
+            validated["circuit_breaker"] = {
+                "enabled": bool(
+                    cb_config.get("enabled", defaults["circuit_breaker"]["enabled"])
+                ),
+                "failure_threshold": max(
+                    1,
+                    int(
+                        cb_config.get(
+                            "failure_threshold",
+                            defaults["circuit_breaker"]["failure_threshold"],
+                        )
+                    ),
+                ),
+                "recovery_timeout": max(
+                    1.0,
+                    float(
+                        cb_config.get(
+                            "recovery_timeout",
+                            defaults["circuit_breaker"]["recovery_timeout"],
+                        )
+                    ),
+                ),
+            }
+        else:
+            validated["circuit_breaker"] = defaults["circuit_breaker"]
+
+        # Phase 2: Validate queue configuration
+        queue_config = config.get("queue", defaults["queue"])
+        if isinstance(queue_config, dict):
+            validated["queue"] = {}
+            
+            # Validate max_size (must be positive)
+            max_size = queue_config.get("max_size", defaults["queue"]["max_size"])
+            if isinstance(max_size, (int, float)) and max_size > 0:
+                validated["queue"]["max_size"] = int(max_size)
+            else:
+                validated["queue"]["max_size"] = defaults["queue"]["max_size"]
+                logger.warning(f"Invalid queue max_size: {max_size}, using default {defaults['queue']['max_size']}")
+            
+            # Validate batch_size (must be positive)
+            batch_size = queue_config.get("batch_size", defaults["queue"]["batch_size"])
+            if isinstance(batch_size, (int, float)) and batch_size > 0:
+                validated["queue"]["batch_size"] = int(batch_size)
+            else:
+                validated["queue"]["batch_size"] = defaults["queue"]["batch_size"]
+                logger.warning(f"Invalid queue batch_size: {batch_size}, using default {defaults['queue']['batch_size']}")
+            
+            # Validate overflow_strategy
+            strategy = queue_config.get("overflow_strategy", defaults["queue"]["overflow_strategy"])
+            if strategy in ["drop_oldest", "drop_newest", "block"]:
+                validated["queue"]["overflow_strategy"] = strategy
+            else:
+                validated["queue"]["overflow_strategy"] = defaults["queue"]["overflow_strategy"]
+                logger.warning(f"Invalid overflow_strategy: {strategy}, using default {defaults['queue']['overflow_strategy']}")
+            
+            # Validate flush_on_config_change
+            flush_on_change = queue_config.get("flush_on_config_change", defaults["queue"]["flush_on_config_change"])
+            validated["queue"]["flush_on_config_change"] = bool(flush_on_change)
+        else:
+            validated["queue"] = defaults["queue"]
+
+        # Validate transmission configuration
+        transmission_config = config.get("transmission", defaults["transmission"])
+        if isinstance(transmission_config, dict):
+            validated["transmission"] = {}
+            
+            # Validate timeouts (must be non-negative)
+            for key in ["batch_timeout_ms", "queue_check_interval_ms"]:
+                value = transmission_config.get(key, defaults["transmission"][key])
+                if isinstance(value, (int, float)) and value >= 0:
+                    validated["transmission"][key] = int(value)
+                else:
+                    validated["transmission"][key] = defaults["transmission"][key]
+                    logger.warning(f"Invalid transmission {key}: {value}, using default {defaults['transmission'][key]}")
+        else:
+            validated["transmission"] = defaults["transmission"]
+
+        # Validate monitoring configuration
+        monitoring_config = config.get("monitoring", defaults["monitoring"])
+        if isinstance(monitoring_config, dict):
+            validated["monitoring"] = {}
+            
+            # Validate log_queue_stats
+            log_stats = monitoring_config.get("log_queue_stats", defaults["monitoring"]["log_queue_stats"])
+            validated["monitoring"]["log_queue_stats"] = bool(log_stats)
+            
+            # Validate queue_warning_threshold (must be positive)
+            threshold = monitoring_config.get("queue_warning_threshold", defaults["monitoring"]["queue_warning_threshold"])
+            if isinstance(threshold, (int, float)) and threshold > 0:
+                validated["monitoring"]["queue_warning_threshold"] = int(threshold)
+            else:
+                validated["monitoring"]["queue_warning_threshold"] = defaults["monitoring"]["queue_warning_threshold"]
+                logger.warning(f"Invalid queue_warning_threshold: {threshold}, using default {defaults['monitoring']['queue_warning_threshold']}")
+        else:
+            validated["monitoring"] = defaults["monitoring"]
+
+        return validated
+
+    def _load_performance_config(self):
+        """Load and apply performance configuration with environment overrides"""
+        # Load from file
+        file_config = self.load_performance_config()
+
+        # Apply file configuration over defaults
+        if file_config:
+            self.parallel_config.update(file_config)
+
+        # Apply environment variable overrides
+        env_config = self.load_performance_config_with_env_override()
+        self.parallel_config.update(env_config)
+
+        # Validate configuration
+        self.parallel_config = self.validate_performance_config(self.parallel_config)
+
+    # Phase 1: Critical methods for plugins - extracted from EnhancedCOTService
+    
+    async def create_cot_events(
+        self,
+        locations: List[Dict[str, Any]],
+        cot_type: str = "a-f-G-U-C",
+        stale_time: int = 300,
+        cot_type_mode: str = "stream",
+    ) -> List[bytes]:
+        """
+        Create COT events from location data
+
+        Args:
+            locations: List of location dictionaries
+            cot_type: COT type identifier (used when cot_type_mode is "stream")
+            stale_time: Time in seconds before event becomes stale
+            cot_type_mode: "stream" or "per_point" to determine COT type source
+
+        Returns:
+            List of COT events as XML bytes
+        """
+        logger.debug(
+            f"create_cot_events called with: cot_type_mode='{cot_type_mode}', cot_type='{cot_type}', locations={len(locations)}"
+        )
+        
+        # Phase 1: Always use PyTAK (no fallback complexity)
+        if PYTAK_AVAILABLE:
+            return await self._create_pytak_events(
+                locations, cot_type, stale_time, cot_type_mode
+            )
+        else:
+            # Import custom method from EnhancedCOTService
+            from services.cot_service import EnhancedCOTService
+            return await EnhancedCOTService._create_custom_events(
+                locations, cot_type, stale_time, cot_type_mode
+            )
+
+    async def send_to_tak_server(self, events: List[bytes], tak_server) -> bool:
+        """
+        Send COT events to TAK server using appropriate method
+
+        Args:
+            events: List of COT events as XML bytes
+            tak_server: TAK server configuration
+
+        Returns:
+            bool: Success status
+        """
+        # Phase 1: Always use PyTAK (no fallback complexity)
+        if PYTAK_AVAILABLE:
+            return await self._send_with_pytak(events, tak_server)
+        else:
+            # Import custom method from EnhancedCOTService
+            from services.cot_service import EnhancedCOTService
+            return await EnhancedCOTService._send_with_custom(events, tak_server)
+
+    @staticmethod
+    async def _create_pytak_events(
+        locations: List[Dict[str, Any]],
+        cot_type: str,
+        stale_time: int,
+        cot_type_mode: str = "stream",
+    ) -> List[bytes]:
+        """Create COT events using PyTAK's XML generation"""
+        events = []
+
+        for location in locations:
+            try:
+                # Check for error responses from plugins
+                if "_error" in location:
+                    error_code = location.get("_error", "unknown")
+                    error_message = location.get("_error_message", "Unknown error")
+                    logger.warning(
+                        f"Skipping error response from plugin: {error_code} - {error_message}"
+                    )
+                    continue
+
+                # Validate and clean location data first
+                from services.cot_service import EnhancedCOTService
+                cleaned_location = EnhancedCOTService._validate_location_data(location)
+
+                # Debug: Log the location data to see what we're working with
+                logger.debug(f"Processing location: {cleaned_location}")
+
+                # Parse timestamp - ensure we get a proper datetime object
+                if "timestamp" in cleaned_location and cleaned_location["timestamp"]:
+                    if isinstance(cleaned_location["timestamp"], str):
+                        try:
+                            event_time = datetime.fromisoformat(
+                                cleaned_location["timestamp"].replace("Z", "+00:00")
+                            )
+                            # Remove timezone info to avoid issues
+                            if event_time.tzinfo is not None:
+                                event_time = event_time.replace(tzinfo=None)
+                        except (ValueError, TypeError) as e:
+                            logger.warning(f"Invalid timestamp format: {cleaned_location['timestamp']}, error: {e}")
+                            event_time = datetime.now()
+                    elif isinstance(cleaned_location["timestamp"], datetime):
+                        event_time = cleaned_location["timestamp"]
+                        # Remove timezone info to avoid issues
+                        if event_time.tzinfo is not None:
+                            event_time = event_time.replace(tzinfo=None)
+                    else:
+                        logger.warning(f"Unexpected timestamp type: {type(cleaned_location['timestamp'])}")
+                        event_time = datetime.now()
+                else:
+                    event_time = datetime.now()
+
+                # Determine COT type
+                if cot_type_mode == "per_point":
+                    point_cot_type = cleaned_location.get("cot_type", cot_type)
+                else:
+                    point_cot_type = cot_type
+
+                # Create PyTAK event using correct API
+                event_bytes = pytak.gen_cot(
+                    uid=cleaned_location.get("id", "unknown"),
+                    lat=float(cleaned_location.get("latitude", 0.0)),
+                    lon=float(cleaned_location.get("longitude", 0.0)),
+                    cot_type=point_cot_type,
+                    stale=stale_time,  # Time in seconds
+                )
+                
+                # PyTAK returns bytes, but we need to parse and modify XML for additional fields
+                # Convert bytes to ElementTree for modification
+                event = ET.fromstring(event_bytes)
+
+                # Add additional fields if present
+                if "altitude" in cleaned_location:
+                    try:
+                        altitude = float(cleaned_location["altitude"])
+                        # Find the detail element and add altitude
+                        detail = event.find("detail")
+                        if detail is not None:
+                            track_elem = detail.find("track")
+                            if track_elem is None:
+                                track_elem = ET.SubElement(detail, "track")
+                            track_elem.set("hae", str(altitude))
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid altitude value: {cleaned_location['altitude']}")
+
+                if "callsign" in cleaned_location and cleaned_location["callsign"]:
+                    try:
+                        detail = event.find("detail")
+                        if detail is not None:
+                            contact_elem = detail.find("contact")
+                            if contact_elem is None:
+                                contact_elem = ET.SubElement(detail, "contact")
+                            contact_elem.set("callsign", str(cleaned_location["callsign"]))
+                    except Exception as e:
+                        logger.warning(f"Failed to add callsign: {e}")
+
+                # Convert to bytes
+                event_xml = ET.tostring(event, encoding="utf-8")
+                events.append(event_xml)
+
+            except Exception as e:
+                logger.error(f"Failed to create COT event for location {location}: {e}")
+                continue
+
+        logger.debug(f"Created {len(events)} COT events from {len(locations)} locations")
+        return events
+
+    async def _send_with_pytak(self, events: List[bytes], tak_server) -> bool:
+        """Send events using PyTAK"""
+        try:
+            # For now, delegate to the existing PyTAK transmission in the worker
+            # This is a simplified implementation for Phase 1
+            for event in events:
+                await self.enqueue_event(event, tak_server.id)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send events via PyTAK: {e}")
+            return False
 
     async def start_worker(self, tak_server) -> bool:
         """

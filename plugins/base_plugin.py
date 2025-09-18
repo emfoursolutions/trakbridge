@@ -381,7 +381,7 @@ class BaseGPSPlugin(ABC):
 
         try:
             # Import here to avoid circular imports
-            from services.cot_service import EnhancedCOTService, get_cot_service
+            from services.cot_service import get_cot_service
 
             # Ensure persistent worker is running for this TAK server
             if hasattr(stream, "tak_server_id") and stream.tak_server_id:
@@ -396,7 +396,7 @@ class BaseGPSPlugin(ABC):
             stale_time = self.get_stream_config_value("cot_stale_time", 300)
 
             # Create COT events from locations
-            cot_events = await EnhancedCOTService().create_cot_events(
+            cot_events = await get_cot_service().create_cot_events(
                 locations,
                 cot_type=cot_type,
                 stale_time=stale_time,

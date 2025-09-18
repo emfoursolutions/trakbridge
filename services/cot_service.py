@@ -1281,15 +1281,8 @@ class EnhancedCOTService:
                     with open(expanded_path, "r") as f:
                         file_config = yaml.safe_load(f) or {}
                         if "parallel_processing" in file_config:
-                            config = file_config["parallel_processing"]
-                            
-                            # Phase 2: Load queue configuration
-                            if "queue" in file_config:
-                                config["queue"] = file_config["queue"]
-                            if "transmission" in file_config:
-                                config["transmission"] = file_config["transmission"]
-                            if "monitoring" in file_config:
-                                config["monitoring"] = file_config["monitoring"]
+                            # Load the full configuration structure
+                            config = file_config.copy()
                                 
                             logger.debug(
                                 f"Loaded performance configuration from {expanded_path}"
@@ -1309,7 +1302,7 @@ class EnhancedCOTService:
         if not config:
             return {"parallel_processing": self._get_default_performance_config()}
 
-        return {"parallel_processing": config}
+        return config
 
     def get_config_file_search_paths(self) -> List[str]:
         """Get list of paths to search for configuration files"""
@@ -2851,16 +2844,11 @@ def get_cot_service() -> QueuedCOTService:
     """Get the singleton COT service instance with advanced queue management"""
     global cot_service
     if cot_service is None:
-        # Load configuration using the same method as EnhancedCOTService
-        enhanced_service = EnhancedCOTService()
-        queue_config = enhanced_service.parallel_config.get("queue", {})
-        transmission_config = enhanced_service.parallel_config.get("transmission", {})
-        
-        # Merge queue and transmission config for the service
-        merged_config = {**queue_config, **transmission_config}
-        # Create singleton instance (no bypass - enforce singleton pattern)
-        QueuedCOTService._instance = None  # Reset in case of stale instance
-        cot_service = QueuedCOTService(queue_config=merged_config)
+        # Phase 1: Direct configuration loading - no EnhancedCOTService dependency
+        # Reset singleton instance to ensure clean initialization
+        QueuedCOTService._instance = None
+        # QueuedCOTService now loads its own config directly via _load_performance_config()
+        cot_service = QueuedCOTService(queue_config=None)
     return cot_service
 
 
