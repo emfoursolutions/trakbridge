@@ -52,6 +52,8 @@ class QueuedCOTService:
     """
     
     _instance = None
+    _workers: Dict[int, asyncio.Task] = {}  # Class-level worker tracking
+    _connections: Dict[int, Any] = {}      # Class-level connection tracking
 
     def __init__(self, queue_config: Optional[Dict[str, Any]] = None, _bypass_singleton_check: bool = False):
         """
@@ -67,8 +69,9 @@ class QueuedCOTService:
             )
         QueuedCOTService._instance = self
         
-        self.workers: Dict[int, asyncio.Task] = {}
-        self.connections: Dict[int, Any] = {}
+        # Use class-level attributes instead of instance attributes
+        self.workers = QueuedCOTService._workers
+        self.connections = QueuedCOTService._connections
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self._running = True
         
@@ -82,6 +85,7 @@ class QueuedCOTService:
         # Configuration tracking for change detection
         self.last_config_hash = None
         
+        logger.debug(f"QueuedCOTService singleton instance created at {datetime.now()}")
         logger.info("QueuedCOTService initialized with queue management integration")
 
     @property
@@ -107,10 +111,12 @@ class QueuedCOTService:
         tak_server_id = tak_server.id
         
         if tak_server_id in self.workers:
-            logger.info(f"Worker for TAK server {tak_server_id} already running.")
+            logger.debug(f"Worker for TAK server {tak_server_id} already running - skipping creation")
             return True
 
         try:
+            logger.debug(f"Starting worker for TAK server {tak_server.name} (ID: {tak_server_id}) at {datetime.now()}")
+            
             # Create queue through queue manager
             queue_created = await self.queue_manager.create_queue(tak_server_id)
             if not queue_created:
@@ -126,6 +132,7 @@ class QueuedCOTService:
             )
             self.workers[tak_server_id] = worker_task
 
+            logger.debug(f"Worker registry state: {list(self.workers.keys())} active workers")
             logger.info(f"Started worker for TAK server {tak_server.name}")
             return True
 
@@ -490,11 +497,13 @@ class QueuedCOTService:
         """
         try:
             logger.info("Configuration change detected in COT service")
+            logger.debug(f"Configuration change tracking - active workers before: {list(self.workers.keys())}")
             
             # Update queue manager configuration
             await self.queue_manager.on_configuration_change(new_config)
             
             # Log configuration change
+            logger.debug(f"Configuration change tracking - active workers after: {list(self.workers.keys())}")
             logger.info("Queue configuration updated due to configuration change")
 
         except Exception as e:
@@ -508,6 +517,8 @@ class QueuedCOTService:
             tak_server_id: TAK server identifier
         """
         try:
+            logger.debug(f"Stopping worker for TAK server {tak_server_id} at {datetime.now()}")
+            
             # Cancel worker task
             if tak_server_id in self.workers:
                 self.workers[tak_server_id].cancel()
@@ -516,6 +527,7 @@ class QueuedCOTService:
                 except asyncio.CancelledError:
                     pass
                 del self.workers[tak_server_id]
+                logger.debug(f"Worker task stopped for TAK server {tak_server_id}")
 
             # Remove queue
             await self.queue_manager.remove_queue(tak_server_id)
@@ -524,6 +536,7 @@ class QueuedCOTService:
             if tak_server_id in self.device_state_managers:
                 del self.device_state_managers[tak_server_id]
 
+            logger.debug(f"Worker registry state: {list(self.workers.keys())} active workers")
             logger.info(f"Stopped worker for TAK server {tak_server_id}")
 
         except Exception as e:
