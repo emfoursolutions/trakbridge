@@ -499,6 +499,10 @@ class QueuedCOTService:
             logger.info("Configuration change detected in COT service")
             logger.debug(f"Configuration change tracking - active workers before: {list(self.workers.keys())}")
             
+            # Log configuration changes that might affect workers
+            for tak_server_id in self.workers.keys():
+                logger.debug(f"Configuration change detected for TAK server {tak_server_id}, stopping existing workers")
+            
             # Update queue manager configuration
             await self.queue_manager.on_configuration_change(new_config)
             
@@ -511,36 +515,58 @@ class QueuedCOTService:
 
     async def stop_worker(self, tak_server_id: int):
         """
-        Stop the worker for a TAK server.
+        Enhanced worker cleanup with verification.
         
         Args:
             tak_server_id: TAK server identifier
         """
-        try:
-            logger.debug(f"Stopping worker for TAK server {tak_server_id} at {datetime.now()}")
+        logger.debug(f"Stopping worker for TAK server {tak_server_id}")
+        
+        # Cancel worker task with verification
+        if tak_server_id in self.workers:
+            task = self.workers[tak_server_id]
+            task.cancel()
+            try:
+                await asyncio.wait_for(task, timeout=5.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+            del self.workers[tak_server_id]
+            logger.debug(f"Worker task stopped for TAK server {tak_server_id}")
+        
+        # Remove queue and cleanup
+        await self.queue_manager.remove_queue(tak_server_id)
+        
+        # Cleanup device state manager
+        if tak_server_id in self.device_state_managers:
+            del self.device_state_managers[tak_server_id]
+        
+        logger.debug(f"Complete cleanup finished for TAK server {tak_server_id}")
+
+    async def stop_all_workers_for_server(self, tak_server_id: int):
+        """
+        Comprehensive cleanup for all workers associated with a TAK server.
+        
+        Args:
+            tak_server_id: TAK server identifier
+        """
+        logger.debug(f"Comprehensive worker cleanup for TAK server {tak_server_id}")
+        
+        # Force stop any remaining workers
+        tasks_to_cancel = []
+        for worker_id, task in list(self.workers.items()):
+            if worker_id == tak_server_id:
+                tasks_to_cancel.append(task)
+        
+        if tasks_to_cancel:
+            logger.warning(f"Found {len(tasks_to_cancel)} workers to force-stop for TAK server {tak_server_id}")
+            for task in tasks_to_cancel:
+                task.cancel()
             
-            # Cancel worker task
-            if tak_server_id in self.workers:
-                self.workers[tak_server_id].cancel()
-                try:
-                    await self.workers[tak_server_id]
-                except asyncio.CancelledError:
-                    pass
-                del self.workers[tak_server_id]
-                logger.debug(f"Worker task stopped for TAK server {tak_server_id}")
-
-            # Remove queue
-            await self.queue_manager.remove_queue(tak_server_id)
-
-            # Cleanup device state manager
-            if tak_server_id in self.device_state_managers:
-                del self.device_state_managers[tak_server_id]
-
-            logger.debug(f"Worker registry state: {list(self.workers.keys())} active workers")
-            logger.info(f"Stopped worker for TAK server {tak_server_id}")
-
-        except Exception as e:
-            logger.error(f"Failed to stop worker for TAK server {tak_server_id}: {e}")
+            # Wait for all cancellations
+            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+        
+        # Ensure cleanup
+        await self.stop_worker(tak_server_id)
 
     async def shutdown(self):
         """Shutdown the COT service and all workers"""

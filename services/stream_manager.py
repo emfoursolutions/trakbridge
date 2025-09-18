@@ -133,6 +133,28 @@ class StreamManager:
         logger.info(f"Stream {stream.id} has no TAK servers configured")
         return False
 
+    def _get_all_tak_servers(self, stream):
+        """
+        Get all TAK servers for a stream (single or multi-server configuration).
+        
+        Args:
+            stream: Stream object
+            
+        Returns:
+            Generator of TAK server objects
+        """
+        # Handle legacy single-server configuration
+        if hasattr(stream, "tak_server") and stream.tak_server:
+            yield stream.tak_server
+        
+        # Handle multi-server configuration
+        if hasattr(stream, "tak_servers"):
+            try:
+                for tak_server in stream.tak_servers:
+                    yield tak_server
+            except Exception as e:
+                logger.warning(f"Error accessing tak_servers for stream {stream.id}: {e}")
+
     def _get_tak_server_display(self, stream) -> str:
         """
         Get display string for TAK server configuration.
@@ -544,10 +566,10 @@ class StreamManager:
             return False
 
     async def restart_stream(self, stream_id: int) -> bool:
-        """Restart a specific stream with queue flushing"""
-        logger.info(f"Restarting stream {stream_id} with queue flush")
-
-        # Get stream and its TAK servers
+        """Enhanced restart with comprehensive worker cleanup"""
+        logger.debug(f"Restarting stream {stream_id} with comprehensive worker cleanup")
+        
+        # Get stream and flush queues (existing logic)
         try:
             stream = await asyncio.get_event_loop().run_in_executor(
                 None, self.db_manager.get_stream_with_relationships, stream_id
@@ -596,6 +618,10 @@ class StreamManager:
                     logger.info(f"Stream restart: flushed {total_flushed} total events")
                 else:
                     logger.info("Stream restart: no events to flush")
+                    
+                # Enhanced worker cleanup before restart
+                for tak_server in self._get_all_tak_servers(stream):
+                    await get_cot_service().stop_all_workers_for_server(tak_server.id)
             else:
                 logger.warning(f"Stream {stream_id} has no TAK servers configured")
         except Exception as e:
