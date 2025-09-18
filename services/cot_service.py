@@ -44,6 +44,7 @@ import xml.etree.ElementTree as ET
 
 from services.logging_service import get_module_logger
 from services.device_state_manager import DeviceStateManager
+from services.cot_service_integration import QueuedCOTService
 
 # PyTAK imports
 try:
@@ -1966,858 +1967,876 @@ class EnhancedCOTService:
             return False
 
 
-class PersistentCOTService:
-    """
-    Manages persistent PyTAK workers and queues for each TAK server.
-    """
-
-    def __init__(self, queue_config: Optional[Dict[str, Any]] = None):
-        self.workers: Dict[int, asyncio.Task] = {}  # tak_server_id -> worker task
-        self.queues: Dict[int, asyncio.Queue] = {}  # tak_server_id -> event queue
-        self.connections: Dict[int, Any] = {}  # tak_server_id -> pytak connection
-        self.loop: Optional[asyncio.AbstractEventLoop] = None
-        self._running = False
-        self.device_state_managers: Dict[int, DeviceStateManager] = (
-            {}
-        )  # Per-server device state managers for queue replacement functionality
-        
-        # Phase 2: Queue configuration
-        self.queue_config = queue_config or {
-            "max_size": 500,
-            "batch_size": 8,
-            "overflow_strategy": "drop_oldest",
-            "flush_on_config_change": True,
-        }
-
-    async def start_worker(self, tak_server):
-        """
-        Start a persistent PyTAK worker for a given TAK server.
-        Returns True if successful, False otherwise.
-        """
-        tak_server_id = tak_server.id
-        if tak_server_id in self.workers:
-            logger.info(f"Worker for TAK server {tak_server_id} already running.")
-            return True  # Return True since worker is already running
-
-        if not PYTAK_AVAILABLE:
-            logger.error("PyTAK not available. Cannot start persistent worker.")
-            return False
-
-        # Phase 2: Create bounded queue with configured max size
-        queue = asyncio.Queue(maxsize=self.queue_config["max_size"])
-        self.queues[tak_server_id] = queue
-
-        # Create an event to signal when connection is established
-        connection_ready = asyncio.Event()
-        connection_error = None
-
-        async def cot_worker():
-            """PyTAK worker coroutine"""
-            nonlocal connection_error
-            try:
-                logger.info(
-                    f"Starting persistent worker for TAK server {tak_server.name}"
-                )
-
-                # Create PyTAK configuration
-                config = await self._create_pytak_config(tak_server)
-
-                # Create connection using PyTAK's protocol factory with timeout
-                try:
-                    logger.debug(
-                        f"Attempting to connect to TAK server {tak_server.name} "
-                        f"at {tak_server.host}:{tak_server.port}"
-                    )
-                    # Add timeout to prevent hanging
-                    connection_result = await asyncio.wait_for(
-                        pytak.protocol_factory(config),
-                        timeout=30.0,  # 30 second timeout
-                    )
-
-                    # Handle the connection result (might be a tuple for TCP)
-                    if (
-                        isinstance(connection_result, tuple)
-                        and len(connection_result) == 2
-                    ):
-                        reader, writer = connection_result
-                        logger.info(
-                            f"Received (reader, writer) tuple for TAK server {tak_server.name}"
-                        )
-                        self.connections[tak_server_id] = (reader, writer)
-                    else:
-                        logger.info(
-                            f"Received single connection object for TAK server {tak_server.name}"
-                        )
-                        self.connections[tak_server_id] = connection_result
-
-                    logger.info(
-                        f"Successfully connected to TAK server {tak_server.name}"
-                    )
-
-                    # Signal that connection is ready
-                    connection_ready.set()
-
-                except asyncio.TimeoutError:
-                    error_msg = f"Timeout connecting to TAK server {tak_server.name}"
-                    logger.error(error_msg)
-                    connection_error = Exception(error_msg)
-                    return
-                except Exception as e:
-                    error_msg = (
-                        f"Failed to connect to TAK server {tak_server.name}: {e}"
-                    )
-                    logger.error(error_msg)
-                    connection_error = Exception(error_msg)
-                    return
-
-                # Start the transmission worker
-                await self._transmission_worker(
-                    queue, self.connections[tak_server_id], tak_server, self.queue_config
-                )
-
-            except Exception as e:
-                logger.error(f"PyTAK worker failed for TAK server {tak_server_id}: {e}")
-                connection_error = e
-                # Clean up on error
-                await self._cleanup_worker(tak_server_id)
-
-        try:
-            # Create the task
-            task = asyncio.create_task(cot_worker())
-            self.workers[tak_server_id] = task
-
-            # Wait for connection to be established (with timeout)
-            try:
-                await asyncio.wait_for(
-                    connection_ready.wait(), timeout=35.0
-                )  # Slightly longer than connection timeout
-                logger.info(f"Started PyTAK worker for TAK server {tak_server_id}.")
-                return True
-            except asyncio.TimeoutError:
-                logger.error(
-                    f"Timeout waiting for worker to start for TAK server {tak_server_id}"
-                )
-                # Clean up the task
-                task.cancel()
-                try:
-                    await asyncio.wait_for(task, timeout=5.0)
-                except (asyncio.CancelledError, asyncio.TimeoutError):
-                    pass
-                return False
-
-        except Exception as e:
-            logger.error(f"Failed to start worker for TAK server {tak_server_id}: {e}")
-            return False
-
-        # Check if there was a connection error
-        if connection_error:
-            logger.error(
-                f"Connection error for TAK server {tak_server_id}: {connection_error}"
-            )
-            return False
-
-    @staticmethod
-    async def _transmission_worker(queue: asyncio.Queue, connection, tak_server, queue_config: Dict[str, Any]):
-        """Handle transmission of COT events from queue with batching"""
-        logger.info(
-            f"Starting transmission worker for TAK server '{tak_server.name}' (ID: {tak_server.id})"
-        )
-
-        # Track queue processing statistics
-        events_processed = 0
-        last_queue_size_log = None
-        queue_empty_logged = False
-
-        # Handle the case where connection might be a tuple (reader, writer)
-        if isinstance(connection, tuple) and len(connection) == 2:
-            reader, writer = connection
-            logger.info(
-                f"Using (reader, writer) tuple for TAK server '{tak_server.name}'"
-            )
-            use_writer = True
-        else:
-            reader = connection
-            writer = None
-            use_writer = False
-            logger.info(
-                f"Using single connection object for TAK server '{tak_server.name}'"
-            )
-
-        try:
-            while True:
-                try:
-                    # Check queue size periodically for logging
-                    current_queue_size = queue.qsize()
-
-                    # Log when queue becomes empty after having events
-                    if (
-                        current_queue_size == 0
-                        and not queue_empty_logged
-                        and events_processed > 0
-                    ):
-                        logger.info(
-                            f"Queue cleared for TAK server '{tak_server.name}' - "
-                            f"all {events_processed} events have been processed and transmitted"
-                        )
-                        queue_empty_logged = True
-
-                    # Log significant queue size changes (every 10 events)
-                    if (
-                        last_queue_size_log is None
-                        or abs(current_queue_size - last_queue_size_log) >= 10
-                    ):
-                        if current_queue_size > 0:
-                            logger.debug(
-                                f"Queue status for TAK server '{tak_server.name}': "
-                                f"{current_queue_size} events pending, "
-                                f"{events_processed} events processed so far"
-                            )
-                        last_queue_size_log = current_queue_size
-
-                    # Phase 2: Batch transmission with configurable batch size
-                    batch = []
-                    batch_size = queue_config.get("batch_size", 8)
-                    timeout_ms = queue_config.get("batch_timeout_ms", 100)
-                    timeout_seconds = timeout_ms / 1000.0
-
-                    logger.debug(
-                        f"Collecting batch of up to {batch_size} events for TAK server '{tak_server.name}'"
-                    )
-
-                    # Collect events for batch transmission
-                    while len(batch) < batch_size:
-                        try:
-                            event = await asyncio.wait_for(queue.get(), timeout=timeout_seconds)
-                            
-                            if event is None:  # Shutdown signal
-                                if batch:
-                                    # Process any remaining events in batch before shutdown
-                                    break
-                                logger.info(
-                                    f"Received shutdown signal for TAK server '{tak_server.name}'. "
-                                    f"Total events processed: {events_processed}"
-                                )
-                                return
-                            
-                            batch.append(event)
-                            
-                        except asyncio.TimeoutError:
-                            # Timeout waiting for events - transmit partial batch if we have any
-                            break
-
-                    if not batch:
-                        # No events collected (timeout with empty queue)
-                        logger.debug(
-                            f"No events received (timeout) for TAK server '{tak_server.name}'"
-                        )
-                        continue
-
-                    # Reset queue empty flag when we process events
-                    if queue_empty_logged:
-                        queue_empty_logged = False
-                        logger.debug(
-                            f"Queue activity resumed for TAK server '{tak_server.name}'"
-                        )
-
-                    batch_start_num = events_processed + 1
-                    logger.debug(
-                        f"Processing batch of {len(batch)} events ({batch_start_num}-{batch_start_num + len(batch) - 1}) "
-                        f"for TAK server '{tak_server.name}'"
-                    )
-
-                    # Transmit all events in the batch
-                    batch_success = True
-                    for i, event in enumerate(batch):
-                        try:
-                            # Send the event using the appropriate method
-                            if use_writer and writer:
-                                # Use writer for TCP connections
-                                writer.write(event)
-                                await writer.drain()
-                            elif hasattr(reader, "send"):
-                                # Use reader.send for other connection types
-                                await reader.send(event)
-                            else:
-                                logger.error(
-                                    f"No suitable send method found for TAK server '{tak_server.name}'. "
-                                    f"Event {batch_start_num + i} not transmitted."
-                                )
-                                batch_success = False
-                                
-                            events_processed += 1
-                            
-                        except Exception as e:
-                            logger.error(
-                                f"Error transmitting event {batch_start_num + i} to TAK server '{tak_server.name}': {e}"
-                            )
-                            batch_success = False
-                            events_processed += 1  # Count as processed even if failed
-
-                    # Mark all batch events as done
-                    for _ in batch:
-                        queue.task_done()
-
-                    if batch_success:
-                        logger.debug(
-                            f"Successfully transmitted batch of {len(batch)} events to TAK server '{tak_server.name}'"
-                        )
-                    else:
-                        logger.warning(
-                            f"Some events in batch failed transmission to TAK server '{tak_server.name}'"
-                        )
-
-                    # Log milestone events (every 50 events)
-                    if events_processed % 50 == 0:
-                        logger.info(
-                            f"Transmission milestone for TAK server '{tak_server.name}': "
-                            f"{events_processed} events successfully processed"
-                        )
-
-                except Exception as e:
-                    logger.error(
-                        f"Error in batch transmission worker for TAK server '{tak_server.name}': {e}"
-                    )
-                    continue
-
-        except Exception as e:
-            logger.error(
-                f"Transmission worker error for TAK server '{tak_server.name}': {e}"
-            )
-        finally:
-            # Log final statistics
-            logger.info(
-                f"Transmission worker shutting down for TAK server '{tak_server.name}'. "
-                f"Total events processed: {events_processed}"
-            )
-
-            # Clean up connection
-            if use_writer and writer:
-                try:
-                    writer.close()
-                    await writer.wait_closed()
-                    logger.info(
-                        f"Closed writer connection for TAK server '{tak_server.name}'"
-                    )
-                except Exception as e:
-                    logger.debug(
-                        f"Error closing writer for TAK server '{tak_server.name}': {e}"
-                    )
-            elif hasattr(reader, "close"):
-                try:
-                    await reader.close()
-                    logger.info(
-                        f"Closed reader connection for TAK server '{tak_server.name}'"
-                    )
-                except Exception as e:
-                    logger.debug(
-                        f"Error closing reader for TAK server '{tak_server.name}': {e}"
-                    )
-
-    def log_queue_status(self, tak_server_id: int, context: str = ""):
-        """Log current queue status for a TAK server"""
-        if tak_server_id not in self.queues:
-            logger.warning(
-                f"No queue found for TAK server {tak_server_id} when logging status"
-            )
-            return
-
-        queue = self.queues[tak_server_id]
-        queue_size = queue.qsize()
-
-        context_str = f" ({context})" if context else ""
-
-        if queue_size == 0:
-            logger.info(f"Queue is empty for TAK server {tak_server_id}{context_str}")
-        else:
-            logger.info(
-                f"Queue contains {queue_size} pending events for TAK server {tak_server_id}{context_str}"
-            )
-
-    @staticmethod
-    async def _create_pytak_config(tak_server):
-        """Create PyTAK configuration from TAK server settings"""
-        from configparser import ConfigParser
-
-        config = ConfigParser(interpolation=None)
-        config.add_section("pytak")
-
-        # Determine protocol
-        protocol = "tls" if tak_server.protocol.lower() in ["tls", "ssl"] else "tcp"
-        config.set(
-            "pytak", "COT_URL", f"{protocol}://{tak_server.host}:{tak_server.port}"
-        )
-
-        # Add TLS configuration if needed
-        if protocol == "tls":
-            config.set(
-                "pytak", "PYTAK_TLS_DONT_VERIFY", str(not tak_server.verify_ssl).lower()
-            )
-
-            # Handle P12 certificate if available
-            if tak_server.cert_p12 and len(tak_server.cert_p12) > 0:
-                try:
-                    cert_pem, key_pem = EnhancedCOTService._extract_p12_certificate(
-                        tak_server.cert_p12, tak_server.get_cert_password()
-                    )
-                    cert_path, key_path = EnhancedCOTService._create_temp_cert_files(
-                        cert_pem, key_pem
-                    )
-                    config.set("pytak", "PYTAK_TLS_CLIENT_CERT", cert_path)
-                    config.set("pytak", "PYTAK_TLS_CLIENT_KEY", key_path)
-                except Exception as e:
-                    logger.error(f"Failed to configure P12 certificate: {e}")
-
-        logger.debug(
-            f"Created PyTAK config for {tak_server.name}: {dict(config['pytak'])}"
-        )
-        return config["pytak"]
-
-    async def stop_worker(self, tak_server_id: int):
-        """
-        Stop the PyTAK worker for a given TAK server.
-        """
-        await self._cleanup_worker(tak_server_id)
-
-    async def _cleanup_worker(self, tak_server_id: int):
-        """Clean up worker resources"""
-        try:
-            # Send shutdown signal to queue
-            if tak_server_id in self.queues:
-                await self.queues[tak_server_id].put(None)
-
-            # Cancel worker task
-            if tak_server_id in self.workers:
-                task = self.workers[tak_server_id]
-                if not task.done():
-                    task.cancel()
-                    try:
-                        await asyncio.wait_for(task, timeout=5.0)
-                    except (asyncio.CancelledError, asyncio.TimeoutError):
-                        pass
-                del self.workers[tak_server_id]
-
-            # Clean up connection
-            if tak_server_id in self.connections:
-                connection = self.connections[tak_server_id]
-                try:
-                    await connection.close()
-                except Exception as e:
-                    logger.debug(f"Error closing connection: {e}")
-                del self.connections[tak_server_id]
-
-            # Clean up queue
-            if tak_server_id in self.queues:
-                del self.queues[tak_server_id]
-
-            logger.info(f"Cleaned up PyTAK worker for TAK server {tak_server_id}.")
-
-        except Exception as e:
-            logger.error(f"Error cleaning up worker {tak_server_id}: {e}")
-
-    async def enqueue_event(self, event: bytes, tak_server_id: int):
-        """
-        Put a COT event onto the TAK server's queue.
-        """
-        if tak_server_id not in self.queues:
-            logger.error(
-                f"No queue found for TAK server {tak_server_id}. Event not sent."
-            )
-            return False
-
-        try:
-            queue = self.queues[tak_server_id]
-            queue_size_before = queue.qsize()
-
-            # Log if this is the first event being added to an empty queue
-            if queue_size_before == 0:
-                logger.info(
-                    f"Adding first event to empty queue for TAK server {tak_server_id}"
-                )
-
-            # Phase 2: Handle queue overflow with configurable strategy
-            await self._enqueue_with_overflow_handling(queue, event, tak_server_id)
-            queue_size_after = queue.qsize()
-
-            logger.debug(
-                f"Successfully enqueued COT event for TAK server {tak_server_id}. "
-                f"Queue size: {queue_size_before} → {queue_size_after}"
-            )
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to enqueue event for TAK server {tak_server_id}: {e}")
-            return False
-
-    async def _enqueue_with_overflow_handling(self, queue: asyncio.Queue, event: bytes, tak_server_id: int):
-        """
-        Handle queue overflow according to configured strategy.
-        
-        Args:
-            queue: The asyncio queue to add the event to
-            event: The COT event to enqueue
-            tak_server_id: The TAK server ID for logging
-        """
-        strategy = self.queue_config["overflow_strategy"]
-        
-        if strategy == "block":
-            # Block until space is available (default asyncio.Queue behavior)
-            await queue.put(event)
-        elif queue.full():
-            # Queue is full, apply overflow strategy
-            if strategy == "drop_oldest":
-                try:
-                    # Remove oldest event to make room
-                    queue.get_nowait()
-                    logger.warning(
-                        f"Queue overflow: dropped oldest event for TAK server {tak_server_id} "
-                        f"(queue size: {queue.qsize()}, max: {self.queue_config['max_size']})"
-                    )
-                    # Add the new event
-                    await queue.put(event)
-                except asyncio.QueueEmpty:
-                    # Queue became empty between check and get, just add the event
-                    await queue.put(event)
-            elif strategy == "drop_newest":
-                # Drop the new event (don't add it)
-                logger.warning(
-                    f"Queue overflow: dropping newest event for TAK server {tak_server_id} "
-                    f"(queue size: {queue.qsize()}, max: {self.queue_config['max_size']})"
-                )
-            else:
-                # Unknown strategy, fall back to blocking
-                logger.warning(f"Unknown overflow strategy: {strategy}, falling back to blocking")
-                await queue.put(event)
-        else:
-            # Queue has space, add the event normally
-            await queue.put(event)
-
-    async def ensure_workers(self):
-        """
-        Ensure a worker is running for each TAK server in the database.
-        """
-        try:
-            # Import here to avoid circular imports
-            from database import db
-            from models.tak_server import TakServer
-
-            tak_servers = db.session.query(TakServer).all()
-            for tak_server in tak_servers:
-                if tak_server.id not in self.workers:
-                    await self.start_worker(tak_server)
-        except Exception as e:
-            logger.error(f"Error ensuring workers: {e}")
-
-    def get_worker_status(self, tak_server_id: int) -> Dict[str, Any]:
-        """Get status information for a specific worker"""
-        status = {
-            "worker_running": tak_server_id in self.workers,
-            "queue_exists": tak_server_id in self.queues,
-            "connection_exists": tak_server_id in self.connections,
-            "queue_size": 0,
-        }
-
-        if tak_server_id in self.queues:
-            status["queue_size"] = self.queues[tak_server_id].qsize()
-
-        if tak_server_id in self.workers:
-            task = self.workers[tak_server_id]
-            status["worker_done"] = task.done()
-            status["worker_cancelled"] = task.cancelled()
-            if task.done() and not task.cancelled():
-                try:
-                    exception = task.exception()
-                    status["worker_exception"] = str(exception) if exception else None
-                except Exception:
-                    status["worker_exception"] = "Unknown"
-
-        return status
-
-    def get_all_worker_status(self) -> Dict[int, Dict[str, Any]]:
-        """Get status for all workers"""
-        return {
-            tak_server_id: self.get_worker_status(tak_server_id)
-            for tak_server_id in set(
-                list(self.workers.keys()) + list(self.queues.keys())
-            )
-        }
-
-    def get_detailed_worker_status(self, tak_server_id: int) -> Dict[str, Any]:
-        """Get detailed status information for a specific worker"""
-        status = self.get_worker_status(tak_server_id)
-
-        # Add more detailed information
-        if tak_server_id in self.queues:
-            queue = self.queues[tak_server_id]
-            status["queue_size"] = queue.qsize()
-            status["queue_full"] = queue.full()
-            status["queue_empty"] = queue.empty()
-
-        if tak_server_id in self.workers:
-            task = self.workers[tak_server_id]
-            status["worker_done"] = task.done()
-            status["worker_cancelled"] = task.cancelled()
-            status["worker_running"] = not task.done() and not task.cancelled()
-
-            if task.done() and not task.cancelled():
-                try:
-                    exception = task.exception()
-                    status["worker_exception"] = str(exception) if exception else None
-                except Exception:
-                    status["worker_exception"] = "Unknown"
-
-        if tak_server_id in self.connections:
-            connection = self.connections[tak_server_id]
-            status["connection_exists"] = True
-            # Try to get connection status if possible
-            status["connection_closed"] = getattr(connection, "closed", "Unknown")
-        else:
-            status["connection_exists"] = False
-
-        return status
-
-    async def test_worker_communication(self, tak_server_id: int) -> bool:
-        """Test if the worker is actually processing events"""
-        if tak_server_id not in self.queues:
-            logger.error(f"No queue for TAK server {tak_server_id}")
-            return False
-
-        try:
-            # Create a test event
-            test_event = b"<test>test</test>"
-
-            # Put it in the queue
-            queue = self.queues[tak_server_id]
-            await queue.put(test_event)
-
-            # Wait a bit to see if it gets processed
-            await asyncio.sleep(2)
-
-            # Check queue size
-            queue_size = queue.qsize()
-            logger.info(f"Test event queue size after 2 seconds: {queue_size}")
-
-            return queue_size == 0  # If queue is empty, event was processed
-
-        except Exception as e:
-            logger.error(f"Error testing worker communication: {e}")
-            return False
-
-    async def shutdown(self):
-        """Shutdown all workers and clean up resources"""
-        logger.info("Shutting down persistent COT service...")
-
-        # Stop all workers
-        tasks = []
-        for tak_server_id in list(self.workers.keys()):
-            tasks.append(self.stop_worker(tak_server_id))
-
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Final cleanup
-        self.workers.clear()
-        self.queues.clear()
-        self.connections.clear()
-
-        logger.info("Persistent COT service shutdown complete.")
-
-    def extract_uid_from_cot_event(self, event: bytes) -> Optional[str]:
-        """
-        Extract device UID from COT event XML for deduplication.
-
-        Args:
-            event: COT event XML as bytes
-
-        Returns:
-            Device UID if found, None if extraction fails
-        """
-        try:
-            root = ET.fromstring(event.decode("utf-8"))
-            uid = root.get("uid")
-            return uid
-        except Exception as e:
-            logger.warning(f"Failed to extract UID from COT event: {e}")
-            return None
-
-    def extract_timestamp_from_cot_event(self, event: bytes) -> Optional[datetime]:
-        """
-        Extract timestamp from COT event XML for freshness comparison.
-
-        Args:
-            event: COT event XML as bytes
-
-        Returns:
-            Event timestamp if found, None if extraction fails
-        """
-        try:
-            root = ET.fromstring(event.decode("utf-8"))
-            time_str = root.get("time")
-            if time_str:
-                # Parse ISO format timestamp
-                return datetime.fromisoformat(time_str.replace("Z", "+00:00"))
-            return None
-        except Exception as e:
-            logger.warning(f"Failed to extract timestamp from COT event: {e}")
-            return None
-
-    async def remove_events_by_uid(
-        self, tak_server_id: int, uids_to_remove: List[str]
-    ) -> int:
-        """
-        Remove events with specific UIDs from the queue.
-
-        Args:
-            tak_server_id: TAK server ID
-            uids_to_remove: List of device UIDs to remove from queue
-
-        Returns:
-            Number of events removed
-        """
-        if tak_server_id not in self.queues:
-            return 0
-
-        queue = self.queues[tak_server_id]
-
-        # Create new temporary queue to hold non-matching events
-        temp_events = []
-        removed_count = 0
-
-        # Drain the queue and filter out events with matching UIDs
-        while not queue.empty():
-            try:
-                event = queue.get_nowait()
-                uid = self.extract_uid_from_cot_event(event)
-
-                if uid in uids_to_remove:
-                    removed_count += 1
-                    logger.debug(f"Removing old event for device {uid}")
-                else:
-                    temp_events.append(event)
-
-            except asyncio.QueueEmpty:
-                break
-
-        # Put back the events we want to keep
-        for event in temp_events:
-            await queue.put(event)
-
-        if removed_count > 0:
-            logger.info(
-                f"Removed {removed_count} old events from queue for TAK server {tak_server_id}"
-            )
-
-        return removed_count
-
-    async def enqueue_with_replacement(
-        self, events: List[bytes], tak_server_id: int
-    ) -> bool:
-        """
-        Enqueue events while replacing outdated ones for same devices.
-
-        This implements the core queue management enhancement to prevent event accumulation.
-        Events from same device UID replace older events instead of accumulating.
-
-        Args:
-            events: List of COT events to enqueue
-            tak_server_id: Target TAK server ID
-
-        Returns:
-            True if successfully processed, False otherwise
-        """
-        if tak_server_id not in self.queues:
-            available_queues = list(self.queues.keys())
-            available_workers = list(self.workers.keys())
-            logger.error(
-                f"No queue found for TAK server {tak_server_id}. Available queues: {available_queues}, Available workers: {available_workers}"
-            )
-            return False
-
-        if not events:
-            return True
-
-        try:
-            queue = self.queues[tak_server_id]
-            queue_size_before = queue.qsize()
-
-            # Track statistics
-            new_events = 0
-            updated_events = 0
-            skipped_events = 0
-
-            # Group events by UID and find newest timestamp for each device
-            device_events = {}
-            uids_to_remove = []
-
-            for event in events:
-                uid = self.extract_uid_from_cot_event(event)
-                timestamp = self.extract_timestamp_from_cot_event(event)
-
-                if uid is None:
-                    logger.warning("Event has no UID, skipping deduplication")
-                    await queue.put(event)
-                    new_events += 1
-                    continue
-
-                if timestamp is None:
-                    logger.warning(
-                        f"Event {uid} has no timestamp, skipping deduplication"
-                    )
-                    await queue.put(event)
-                    new_events += 1
-                    continue
-
-                # Get or create server-specific device state manager (lazy initialization)
-                if tak_server_id not in self.device_state_managers:
-                    self.device_state_managers[tak_server_id] = DeviceStateManager()
-
-                server_device_manager = self.device_state_managers[tak_server_id]
-
-                # Check if we should update this device
-                if server_device_manager.should_update_device(uid, timestamp):
-                    # Update device state
-                    server_device_manager.update_device_state(
-                        uid, {"timestamp": timestamp, "uid": uid}
-                    )
-
-                    # Track for old event removal
-                    uids_to_remove.append(uid)
-                    device_events[uid] = event
-
-                    # Check if this is a new device or an update
-                    if uid in server_device_manager.device_states:
-                        updated_events += 1
-                    else:
-                        new_events += 1
-                else:
-                    # Event is older than current state, skip it
-                    skipped_events += 1
-                    logger.debug(f"Skipping older event for device {uid}")
-                    continue
-
-            # Remove old events for devices we're updating
-            if uids_to_remove:
-                removed_count = await self.remove_events_by_uid(
-                    tak_server_id, uids_to_remove
-                )
-                logger.debug(
-                    f"Removed {removed_count} old events for {len(uids_to_remove)} devices"
-                )
-
-            # Add new/updated events to queue
-            for uid, event in device_events.items():
-                await queue.put(event)
-
-            queue_size_after = queue.qsize()
-
-            # Log replacement statistics
-            logger.debug(
-                f"Queue replacement statistics for TAK server {tak_server_id}: "
-                f"new={new_events}, updated={updated_events}, skipped={skipped_events}, "
-                f"queue size: {queue_size_before} → {queue_size_after}"
-            )
-
-            return True
-
+# ==========================================
+# DEPRECATED: PersistentCOTService (v1.0.0-rc.6)
+# ==========================================
+# This class has been replaced by QueuedCOTService in services/cot_service_integration.py
+# for improved queue management and performance.
+# 
+# DEPRECATION TIMELINE:
+# - v1.0.0-rc.6: Commented out and deprecated
+# - v1.0.0-rc.7: Monitor for 30 days (target removal)
+# - v1.0.1: Complete removal if no issues found
+#
+# ROLLBACK: Uncomment this code and revert get_cot_service() if QueuedCOTService issues arise
+# ==========================================
+
+# class PersistentCOTService:
+#     """
+#     DEPRECATED: Replaced by QueuedCOTService for enhanced queue management
+#     
+#     Manages persistent PyTAK workers and queues for each TAK server.
+#     This implementation has been superseded by the QueuedCOTService which
+#     provides better performance, monitoring, and queue management capabilities.
+#     """
+
+#     def __init__(self, queue_config: Optional[Dict[str, Any]] = None):
+#         self.workers: Dict[int, asyncio.Task] = {}  # tak_server_id -> worker task
+#         self.queues: Dict[int, asyncio.Queue] = {}  # tak_server_id -> event queue
+#         self.connections: Dict[int, Any] = {}  # tak_server_id -> pytak connection
+#         self.loop: Optional[asyncio.AbstractEventLoop] = None
+#         self._running = False
+#         self.device_state_managers: Dict[int, DeviceStateManager] = (
+#             {}
+#         )  # Per-server device state managers for queue replacement functionality
+#         
+#         # Phase 2: Queue configuration
+#         self.queue_config = queue_config or {
+#             "max_size": 500,
+#             "batch_size": 8,
+#             "overflow_strategy": "drop_oldest",
+#             "flush_on_config_change": True,
+#         }
+# 
+#     async def start_worker(self, tak_server):
+#         """
+#         Start a persistent PyTAK worker for a given TAK server.
+#         Returns True if successful, False otherwise.
+#         """
+#         tak_server_id = tak_server.id
+#         if tak_server_id in self.workers:
+#             logger.info(f"Worker for TAK server {tak_server_id} already running.")
+#             return True  # Return True since worker is already running
+# 
+#         if not PYTAK_AVAILABLE:
+#             logger.error("PyTAK not available. Cannot start persistent worker.")
+#             return False
+# 
+#         # Phase 2: Create bounded queue with configured max size
+#         queue = asyncio.Queue(maxsize=self.queue_config["max_size"])
+#         self.queues[tak_server_id] = queue
+# 
+#         # Create an event to signal when connection is established
+#         connection_ready = asyncio.Event()
+#         connection_error = None
+# 
+#         async def cot_worker():
+#             """PyTAK worker coroutine"""
+#             nonlocal connection_error
+#             try:
+#                 logger.info(
+#                     f"Starting persistent worker for TAK server {tak_server.name}"
+#                 )
+# 
+#                 # Create PyTAK configuration
+#                 config = await self._create_pytak_config(tak_server)
+# 
+#                 # Create connection using PyTAK's protocol factory with timeout
+#                 try:
+#                     logger.debug(
+#                         f"Attempting to connect to TAK server {tak_server.name} "
+#                         f"at {tak_server.host}:{tak_server.port}"
+#                     )
+#                     # Add timeout to prevent hanging
+#                     connection_result = await asyncio.wait_for(
+#                         pytak.protocol_factory(config),
+#                         timeout=30.0,  # 30 second timeout
+#                     )
+# 
+#                     # Handle the connection result (might be a tuple for TCP)
+#                     if (
+#                         isinstance(connection_result, tuple)
+#                         and len(connection_result) == 2
+#                     ):
+#                         reader, writer = connection_result
+#                         logger.info(
+#                             f"Received (reader, writer) tuple for TAK server {tak_server.name}"
+#                         )
+#                         self.connections[tak_server_id] = (reader, writer)
+#                     else:
+#                         logger.info(
+#                             f"Received single connection object for TAK server {tak_server.name}"
+#                         )
+#                         self.connections[tak_server_id] = connection_result
+# 
+#                     logger.info(
+#                         f"Successfully connected to TAK server {tak_server.name}"
+#                     )
+# 
+#                     # Signal that connection is ready
+#                     connection_ready.set()
+# 
+#                 except asyncio.TimeoutError:
+#                     error_msg = f"Timeout connecting to TAK server {tak_server.name}"
+#                     logger.error(error_msg)
+#                     connection_error = Exception(error_msg)
+#                     return
+#                 except Exception as e:
+#                     error_msg = (
+#                         f"Failed to connect to TAK server {tak_server.name}: {e}"
+#                     )
+#                     logger.error(error_msg)
+#                     connection_error = Exception(error_msg)
+#                     return
+# 
+#                 # Start the transmission worker
+#                 await self._transmission_worker(
+#                     queue, self.connections[tak_server_id], tak_server, self.queue_config
+#                 )
+# 
+#             except Exception as e:
+#                 logger.error(f"PyTAK worker failed for TAK server {tak_server_id}: {e}")
+#                 connection_error = e
+#                 # Clean up on error
+#                 await self._cleanup_worker(tak_server_id)
+# 
+#         try:
+#             # Create the task
+#             task = asyncio.create_task(cot_worker())
+#             self.workers[tak_server_id] = task
+# 
+#             # Wait for connection to be established (with timeout)
+#             try:
+#                 await asyncio.wait_for(
+#                     connection_ready.wait(), timeout=35.0
+#                 )  # Slightly longer than connection timeout
+#                 logger.info(f"Started PyTAK worker for TAK server {tak_server_id}.")
+#                 return True
+#             except asyncio.TimeoutError:
+#                 logger.error(
+#                     f"Timeout waiting for worker to start for TAK server {tak_server_id}"
+#                 )
+#                 # Clean up the task
+#                 task.cancel()
+#                 try:
+#                     await asyncio.wait_for(task, timeout=5.0)
+#                 except (asyncio.CancelledError, asyncio.TimeoutError):
+#                     pass
+#                 return False
+# 
+#         except Exception as e:
+#             logger.error(f"Failed to start worker for TAK server {tak_server_id}: {e}")
+#             return False
+# 
+#         # Check if there was a connection error
+#         if connection_error:
+#             logger.error(
+#                 f"Connection error for TAK server {tak_server_id}: {connection_error}"
+#             )
+#             return False
+# 
+#     @staticmethod
+#     async def _transmission_worker(queue: asyncio.Queue, connection, tak_server, queue_config: Dict[str, Any]):
+#         """Handle transmission of COT events from queue with batching"""
+#         logger.info(
+#             f"Starting transmission worker for TAK server '{tak_server.name}' (ID: {tak_server.id})"
+#         )
+# 
+#         # Track queue processing statistics
+#         events_processed = 0
+#         last_queue_size_log = None
+#         queue_empty_logged = False
+# 
+#         # Handle the case where connection might be a tuple (reader, writer)
+#         if isinstance(connection, tuple) and len(connection) == 2:
+#             reader, writer = connection
+#             logger.info(
+#                 f"Using (reader, writer) tuple for TAK server '{tak_server.name}'"
+#             )
+#             use_writer = True
+#         else:
+#             reader = connection
+#             writer = None
+#             use_writer = False
+#             logger.info(
+#                 f"Using single connection object for TAK server '{tak_server.name}'"
+#             )
+# 
+#         try:
+#             while True:
+#                 try:
+#                     # Check queue size periodically for logging
+#                     current_queue_size = queue.qsize()
+# 
+#                     # Log when queue becomes empty after having events
+#                     if (
+#                         current_queue_size == 0
+#                         and not queue_empty_logged
+#                         and events_processed > 0
+#                     ):
+#                         logger.info(
+#                             f"Queue cleared for TAK server '{tak_server.name}' - "
+#                             f"all {events_processed} events have been processed and transmitted"
+#                         )
+#                         queue_empty_logged = True
+# 
+#                     # Log significant queue size changes (every 10 events)
+#                     if (
+#                         last_queue_size_log is None
+#                         or abs(current_queue_size - last_queue_size_log) >= 10
+#                     ):
+#                         if current_queue_size > 0:
+#                             logger.debug(
+#                                 f"Queue status for TAK server '{tak_server.name}': "
+#                                 f"{current_queue_size} events pending, "
+#                                 f"{events_processed} events processed so far"
+#                             )
+#                         last_queue_size_log = current_queue_size
+# 
+#                     # Phase 2: Batch transmission with configurable batch size
+#                     batch = []
+#                     batch_size = queue_config.get("batch_size", 8)
+#                     timeout_ms = queue_config.get("batch_timeout_ms", 100)
+#                     timeout_seconds = timeout_ms / 1000.0
+# 
+#                     logger.debug(
+#                         f"Collecting batch of up to {batch_size} events for TAK server '{tak_server.name}'"
+#                     )
+# 
+#                     # Collect events for batch transmission
+#                     while len(batch) < batch_size:
+#                         try:
+#                             event = await asyncio.wait_for(queue.get(), timeout=timeout_seconds)
+#                             
+#                             if event is None:  # Shutdown signal
+#                                 if batch:
+#                                     # Process any remaining events in batch before shutdown
+#                                     break
+#                                 logger.info(
+#                                     f"Received shutdown signal for TAK server '{tak_server.name}'. "
+#                                     f"Total events processed: {events_processed}"
+#                                 )
+#                                 return
+#                             
+#                             batch.append(event)
+#                             
+#                         except asyncio.TimeoutError:
+#                             # Timeout waiting for events - transmit partial batch if we have any
+#                             break
+# 
+#                     if not batch:
+#                         # No events collected (timeout with empty queue)
+#                         logger.debug(
+#                             f"No events received (timeout) for TAK server '{tak_server.name}'"
+#                         )
+#                         continue
+# 
+#                     # Reset queue empty flag when we process events
+#                     if queue_empty_logged:
+#                         queue_empty_logged = False
+#                         logger.debug(
+#                             f"Queue activity resumed for TAK server '{tak_server.name}'"
+#                         )
+# 
+#                     batch_start_num = events_processed + 1
+#                     logger.debug(
+#                         f"Processing batch of {len(batch)} events ({batch_start_num}-{batch_start_num + len(batch) - 1}) "
+#                         f"for TAK server '{tak_server.name}'"
+#                     )
+# 
+#                     # Transmit all events in the batch
+#                     batch_success = True
+#                     for i, event in enumerate(batch):
+#                         try:
+#                             # Send the event using the appropriate method
+#                             if use_writer and writer:
+#                                 # Use writer for TCP connections
+#                                 writer.write(event)
+#                                 await writer.drain()
+#                             elif hasattr(reader, "send"):
+#                                 # Use reader.send for other connection types
+#                                 await reader.send(event)
+#                             else:
+#                                 logger.error(
+#                                     f"No suitable send method found for TAK server '{tak_server.name}'. "
+#                                     f"Event {batch_start_num + i} not transmitted."
+#                                 )
+#                                 batch_success = False
+#                                 
+#                             events_processed += 1
+#                             
+#                         except Exception as e:
+#                             logger.error(
+#                                 f"Error transmitting event {batch_start_num + i} to TAK server '{tak_server.name}': {e}"
+#                             )
+#                             batch_success = False
+#                             events_processed += 1  # Count as processed even if failed
+# 
+#                     # Mark all batch events as done
+#                     for _ in batch:
+#                         queue.task_done()
+# 
+#                     if batch_success:
+#                         logger.debug(
+#                             f"Successfully transmitted batch of {len(batch)} events to TAK server '{tak_server.name}'"
+#                         )
+#                     else:
+#                         logger.warning(
+#                             f"Some events in batch failed transmission to TAK server '{tak_server.name}'"
+#                         )
+# 
+#                     # Log milestone events (every 50 events)
+#                     if events_processed % 50 == 0:
+#                         logger.info(
+#                             f"Transmission milestone for TAK server '{tak_server.name}': "
+#                             f"{events_processed} events successfully processed"
+#                         )
+# 
+#                 except Exception as e:
+#                     logger.error(
+#                         f"Error in batch transmission worker for TAK server '{tak_server.name}': {e}"
+#                     )
+#                     continue
+# 
+#         except Exception as e:
+#             logger.error(
+#                 f"Transmission worker error for TAK server '{tak_server.name}': {e}"
+#             )
+#         finally:
+#             # Log final statistics
+#             logger.info(
+#                 f"Transmission worker shutting down for TAK server '{tak_server.name}'. "
+#                 f"Total events processed: {events_processed}"
+#             )
+# 
+#             # Clean up connection
+#             if use_writer and writer:
+#                 try:
+#                     writer.close()
+#                     await writer.wait_closed()
+#                     logger.info(
+#                         f"Closed writer connection for TAK server '{tak_server.name}'"
+#                     )
+#                 except Exception as e:
+#                     logger.debug(
+#                         f"Error closing writer for TAK server '{tak_server.name}': {e}"
+#                     )
+#             elif hasattr(reader, "close"):
+#                 try:
+#                     await reader.close()
+#                     logger.info(
+#                         f"Closed reader connection for TAK server '{tak_server.name}'"
+#                     )
+#                 except Exception as e:
+#                     logger.debug(
+#                         f"Error closing reader for TAK server '{tak_server.name}': {e}"
+#                     )
+# 
+#     def log_queue_status(self, tak_server_id: int, context: str = ""):
+#         """Log current queue status for a TAK server"""
+#         if tak_server_id not in self.queues:
+#             logger.warning(
+#                 f"No queue found for TAK server {tak_server_id} when logging status"
+#             )
+#             return
+# 
+#         queue = self.queues[tak_server_id]
+#         queue_size = queue.qsize()
+# 
+#         context_str = f" ({context})" if context else ""
+# 
+#         if queue_size == 0:
+#             logger.info(f"Queue is empty for TAK server {tak_server_id}{context_str}")
+#         else:
+#             logger.info(
+#                 f"Queue contains {queue_size} pending events for TAK server {tak_server_id}{context_str}"
+#             )
+# 
+#     @staticmethod
+#     async def _create_pytak_config(tak_server):
+#         """Create PyTAK configuration from TAK server settings"""
+#         from configparser import ConfigParser
+# 
+#         config = ConfigParser(interpolation=None)
+#         config.add_section("pytak")
+# 
+#         # Determine protocol
+#         protocol = "tls" if tak_server.protocol.lower() in ["tls", "ssl"] else "tcp"
+#         config.set(
+#             "pytak", "COT_URL", f"{protocol}://{tak_server.host}:{tak_server.port}"
+#         )
+# 
+#         # Add TLS configuration if needed
+#         if protocol == "tls":
+#             config.set(
+#                 "pytak", "PYTAK_TLS_DONT_VERIFY", str(not tak_server.verify_ssl).lower()
+#             )
+# 
+#             # Handle P12 certificate if available
+#             if tak_server.cert_p12 and len(tak_server.cert_p12) > 0:
+#                 try:
+#                     cert_pem, key_pem = EnhancedCOTService._extract_p12_certificate(
+#                         tak_server.cert_p12, tak_server.get_cert_password()
+#                     )
+#                     cert_path, key_path = EnhancedCOTService._create_temp_cert_files(
+#                         cert_pem, key_pem
+#                     )
+#                     config.set("pytak", "PYTAK_TLS_CLIENT_CERT", cert_path)
+#                     config.set("pytak", "PYTAK_TLS_CLIENT_KEY", key_path)
+#                 except Exception as e:
+#                     logger.error(f"Failed to configure P12 certificate: {e}")
+# 
+#         logger.debug(
+#             f"Created PyTAK config for {tak_server.name}: {dict(config['pytak'])}"
+#         )
+#         return config["pytak"]
+# 
+#     async def stop_worker(self, tak_server_id: int):
+#         """
+#         Stop the PyTAK worker for a given TAK server.
+#         """
+#         await self._cleanup_worker(tak_server_id)
+# 
+#     async def _cleanup_worker(self, tak_server_id: int):
+#         """Clean up worker resources"""
+#         try:
+#             # Send shutdown signal to queue
+#             if tak_server_id in self.queues:
+#                 await self.queues[tak_server_id].put(None)
+# 
+#             # Cancel worker task
+#             if tak_server_id in self.workers:
+#                 task = self.workers[tak_server_id]
+#                 if not task.done():
+#                     task.cancel()
+#                     try:
+#                         await asyncio.wait_for(task, timeout=5.0)
+#                     except (asyncio.CancelledError, asyncio.TimeoutError):
+#                         pass
+#                 del self.workers[tak_server_id]
+# 
+#             # Clean up connection
+#             if tak_server_id in self.connections:
+#                 connection = self.connections[tak_server_id]
+#                 try:
+#                     await connection.close()
+#                 except Exception as e:
+#                     logger.debug(f"Error closing connection: {e}")
+#                 del self.connections[tak_server_id]
+# 
+#             # Clean up queue
+#             if tak_server_id in self.queues:
+#                 del self.queues[tak_server_id]
+# 
+#             logger.info(f"Cleaned up PyTAK worker for TAK server {tak_server_id}.")
+# 
+#         except Exception as e:
+#             logger.error(f"Error cleaning up worker {tak_server_id}: {e}")
+# 
+#     async def enqueue_event(self, event: bytes, tak_server_id: int):
+#         """
+#         Put a COT event onto the TAK server's queue.
+#         """
+#         if tak_server_id not in self.queues:
+#             logger.error(
+#                 f"No queue found for TAK server {tak_server_id}. Event not sent."
+#             )
+#             return False
+# 
+#         try:
+#             queue = self.queues[tak_server_id]
+#             queue_size_before = queue.qsize()
+# 
+#             # Log if this is the first event being added to an empty queue
+#             if queue_size_before == 0:
+#                 logger.info(
+#                     f"Adding first event to empty queue for TAK server {tak_server_id}"
+#                 )
+# 
+#             # Phase 2: Handle queue overflow with configurable strategy
+#             await self._enqueue_with_overflow_handling(queue, event, tak_server_id)
+#             queue_size_after = queue.qsize()
+# 
+#             logger.debug(
+#                 f"Successfully enqueued COT event for TAK server {tak_server_id}. "
+#                 f"Queue size: {queue_size_before} → {queue_size_after}"
+#             )
+#             return True
+# 
+#         except Exception as e:
+#             logger.error(f"Failed to enqueue event for TAK server {tak_server_id}: {e}")
+#             return False
+# 
+#     async def _enqueue_with_overflow_handling(self, queue: asyncio.Queue, event: bytes, tak_server_id: int):
+#         """
+#         Handle queue overflow according to configured strategy.
+#         
+#         Args:
+#             queue: The asyncio queue to add the event to
+#             event: The COT event to enqueue
+#             tak_server_id: The TAK server ID for logging
+#         """
+#         strategy = self.queue_config["overflow_strategy"]
+#         
+#         if strategy == "block":
+#             # Block until space is available (default asyncio.Queue behavior)
+#             await queue.put(event)
+#         elif queue.full():
+#             # Queue is full, apply overflow strategy
+#             if strategy == "drop_oldest":
+#                 try:
+#                     # Remove oldest event to make room
+#                     queue.get_nowait()
+#                     logger.warning(
+#                         f"Queue overflow: dropped oldest event for TAK server {tak_server_id} "
+#                         f"(queue size: {queue.qsize()}, max: {self.queue_config['max_size']})"
+#                     )
+#                     # Add the new event
+#                     await queue.put(event)
+#                 except asyncio.QueueEmpty:
+#                     # Queue became empty between check and get, just add the event
+#                     await queue.put(event)
+#             elif strategy == "drop_newest":
+#                 # Drop the new event (don't add it)
+#                 logger.warning(
+#                     f"Queue overflow: dropping newest event for TAK server {tak_server_id} "
+#                     f"(queue size: {queue.qsize()}, max: {self.queue_config['max_size']})"
+#                 )
+#             else:
+#                 # Unknown strategy, fall back to blocking
+#                 logger.warning(f"Unknown overflow strategy: {strategy}, falling back to blocking")
+#                 await queue.put(event)
+#         else:
+#             # Queue has space, add the event normally
+#             await queue.put(event)
+# 
+#     async def ensure_workers(self):
+#         """
+#         Ensure a worker is running for each TAK server in the database.
+#         """
+#         try:
+#             # Import here to avoid circular imports
+#             from database import db
+#             from models.tak_server import TakServer
+# 
+#             tak_servers = db.session.query(TakServer).all()
+#             for tak_server in tak_servers:
+#                 if tak_server.id not in self.workers:
+#                     await self.start_worker(tak_server)
+#         except Exception as e:
+#             logger.error(f"Error ensuring workers: {e}")
+# 
+#     def get_worker_status(self, tak_server_id: int) -> Dict[str, Any]:
+#         """Get status information for a specific worker"""
+#         status = {
+#             "worker_running": tak_server_id in self.workers,
+#             "queue_exists": tak_server_id in self.queues,
+#             "connection_exists": tak_server_id in self.connections,
+#             "queue_size": 0,
+#         }
+# 
+#         if tak_server_id in self.queues:
+#             status["queue_size"] = self.queues[tak_server_id].qsize()
+# 
+#         if tak_server_id in self.workers:
+#             task = self.workers[tak_server_id]
+#             status["worker_done"] = task.done()
+#             status["worker_cancelled"] = task.cancelled()
+#             if task.done() and not task.cancelled():
+#                 try:
+#                     exception = task.exception()
+#                     status["worker_exception"] = str(exception) if exception else None
+#                 except Exception:
+#                     status["worker_exception"] = "Unknown"
+# 
+#         return status
+# 
+#     def get_all_worker_status(self) -> Dict[int, Dict[str, Any]]:
+#         """Get status for all workers"""
+#         return {
+#             tak_server_id: self.get_worker_status(tak_server_id)
+#             for tak_server_id in set(
+#                 list(self.workers.keys()) + list(self.queues.keys())
+#             )
+#         }
+# 
+#     def get_detailed_worker_status(self, tak_server_id: int) -> Dict[str, Any]:
+#         """Get detailed status information for a specific worker"""
+#         status = self.get_worker_status(tak_server_id)
+# 
+#         # Add more detailed information
+#         if tak_server_id in self.queues:
+#             queue = self.queues[tak_server_id]
+#             status["queue_size"] = queue.qsize()
+#             status["queue_full"] = queue.full()
+#             status["queue_empty"] = queue.empty()
+# 
+#         if tak_server_id in self.workers:
+#             task = self.workers[tak_server_id]
+#             status["worker_done"] = task.done()
+#             status["worker_cancelled"] = task.cancelled()
+#             status["worker_running"] = not task.done() and not task.cancelled()
+# 
+#             if task.done() and not task.cancelled():
+#                 try:
+#                     exception = task.exception()
+#                     status["worker_exception"] = str(exception) if exception else None
+#                 except Exception:
+#                     status["worker_exception"] = "Unknown"
+# 
+#         if tak_server_id in self.connections:
+#             connection = self.connections[tak_server_id]
+#             status["connection_exists"] = True
+#             # Try to get connection status if possible
+#             status["connection_closed"] = getattr(connection, "closed", "Unknown")
+#         else:
+#             status["connection_exists"] = False
+# 
+#         return status
+# 
+#     async def test_worker_communication(self, tak_server_id: int) -> bool:
+#         """Test if the worker is actually processing events"""
+#         if tak_server_id not in self.queues:
+#             logger.error(f"No queue for TAK server {tak_server_id}")
+#             return False
+# 
+#         try:
+#             # Create a test event
+#             test_event = b"<test>test</test>"
+# 
+#             # Put it in the queue
+#             queue = self.queues[tak_server_id]
+#             await queue.put(test_event)
+# 
+#             # Wait a bit to see if it gets processed
+#             await asyncio.sleep(2)
+# 
+#             # Check queue size
+#             queue_size = queue.qsize()
+#             logger.info(f"Test event queue size after 2 seconds: {queue_size}")
+# 
+#             return queue_size == 0  # If queue is empty, event was processed
+# 
+#         except Exception as e:
+#             logger.error(f"Error testing worker communication: {e}")
+#             return False
+# 
+#     async def shutdown(self):
+#         """Shutdown all workers and clean up resources"""
+#         logger.info("Shutting down persistent COT service...")
+# 
+#         # Stop all workers
+#         tasks = []
+#         for tak_server_id in list(self.workers.keys()):
+#             tasks.append(self.stop_worker(tak_server_id))
+# 
+#         if tasks:
+#             await asyncio.gather(*tasks, return_exceptions=True)
+# 
+#         # Final cleanup
+#         self.workers.clear()
+#         self.queues.clear()
+#         self.connections.clear()
+# 
+#         logger.info("Persistent COT service shutdown complete.")
+# 
+#     def extract_uid_from_cot_event(self, event: bytes) -> Optional[str]:
+#         """
+#         Extract device UID from COT event XML for deduplication.
+# 
+#         Args:
+#             event: COT event XML as bytes
+# 
+#         Returns:
+#             Device UID if found, None if extraction fails
+#         """
+#         try:
+#             root = ET.fromstring(event.decode("utf-8"))
+#             uid = root.get("uid")
+#             return uid
+#         except Exception as e:
+#             logger.warning(f"Failed to extract UID from COT event: {e}")
+#             return None
+# 
+#     def extract_timestamp_from_cot_event(self, event: bytes) -> Optional[datetime]:
+#         """
+#         Extract timestamp from COT event XML for freshness comparison.
+# 
+#         Args:
+#             event: COT event XML as bytes
+# 
+#         Returns:
+#             Event timestamp if found, None if extraction fails
+#         """
+#         try:
+#             root = ET.fromstring(event.decode("utf-8"))
+#             time_str = root.get("time")
+#             if time_str:
+#                 # Parse ISO format timestamp
+#                 return datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+#             return None
+#         except Exception as e:
+#             logger.warning(f"Failed to extract timestamp from COT event: {e}")
+#             return None
+# 
+#     async def remove_events_by_uid(
+#         self, tak_server_id: int, uids_to_remove: List[str]
+#     ) -> int:
+#         """
+#         Remove events with specific UIDs from the queue.
+# 
+#         Args:
+#             tak_server_id: TAK server ID
+#             uids_to_remove: List of device UIDs to remove from queue
+# 
+#         Returns:
+#             Number of events removed
+#         """
+#         if tak_server_id not in self.queues:
+#             return 0
+# 
+#         queue = self.queues[tak_server_id]
+# 
+#         # Create new temporary queue to hold non-matching events
+#         temp_events = []
+#         removed_count = 0
+# 
+#         # Drain the queue and filter out events with matching UIDs
+#         while not queue.empty():
+#             try:
+#                 event = queue.get_nowait()
+#                 uid = self.extract_uid_from_cot_event(event)
+# 
+#                 if uid in uids_to_remove:
+#                     removed_count += 1
+#                     logger.debug(f"Removing old event for device {uid}")
+#                 else:
+#                     temp_events.append(event)
+# 
+#             except asyncio.QueueEmpty:
+#                 break
+# 
+#         # Put back the events we want to keep
+#         for event in temp_events:
+#             await queue.put(event)
+# 
+#         if removed_count > 0:
+#             logger.info(
+#                 f"Removed {removed_count} old events from queue for TAK server {tak_server_id}"
+#             )
+# 
+#         return removed_count
+# 
+#     async def enqueue_with_replacement(
+#         self, events: List[bytes], tak_server_id: int
+#     ) -> bool:
+#         """
+#         Enqueue events while replacing outdated ones for same devices.
+# 
+#         This implements the core queue management enhancement to prevent event accumulation.
+#         Events from same device UID replace older events instead of accumulating.
+# 
+#         Args:
+#             events: List of COT events to enqueue
+#             tak_server_id: Target TAK server ID
+# 
+#         Returns:
+#             True if successfully processed, False otherwise
+#         """
+#         if tak_server_id not in self.queues:
+#             available_queues = list(self.queues.keys())
+#             available_workers = list(self.workers.keys())
+#             logger.error(
+#                 f"No queue found for TAK server {tak_server_id}. Available queues: {available_queues}, Available workers: {available_workers}"
+#             )
+#             return False
+# 
+#         if not events:
+#             return True
+# 
+#         try:
+#             queue = self.queues[tak_server_id]
+#             queue_size_before = queue.qsize()
+# 
+#             # Track statistics
+#             new_events = 0
+#             updated_events = 0
+#             skipped_events = 0
+# 
+#             # Group events by UID and find newest timestamp for each device
+#             device_events = {}
+#             uids_to_remove = []
+# 
+#             for event in events:
+#                 uid = self.extract_uid_from_cot_event(event)
+#                 timestamp = self.extract_timestamp_from_cot_event(event)
+# 
+#                 if uid is None:
+#                     logger.warning("Event has no UID, skipping deduplication")
+#                     await queue.put(event)
+#                     new_events += 1
+#                     continue
+# 
+#                 if timestamp is None:
+#                     logger.warning(
+#                         f"Event {uid} has no timestamp, skipping deduplication"
+#                     )
+#                     await queue.put(event)
+#                     new_events += 1
+#                     continue
+# 
+#                 # Get or create server-specific device state manager (lazy initialization)
+#                 if tak_server_id not in self.device_state_managers:
+#                     self.device_state_managers[tak_server_id] = DeviceStateManager()
+# 
+#                 server_device_manager = self.device_state_managers[tak_server_id]
+# 
+#                 # Check if we should update this device
+#                 if server_device_manager.should_update_device(uid, timestamp):
+#                     # Update device state
+#                     server_device_manager.update_device_state(
+#                         uid, {"timestamp": timestamp, "uid": uid}
+#                     )
+# 
+#                     # Track for old event removal
+#                     uids_to_remove.append(uid)
+#                     device_events[uid] = event
+# 
+#                     # Check if this is a new device or an update
+#                     if uid in server_device_manager.device_states:
+#                         updated_events += 1
+#                     else:
+#                         new_events += 1
+#                 else:
+#                     # Event is older than current state, skip it
+#                     skipped_events += 1
+#                     logger.debug(f"Skipping older event for device {uid}")
+#                     continue
+# 
+#             # Remove old events for devices we're updating
+#             if uids_to_remove:
+#                 removed_count = await self.remove_events_by_uid(
+#                     tak_server_id, uids_to_remove
+#                 )
+#                 logger.debug(
+#                     f"Removed {removed_count} old events for {len(uids_to_remove)} devices"
+#                 )
+# 
+#             # Add new/updated events to queue
+#             for uid, event in device_events.items():
+#                 await queue.put(event)
+# 
+#             queue_size_after = queue.qsize()
+# 
+#             # Log replacement statistics
+#             logger.debug(
+#                 f"Queue replacement statistics for TAK server {tak_server_id}: "
+#                 f"new={new_events}, updated={updated_events}, skipped={skipped_events}, "
+#                 f"queue size: {queue_size_before} → {queue_size_after}"
+#             )
+# 
+#             return True
+# 
         except Exception as e:
             logger.error(
                 f"Failed to enqueue events with replacement for TAK server {tak_server_id}: {e}"
@@ -2828,8 +2847,8 @@ class PersistentCOTService:
 # Singleton instance - will be initialized with configuration when first accessed
 cot_service = None
 
-def get_cot_service() -> PersistentCOTService:
-    """Get the singleton COT service instance with proper configuration"""
+def get_cot_service() -> QueuedCOTService:
+    """Get the singleton COT service instance with advanced queue management"""
     global cot_service
     if cot_service is None:
         # Load configuration using the same method as EnhancedCOTService
@@ -2839,5 +2858,5 @@ def get_cot_service() -> PersistentCOTService:
         
         # Merge queue and transmission config for the service
         merged_config = {**queue_config, **transmission_config}
-        cot_service = PersistentCOTService(queue_config=merged_config)
+        cot_service = QueuedCOTService(queue_config=merged_config)
     return cot_service
