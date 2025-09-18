@@ -2858,7 +2858,9 @@ def get_cot_service() -> QueuedCOTService:
         
         # Merge queue and transmission config for the service
         merged_config = {**queue_config, **transmission_config}
-        cot_service = QueuedCOTService(queue_config=merged_config, _bypass_singleton_check=True)
+        # Create singleton instance (no bypass - enforce singleton pattern)
+        QueuedCOTService._instance = None  # Reset in case of stale instance
+        cot_service = QueuedCOTService(queue_config=merged_config)
     return cot_service
 
 
