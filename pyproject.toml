@@ -51,7 +51,7 @@ dependencies = [
     "python-dateutil",
     "python-dotenv",
     "PyYAML",
-    "redis
+    "redis",
     "setuptools",
     "setuptools-scm",
     "six",
