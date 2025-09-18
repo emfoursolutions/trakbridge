@@ -50,7 +50,7 @@ queue:
   max_size: 500
   
   # Events per transmission batch
-  batch_size: 8
+  batch_size: 20
   
   # Overflow strategy when queue is full
   # Options: drop_oldest, drop_newest, block

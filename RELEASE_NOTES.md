@@ -1,7 +1,7 @@
 # TrakBridge Release Notes
 
 ## Version 1.0.0-rc.5 - Scaling Enhancement & Tracker Control Release
-**Release Date:** September 13, 2025  
+**Release Date:** September 18, 2025  
 **Major Features: Multi-Server Distribution & Individual Tracker Control**
 
 ---
@@ -33,13 +33,18 @@
 - **Parallel CoT transformation** processing with 5-10x performance improvement for large datasets (300+ points)
 - **Configurable batch processing** with automatic fallback to serial processing on errors
 - **Server failure isolation** - problems with one TAK server don't affect others
-- **Enhanced UI** with intuitive checkbox grid for multiple TAK server selection
+- **Improved UI** with intuitive checkbox grid for multiple TAK server selection
 
 **Performance Improvements:**
 - **Large Datasets**: 5-10x faster processing for 300+ point datasets
 - **API Efficiency**: 90% reduction in external API calls for multi-server configurations  
 - **Network Optimization**: Massive reduction in bandwidth usage through data sharing
 - **Processing Time**: <2 seconds for 100+ trackers with full enable/disable control
+
+**Queue Management System**
+- **Bounded queues** - Prevent uncrontolled queue growth with configurable size limits (default 500 events)
+- **Configurable** - Overflow strategies (drop_oldest, drop_newest, block) and batch sizes
+- **Improved change detection** - On a configuration change streams will immediately flush queues
 
 ### Advanced Performance Enhancements
 **Production-Ready Scaling Architecture**
