@@ -31,12 +31,20 @@ from services.queue_manager import get_queue_manager
 from services.queue_monitoring import get_queue_monitoring_service
 from services.device_state_manager import DeviceStateManager
 
+# PyTAK imports
+try:
+    import pytak
+    PYTAK_AVAILABLE = True
+except ImportError:
+    PYTAK_AVAILABLE = False
+    logger.warning("PyTAK not available - falling back to custom COT transmission")
+
 logger = get_module_logger(__name__)
 
 
-class EnhancedPersistentCOTService:
+class QueuedCOTService:
     """
-    Enhanced COT service integrating with dedicated queue management.
+    Production-ready COT service with advanced queue management.
     
     This class provides all the functionality of the original PersistentCOTService
     but uses the new QueueManager and QueueMonitoringService for improved
@@ -45,7 +53,7 @@ class EnhancedPersistentCOTService:
 
     def __init__(self, queue_config: Optional[Dict[str, Any]] = None):
         """
-        Initialize enhanced COT service with queue management integration.
+        Initialize queued COT service with queue management integration.
 
         Args:
             queue_config: Queue configuration dictionary
@@ -53,7 +61,7 @@ class EnhancedPersistentCOTService:
         self.workers: Dict[int, asyncio.Task] = {}
         self.connections: Dict[int, Any] = {}
         self.loop: Optional[asyncio.AbstractEventLoop] = None
-        self._running = False
+        self._running = True
         
         # Initialize queue management services
         self.queue_manager = get_queue_manager(queue_config)
@@ -65,7 +73,7 @@ class EnhancedPersistentCOTService:
         # Configuration tracking for change detection
         self.last_config_hash = None
         
-        logger.info("EnhancedPersistentCOTService initialized with queue management integration")
+        logger.info("QueuedCOTService initialized with queue management integration")
 
     async def start_worker(self, tak_server) -> bool:
         """
@@ -166,15 +174,94 @@ class EnhancedPersistentCOTService:
 
     async def _create_pytak_connection(self, tak_server):
         """
-        Create PyTAK connection (reusing existing COT service logic).
-        This would integrate with the existing PyTAK connection code.
+        Create PyTAK connection (copied from PersistentCOTService).
         """
-        # This would contain the actual PyTAK connection logic
-        # from the original COT service
-        logger.info(f"Creating PyTAK connection for {tak_server.name}")
+        if not PYTAK_AVAILABLE:
+            logger.error("PyTAK not available. Cannot create connection.")
+            return None
+            
+        try:
+            logger.info(f"Creating PyTAK connection for {tak_server.name}")
+            
+            # Create PyTAK configuration
+            config = await self._create_pytak_config(tak_server)
+            
+            # Create connection using PyTAK's protocol factory with timeout
+            logger.debug(
+                f"Attempting to connect to TAK server {tak_server.name} "
+                f"at {tak_server.host}:{tak_server.port}"
+            )
+            
+            # Add timeout to prevent hanging
+            connection_result = await asyncio.wait_for(
+                pytak.protocol_factory(config),
+                timeout=30.0,  # 30 second timeout
+            )
+            
+            # Handle the connection result (might be a tuple for TCP)
+            if (
+                isinstance(connection_result, tuple)
+                and len(connection_result) == 2
+            ):
+                reader, writer = connection_result
+                logger.info(
+                    f"Received (reader, writer) tuple for TAK server {tak_server.name}"
+                )
+                return (reader, writer)
+            else:
+                logger.info(
+                    f"Received single connection object for TAK server {tak_server.name}"
+                )
+                return connection_result
+                
+        except asyncio.TimeoutError:
+            error_msg = f"Timeout connecting to TAK server {tak_server.name}"
+            logger.error(error_msg)
+            return None
+        except Exception as e:
+            error_msg = f"Failed to connect to TAK server {tak_server.name}: {e}"
+            logger.error(error_msg)
+            return None
+
+    async def _create_pytak_config(self, tak_server):
+        """Create PyTAK configuration from TAK server settings"""
+        from configparser import ConfigParser
         
-        # Placeholder - would implement actual connection logic
-        return {"server": tak_server, "connected": True}
+        config = ConfigParser(interpolation=None)
+        config.add_section("pytak")
+        
+        # Determine protocol
+        protocol = "tls" if tak_server.protocol.lower() in ["tls", "ssl"] else "tcp"
+        config.set(
+            "pytak", "COT_URL", f"{protocol}://{tak_server.host}:{tak_server.port}"
+        )
+        
+        # Add TLS configuration if needed
+        if protocol == "tls":
+            config.set(
+                "pytak", "PYTAK_TLS_DONT_VERIFY", str(not tak_server.verify_ssl).lower()
+            )
+            
+            # Handle P12 certificate if available
+            if tak_server.cert_p12 and len(tak_server.cert_p12) > 0:
+                try:
+                    # Import certificate utilities from COT service
+                    from services.cot_service import EnhancedCOTService
+                    cert_pem, key_pem = EnhancedCOTService._extract_p12_certificate(
+                        tak_server.cert_p12, tak_server.get_cert_password()
+                    )
+                    cert_path, key_path = EnhancedCOTService._create_temp_cert_files(
+                        cert_pem, key_pem
+                    )
+                    config.set("pytak", "PYTAK_TLS_CLIENT_CERT", cert_path)
+                    config.set("pytak", "PYTAK_TLS_CLIENT_KEY", key_path)
+                except Exception as e:
+                    logger.error(f"Failed to configure P12 certificate: {e}")
+        
+        logger.debug(
+            f"Created PyTAK config for {tak_server.name}: {dict(config['pytak'])}"
+        )
+        return config["pytak"]
 
     async def _transmit_batch(self, batch: List[bytes], connection, tak_server) -> bool:
         """
@@ -188,15 +275,56 @@ class EnhancedPersistentCOTService:
         Returns:
             True if transmission successful
         """
-        try:
-            # This would contain the actual transmission logic
-            # For now, just log the transmission
-            logger.debug(f"Transmitting {len(batch)} events to {tak_server.name}")
-            
-            # Simulate transmission success
-            await asyncio.sleep(0.01)  # Simulate network delay
-            
+        if not batch:
             return True
+            
+        try:
+            logger.debug(f"Transmitting batch of {len(batch)} events to {tak_server.name}")
+            
+            # Handle the case where connection might be a tuple (reader, writer)
+            if isinstance(connection, tuple) and len(connection) == 2:
+                reader, writer = connection
+                use_writer = True
+            else:
+                reader = connection
+                writer = None
+                use_writer = False
+            
+            # Transmit all events in the batch
+            batch_success = True
+            for i, event in enumerate(batch):
+                try:
+                    # Send the event using the appropriate method
+                    if use_writer and writer:
+                        # Use writer for TCP connections
+                        writer.write(event)
+                        await writer.drain()
+                    elif hasattr(reader, "send"):
+                        # Use reader.send for other connection types
+                        await reader.send(event)
+                    else:
+                        logger.error(
+                            f"No suitable send method found for TAK server '{tak_server.name}'. "
+                            f"Event {i + 1} not transmitted."
+                        )
+                        batch_success = False
+                        
+                except Exception as e:
+                    logger.error(
+                        f"Error transmitting event {i + 1} to TAK server '{tak_server.name}': {e}"
+                    )
+                    batch_success = False
+            
+            if batch_success:
+                logger.debug(
+                    f"Successfully transmitted batch of {len(batch)} events to TAK server '{tak_server.name}'"
+                )
+            else:
+                logger.warning(
+                    f"Some events in batch failed transmission to TAK server '{tak_server.name}'"
+                )
+                
+            return batch_success
 
         except Exception as e:
             logger.error(f"Failed to transmit batch to {tak_server.name}: {e}")
@@ -204,8 +332,24 @@ class EnhancedPersistentCOTService:
 
     async def _cleanup_connection(self, connection):
         """Cleanup PyTAK connection"""
-        # Placeholder for connection cleanup
-        logger.debug("Cleaning up PyTAK connection")
+        try:
+            # Handle the case where connection might be a tuple (reader, writer)
+            if isinstance(connection, tuple) and len(connection) == 2:
+                reader, writer = connection
+                try:
+                    writer.close()
+                    await writer.wait_closed()
+                    logger.debug("Closed writer connection")
+                except Exception as e:
+                    logger.debug(f"Error closing writer: {e}")
+            elif hasattr(connection, "close"):
+                try:
+                    await connection.close()
+                    logger.debug("Closed reader connection")
+                except Exception as e:
+                    logger.debug(f"Error closing reader: {e}")
+        except Exception as e:
+            logger.error(f"Error cleaning up connection: {e}")
 
     async def enqueue_event(self, event: bytes, tak_server_id: int) -> bool:
         """
@@ -289,6 +433,26 @@ class EnhancedPersistentCOTService:
             base_status["average_wait_time"] = metrics.average_wait_time
         
         return base_status
+
+    def get_worker_status(self, tak_server_id: int) -> Dict[str, Any]:
+        """Get status information for a specific worker"""
+        status = {
+            "worker_running": tak_server_id in self.workers,
+            "connection_exists": tak_server_id in self.connections,
+            "queue_size": 0,
+        }
+        
+        # Get queue size from queue manager
+        queue_status = self.queue_manager.get_queue_status(tak_server_id)
+        if queue_status:
+            status["queue_size"] = queue_status.get("size", 0)
+            
+        if tak_server_id in self.workers:
+            task = self.workers[tak_server_id]
+            status["worker_done"] = task.done()
+            status["worker_cancelled"] = task.cancelled()
+            
+        return status
 
     async def start_monitoring(self):
         """Start the queue monitoring service"""
@@ -386,27 +550,27 @@ class EnhancedPersistentCOTService:
             logger.error(f"Failed to log comprehensive status: {e}")
 
 
-# Global enhanced service instance
-_enhanced_service = None
+# Global queued service instance
+_queued_service = None
 
 
-def get_enhanced_cot_service(queue_config: Optional[Dict[str, Any]] = None) -> EnhancedPersistentCOTService:
+def get_queued_cot_service(queue_config: Optional[Dict[str, Any]] = None) -> QueuedCOTService:
     """
-    Get the global enhanced COT service instance (singleton pattern).
+    Get the global queued COT service instance (singleton pattern).
 
     Args:
         queue_config: Queue configuration dictionary (only used on first call)
 
     Returns:
-        EnhancedPersistentCOTService instance
+        QueuedCOTService instance
     """
-    global _enhanced_service
-    if _enhanced_service is None:
-        _enhanced_service = EnhancedPersistentCOTService(queue_config)
-    return _enhanced_service
+    global _queued_service
+    if _queued_service is None:
+        _queued_service = QueuedCOTService(queue_config)
+    return _queued_service
 
 
-def reset_enhanced_cot_service():
-    """Reset the global enhanced COT service (mainly for testing)"""
-    global _enhanced_service
-    _enhanced_service = None
+def reset_queued_cot_service():
+    """Reset the global queued COT service (mainly for testing)"""
+    global _queued_service
+    _queued_service = None
