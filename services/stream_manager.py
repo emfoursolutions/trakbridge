@@ -544,8 +544,65 @@ class StreamManager:
             return False
 
     async def restart_stream(self, stream_id: int) -> bool:
-        """Restart a specific stream"""
-        logger.info(f"Restarting stream {stream_id}")
+        """Restart a specific stream with queue flushing"""
+        logger.info(f"Restarting stream {stream_id} with queue flush")
+
+        # Get stream and its TAK servers
+        try:
+            stream = await asyncio.get_event_loop().run_in_executor(
+                None, self.db_manager.get_stream_with_relationships, stream_id
+            )
+            if stream and (self._has_tak_servers_configured(stream)):
+                total_flushed = 0
+                # Flush queues for all associated TAK servers
+
+                # Handle legacy single-server configuration
+                if hasattr(stream, "tak_server") and stream.tak_server:
+                    try:
+                        flushed_count = await get_cot_service().flush_queue(
+                            stream.tak_server.id
+                        )
+                        total_flushed += flushed_count
+                        logger.info(
+                            f"Flushed {flushed_count} events from TAK server '{stream.tak_server.name}' queue"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to flush queue for TAK server {stream.tak_server.id}: {e}"
+                        )
+
+                # Handle multi-server configuration
+                if hasattr(stream, "tak_servers"):
+                    try:
+                        for tak_server in stream.tak_servers:
+                            try:
+                                flushed_count = await get_cot_service().flush_queue(
+                                    tak_server.id
+                                )
+                                total_flushed += flushed_count
+                                logger.info(
+                                    f"Flushed {flushed_count} events from TAK server '{tak_server.name}' queue"
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to flush queue for TAK server {tak_server.id}: {e}"
+                                )
+                    except Exception as e:
+                        logger.warning(
+                            f"Error accessing multi-server relationship for stream {stream_id}: {e}"
+                        )
+
+                if total_flushed > 0:
+                    logger.info(f"Stream restart: flushed {total_flushed} total events")
+                else:
+                    logger.info("Stream restart: no events to flush")
+            else:
+                logger.warning(f"Stream {stream_id} has no TAK servers configured")
+        except Exception as e:
+            logger.error(f"Error during queue flush for stream {stream_id}: {e}")
+            # Continue with restart even if flush fails
+
+        # Proceed with normal restart sequence
         await self.stop_stream(stream_id)
         await asyncio.sleep(2)  # Give time for cleanup
         return await self.start_stream(stream_id)
@@ -1115,7 +1172,9 @@ class StreamManager:
                             )
                             try:
                                 # Restart the unhealthy worker
-                                restart_success = get_cot_service().restart_worker(tak_server)
+                                restart_success = get_cot_service().restart_worker(
+                                    tak_server
+                                )
                                 if restart_success:
                                     logger.info(
                                         f"Successfully restarted TAK worker for {server_name}"

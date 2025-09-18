@@ -579,7 +579,7 @@ class StreamOperationsService:
 
                 # Restart the stream if it was running before
                 if was_running:
-                    self.stream_manager.start_stream_sync(stream_id)
+                    self.stream_manager.restart_stream_sync(stream_id)
 
                 return {
                     "success": True,

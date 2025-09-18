@@ -75,6 +75,16 @@ class QueuedCOTService:
         
         logger.info("QueuedCOTService initialized with queue management integration")
 
+    @property
+    def queues(self):
+        """
+        Backward compatibility property to access queues.
+        
+        Returns:
+            Dict[int, asyncio.Queue]: Dictionary of TAK server ID to queue mappings
+        """
+        return self.queue_manager.queues
+
     async def start_worker(self, tak_server) -> bool:
         """
         Start a persistent PyTAK worker for a given TAK server.
