@@ -1,250 +1,161 @@
-"""
-ABOUTME: Worker coordination service using Redis pub/sub for multi-worker deployments
-ABOUTME: Provides graceful fallback when Redis is unavailable
-"""
+# ABOUTME: Redis pub/sub coordination service for multi-worker deployments
+# ABOUTME: Handles worker coordination with graceful fallback when Redis unavailable
 
+import asyncio
+import json
 import logging
-import os
-import threading
 import time
 from datetime import datetime
-from typing import Callable, Dict, Optional
-
+from typing import Optional, Dict, Any, Callable
 import redis
-from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
+import os
 
 logger = logging.getLogger(__name__)
 
 
 class WorkerCoordinationService:
-    """
-    Redis-based worker coordination service for multi-worker TrakBridge deployments.
-    
-    Handles configuration change notifications between workers with graceful degradation
-    when Redis is unavailable. Uses pub/sub messaging to coordinate stream restarts
-    when configuration changes occur.
-    """
+    """Redis pub/sub coordination service with graceful fallback"""
     
     def __init__(self):
-        self._redis_client: Optional[redis.Redis] = None
-        self._subscriber_thread: Optional[threading.Thread] = None
-        self._running = False
-        self._enabled = self._get_redis_config_enabled()
-        self._connection_attempts = 0
-        self._max_connection_attempts = 3
-        self._retry_delays = [0.1, 0.2, 0.4]  # Exponential backoff in seconds
-        self._subscribers: Dict[str, Callable[[dict], None]] = {}
-        self._lock = threading.Lock()
+        self.redis_client: Optional[redis.Redis] = None
+        self.pubsub: Optional[redis.client.PubSub] = None
+        self.enabled = os.getenv('ENABLE_WORKER_COORDINATION', 'false').lower() == 'true'
+        self.channel = "trakbridge:config_updates"
+        self.reconnect_attempts = 0
+        self.max_reconnect_attempts = 3
+        self.reconnect_delay = 1.0
+        self.subscribers: Dict[str, Callable] = {}
         
-        if self._enabled:
-            self._initialize_redis_connection()
-            
-    def _get_redis_config_enabled(self) -> bool:
-        """Check if worker coordination is enabled via environment configuration"""
-        return os.getenv('ENABLE_WORKER_COORDINATION', 'false').lower() == 'true'
-        
-    def _get_redis_connection_config(self) -> dict:
-        """Get Redis connection configuration from environment variables"""
-        return {
-            'host': os.getenv('REDIS_HOST', 'localhost'),
-            'port': int(os.getenv('REDIS_PORT', '6379')),
-            'db': int(os.getenv('REDIS_DB', '0')),
-            'password': os.getenv('REDIS_PASSWORD'),
-            'socket_connect_timeout': 5,
-            'socket_timeout': 5,
-            'retry_on_timeout': True,
-            'health_check_interval': 30,
-        }
-        
-    def _initialize_redis_connection(self):
-        """Initialize Redis connection with retry logic"""
-        if not self._enabled:
-            return
-            
-        config = self._get_redis_connection_config()
-        
-        for attempt in range(self._max_connection_attempts):
-            try:
-                redis_client = redis.Redis(**config)
-                # Test connection
-                redis_client.ping()
-                self._redis_client = redis_client
-                logger.info("Successfully connected to Redis for worker coordination")
-                self._connection_attempts = 0
-                return
-                
-            except (RedisConnectionError, RedisTimeoutError, ConnectionRefusedError) as e:
-                self._connection_attempts += 1
-                if attempt < len(self._retry_delays):
-                    delay = self._retry_delays[attempt]
-                    logger.warning(
-                        f"Redis connection attempt {attempt + 1}/{self._max_connection_attempts} failed: {e}. "
-                        f"Retrying in {delay}s..."
-                    )
-                    time.sleep(delay)
-                else:
-                    logger.warning(
-                        f"All Redis connection attempts failed. "
-                        f"Worker coordination disabled, continuing without coordination."
-                    )
-                    break
-            except Exception as e:
-                logger.error(f"Unexpected error connecting to Redis: {e}")
-                break
-                
-        # If we get here, all attempts failed
-        self._redis_client = None
-                
-    def is_available(self) -> bool:
-        """Check if Redis coordination is available"""
-        if not self._enabled or not self._redis_client:
-            return False
-            
+        if self.enabled:
+            self._connect()
+    
+    def _connect(self) -> bool:
+        """Connect to Redis with retry logic"""
         try:
-            self._redis_client.ping()
+            redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+            self.redis_client = redis.from_url(redis_url, decode_responses=True)
+            
+            # Test connection
+            self.redis_client.ping()
+            self.pubsub = self.redis_client.pubsub()
+            
+            logger.info("Connected to Redis for worker coordination")
+            self.reconnect_attempts = 0
             return True
-        except (RedisConnectionError, RedisTimeoutError, ConnectionRefusedError):
-            return False
+            
         except Exception as e:
-            logger.warning(f"Unexpected error checking Redis availability: {e}")
+            logger.warning(f"Failed to connect to Redis: {e}. Worker coordination disabled.")
+            self.redis_client = None
+            self.pubsub = None
             return False
-            
-    def publish_config_change(self, stream_id: int, new_version: datetime) -> bool:
-        """
-        Publish a configuration change notification to other workers
+    
+    def _reconnect_with_backoff(self) -> bool:
+        """Reconnect with exponential backoff"""
+        if self.reconnect_attempts >= self.max_reconnect_attempts:
+            logger.error("Max Redis reconnection attempts reached. Coordination disabled.")
+            return False
         
-        Args:
-            stream_id: ID of the stream that had its configuration changed
-            new_version: New configuration version timestamp
-            
-        Returns:
-            bool: True if successfully published, False if Redis unavailable
-        """
-        if not self.is_available():
-            logger.debug(f"Redis unavailable, skipping config change notification for stream {stream_id}")
+        delay = min(self.reconnect_delay * (2 ** self.reconnect_attempts), 30.0)
+        logger.info(f"Attempting Redis reconnection in {delay}s (attempt {self.reconnect_attempts + 1})")
+        
+        time.sleep(delay)
+        self.reconnect_attempts += 1
+        
+        return self._connect()
+    
+    def publish_config_change(self, stream_id: int, config_version: datetime) -> bool:
+        """Publish configuration change notification"""
+        if not self.enabled or not self.redis_client:
+            logger.debug("Worker coordination disabled, skipping config change notification")
             return False
-            
-        message = {
-            'stream_id': stream_id,
-            'version': new_version.isoformat(),
-            'timestamp': datetime.utcnow().isoformat(),
-            'action': 'config_changed'
-        }
         
         try:
-            channel = 'trakbridge:config_updates'
-            result = self._redis_client.publish(channel, str(message))
+            message = {
+                'stream_id': stream_id,
+                'config_version': config_version.isoformat(),
+                'timestamp': datetime.utcnow().isoformat(),
+                'worker_id': os.getenv('WORKER_ID', 'unknown')
+            }
+            
+            result = self.redis_client.publish(self.channel, json.dumps(message))
             logger.debug(f"Published config change for stream {stream_id} to {result} subscribers")
             return True
             
-        except (RedisConnectionError, RedisTimeoutError, ConnectionRefusedError) as e:
-            logger.warning(f"Failed to publish config change for stream {stream_id}: {e}")
-            return False
         except Exception as e:
-            logger.error(f"Unexpected error publishing config change for stream {stream_id}: {e}")
+            logger.error(f"Failed to publish config change: {e}")
+            if self._should_reconnect():
+                self._reconnect_with_backoff()
             return False
-            
-    def subscribe_to_config_changes(self, callback: Callable[[dict], None]):
-        """
-        Subscribe to configuration change notifications from other workers
-        
-        Args:
-            callback: Function to call when a config change is received
-                     Should accept a dict with keys: stream_id, version, timestamp, action
-        """
-        if not self.is_available():
-            logger.debug("Redis unavailable, skipping config change subscription")
-            return
-            
-        with self._lock:
-            self._subscribers['config_changes'] = callback
-            
-            if not self._running:
-                self._start_subscriber_thread()
-                
-    def _start_subscriber_thread(self):
-        """Start the background subscriber thread"""
-        if self._subscriber_thread and self._subscriber_thread.is_alive():
-            return
-            
-        self._running = True
-        self._subscriber_thread = threading.Thread(
-            target=self._subscriber_worker,
-            name="WorkerCoordination-Subscriber",
-            daemon=True
-        )
-        self._subscriber_thread.start()
-        logger.info("Started worker coordination subscriber thread")
-        
-    def _subscriber_worker(self):
-        """Background worker that listens for Redis pub/sub messages"""
-        pubsub = None
+    
+    def subscribe_to_config_changes(self, callback: Callable[[Dict[str, Any]], None]) -> bool:
+        """Subscribe to configuration change notifications"""
+        if not self.enabled or not self.pubsub:
+            logger.debug("Worker coordination disabled, skipping subscription")
+            return False
         
         try:
-            pubsub = self._redis_client.pubsub()
-            pubsub.subscribe('trakbridge:config_updates')
+            self.pubsub.subscribe(self.channel)
+            callback_id = id(callback)
+            self.subscribers[str(callback_id)] = callback
             
-            logger.info("Subscribed to worker coordination messages")
+            logger.info(f"Subscribed to config changes on channel {self.channel}")
+            return True
             
-            for message in pubsub.listen():
-                if not self._running:
-                    break
-                    
+        except Exception as e:
+            logger.error(f"Failed to subscribe to config changes: {e}")
+            return False
+    
+    def listen_for_messages(self) -> None:
+        """Listen for Redis messages and dispatch to subscribers"""
+        if not self.enabled or not self.pubsub:
+            return
+        
+        try:
+            for message in self.pubsub.listen():
                 if message['type'] == 'message':
                     try:
-                        # Parse the message data
-                        data = eval(message['data'].decode('utf-8'))  # Safe eval of dict string
+                        data = json.loads(message['data'])
+                        logger.debug(f"Received config change notification: {data}")
                         
-                        with self._lock:
-                            callback = self._subscribers.get('config_changes')
-                            if callback:
+                        # Dispatch to all subscribers
+                        for callback in self.subscribers.values():
+                            try:
                                 callback(data)
+                            except Exception as e:
+                                logger.error(f"Error in config change callback: {e}")
                                 
-                    except Exception as e:
-                        logger.warning(f"Error processing coordination message: {e}")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Invalid JSON in config change message: {e}")
                         
-        except (RedisConnectionError, RedisTimeoutError, ConnectionRefusedError) as e:
-            logger.warning(f"Redis subscriber connection lost: {e}")
         except Exception as e:
-            logger.error(f"Unexpected error in subscriber worker: {e}")
-        finally:
-            if pubsub:
-                try:
-                    pubsub.unsubscribe()
-                    pubsub.close()
-                except Exception as e:
-                    logger.warning(f"Error closing Redis pubsub: {e}")
-            logger.info("Worker coordination subscriber thread stopped")
-            
-    def stop(self):
-        """Stop the coordination service and clean up resources"""
-        logger.info("Stopping worker coordination service")
-        
-        with self._lock:
-            self._running = False
-            self._subscribers.clear()
-            
-        if self._subscriber_thread and self._subscriber_thread.is_alive():
-            self._subscriber_thread.join(timeout=5)
-            
-        if self._redis_client:
-            try:
-                self._redis_client.close()
-            except Exception as e:
-                logger.warning(f"Error closing Redis client: {e}")
-            finally:
-                self._redis_client = None
+            logger.error(f"Error listening for Redis messages: {e}")
+            if self._should_reconnect():
+                self._reconnect_with_backoff()
+    
+    def _should_reconnect(self) -> bool:
+        """Determine if we should attempt reconnection"""
+        return (self.enabled and 
+                self.reconnect_attempts < self.max_reconnect_attempts)
+    
+    def unsubscribe(self, callback: Callable) -> None:
+        """Unsubscribe a callback from config changes"""
+        callback_id = str(id(callback))
+        if callback_id in self.subscribers:
+            del self.subscribers[callback_id]
+    
+    def close(self) -> None:
+        """Close Redis connections"""
+        try:
+            if self.pubsub:
+                self.pubsub.close()
+            if self.redis_client:
+                self.redis_client.close()
                 
-        logger.info("Worker coordination service stopped")
+            logger.info("Closed Redis connections")
+            
+        except Exception as e:
+            logger.error(f"Error closing Redis connections: {e}")
 
 
-# Global service instance
-_coordination_service: Optional[WorkerCoordinationService] = None
-
-
-def get_coordination_service() -> WorkerCoordinationService:
-    """Get the global worker coordination service instance"""
-    global _coordination_service
-    if _coordination_service is None:
-        _coordination_service = WorkerCoordinationService()
-    return _coordination_service
+# Global instance
+worker_coordination = WorkerCoordinationService()

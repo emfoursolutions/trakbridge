@@ -44,7 +44,7 @@ from typing import Any, Dict, Optional
 # Local application imports
 from models.stream import Stream
 from services.exceptions import DatabaseError, StreamConfigurationError
-from services.worker_coordination_service import get_coordination_service
+from services.worker_coordination_service import worker_coordination
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class StreamOperationsService:
     def __init__(self, stream_manager: Any, db: Any) -> None:
         self.stream_manager = stream_manager
         self.db = db
-        self.coordination_service = get_coordination_service()
+        # Use global worker coordination instance
 
     def _get_session(self):
         """Get the database session, handling both scoped session and db.session patterns"""
@@ -123,7 +123,7 @@ class StreamOperationsService:
             stream.update_config_version()
             
             # Publish notification to other workers
-            success = self.coordination_service.publish_config_change(
+            success = worker_coordination.publish_config_change(
                 stream.id, stream.config_version
             )
             

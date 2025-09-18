@@ -19,7 +19,7 @@ from unittest import TestCase
 import pytest
 from redis.exceptions import ConnectionError as RedisConnectionError
 
-from services.worker_coordination_service import WorkerCoordinationService, get_coordination_service
+from services.worker_coordination_service import WorkerCoordinationService
 
 
 class TestWorkerCoordinationService:
@@ -35,8 +35,8 @@ class TestWorkerCoordinationService:
                 service = WorkerCoordinationService()
                 
                 # Should fall back gracefully
-                assert not service.is_available()
-                assert service._redis_client is None
+                assert not service.enabled or service.redis_client is None
+                assert service.redis_client is None
                 
                 # Should still allow publishing (returns False)
                 result = service.publish_config_change(1, datetime.utcnow())
@@ -160,8 +160,8 @@ class TestWorkerCoordinationService:
             service = WorkerCoordinationService()
             
             assert not service._enabled
-            assert not service.is_available()
-            assert service._redis_client is None
+            assert not service.enabled or service.redis_client is None
+            assert service.redis_client is None
             
             # Should return False for publish operations
             result = service.publish_config_change(1, datetime.utcnow())
@@ -181,7 +181,7 @@ class TestWorkerCoordinationService:
                 mock_client.close.assert_called_once()
                 
                 # Should not be available after stop
-                assert not service.is_available()
+                assert not service.enabled or service.redis_client is None
 
     def test_redis_connection_error_handling(self):
         """Test handling of Redis connection errors during operations"""

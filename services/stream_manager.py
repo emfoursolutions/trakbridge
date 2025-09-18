@@ -41,7 +41,7 @@ import logging
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 # Local application imports
 from services.cot_service import get_cot_service
@@ -54,6 +54,7 @@ from services.exceptions import (
 from services.logging_service import get_module_logger
 from services.session_manager import SessionManager
 from services.stream_worker import StreamWorker
+from services.worker_coordination_service import worker_coordination
 
 # Global stream manager instance - use singleton pattern to prevent multiple instances
 _stream_manager_instance = None
@@ -80,6 +81,10 @@ class StreamManager:
         self._health_check_task = None
         self._loop_thread = None
         self._manager_lock = threading.Lock()
+        
+        # Worker coordination
+        self._stream_versions: Dict[int, datetime] = {}  # Cache of stream config versions
+        self.coordination_thread: Optional[threading.Thread] = None
 
         # Initialize dependencies
         self.db_manager = DatabaseManager(app_context_factory)
@@ -88,6 +93,9 @@ class StreamManager:
         # Initialize persistent COT service flag
         self._cot_service_initialized = False
 
+        # Setup worker coordination
+        self._setup_coordination_subscriber()
+        
         # Start background loop
         self._start_background_loop()
 
@@ -203,6 +211,104 @@ class StreamManager:
             )
 
         return None
+    
+    def _setup_coordination_subscriber(self):
+        """Setup worker coordination subscriber"""
+        if not worker_coordination.enabled:
+            logger.debug("Worker coordination disabled, skipping subscriber setup")
+            return
+            
+        def config_change_callback(message):
+            """Handle configuration change notifications from other workers"""
+            try:
+                stream_id = message.get('stream_id')
+                config_version_str = message.get('config_version')
+                worker_id = message.get('worker_id', 'unknown')
+                
+                if not stream_id or not config_version_str:
+                    logger.warning(f"Invalid config change message: {message}")
+                    return
+                
+                # Parse config version timestamp
+                config_version = datetime.fromisoformat(config_version_str.replace('Z', '+00:00'))
+                
+                # Check if our version is outdated
+                if self.is_config_outdated(stream_id, config_version):
+                    logger.info(f"Received config update for stream {stream_id} from worker {worker_id}")
+                    
+                    # Update our version cache
+                    self._stream_versions[stream_id] = config_version
+                    
+                    # Restart the stream to pick up new configuration
+                    self.restart_stream_sync(stream_id)
+                else:
+                    logger.debug(f"Config version for stream {stream_id} is current, no restart needed")
+                    
+            except Exception as e:
+                logger.error(f"Error processing config change notification: {e}")
+        
+        # Subscribe to config changes
+        worker_coordination.subscribe_to_config_changes(config_change_callback)
+        
+        # Start coordination listener thread if enabled
+        if worker_coordination.enabled:
+            self.coordination_thread = threading.Thread(target=self._coordination_listener, daemon=True)
+            self.coordination_thread.start()
+            logger.info("Worker coordination enabled - listening for config changes")
+    
+    def _coordination_listener(self):
+        """Background thread for listening to Redis coordination messages"""
+        logger.info("Starting coordination listener thread")
+        
+        try:
+            while not self._shutdown_event.is_set():
+                try:
+                    # Listen for messages with timeout
+                    worker_coordination.listen_for_messages()
+                    
+                    # Brief pause to prevent tight loop if listen_for_messages returns immediately
+                    time.sleep(0.1)
+                    
+                except Exception as e:
+                    logger.error(f"Error in coordination listener: {e}")
+                    
+                    # Wait before retrying
+                    if not self._shutdown_event.wait(5.0):
+                        continue
+                    else:
+                        break
+                        
+        except Exception as e:
+            logger.error(f"Coordination listener thread error: {e}")
+        finally:
+            logger.info("Coordination listener thread stopped")
+    
+    def is_config_outdated(self, stream_id: int, new_version: datetime) -> bool:
+        """Check if stream configuration is outdated compared to new version"""
+        current_version = self._stream_versions.get(stream_id)
+        
+        # If we don't have a version cached, it's outdated
+        if current_version is None:
+            return True
+        
+        # Compare timestamps
+        return new_version > current_version
+    
+    def restart_stream_coordination(self, stream_id: int) -> bool:
+        """Restart a specific stream due to configuration change with coordination"""
+        logger.info(f"Restarting stream {stream_id} due to configuration change")
+        
+        try:
+            # Use existing restart_stream_sync method
+            return self.restart_stream_sync(stream_id)
+                
+        except Exception as e:
+            logger.error(f"Error restarting stream {stream_id}: {e}")
+            return False
+    
+    def update_stream_version_cache(self, stream_id: int, version: datetime):
+        """Update the cached version for a stream"""
+        self._stream_versions[stream_id] = version
 
     async def _initialize_persistent_cot_service(self):
         """
@@ -1282,6 +1388,14 @@ class StreamManager:
             except Exception as e:
                 logger.error(f"Error cancelling health check task: {e}")
 
+        # Wait for coordination thread to finish
+        if self.coordination_thread and self.coordination_thread.is_alive():
+            self.coordination_thread.join(timeout=5)
+            if self.coordination_thread.is_alive():
+                logger.warning("Coordination thread did not terminate within timeout")
+            else:
+                logger.info("Coordination thread terminated successfully")
+
         # Wait for thread to finish with timeout
         if self._loop_thread and self._loop_thread.is_alive():
             self._loop_thread.join(timeout=15)  # Reduced timeout
@@ -1289,6 +1403,9 @@ class StreamManager:
                 logger.warning("Background thread did not terminate within timeout")
             else:
                 logger.info("Background thread terminated successfully")
+
+        # Close coordination service
+        worker_coordination.close()
 
         # Clear references to avoid memory leaks
         self.workers.clear()
