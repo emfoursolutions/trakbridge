@@ -568,9 +568,9 @@ class StreamManager:
     async def restart_stream(self, stream_id: int) -> bool:
         """Enhanced restart with comprehensive worker cleanup"""
         logger.debug(f"Restarting stream {stream_id} with comprehensive worker cleanup")
-        logger.debug(f"Stream restart initiated at {datetime.now()} - potential configuration change trigger")
+        logger.debug(f"Stream restart initiated at {datetime.now(timezone.utc)} - potential configuration change trigger")
         
-        # Get stream and flush queues (existing logic)
+        # Get stream and flush queues (existing logic)...
         try:
             stream = await asyncio.get_event_loop().run_in_executor(
                 None, self.db_manager.get_stream_with_relationships, stream_id
@@ -621,10 +621,12 @@ class StreamManager:
                     logger.info("Stream restart: no events to flush")
                     
                 # Enhanced worker cleanup before restart
-                logger.debug(f"Stream restart triggering comprehensive worker cleanup for stream {stream_id} at {datetime.now()}")
-                for tak_server in self._get_all_tak_servers(stream):
-                    logger.debug(f"Stream restart cleanup: stopping all workers for TAK server {tak_server.name} (ID: {tak_server.id})")
-                    await get_cot_service().stop_all_workers_for_server(tak_server.id)
+                if stream and self._has_tak_servers_configured(stream):
+                    logger.debug(f"Stream restart triggering comprehensive worker cleanup for stream {stream_id} at {datetime.now(timezone.utc)}")
+                    for tak_server in self._get_all_tak_servers(stream):
+                        logger.debug(f"Stream restart cleanup: stopping all workers for TAK server {tak_server.name} (ID: {tak_server.id})")
+                        await get_cot_service().stop_all_workers_for_server(tak_server.id)
+                        logger.debug(f"Comprehensive worker cleanup completed for TAK server {tak_server.name}")
             else:
                 logger.warning(f"Stream {stream_id} has no TAK servers configured")
         except Exception as e:
@@ -632,9 +634,14 @@ class StreamManager:
             # Continue with restart even if flush fails
 
         # Proceed with normal restart sequence
+        logger.debug(f"Beginning stream restart sequence: stop -> sleep -> start for stream {stream_id}")
         await self.stop_stream(stream_id)
-        await asyncio.sleep(2)  # Give time for cleanup
-        return await self.start_stream(stream_id)
+        logger.debug(f"Stream {stream_id} stopped, waiting 2 seconds for cleanup")
+        await asyncio.sleep(2)
+        logger.debug(f"Starting stream {stream_id} after restart cleanup")
+        result = await self.start_stream(stream_id)
+        logger.debug(f"Stream restart completed for {stream_id}: {'success' if result else 'failed'}")
+        return result
 
     async def stop_all(self, skip_db_update=False):
         """Stop all running streams with enhanced database operations"""
