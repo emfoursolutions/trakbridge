@@ -39,6 +39,7 @@ pytak
 python-dateutil
 python-dotenv
 PyYAML
+redis
 setuptools
 setuptools-scm
 six
