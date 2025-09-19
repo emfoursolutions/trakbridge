@@ -11,7 +11,9 @@
 #
 # Usage:
 #   docker-compose -f docker-compose-dev.yml --profile postgres up -d
+#   docker-compose -f docker-compose-dev.yml --profile postgres --profile redis up -d
 #   docker-compose -f docker-compose-dev.yml --profile postgres --profile nginx up -d
+#   docker-compose -f docker-compose-dev.yml --profile postgres --profile redis --profile nginx up -d
 #
 # Features:
 #   - Development-optimized settings (debug mode, verbose logging)
@@ -123,12 +125,18 @@ services:
       SESSION_COOKIE_DOMAIN: "${SESSION_COOKIE_DOMAIN:-}"
       SESSION_COOKIE_PATH: "${SESSION_COOKIE_PATH:-/}"
 
+      # Redis Configuration (Development - for worker coordination testing)
+      ENABLE_WORKER_COORDINATION: "${ENABLE_WORKER_COORDINATION:-false}"
+      REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+
       # Secret file paths (if secrets are in /app/secrets instead of /run/secrets)
       DB_PASSWORD_FILE: "/app/secrets/db_password"
       SECRET_KEY_FILE: "/app/secrets/secret_key" 
       TB_MASTER_KEY_FILE: "/app/secrets/tb_master_key"
       LDAP_BIND_PASSWORD_FILE: "/app/secrets/ldap_bind_password"
       OIDC_CLIENT_SECRET_FILE: "/app/secrets/oidc_client_secret"
+      REDIS_PASSWORD_FILE: "./secrets/redis_password"
 
     # Secrets - use Docker Compose secrets for consistency with production
     secrets:
@@ -307,7 +315,7 @@ services:
         reservations:
           memory: 256M
 
-  # Redis (optional, for caching/sessions)
+  # Redis (optional, for worker coordination and caching)
   redis:
     image: redis:7-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-trakbridge}-redis
@@ -315,6 +323,18 @@ services:
     profiles:
       - redis
       - cache
+      - coordination
+
+    command: |
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --save 60 100
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+      --tcp-keepalive 300
+      --timeout 0
+      --databases 16
 
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -327,9 +347,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
     networks:
       - app-network
+
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
 
   # Nginx reverse proxy (optional)
   nginx:
@@ -386,3 +414,5 @@ secrets:
     file: ./secrets/ldap_bind_password
   oidc_client_secret:
     file: ./secrets/oidc_client_secret
+  redis_password:
+    file: ./secrets/redis_password

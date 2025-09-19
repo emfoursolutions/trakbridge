@@ -19,16 +19,26 @@ class WorkerCoordinationService:
     def __init__(self):
         self.redis_client: Optional[redis.Redis] = None
         self.pubsub: Optional[redis.client.PubSub] = None
-        self.enabled = os.getenv('ENABLE_WORKER_COORDINATION', 'false').lower() == 'true'
         self.channel = "trakbridge:config_updates"
         self.reconnect_attempts = 0
         self.max_reconnect_attempts = 3
         self.reconnect_delay = 1.0
         self.subscribers: Dict[str, Callable] = {}
-        
-        if self.enabled:
-            self._connect()
-    
+        # Note: Connection is now lazy-loaded when first needed
+
+    @property
+    def enabled(self) -> bool:
+        """Check if worker coordination is enabled via environment variable."""
+        return os.getenv('ENABLE_WORKER_COORDINATION', 'false').lower() == 'true'
+
+    def _ensure_connected(self) -> bool:
+        """Ensure Redis connection exists if coordination is enabled."""
+        if not self.enabled:
+            return False
+        if self.redis_client is None:
+            return self._connect()
+        return True
+
     def _connect(self) -> bool:
         """Connect to Redis with retry logic"""
         try:
@@ -65,7 +75,7 @@ class WorkerCoordinationService:
     
     def publish_config_change(self, stream_id: int, config_version: datetime) -> bool:
         """Publish configuration change notification"""
-        if not self.enabled or not self.redis_client:
+        if not self._ensure_connected():
             logger.debug("Worker coordination disabled, skipping config change notification")
             return False
         
@@ -89,7 +99,7 @@ class WorkerCoordinationService:
     
     def subscribe_to_config_changes(self, callback: Callable[[Dict[str, Any]], None]) -> bool:
         """Subscribe to configuration change notifications"""
-        if not self.enabled or not self.pubsub:
+        if not self._ensure_connected() or not self.pubsub:
             logger.debug("Worker coordination disabled, skipping subscription")
             return False
         
@@ -107,7 +117,7 @@ class WorkerCoordinationService:
     
     def listen_for_messages(self) -> None:
         """Listen for Redis messages and dispatch to subscribers"""
-        if not self.enabled or not self.pubsub:
+        if not self._ensure_connected() or not self.pubsub:
             return
         
         try:
@@ -134,7 +144,7 @@ class WorkerCoordinationService:
     
     def _should_reconnect(self) -> bool:
         """Determine if we should attempt reconnection"""
-        return (self.enabled and 
+        return (self.enabled and
                 self.reconnect_attempts < self.max_reconnect_attempts)
     
     def unsubscribe(self, callback: Callable) -> None:

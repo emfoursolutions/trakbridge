@@ -6,8 +6,11 @@
 #   docker-compose up                         # App only (requires external DB or SQLite)
 #   docker-compose --profile postgres up      # App + PostgreSQL
 #   docker-compose --profile mysql up         # App + MySQL
+#   docker-compose --profile redis up         # App + Redis (for worker coordination)
 #   docker-compose --profile nginx up         # App + Nginx reverse proxy
-#   docker-compose --profile postgres --profile nginx up  # Full stack
+#   docker-compose --profile postgres --profile redis up  # App + PostgreSQL + Redis
+#   docker-compose --profile postgres --profile nginx up  # Full stack without Redis
+#   docker-compose --profile postgres --profile redis --profile nginx up  # Complete stack
 #
 # Configuration:
 #   Edit the 'x-environment' section below to customize your deployment
@@ -17,8 +20,23 @@
 #   Default configuration files are automatically installed on first run.
 #   Set TRAKBRIDGE_CONFIG_UPDATE_MODE to control how configs are updated:
 #     - "preserve": Keep existing configs (default)
-#     - "overwrite": Replace with container defaults  
+#     - "overwrite": Replace with container defaults
 #     - "merge": Smart merge (future feature)
+#
+# Redis Configuration (Worker Coordination):
+#   Redis enables coordination between multiple TrakBridge workers in scaled deployments.
+#   When enabled, workers synchronize configuration changes in real-time via pub/sub.
+#
+#   To enable Redis worker coordination:
+#   1. Set ENABLE_WORKER_COORDINATION="true" in the environment section below
+#   2. Deploy with Redis: docker-compose --profile postgres --profile redis up
+#   3. Optionally set a Redis password in ./secrets/redis_password for security
+#
+#   Redis URL formats:
+#     - redis://redis:6379/0                    # No authentication (default)
+#     - redis://:password@redis:6379/0          # With password
+#     - redis://user:password@redis:6379/0      # With username and password
+#     - redis://external-redis.example.com:6379/0  # External Redis service
 #
 # =============================================================================
 
@@ -117,6 +135,11 @@ x-environment: &common-environment
   SESSION_SECURE_COOKIES: "true"
   SESSION_COOKIE_DOMAIN: ""  # Leave blank for auto-detection
   SESSION_COOKIE_PATH: "/"
+
+  # Redis Configuration (for worker coordination in multi-worker deployments)
+  ENABLE_WORKER_COORDINATION: "false"  # Set to "true" to enable Redis worker coordination
+  REDIS_URL: "redis://redis:6379/0"  # Redis connection URL (used when coordination enabled)
+  REDIS_PASSWORD: ""  # Leave blank for no auth, or set password for Redis authentication
   
 # Secret file paths - customize if needed
 x-secrets: &common-secrets
@@ -125,6 +148,7 @@ x-secrets: &common-secrets
   TB_MASTER_KEY_FILE: "./secrets/tb_master_key"
   LDAP_BIND_PASSWORD_FILE: "./secrets/ldap_bind_password"
   OIDC_CLIENT_SECRET_FILE: "./secrets/oidc_client_secret"
+  REDIS_PASSWORD_FILE: "./secrets/redis_password"
 
 services:
   # =============================================================================
@@ -148,6 +172,7 @@ services:
       - tb_master_key
       - ldap_bind_password
       - oidc_client_secret
+      - redis_password
 
     ports:
       - "5000:5000"  # Change first port if you need external access on different port
@@ -172,6 +197,9 @@ services:
         condition: service_healthy
         required: false
       mysql:
+        condition: service_healthy
+        required: false
+      redis:
         condition: service_healthy
         required: false
 
@@ -306,6 +334,62 @@ services:
           memory: 512M
 
   # =============================================================================
+  # Redis (Optional - for worker coordination in multi-worker deployments)
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: trakbridge-redis
+    restart: unless-stopped
+    profiles: ["redis", "coordination"]
+
+    command: |
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --tcp-keepalive 300
+      --tcp-backlog 511
+      --timeout 0
+      --databases 16
+      --requirepass $$(cat /run/secrets/redis_password 2>/dev/null || echo "")
+
+    ports:
+      - "6379:6379"  # Change first port if you need external access on different port
+
+    secrets:
+      - redis_password
+
+    volumes:
+      - redis_data:/data
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+
+    healthcheck:
+      test: |
+        if [ -f /run/secrets/redis_password ]; then
+          redis-cli -a "$$(cat /run/secrets/redis_password)" ping
+        else
+          redis-cli ping
+        fi
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+    networks:
+      - trakbridge
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # =============================================================================
   # Nginx Reverse Proxy (Optional)
   # =============================================================================
   nginx:
@@ -342,6 +426,8 @@ volumes:
     driver: local
   mysql_data:
     driver: local
+  redis_data:
+    driver: local
 
 # =============================================================================
 # Secrets
@@ -357,3 +443,5 @@ secrets:
     file: ./secrets/ldap_bind_password
   oidc_client_secret:
     file: ./secrets/oidc_client_secret
+  redis_password:
+    file: ./secrets/redis_password

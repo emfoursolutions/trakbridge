@@ -267,6 +267,14 @@ class DatabaseManager:
         stream_copy.plugin_config = stream.plugin_config
         stream_copy.total_messages_sent = getattr(stream, "total_messages_sent", 0)
 
+        # Copy callsign mapping and per-point configuration fields
+        stream_copy.cot_type_mode = getattr(stream, "cot_type_mode", "stream")
+        stream_copy.enable_callsign_mapping = getattr(stream, "enable_callsign_mapping", False)
+        stream_copy.callsign_identifier_field = getattr(stream, "callsign_identifier_field", None)
+        stream_copy.callsign_error_handling = getattr(stream, "callsign_error_handling", "fallback")
+        stream_copy.enable_per_callsign_cot_types = getattr(stream, "enable_per_callsign_cot_types", False)
+        stream_copy.config_version = getattr(stream, "config_version", None)
+
         # Copy TAK server data if it exists
         if stream.tak_server:
             tak_copy = SimpleNamespace()

@@ -123,6 +123,11 @@ x-environment: &staging-environment
   SESSION_SECURE_COOKIES: "true"  # Production-like security
   SESSION_COOKIE_DOMAIN: "staging.trakbridge.local"  # Update for your staging domain
   SESSION_COOKIE_PATH: "/"
+
+  # Redis Configuration (for worker coordination in multi-worker deployments)
+  ENABLE_WORKER_COORDINATION: "false"  # Set to "true" to enable Redis worker coordination
+  REDIS_URL: "redis://redis:6379/0"  # Redis connection URL (used when coordination enabled)
+  REDIS_PASSWORD: ""  # Leave blank for no auth, or set password for Redis authentication
   
   # Secret file paths (if secrets are in /app/secrets instead of /run/secrets)
   DB_PASSWORD_FILE: "/app/secrets/db_password"
@@ -130,6 +135,7 @@ x-environment: &staging-environment
   TB_MASTER_KEY_FILE: "/app/secrets/tb_master_key"
   LDAP_BIND_PASSWORD_FILE: "/app/secrets/ldap_bind_password"
   OIDC_CLIENT_SECRET_FILE: "/app/secrets/oidc_client_secret"
+  REDIS_PASSWORD_FILE: "/app/secrets/redis_password"
 
 # Secrets are now configured directly in environment variables above
 
@@ -151,6 +157,7 @@ services:
       - tb_master_key
       - ldap_bind_password
       - oidc_client_secret
+      - redis_password
     
     ports:
       - "${APP_PORT:-5000}:5000"
@@ -318,6 +325,62 @@ services:
           memory: 384M
 
   # =============================================================================
+  # Redis (Optional - for worker coordination in multi-worker deployments)
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: trakbridge-redis
+    restart: unless-stopped
+    profiles: ["redis", "coordination"]
+
+    command: |
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --tcp-keepalive 300
+      --tcp-backlog 511
+      --timeout 0
+      --databases 16
+      --requirepass $$(cat /run/secrets/redis_password 2>/dev/null || echo "")
+
+    ports:
+      - "6379:6379"  # Change first port if you need external access on different port
+
+    secrets:
+      - redis_password
+
+    volumes:
+      - redis_data:/data
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+
+    healthcheck:
+      test: |
+        if [ -f /run/secrets/redis_password ]; then
+          redis-cli -a "$$(cat /run/secrets/redis_password)" ping
+        else
+          redis-cli ping
+        fi
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+    networks:
+      - trakbridge
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # =============================================================================
   # Nginx Reverse Proxy - Staging Configuration
   # =============================================================================
   nginx:
@@ -368,7 +431,11 @@ volumes:
   mysql_staging_data:
     driver: local
     name: trakbridge-mysql-staging-data
-  
+
+  redis_data:
+    driver: local
+    name: trakbridge-redis-staging-data
+
 # =============================================================================
 # Secrets - Staging Environment (using standard secrets directory)
 # =============================================================================
@@ -387,3 +454,6 @@ secrets:
   
   oidc_client_secret:
     file: ${OIDC_CLIENT_SECRET_FILE:-./secrets/oidc_client_secret}
+
+  redis_password:
+    file: ${REDIS_PASSWORD_FILE:-./secrets/redis_password}

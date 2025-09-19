@@ -463,7 +463,7 @@ class QueuedCOTService:
         cot_type_mode: str = "stream",
     ) -> List[bytes]:
         """
-        Create COT events from location data
+        Create COT events from location data with parallel processing support
 
         Args:
             locations: List of location dictionaries
@@ -477,16 +477,45 @@ class QueuedCOTService:
         logger.debug(
             f"create_cot_events called with: cot_type_mode='{cot_type_mode}', cot_type='{cot_type}', locations={len(locations)}"
         )
-        
-        # Phase 1: Always use PyTAK (no fallback complexity)
-        if PYTAK_AVAILABLE:
-            return await self._create_pytak_events(
-                locations, cot_type, stale_time, cot_type_mode
+
+        # Check if parallel processing is enabled
+        if not self.parallel_config.get("enabled", True):
+            logger.debug("Parallel processing disabled, using serial processing")
+            if PYTAK_AVAILABLE:
+                return await self._create_pytak_events(
+                    locations, cot_type, stale_time, cot_type_mode
+                )
+            else:
+                return await QueuedCOTService._create_custom_events(
+                    locations, cot_type, stale_time, cot_type_mode
+                )
+
+        # Use parallel processing for larger datasets to improve performance
+        threshold = self.parallel_config.get("batch_size_threshold", 10)
+        if len(locations) >= threshold:
+            logger.debug(
+                f"Using parallel processing for {len(locations)} locations (threshold: {threshold})"
             )
+            if PYTAK_AVAILABLE:
+                return await self._create_parallel_pytak_events(
+                    locations, cot_type, stale_time, cot_type_mode
+                )
+            else:
+                return await QueuedCOTService._create_custom_events(
+                    locations, cot_type, stale_time, cot_type_mode
+                )
         else:
-            return await QueuedCOTService._create_custom_events(
-                locations, cot_type, stale_time, cot_type_mode
+            logger.debug(
+                f"Using serial processing for {len(locations)} locations (below threshold: {threshold})"
             )
+            if PYTAK_AVAILABLE:
+                return await self._create_pytak_events(
+                    locations, cot_type, stale_time, cot_type_mode
+                )
+            else:
+                return await QueuedCOTService._create_custom_events(
+                    locations, cot_type, stale_time, cot_type_mode
+                )
 
     async def send_to_tak_server(self, events: List[bytes], tak_server) -> bool:
         """
@@ -610,6 +639,123 @@ class QueuedCOTService:
 
         logger.debug(f"Created {len(events)} COT events from {len(locations)} locations")
         return events
+
+    async def _create_parallel_pytak_events(
+        self,
+        locations: List[Dict[str, Any]],
+        cot_type: str,
+        stale_time: int,
+        cot_type_mode: str = "stream",
+    ) -> List[bytes]:
+        """
+        Create COT events using PyTAK with parallel processing for improved performance.
+
+        This method processes locations concurrently to improve performance for large datasets
+        while properly handling per-point CoT type mode functionality.
+        """
+        if not locations:
+            return []
+
+        try:
+            # Get parallel processing configuration
+            max_concurrent_tasks = self.parallel_config.get("max_concurrent_tasks", 50)
+            processing_timeout = self.parallel_config.get("processing_timeout", 30.0)
+            fallback_on_error = self.parallel_config.get("fallback_on_error", True)
+
+            logger.debug(
+                f"Parallel processing: {len(locations)} locations with "
+                f"max_concurrent_tasks={max_concurrent_tasks}, "
+                f"timeout={processing_timeout}s, fallback_enabled={fallback_on_error}"
+            )
+
+            # Split locations into chunks for concurrent processing
+            import math
+            chunk_size = max(1, math.ceil(len(locations) / max_concurrent_tasks))
+            chunks = [locations[i:i + chunk_size] for i in range(0, len(locations), chunk_size)]
+
+            logger.debug(f"Split {len(locations)} locations into {len(chunks)} chunks of "
+                        f"~{chunk_size} each")
+
+            async def process_chunk(chunk: List[Dict[str, Any]]) -> List[bytes]:
+                """Process a chunk of locations using the existing serial method"""
+                try:
+                    # Use the existing _create_pytak_events method for each chunk
+                    # This ensures per-point CoT type logic is preserved
+                    return await QueuedCOTService._create_pytak_events(
+                        chunk, cot_type, stale_time, cot_type_mode
+                    )
+                except Exception as e:
+                    logger.error(f"Error processing chunk of {len(chunk)} locations: {e}")
+                    if fallback_on_error:
+                        logger.debug("Using fallback serial processing for failed chunk")
+                        return await QueuedCOTService._create_pytak_events(
+                            chunk, cot_type, stale_time, cot_type_mode
+                        )
+                    else:
+                        raise
+
+            # Process chunks concurrently with timeout
+            try:
+                if processing_timeout > 0:
+                    chunk_tasks = [process_chunk(chunk) for chunk in chunks]
+                    chunk_results = await asyncio.wait_for(
+                        asyncio.gather(*chunk_tasks, return_exceptions=True),
+                        timeout=processing_timeout
+                    )
+                else:
+                    chunk_results = await asyncio.gather(
+                        *[process_chunk(chunk) for chunk in chunks], return_exceptions=True
+                    )
+            except asyncio.TimeoutError:
+                logger.error(f"Parallel processing timed out after {processing_timeout}s")
+                if fallback_on_error:
+                    logger.info("Falling back to serial processing due to timeout")
+                    return await QueuedCOTService._create_pytak_events(
+                        locations, cot_type, stale_time, cot_type_mode
+                    )
+                else:
+                    raise
+
+            # Combine results and handle any exceptions
+            all_events = []
+            failed_chunks = 0
+
+            for i, result in enumerate(chunk_results):
+                if isinstance(result, Exception):
+                    failed_chunks += 1
+                    logger.error(f"Chunk {i} processing failed: {result}")
+                    if fallback_on_error:
+                        logger.debug(f"Processing failed chunk {i} with serial fallback")
+                        try:
+                            fallback_events = await QueuedCOTService._create_pytak_events(
+                                chunks[i], cot_type, stale_time, cot_type_mode
+                            )
+                            all_events.extend(fallback_events)
+                        except Exception as fallback_error:
+                            logger.error(f"Fallback processing also failed for chunk {i}: {fallback_error}")
+                    else:
+                        raise result
+                else:
+                    all_events.extend(result)
+
+            if failed_chunks > 0:
+                logger.warning(f"Parallel processing completed with "
+                              f"{failed_chunks}/{len(chunks)} failed chunks")
+            else:
+                logger.debug(f"Parallel processing completed successfully: "
+                            f"{len(all_events)} total events created")
+
+            return all_events
+
+        except Exception as e:
+            logger.error(f"Parallel processing failed: {e}")
+            if fallback_on_error:
+                logger.info("Falling back to serial processing due to parallel processing failure")
+                return await QueuedCOTService._create_pytak_events(
+                    locations, cot_type, stale_time, cot_type_mode
+                )
+            else:
+                raise
 
     async def _send_with_pytak(self, events: List[bytes], tak_server) -> bool:
         """Send events using PyTAK"""
