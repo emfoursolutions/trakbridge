@@ -72,32 +72,32 @@ class TestConfigChangeRestart:
             mock_query = Mock()
             mock_query.options.return_value.filter_by.return_value.first_or_404.return_value = mock_stream
             mock_stream_query.query = mock_query
-        
-        # Mock TAK server query
-        mock_tak_server.query.filter.return_value.all.return_value = [Mock(id=1, name="Test Server")]
-        
-        # Mock plugin manager and config service
-        mock_plugin_manager.return_value.get_plugin_metadata.return_value = {
-            "config_fields": []
-        }
-        mock_config_service = Mock()
-        mock_config_service.extract_plugin_config_from_request.return_value = {}
-        mock_config_service.merge_plugin_config_with_existing.return_value = {}
-        mock_config_service_class.return_value = mock_config_service
-        
-        # Set stream as running
-        stream_operations_service._safe_get_stream_status.return_value = {"running": True}
-        
-        # Test data
-        update_data = {
-            "name": "Updated Stream",
-            "plugin_type": "garmin",
-            "poll_interval": 300,
-            "cot_type": "a-f-G-U-C",
-            "cot_stale_time": 600,
-            "tak_servers": ["1"]
-        }
-        
+
+            # Mock TAK server query
+            mock_tak_server.query.filter.return_value.all.return_value = [Mock(id=1, name="Test Server")]
+
+            # Mock plugin manager and config service
+            mock_plugin_manager.return_value.get_plugin_metadata.return_value = {
+                "config_fields": []
+            }
+            mock_config_service = Mock()
+            mock_config_service.extract_plugin_config_from_request.return_value = {}
+            mock_config_service.merge_plugin_config_with_existing.return_value = {}
+            mock_config_service_class.return_value = mock_config_service
+
+            # Set stream as running
+            stream_operations_service._safe_get_stream_status.return_value = {"running": True}
+
+            # Test data
+            update_data = {
+                "name": "Updated Stream",
+                "plugin_type": "garmin",
+                "poll_interval": 300,
+                "cot_type": "a-f-G-U-C",
+                "cot_stale_time": 600,
+                "tak_servers": ["1"]
+            }
+
             # Execute
             result = stream_operations_service.update_stream_safely(1, update_data)
 
@@ -129,41 +129,41 @@ class TestConfigChangeRestart:
             mock_query = Mock()
             mock_query.options.return_value.filter_by.return_value.first_or_404.return_value = mock_stream
             mock_stream_query.query = mock_query
-        
-        # Mock TAK server query
-        mock_tak_server.query.filter.return_value.all.return_value = [Mock(id=1, name="Test Server")]
-        
-        # Mock plugin manager and config service
-        mock_plugin_manager.return_value.get_plugin_metadata.return_value = {
-            "config_fields": []
-        }
-        mock_config_service = Mock()
-        mock_config_service.extract_plugin_config_from_request.return_value = {}
-        mock_config_service.merge_plugin_config_with_existing.return_value = {}
-        mock_config_service_class.return_value = mock_config_service
-        
-        # Set stream as NOT running
-        stream_operations_service._safe_get_stream_status.return_value = {"running": False}
-        
-        # Test data
-        update_data = {
-            "name": "Updated Stream",
-            "plugin_type": "garmin",
-            "poll_interval": 300,
-            "cot_type": "a-f-G-U-C",
-            "cot_stale_time": 600,
-            "tak_servers": ["1"]
-        }
-        
-        # Execute
-        result = stream_operations_service.update_stream_safely(1, update_data)
-        
-        # Verify
-        assert result["success"] is True
-        # For stopped streams, no restart should occur, but refresh should still happen
-        mock_stream_manager.restart_stream_sync.assert_not_called()
-        # TAK worker refresh should still happen for configuration changes
-        mock_stream_manager.refresh_stream_tak_workers.assert_called_once_with(1)
+
+            # Mock TAK server query
+            mock_tak_server.query.filter.return_value.all.return_value = [Mock(id=1, name="Test Server")]
+
+            # Mock plugin manager and config service
+            mock_plugin_manager.return_value.get_plugin_metadata.return_value = {
+                "config_fields": []
+            }
+            mock_config_service = Mock()
+            mock_config_service.extract_plugin_config_from_request.return_value = {}
+            mock_config_service.merge_plugin_config_with_existing.return_value = {}
+            mock_config_service_class.return_value = mock_config_service
+
+            # Set stream as NOT running
+            stream_operations_service._safe_get_stream_status.return_value = {"running": False}
+
+            # Test data
+            update_data = {
+                "name": "Updated Stream",
+                "plugin_type": "garmin",
+                "poll_interval": 300,
+                "cot_type": "a-f-G-U-C",
+                "cot_stale_time": 600,
+                "tak_servers": ["1"]
+            }
+
+            # Execute
+            result = stream_operations_service.update_stream_safely(1, update_data)
+
+            # Verify
+            assert result["success"] is True
+            # For stopped streams, no restart should occur, but refresh should still happen
+            mock_stream_manager.restart_stream_sync.assert_not_called()
+            # TAK worker refresh should still happen for configuration changes
+            mock_stream_manager.refresh_stream_tak_workers.assert_called_once_with(1)
 
     @patch('models.stream.Stream')
     @patch('models.tak_server.TakServer')
@@ -177,47 +177,49 @@ class TestConfigChangeRestart:
         mock_stream_query,
         stream_operations_service,
         mock_stream_manager,
-        mock_stream
+        mock_stream,
+        app
     ):
         """Test that configuration updates succeed even if restart fails."""
-        # Setup
-        mock_query = Mock()
-        mock_query.options.return_value.filter_by.return_value.first_or_404.return_value = mock_stream
-        mock_stream_query.query = mock_query
-        
-        # Mock TAK server query
-        mock_tak_server.query.filter.return_value.all.return_value = [Mock(id=1, name="Test Server")]
-        
-        # Mock plugin manager and config service
-        mock_plugin_manager.return_value.get_plugin_metadata.return_value = {
-            "config_fields": []
-        }
-        mock_config_service = Mock()
-        mock_config_service.extract_plugin_config_from_request.return_value = {}
-        mock_config_service.merge_plugin_config_with_existing.return_value = {}
-        mock_config_service_class.return_value = mock_config_service
-        
-        # Set stream as running
-        stream_operations_service._safe_get_stream_status.return_value = {"running": True}
-        
-        # Make restart fail
-        mock_stream_manager.restart_stream_sync.return_value = False
-        
-        # Test data
-        update_data = {
-            "name": "Updated Stream",
-            "plugin_type": "garmin",
-            "poll_interval": 300,
-            "cot_type": "a-f-G-U-C",
-            "cot_stale_time": 600,
-            "tak_servers": ["1"]
-        }
-        
-        # Execute
-        result = stream_operations_service.update_stream_safely(1, update_data)
-        
-        # Verify
-        assert result["success"] is True  # Update should still succeed
-        # The implementation calls restart_stream_sync directly (which handles restart failure gracefully)
-        mock_stream_manager.restart_stream_sync.assert_called_once_with(1)
-        mock_stream_manager.refresh_stream_tak_workers.assert_called_once_with(1)
+        with app.app_context():
+            # Setup
+            mock_query = Mock()
+            mock_query.options.return_value.filter_by.return_value.first_or_404.return_value = mock_stream
+            mock_stream_query.query = mock_query
+
+            # Mock TAK server query
+            mock_tak_server.query.filter.return_value.all.return_value = [Mock(id=1, name="Test Server")]
+
+            # Mock plugin manager and config service
+            mock_plugin_manager.return_value.get_plugin_metadata.return_value = {
+                "config_fields": []
+            }
+            mock_config_service = Mock()
+            mock_config_service.extract_plugin_config_from_request.return_value = {}
+            mock_config_service.merge_plugin_config_with_existing.return_value = {}
+            mock_config_service_class.return_value = mock_config_service
+
+            # Set stream as running
+            stream_operations_service._safe_get_stream_status.return_value = {"running": True}
+
+            # Make restart fail
+            mock_stream_manager.restart_stream_sync.return_value = False
+
+            # Test data
+            update_data = {
+                "name": "Updated Stream",
+                "plugin_type": "garmin",
+                "poll_interval": 300,
+                "cot_type": "a-f-G-U-C",
+                "cot_stale_time": 600,
+                "tak_servers": ["1"]
+            }
+
+            # Execute
+            result = stream_operations_service.update_stream_safely(1, update_data)
+
+            # Verify
+            assert result["success"] is True  # Update should still succeed
+            # The implementation calls restart_stream_sync directly (which handles restart failure gracefully)
+            mock_stream_manager.restart_stream_sync.assert_called_once_with(1)
+            mock_stream_manager.refresh_stream_tak_workers.assert_called_once_with(1)
