@@ -360,7 +360,7 @@ class TestDisabledTrackerFiltering:
             from services.session_manager import SessionManager
 
             # Use the actual database session for this test
-            db_manager = DatabaseManager()
+            db_manager = DatabaseManager(lambda: app.app_context())
             session_manager = SessionManager()
             stream_worker = StreamWorker(stream, session_manager, db_manager)
 

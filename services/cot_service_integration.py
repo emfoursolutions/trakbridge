@@ -502,14 +502,25 @@ class QueuedCOTService:
 
         # Use parallel processing for larger datasets to improve performance
         threshold = self.parallel_config.get("batch_size_threshold", 10)
+        fallback_on_error = self.parallel_config.get("fallback_on_error", True)
+
         if len(locations) >= threshold:
             logger.debug(
                 f"Using parallel processing for {len(locations)} locations (threshold: {threshold})"
             )
             if PYTAK_AVAILABLE:
-                return await self._create_parallel_pytak_events(
-                    locations, cot_type, stale_time, cot_type_mode
-                )
+                try:
+                    return await self._create_parallel_pytak_events(
+                        locations, cot_type, stale_time, cot_type_mode
+                    )
+                except Exception as e:
+                    if fallback_on_error:
+                        logger.warning(f"Parallel processing failed, falling back to serial: {e}")
+                        return await self._create_pytak_events(
+                            locations, cot_type, stale_time, cot_type_mode
+                        )
+                    else:
+                        raise
             else:
                 return await QueuedCOTService._create_custom_events(
                     locations, cot_type, stale_time, cot_type_mode
@@ -720,7 +731,7 @@ class QueuedCOTService:
                 logger.error(f"Parallel processing timed out after {processing_timeout}s")
                 if fallback_on_error:
                     logger.info("Falling back to serial processing due to timeout")
-                    return await QueuedCOTService._create_pytak_events(
+                    return await self._create_pytak_events(
                         locations, cot_type, stale_time, cot_type_mode
                     )
                 else:
@@ -761,7 +772,7 @@ class QueuedCOTService:
             logger.error(f"Parallel processing failed: {e}")
             if fallback_on_error:
                 logger.info("Falling back to serial processing due to parallel processing failure")
-                return await QueuedCOTService._create_pytak_events(
+                return await self._create_pytak_events(
                     locations, cot_type, stale_time, cot_type_mode
                 )
             else:

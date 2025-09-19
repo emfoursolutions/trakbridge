@@ -41,7 +41,7 @@ class TestPhase3ASystemIntegration:
         "services.auth.ldap_provider",
         "services.auth.oidc_provider",
         "services.stream_manager",
-        "services.cot_service",
+        "services.cot_service_integration",
         "services.database_manager",
         "services.auth.bootstrap_service",
         "services.health_service",

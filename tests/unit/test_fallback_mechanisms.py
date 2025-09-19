@@ -159,9 +159,9 @@ class TestFallbackMechanisms:
         large_dataset = performance_datasets["large"]
 
         # Use the actual logger from the module
-        import services.cot_service
+        import services.cot_service_integration
 
-        with patch.object(services.cot_service, "logger") as mock_logger:
+        with patch.object(services.cot_service_integration, "logger") as mock_logger:
             # Mock parallel processing to fail
             async def failing_parallel(*args, **kwargs):
                 raise ValueError("Mock parallel error")

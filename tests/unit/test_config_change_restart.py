@@ -120,12 +120,16 @@ class TestConfigChangeRestart:
             mock_stream_manager.restart_stream_sync.assert_called_once_with(test_stream.id)
             mock_stream_manager.refresh_stream_tak_workers.assert_called_once_with(test_stream.id)
 
+    @patch('models.tak_server.TAKServer')
+    @patch('models.stream.Stream')
     @patch('plugins.plugin_manager.get_plugin_manager')
     @patch('services.stream_config_service.StreamConfigService')
     def test_update_stream_safely_no_restart_for_stopped_stream(
         self,
         mock_config_service_class,
         mock_plugin_manager,
+        mock_stream_query,
+        mock_tak_server,
         stream_operations_service,
         mock_stream_manager,
         mock_stream,
@@ -174,12 +178,16 @@ class TestConfigChangeRestart:
             # TAK worker refresh should still happen for configuration changes
             mock_stream_manager.refresh_stream_tak_workers.assert_called_once_with(1)
 
+    @patch('models.tak_server.TAKServer')
+    @patch('models.stream.Stream')
     @patch('plugins.plugin_manager.get_plugin_manager')
     @patch('services.stream_config_service.StreamConfigService')
     def test_update_stream_safely_continues_on_restart_failure(
         self,
         mock_config_service_class,
         mock_plugin_manager,
+        mock_stream_query,
+        mock_tak_server,
         stream_operations_service,
         mock_stream_manager,
         mock_stream,
