@@ -17,7 +17,7 @@ import yaml
 from unittest.mock import patch, mock_open
 from typing import Dict, Any
 
-from services.cot_service import PersistentCOTService
+from services.cot_service_integration import QueuedCOTService
 
 
 class TestQueueConfigurationLoading:

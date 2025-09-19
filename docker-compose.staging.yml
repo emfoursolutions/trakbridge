@@ -182,6 +182,9 @@ services:
       mysql:
         condition: service_healthy
         required: false
+      redis:
+        condition: service_healthy
+        required: false
 
     networks:
       - trakbridge-staging

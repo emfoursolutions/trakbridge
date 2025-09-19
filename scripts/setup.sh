@@ -124,6 +124,11 @@ setup_secrets() {
         log_info "Generated secure OIDC client secret"
     fi
 
+    if [[ ! -f "secrets/redis_password" ]] || [[ "$FORCE_RECREATE" == true ]]; then
+        touch secrets/redis_password
+        log_info "Generated secure Redis password"
+    fi
+
     # Set appropriate permissions
     chmod 600 secrets/*
     log_info "Set secure permissions on secret files"

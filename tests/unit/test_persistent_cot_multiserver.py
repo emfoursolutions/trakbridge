@@ -12,7 +12,7 @@ import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
-from services.cot_service import PersistentCOTService
+from services.cot_service_integration import QueuedCOTService
 from services.device_state_manager import DeviceStateManager
 
 
@@ -24,8 +24,8 @@ class TestPersistentCOTMultiServer:
 
     @pytest.fixture
     def persistent_cot_service(self):
-        """Create PersistentCOTService instance for testing"""
-        return PersistentCOTService()
+        """Create QueuedCOTService instance for testing"""
+        return QueuedCOTService()
 
     @pytest.fixture
     def sample_cot_events(self):

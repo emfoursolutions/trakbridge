@@ -11,22 +11,22 @@ import pytest
 
 sys.path.append(".")
 
-from services.cot_service import PersistentCOTService
+from services.cot_service_integration import QueuedCOTService
 
 
 def test_cot_service_workers_access():
-    """Test that PersistentCOTService.workers is accessible"""
+    """Test that QueuedCOTService.workers is accessible"""
 
-    print("Testing PersistentCOTService workers access...")
+    print("Testing QueuedCOTService workers access...")
 
     try:
         # Create service
-        service = PersistentCOTService()
+        service = QueuedCOTService()
 
         # Test workers attribute exists and is a dict
         assert hasattr(
             service, "workers"
-        ), "PersistentCOTService should have workers attribute"
+        ), "QueuedCOTService should have workers attribute"
         assert isinstance(service.workers, dict), "workers should be a dictionary"
         assert len(service.workers) == 0, "workers should start empty"
 

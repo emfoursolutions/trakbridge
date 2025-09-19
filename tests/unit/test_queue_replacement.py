@@ -14,7 +14,7 @@ import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
-from services.cot_service import PersistentCOTService
+from services.cot_service_integration import QueuedCOTService
 from tests.fixtures.mock_location_data import generate_mock_gps_points
 
 
@@ -27,7 +27,7 @@ class TestQueueReplacement:
     @pytest.fixture
     def cot_service(self):
         """Create COT service instance for testing"""
-        return PersistentCOTService()
+        return QueuedCOTService()
 
     @pytest.fixture
     def sample_cot_events(self):

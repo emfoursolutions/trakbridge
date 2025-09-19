@@ -34,7 +34,7 @@ services:
     # Development environment configuration
     environment:
       # Flask environment - Development mode
-      FLASK_ENV: "production"
+      FLASK_ENV: "development"
       FLASK_APP: "app.py"
       
       # Dynamic user creation for runtime
@@ -136,7 +136,7 @@ services:
       TB_MASTER_KEY_FILE: "/app/secrets/tb_master_key"
       LDAP_BIND_PASSWORD_FILE: "/app/secrets/ldap_bind_password"
       OIDC_CLIENT_SECRET_FILE: "/app/secrets/oidc_client_secret"
-      REDIS_PASSWORD_FILE: "./secrets/redis_password"
+      REDIS_PASSWORD_FILE: "/app/secrets/redis_password"
 
     # Secrets - use Docker Compose secrets for consistency with production
     secrets:
@@ -145,6 +145,7 @@ services:
       - tb_master_key
       - ldap_bind_password
       - oidc_client_secret
+      - redis_password
 
     # Ports
     ports:
@@ -171,6 +172,9 @@ services:
         condition: service_healthy
         required: false
       mysql:
+        condition: service_healthy
+        required: false
+      redis:
         condition: service_healthy
         required: false
 
@@ -220,8 +224,6 @@ services:
       -c log_lock_waits=off
       -c log_min_duration_statement=-1
       -c log_statement=none
-      -c fsync=off
-      -c synchronous_commit=off
 
     environment:
       POSTGRES_DB: "trakbridge_dev"

@@ -16,7 +16,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 from typing import Dict, Any
 
-from services.cot_service import PersistentCOTService
+from services.cot_service_integration import QueuedCOTService
 from models.tak_server import TakServer
 from models.stream import Stream
 
