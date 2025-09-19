@@ -51,30 +51,42 @@ class TestConfigChangeRestart:
         stream.set_plugin_config = Mock()
         return stream
 
-    @patch('models.stream.Stream')
-    @patch('models.tak_server.TakServer')
     @patch('plugins.plugin_manager.get_plugin_manager')
     @patch('services.stream_config_service.StreamConfigService')
     def test_update_stream_safely_calls_restart_for_running_stream(
         self,
         mock_config_service_class,
         mock_plugin_manager,
-        mock_tak_server,
-        mock_stream_query,
         stream_operations_service,
         mock_stream_manager,
         mock_stream,
-        app
+        app,
+        db_session
     ):
         """Test that configuration changes trigger restart_stream_sync for running streams."""
         with app.app_context():
-            # Setup
-            mock_query = Mock()
-            mock_query.options.return_value.filter_by.return_value.first_or_404.return_value = mock_stream
-            mock_stream_query.query = mock_query
+            # Create real database records instead of mocking
+            from models.stream import Stream
+            from models.tak_server import TakServer
 
-            # Mock TAK server query
-            mock_tak_server.query.filter.return_value.all.return_value = [Mock(id=1, name="Test Server")]
+            # Create a test TAK server
+            tak_server = TakServer(
+                name="Test Server",
+                host="localhost",
+                port=8089,
+                protocol="tls"
+            )
+            db_session.add(tak_server)
+            db_session.commit()
+
+            # Create a test stream
+            test_stream = Stream(
+                name="Test Stream",
+                plugin_type="garmin",
+                tak_server_id=tak_server.id
+            )
+            db_session.add(test_stream)
+            db_session.commit()
 
             # Mock plugin manager and config service
             mock_plugin_manager.return_value.get_plugin_metadata.return_value = {
@@ -95,33 +107,30 @@ class TestConfigChangeRestart:
                 "poll_interval": 300,
                 "cot_type": "a-f-G-U-C",
                 "cot_stale_time": 600,
-                "tak_servers": ["1"]
+                "tak_servers": [str(tak_server.id)]
             }
 
             # Execute
-            result = stream_operations_service.update_stream_safely(1, update_data)
+            result = stream_operations_service.update_stream_safely(test_stream.id, update_data)
 
             # Verify
             assert result["success"] is True
             # The actual implementation calls restart_stream_sync directly (which handles stop internally)
             # and refresh_stream_tak_workers for configuration changes
-            mock_stream_manager.restart_stream_sync.assert_called_once_with(1)
-            mock_stream_manager.refresh_stream_tak_workers.assert_called_once_with(1)
+            mock_stream_manager.restart_stream_sync.assert_called_once_with(test_stream.id)
+            mock_stream_manager.refresh_stream_tak_workers.assert_called_once_with(test_stream.id)
 
-    @patch('models.stream.Stream')
-    @patch('models.tak_server.TakServer')
     @patch('plugins.plugin_manager.get_plugin_manager')
     @patch('services.stream_config_service.StreamConfigService')
     def test_update_stream_safely_no_restart_for_stopped_stream(
         self,
         mock_config_service_class,
         mock_plugin_manager,
-        mock_tak_server,
-        mock_stream_query,
         stream_operations_service,
         mock_stream_manager,
         mock_stream,
-        app
+        app,
+        db_session
     ):
         """Test that configuration changes don't trigger restart for already stopped streams."""
         with app.app_context():
@@ -165,20 +174,17 @@ class TestConfigChangeRestart:
             # TAK worker refresh should still happen for configuration changes
             mock_stream_manager.refresh_stream_tak_workers.assert_called_once_with(1)
 
-    @patch('models.stream.Stream')
-    @patch('models.tak_server.TakServer')
     @patch('plugins.plugin_manager.get_plugin_manager')
     @patch('services.stream_config_service.StreamConfigService')
     def test_update_stream_safely_continues_on_restart_failure(
         self,
         mock_config_service_class,
         mock_plugin_manager,
-        mock_tak_server,
-        mock_stream_query,
         stream_operations_service,
         mock_stream_manager,
         mock_stream,
-        app
+        app,
+        db_session
     ):
         """Test that configuration updates succeed even if restart fails."""
         with app.app_context():
