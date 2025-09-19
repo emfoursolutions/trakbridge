@@ -109,6 +109,16 @@ class QueuedCOTService:
         logger.debug(f"Singleton instance tracking: _instance set to {id(self)} at {datetime.now()}")
         logger.info("QueuedCOTService initialized with queue management integration")
 
+        # Initialize fallback tracking for TDD tests
+        self._fallback_stats = {
+            "total_fallbacks": 0,
+            "fallback_reasons": {},
+            "fallback_rate": 0.0
+        }
+        self._parallel_health_failures = 0
+        self._parallel_health_successes = 0
+        self._circuit_breaker_open = False
+
     @property
     def queues(self):
         """
@@ -1354,6 +1364,43 @@ class QueuedCOTService:
 
         except Exception as e:
             logger.error(f"Failed to log comprehensive status: {e}")
+
+    # TDD Fallback mechanism methods (basic implementation for tests)
+    def get_fallback_statistics(self) -> Dict[str, Any]:
+        """Get fallback statistics for monitoring"""
+        return self._fallback_stats.copy()
+
+    def record_fallback_event(self, reason: str, error_message: str) -> None:
+        """Record a fallback event for statistics"""
+        self._fallback_stats["total_fallbacks"] += 1
+        if reason not in self._fallback_stats["fallback_reasons"]:
+            self._fallback_stats["fallback_reasons"][reason] = 0
+        self._fallback_stats["fallback_reasons"][reason] += 1
+
+        # Update fallback rate (simple calculation)
+        total_attempts = self._fallback_stats["total_fallbacks"] + self._parallel_health_successes
+        self._fallback_stats["fallback_rate"] = self._fallback_stats["total_fallbacks"] / max(1, total_attempts)
+
+        # Track health for circuit breaker
+        self._parallel_health_failures += 1
+        if self._parallel_health_failures >= 3:
+            self._circuit_breaker_open = True
+
+    def record_successful_parallel_processing(self) -> None:
+        """Record successful parallel processing for health tracking"""
+        self._parallel_health_successes += 1
+        # Reset failure count on successful processing
+        if self._parallel_health_successes >= 3:
+            self._parallel_health_failures = 0
+            self._circuit_breaker_open = False
+
+    def is_parallel_processing_healthy(self) -> bool:
+        """Check if parallel processing is considered healthy"""
+        return self._parallel_health_failures < 3
+
+    def is_circuit_breaker_open(self) -> bool:
+        """Check if circuit breaker is open (blocking parallel processing)"""
+        return self._circuit_breaker_open
 
     # Static utility methods moved from EnhancedCOTService
     @staticmethod

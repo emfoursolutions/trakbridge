@@ -323,7 +323,7 @@ class TestDisabledTrackerFiltering:
             assert enabled_mappings["ENABLED002"].enabled is True
 
     def test_apply_callsign_mapping_filters_disabled_trackers(
-        self, app, db_session, stream_worker
+        self, app, db_session
     ):
         """Test that _apply_callsign_mapping calls filtering for disabled trackers"""
         with app.app_context():
@@ -355,8 +355,14 @@ class TestDisabledTrackerFiltering:
             db_session.add_all([enabled_mapping, disabled_mapping])
             db_session.commit()
 
-            # Update worker's stream reference
-            stream_worker.stream = stream
+            # Create a real StreamWorker with access to the actual database
+            from services.database_manager import DatabaseManager
+            from services.session_manager import SessionManager
+
+            # Use the actual database session for this test
+            db_manager = DatabaseManager()
+            session_manager = SessionManager()
+            stream_worker = StreamWorker(stream, session_manager, db_manager)
 
             # Test locations with enabled and disabled trackers
             test_locations = [

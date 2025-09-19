@@ -11,7 +11,7 @@ import pytest
 
 sys.path.append(".")
 
-from services.cot_service_integration import QueuedCOTService
+from services.cot_service import get_cot_service, reset_cot_service
 
 
 def test_cot_service_workers_access():
@@ -20,8 +20,11 @@ def test_cot_service_workers_access():
     print("Testing QueuedCOTService workers access...")
 
     try:
-        # Create service
-        service = QueuedCOTService()
+        # Reset any existing singleton instance first
+        reset_cot_service()
+
+        # Get service using singleton pattern
+        service = get_cot_service()
 
         # Test workers attribute exists and is a dict
         assert hasattr(

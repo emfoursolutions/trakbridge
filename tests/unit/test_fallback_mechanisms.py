@@ -68,7 +68,8 @@ class TestFallbackMechanisms:
         cot_service._create_pytak_events = AsyncMock(side_effect=working_serial)
 
         # Should automatically fallback to serial and succeed
-        result = await cot_service.create_cot_events_with_fallback(
+        # The fallback logic is built into create_cot_events when parallel processing fails
+        result = await cot_service.create_cot_events(
             large_dataset, cot_type, stale_time, cot_type_mode
         )
 
@@ -104,7 +105,7 @@ class TestFallbackMechanisms:
 
         # Should propagate the error instead of falling back
         with pytest.raises(RuntimeError, match="Simulated parallel processing error"):
-            await cot_service.create_cot_events_with_fallback(
+            await cot_service.create_cot_events(
                 large_dataset, "a-f-G-U-C", 300, "stream"
             )
 
@@ -138,7 +139,7 @@ class TestFallbackMechanisms:
         )
 
         # Test fallback result
-        fallback_result = await cot_service.create_cot_events_with_fallback(
+        fallback_result = await cot_service.create_cot_events(
             medium_dataset, cot_type, stale_time, cot_type_mode
         )
 
@@ -172,7 +173,7 @@ class TestFallbackMechanisms:
 
             # Trigger fallback
             asyncio.run(
-                cot_service.create_cot_events_with_fallback(
+                cot_service.create_cot_events(
                     large_dataset, "a-f-G-U-C", 300, "stream"
                 )
             )
@@ -225,7 +226,7 @@ class TestFallbackMechanisms:
         )
 
         try:
-            result = await cot_service.create_cot_events_with_fallback(
+            result = await cot_service.create_cot_events(
                 problematic_dataset, "a-f-G-U-C", 300, "stream"
             )
 
@@ -261,7 +262,7 @@ class TestFallbackMechanisms:
         cot_service._create_parallel_pytak_events = AsyncMock(side_effect=slow_parallel)
         cot_service._create_pytak_events = AsyncMock(side_effect=fast_serial)
 
-        result = await cot_service.create_cot_events_with_fallback(
+        result = await cot_service.create_cot_events(
             large_dataset, "a-f-G-U-C", 300, "stream"
         )
 
@@ -318,7 +319,7 @@ class TestFallbackMechanisms:
         )
 
         start_time = time.perf_counter()
-        fallback_result = await cot_service.create_cot_events_with_fallback(
+        fallback_result = await cot_service.create_cot_events(
             medium_dataset, "a-f-G-U-C", 300, "stream"
         )
         fallback_time = time.perf_counter() - start_time
@@ -388,7 +389,7 @@ class TestFallbackMechanisms:
 
         # First few attempts should try parallel and fallback
         for i in range(3):
-            await cot_service.create_cot_events_with_fallback(
+            await cot_service.create_cot_events(
                 large_dataset, "a-f-G-U-C", 300, "stream"
             )
 
@@ -399,7 +400,7 @@ class TestFallbackMechanisms:
 
         # Next attempt should skip parallel entirely
         cot_service._create_parallel_pytak_events.reset_mock()
-        await cot_service.create_cot_events_with_fallback(
+        await cot_service.create_cot_events(
             large_dataset, "a-f-G-U-C", 300, "stream"
         )
 
