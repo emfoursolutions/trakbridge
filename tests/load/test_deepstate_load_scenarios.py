@@ -17,7 +17,7 @@ import random
 from unittest.mock import AsyncMock, patch
 from typing import List, Dict, Any
 
-from services.cot_service import PersistentCOTService
+from services.cot_service_integration import QueuedCOTService
 from models.tak_server import TakServer
 
 
@@ -38,7 +38,7 @@ class TestDeepstateLoadScenarios:
             "flush_on_config_change": True,
         }
         
-        cot_service = PersistentCOTService(queue_config=queue_config)
+        cot_service = QueuedCOTService(queue_config=queue_config)
         tak_server = TakServer(id=1, name="deepstate-test", host="localhost", port=8089)
         
         # Track transmission performance
@@ -107,7 +107,7 @@ class TestDeepstateLoadScenarios:
             "flush_on_config_change": True,
         }
         
-        cot_service = PersistentCOTService(queue_config=queue_config)
+        cot_service = QueuedCOTService(queue_config=queue_config)
         tak_server = TakServer(id=1, name="deepstate-burst", host="localhost", port=8089)
         
         transmission_count = 0
@@ -175,7 +175,7 @@ class TestDeepstateLoadScenarios:
         total_points = streams * points_per_stream
         max_processing_time = 30.0
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         
         # Create multiple TAK servers (simulating multiple streams)
         tak_servers = [
@@ -273,7 +273,7 @@ class TestDeepstateLoadScenarios:
             "flush_on_config_change": True,
         }
         
-        cot_service = PersistentCOTService(queue_config=queue_config)
+        cot_service = QueuedCOTService(queue_config=queue_config)
         tak_server = TakServer(id=1, name="memory-test", host="localhost", port=8089)
         
         with patch('services.cot_service.PYTAK_AVAILABLE', True):
@@ -361,7 +361,7 @@ class TestDeepstateQueueBehavior:
             "flush_on_config_change": True,
         }
         
-        cot_service = PersistentCOTService(queue_config=queue_config)
+        cot_service = QueuedCOTService(queue_config=queue_config)
         tak_server = TakServer(id=1, name="overflow-test", host="localhost", port=8089)
         
         with patch('services.cot_service.PYTAK_AVAILABLE', True):
@@ -396,7 +396,7 @@ class TestDeepstateQueueBehavior:
             "flush_on_config_change": True,
         }
         
-        cot_service = PersistentCOTService(queue_config=queue_config)
+        cot_service = QueuedCOTService(queue_config=queue_config)
         tak_server = TakServer(id=1, name="batch-test", host="localhost", port=8089)
         
         transmission_batches = []

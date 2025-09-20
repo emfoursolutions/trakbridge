@@ -125,7 +125,7 @@ if __name__ == "__main__":
         
         print("\n🎉 ALL TESTS PASSED!")
         print("Both fixes are working correctly:")
-        print("  1. ✅ PersistentCOTService.workers direct access")
+        print("  1. ✅ QueuedCOTService.workers direct access")
         print("  2. ✅ Plugin config cot_type_mode extraction")
         print("  3. ✅ Stream constructor accepts cot_type_mode")
         sys.exit(0)

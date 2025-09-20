@@ -42,7 +42,7 @@ class TestQueueConfigurationLoading:
             }
         }
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         
         # Mock no config file found to test defaults
         with patch('builtins.open', side_effect=FileNotFoundError):
@@ -73,7 +73,7 @@ monitoring:
 """
         
         with patch('builtins.open', mock_open(read_data=yaml_config)):
-            cot_service = PersistentCOTService()
+            cot_service = QueuedCOTService()
             config = cot_service._load_queue_configuration_from_file('dummy_path.yaml')
             
             # Verify YAML values are loaded correctly
@@ -98,7 +98,7 @@ monitoring:
         }
         
         with patch.dict(os.environ, env_vars, clear=False):
-            cot_service = PersistentCOTService()
+            cot_service = QueuedCOTService()
             config = cot_service._apply_environment_overrides({})
             
             # Verify environment variables take precedence
@@ -123,7 +123,7 @@ monitoring:
         
         # Only override max_size
         with patch.dict(os.environ, {'QUEUE_MAX_SIZE': '1200'}, clear=False):
-            cot_service = PersistentCOTService()
+            cot_service = QueuedCOTService()
             config = cot_service._apply_environment_overrides(base_config)
             
             # Only max_size should change
@@ -154,7 +154,7 @@ class TestQueueConfigurationValidation:
             }
         }
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         
         # Should not raise any exceptions
         validated_config = cot_service._validate_queue_configuration(valid_config)
@@ -168,7 +168,7 @@ class TestQueueConfigurationValidation:
             {'queue': {'max_size': 'invalid'}},  # Non-numeric
         ]
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         
         for invalid_config in invalid_configs:
             with pytest.raises(ValueError, match="max_size"):
@@ -182,7 +182,7 @@ class TestQueueConfigurationValidation:
             {'queue': {'batch_size': 101}},    # Too large (> 100)
         ]
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         
         for invalid_config in invalid_configs:
             with pytest.raises(ValueError, match="batch_size"):
@@ -196,7 +196,7 @@ class TestQueueConfigurationValidation:
             }
         }
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         
         with pytest.raises(ValueError, match="overflow_strategy"):
             cot_service._validate_queue_configuration(invalid_config)
@@ -211,7 +211,7 @@ class TestQueueConfigurationValidation:
             }
         }
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         
         # With auto-correction enabled
         corrected_config = cot_service._validate_and_correct_configuration(invalid_config)
@@ -228,7 +228,7 @@ class TestQueueConfigurationValidation:
             {'transmission': {'queue_check_interval_ms': -10}},  # Negative interval
         ]
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         
         for invalid_config in invalid_configs:
             with pytest.raises(ValueError, match="timeout|interval"):
@@ -265,7 +265,7 @@ class TestConfigurationPrecedence:
         }
         
         with patch.dict(os.environ, env_override, clear=False):
-            cot_service = PersistentCOTService()
+            cot_service = QueuedCOTService()
             
             # Simulate the configuration loading process
             config = default_config.copy()
@@ -299,7 +299,7 @@ class TestConfigurationPrecedence:
             }
         }
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         merged_config = cot_service._merge_configurations(base_config, override_config)
         
         # Verify deep merging
@@ -318,7 +318,7 @@ class TestConfigurationPrecedence:
         }
         
         with patch.dict(os.environ, env_vars, clear=False):
-            cot_service = PersistentCOTService()
+            cot_service = QueuedCOTService()
             config = cot_service._apply_environment_overrides({})
             
             # Verify type conversions
@@ -349,7 +349,7 @@ class TestConfigurationFileDiscovery:
             '~/.trakbridge/queue.yaml'
         ]
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         search_paths = cot_service._get_configuration_search_paths()
         
         # Verify search paths are in expected order
@@ -358,7 +358,7 @@ class TestConfigurationFileDiscovery:
 
     def test_configuration_file_not_found_fallback(self):
         """Test fallback to defaults when no configuration file is found"""
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         
         # Mock all file paths to not exist
         with patch('os.path.exists', return_value=False):
@@ -377,7 +377,7 @@ queue:
   overflow_strategy: "drop_oldest"
 """
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         
         with patch('builtins.open', mock_open(read_data=malformed_yaml)):
             # Should handle YAML parse errors gracefully

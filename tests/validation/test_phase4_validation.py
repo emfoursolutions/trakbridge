@@ -19,7 +19,7 @@ import os
 from unittest.mock import AsyncMock, MagicMock, patch
 from typing import Dict, Any, List
 
-from services.cot_service import PersistentCOTService
+from services.cot_service_integration import QueuedCOTService
 from models.tak_server import TakServer
 
 
@@ -39,7 +39,7 @@ class TestPhase4QueueValidation:
             "flush_on_config_change": True,
         }
         
-        cot_service = PersistentCOTService(queue_config=queue_config)
+        cot_service = QueuedCOTService(queue_config=queue_config)
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
         
         # Start worker (will create the queue)
@@ -66,7 +66,7 @@ class TestPhase4QueueValidation:
     @pytest.mark.asyncio
     async def test_configuration_changes_propagate_quickly(self):
         """✅ Configuration changes propagate within 5-15 seconds"""
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
         
         with patch('services.cot_service.PYTAK_AVAILABLE', True):
@@ -111,7 +111,7 @@ class TestPhase4QueueValidation:
             "flush_on_config_change": True,
         }
         
-        cot_service = PersistentCOTService(queue_config=queue_config)
+        cot_service = QueuedCOTService(queue_config=queue_config)
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
         
         # Mock the transmission to track batch sizes
@@ -158,7 +158,7 @@ class TestPhase4QueueValidation:
             "flush_on_config_change": False,
         }
         
-        cot_service = PersistentCOTService(queue_config=custom_config)
+        cot_service = QueuedCOTService(queue_config=custom_config)
         
         # Verify configuration was applied
         assert cot_service.queue_config["max_size"] == 250
@@ -169,7 +169,7 @@ class TestPhase4QueueValidation:
     @pytest.mark.asyncio
     async def test_zero_performance_regression_parallel_processing(self):
         """✅ Zero performance regression in parallel input processing"""
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         tak_servers = [
             TakServer(id=i, name=f"server-{i}", host="localhost", port=8089+i)
             for i in range(1, 4)
@@ -222,7 +222,7 @@ class TestPhase4QueueValidation:
             "flush_on_config_change": True,
         }
         
-        cot_service = PersistentCOTService(queue_config=queue_config)
+        cot_service = QueuedCOTService(queue_config=queue_config)
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
         
         with patch('services.cot_service.PYTAK_AVAILABLE', True):
@@ -261,7 +261,7 @@ class TestPhase4QueueValidation:
             "flush_on_config_change": True,
         }
         
-        cot_service = PersistentCOTService(queue_config=queue_config)
+        cot_service = QueuedCOTService(queue_config=queue_config)
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
         
         transmission_times = []
@@ -306,7 +306,7 @@ class TestPhase4CompatibilityValidation:
     @pytest.mark.asyncio
     async def test_existing_monitoring_metrics_functional(self):
         """✅ All existing monitoring metrics functional"""
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
         
         with patch('services.cot_service.PYTAK_AVAILABLE', True):
@@ -339,7 +339,7 @@ class TestPhase4CompatibilityValidation:
     async def test_backward_compatibility_maintained(self):
         """✅ Backward compatibility with current API"""
         # Test that existing API calls still work
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
         
         # These methods should exist and be callable
@@ -356,7 +356,7 @@ class TestPhase4CompatibilityValidation:
     async def test_no_breaking_changes_to_existing_functionality(self):
         """✅ No breaking changes to existing functionality"""
         # Test that queue configuration doesn't break basic operation
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
         
         with patch('services.cot_service.PYTAK_AVAILABLE', True):
@@ -384,7 +384,7 @@ class TestPhase4LoadTestingValidation:
         point_count = 300
         processing_time_limit = 60.0  # seconds
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="deepstate-test", host="localhost", port=8089)
         
         with patch('services.cot_service.PYTAK_AVAILABLE', True):

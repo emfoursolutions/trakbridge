@@ -14,7 +14,7 @@ import pytest
 import time
 from unittest.mock import AsyncMock, patch
 
-from services.cot_service import PersistentCOTService
+from services.cot_service_integration import QueuedCOTService
 from models.tak_server import TakServer
 
 
@@ -24,7 +24,7 @@ class TestPhase4CoreValidation:
     def test_queue_configuration_loaded_correctly(self):
         """✅ Verify queue configuration loads with correct defaults"""
         # Test default configuration
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         
         assert cot_service.queue_config["max_size"] == 500  # From specification
         assert cot_service.queue_config["batch_size"] == 8  # From specification
@@ -40,7 +40,7 @@ class TestPhase4CoreValidation:
             "flush_on_config_change": False,
         }
         
-        cot_service = PersistentCOTService(queue_config=custom_config)
+        cot_service = QueuedCOTService(queue_config=custom_config)
         
         assert cot_service.queue_config["max_size"] == 250
         assert cot_service.queue_config["batch_size"] == 12
@@ -51,7 +51,7 @@ class TestPhase4CoreValidation:
     async def test_bounded_queue_creation(self):
         """✅ Verify queues are created with proper size bounds"""
         queue_config = {"max_size": 10, "batch_size": 3, "overflow_strategy": "drop_oldest", "flush_on_config_change": True}
-        cot_service = PersistentCOTService(queue_config=queue_config)
+        cot_service = QueuedCOTService(queue_config=queue_config)
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
         
         # Mock PyTAK to avoid actual network calls
@@ -83,7 +83,7 @@ class TestPhase4CoreValidation:
     @pytest.mark.asyncio
     async def test_event_enqueueing_works(self):
         """✅ Verify basic event enqueueing functionality"""
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
         
         with patch('services.cot_service.PYTAK_AVAILABLE', True):
@@ -111,7 +111,7 @@ class TestPhase4CoreValidation:
 
     def test_api_compatibility_maintained(self):
         """✅ Verify existing API methods are still available"""
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         
         # Check that all required methods exist
         required_methods = [
@@ -137,7 +137,7 @@ class TestPhase4CoreValidation:
     @pytest.mark.asyncio
     async def test_multiple_server_support(self):
         """✅ Verify multiple TAK servers can be managed simultaneously"""
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         
         servers = [
             TakServer(id=1, name="server1", host="localhost", port=8089),
@@ -183,7 +183,7 @@ class TestPhase4CoreValidation:
             "flush_on_config_change": True,
         }
         
-        cot_service = PersistentCOTService(queue_config=small_config)
+        cot_service = QueuedCOTService(queue_config=small_config)
         
         # Verify configuration was applied
         assert cot_service.queue_config["max_size"] == 5
@@ -195,7 +195,7 @@ class TestPhase4CoreValidation:
     @pytest.mark.asyncio
     async def test_performance_timing_basic(self):
         """✅ Basic performance timing test"""
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         
         # Test that basic operations complete quickly
         start_time = time.time()
@@ -213,7 +213,7 @@ class TestPhase4CoreValidation:
 
     def test_memory_configuration_reasonable(self):
         """✅ Verify memory configuration is reasonable"""
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         
         # Default queue size should be reasonable
         max_size = cot_service.queue_config["max_size"]
@@ -266,7 +266,7 @@ class TestPhase4DocumentationPreparation:
 
     def test_configuration_schema_valid(self):
         """✅ Verify configuration schema is valid and complete"""
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         config = cot_service.queue_config
         
         # Required configuration keys

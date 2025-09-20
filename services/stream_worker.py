@@ -201,7 +201,7 @@ class StreamWorker:
                     )
 
             # Note: We don't stop the persistent worker here as other streams might be using it
-            # The PersistentCOTService manages worker lifecycle automatically
+            # The QueuedCOTService manages worker lifecycle automatically
             self._tak_worker_ensured = False
 
             # Update database only if not during shutdown

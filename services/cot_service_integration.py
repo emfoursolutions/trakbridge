@@ -56,7 +56,7 @@ class QueuedCOTService:
     """
     Production-ready COT service with advanced queue management.
     
-    This class provides all the functionality of the original PersistentCOTService
+    This class provides all the functionality of the original COT service
     but uses the new QueueManager and QueueMonitoringService for improved
     performance, monitoring, and maintainability.
     """
@@ -117,7 +117,11 @@ class QueuedCOTService:
         }
         self._parallel_health_failures = 0
         self._parallel_health_successes = 0
+
+        # Circuit breaker state
+        self._circuit_breaker_failures = 0
         self._circuit_breaker_open = False
+        self._circuit_breaker_open_time = None
 
     @property
     def queues(self):
@@ -505,6 +509,18 @@ class QueuedCOTService:
         fallback_on_error = self.parallel_config.get("fallback_on_error", True)
 
         if len(locations) >= threshold:
+            # Check circuit breaker before attempting parallel processing
+            if self.is_circuit_breaker_open():
+                logger.debug(f"Circuit breaker is open, skipping parallel processing for {len(locations)} locations")
+                if PYTAK_AVAILABLE:
+                    return await self._create_pytak_events(
+                        locations, cot_type, stale_time, cot_type_mode
+                    )
+                else:
+                    return await QueuedCOTService._create_custom_events(
+                        locations, cot_type, stale_time, cot_type_mode
+                    )
+
             logger.debug(
                 f"Using parallel processing for {len(locations)} locations (threshold: {threshold})"
             )
@@ -516,10 +532,12 @@ class QueuedCOTService:
                 except Exception as e:
                     if fallback_on_error:
                         logger.warning(f"Parallel processing failed, falling back to serial: {e}")
+                        self._record_circuit_breaker_failure()
                         return await self._create_pytak_events(
                             locations, cot_type, stale_time, cot_type_mode
                         )
                     else:
+                        self._record_circuit_breaker_failure()
                         raise
             else:
                 return await QueuedCOTService._create_custom_events(
@@ -766,10 +784,13 @@ class QueuedCOTService:
                 logger.debug(f"Parallel processing completed successfully: "
                             f"{len(all_events)} total events created")
 
+            # Record successful parallel processing for circuit breaker
+            self._record_circuit_breaker_success()
             return all_events
 
         except Exception as e:
             logger.error(f"Parallel processing failed: {e}")
+            self._record_circuit_breaker_failure()
             if fallback_on_error:
                 logger.info("Falling back to serial processing due to parallel processing failure")
                 return await self._create_pytak_events(
@@ -923,7 +944,7 @@ class QueuedCOTService:
 
     async def _create_pytak_connection(self, tak_server):
         """
-        Create PyTAK connection (copied from PersistentCOTService).
+        Create PyTAK connection (copied from original COT service).
         """
         if not PYTAK_AVAILABLE:
             logger.error("PyTAK not available. Cannot create connection.")
@@ -1411,7 +1432,37 @@ class QueuedCOTService:
 
     def is_circuit_breaker_open(self) -> bool:
         """Check if circuit breaker is open (blocking parallel processing)"""
+        # Check if circuit breaker should be closed due to recovery timeout
+        if self._circuit_breaker_open and self._circuit_breaker_open_time:
+            circuit_config = self.parallel_config.get("circuit_breaker", {})
+            recovery_timeout = circuit_config.get("recovery_timeout", 60.0)
+            if (datetime.now() - self._circuit_breaker_open_time).total_seconds() > recovery_timeout:
+                self._circuit_breaker_open = False
+                self._circuit_breaker_failures = 0
+                self._circuit_breaker_open_time = None
+                logger.info("Circuit breaker closed after recovery timeout")
+
         return self._circuit_breaker_open
+
+    def _record_circuit_breaker_failure(self):
+        """Record a circuit breaker failure and potentially open the circuit"""
+        circuit_config = self.parallel_config.get("circuit_breaker", {})
+        if not circuit_config.get("enabled", True):
+            return
+
+        self._circuit_breaker_failures += 1
+        failure_threshold = circuit_config.get("failure_threshold", 3)
+
+        if self._circuit_breaker_failures >= failure_threshold and not self._circuit_breaker_open:
+            self._circuit_breaker_open = True
+            self._circuit_breaker_open_time = datetime.now()
+            logger.warning(f"Circuit breaker opened after {self._circuit_breaker_failures} failures")
+
+    def _record_circuit_breaker_success(self):
+        """Record a successful operation and reset failure count"""
+        if self._circuit_breaker_failures > 0:
+            self._circuit_breaker_failures = 0
+            logger.debug("Circuit breaker failure count reset after successful operation")
 
     # Static utility methods moved from EnhancedCOTService
     @staticmethod

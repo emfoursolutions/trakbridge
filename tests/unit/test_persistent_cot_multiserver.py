@@ -273,7 +273,7 @@ class TestPersistentCOTMultiServer:
         self, persistent_cot_service, mock_tak_servers
     ):
         """
-        FAIL initially - Test that PersistentCOTService has per-server DeviceStateManager instances
+        FAIL initially - Test that QueuedCOTService has per-server DeviceStateManager instances
 
         This tests the actual implementation change from single device_state_manager
         to device_state_managers dict
@@ -286,7 +286,7 @@ class TestPersistentCOTMultiServer:
         # Test that device_state_managers attribute exists and is a dict
         assert hasattr(
             persistent_cot_service, "device_state_managers"
-        ), "PersistentCOTService should have device_state_managers dict attribute"
+        ), "QueuedCOTService should have device_state_managers dict attribute"
 
         assert isinstance(
             persistent_cot_service.device_state_managers, dict

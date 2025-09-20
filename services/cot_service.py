@@ -9,6 +9,9 @@ all functionality to the modern queue-based COT service implementation.
 """
 
 from services.cot_service_integration import QueuedCOTService
+from services.logging_service import get_module_logger
+
+logger = get_module_logger(__name__)
 
 
 def get_cot_service() -> QueuedCOTService:

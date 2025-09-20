@@ -30,10 +30,10 @@ class TestQueueSizeManagement:
         max_queue_size = 5
         
         # Mock configuration with small queue size for testing
-        with patch('services.cot_service.PersistentCOTService._get_queue_config') as mock_config:
+        with patch('services.cot_service.QueuedCOTService._get_queue_config') as mock_config:
             mock_config.return_value = {'max_size': max_queue_size}
             
-            cot_service = PersistentCOTService()
+            cot_service = QueuedCOTService()
             tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
             
             # Create a queue for this TAK server
@@ -59,13 +59,13 @@ class TestQueueSizeManagement:
         """When queue is full, oldest events should be dropped (FIFO)"""
         max_queue_size = 3
         
-        with patch('services.cot_service.PersistentCOTService._get_queue_config') as mock_config:
+        with patch('services.cot_service.QueuedCOTService._get_queue_config') as mock_config:
             mock_config.return_value = {
                 'max_size': max_queue_size,
                 'overflow_strategy': 'drop_oldest'
             }
             
-            cot_service = PersistentCOTService()
+            cot_service = QueuedCOTService()
             tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
             
             queue = await cot_service._get_or_create_queue(tak_server.id)
@@ -100,13 +100,13 @@ class TestQueueSizeManagement:
         """Events should be transmitted in configurable small batches"""
         batch_size = 3
         
-        with patch('services.cot_service.PersistentCOTService._get_transmission_config') as mock_config:
+        with patch('services.cot_service.QueuedCOTService._get_transmission_config') as mock_config:
             mock_config.return_value = {
                 'batch_size': batch_size,
                 'batch_timeout_ms': 100
             }
             
-            cot_service = PersistentCOTService()
+            cot_service = QueuedCOTService()
             tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
             
             # Mock the transmission method
@@ -131,13 +131,13 @@ class TestQueueSizeManagement:
     @pytest.mark.asyncio
     async def test_configuration_change_flushes_queue(self):
         """Configuration changes should trigger immediate queue flush"""
-        with patch('services.cot_service.PersistentCOTService._get_queue_config') as mock_config:
+        with patch('services.cot_service.QueuedCOTService._get_queue_config') as mock_config:
             mock_config.return_value = {
                 'max_size': 10,
                 'flush_on_config_change': True
             }
             
-            cot_service = PersistentCOTService()
+            cot_service = QueuedCOTService()
             tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
             
             # Add events to queue
@@ -176,7 +176,7 @@ class TestQueuePerformanceCompatibility:
         # This test verifies that queue modifications don't slow down parallel processing
         start_time = time.time()
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         tak_servers = [
             TakServer(id=i, name=f"server-{i}", host="localhost", port=8089+i)
             for i in range(1, 4)
@@ -201,7 +201,7 @@ class TestQueuePerformanceCompatibility:
     @pytest.mark.asyncio
     async def test_existing_monitoring_metrics_preserved(self):
         """All existing monitoring and metrics should remain functional"""
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
         
         # Add some events
@@ -238,10 +238,10 @@ class TestQueuePerformanceCompatibility:
             }
         }
         
-        with patch('services.cot_service.PersistentCOTService._load_queue_configuration') as mock_load:
+        with patch('services.cot_service.QueuedCOTService._load_queue_configuration') as mock_load:
             mock_load.return_value = test_config
             
-            cot_service = PersistentCOTService()
+            cot_service = QueuedCOTService()
             config = await cot_service._get_queue_config()
             
             # Verify all configuration values are applied
@@ -269,7 +269,7 @@ class TestQueueConfiguration:
     @pytest.mark.asyncio
     async def test_default_configuration_values(self):
         """Test that default configuration values are properly set"""
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         config = await cot_service._get_queue_config()
         
         # Verify default values match specification
@@ -285,7 +285,7 @@ class TestQueueConfiguration:
             'QUEUE_BATCH_SIZE': '15',
             'QUEUE_OVERFLOW_STRATEGY': 'drop_newest'
         }):
-            cot_service = PersistentCOTService()
+            cot_service = QueuedCOTService()
             config = await cot_service._get_queue_config()
             
             assert config['max_size'] == 750
@@ -303,10 +303,10 @@ class TestQueueConfiguration:
             }
         }
         
-        with patch('services.cot_service.PersistentCOTService._load_queue_configuration') as mock_load:
+        with patch('services.cot_service.QueuedCOTService._load_queue_configuration') as mock_load:
             mock_load.return_value = invalid_config
             
-            cot_service = PersistentCOTService()
+            cot_service = QueuedCOTService()
             
             # Should fallback to safe defaults
             config = await cot_service._get_queue_config()

@@ -167,7 +167,9 @@ authentication:
             config["authentication"]["providers"]["ldap"]["bind_password"], "ci-secret"
         )
 
-    @patch.dict(os.environ, {}, clear=True)
+    @patch.dict(os.environ, {
+        "LDAP_ENABLED": "false"
+    }, clear=True)
     def test_template_with_defaults(self):
         """Test template config uses default values when env vars not set."""
         self._create_template_file()
@@ -392,7 +394,10 @@ authentication:
             config["authentication"]["providers"]["ldap"]["default_role"], "admin"
         )
 
-    @patch.dict(os.environ, {}, clear=True)
+    @patch.dict(os.environ, {
+        "LDAP_ENABLED": "false",
+        "LDAP_DEFAULT_ROLE": "user"
+    }, clear=True)
     def test_local_config_environment_defaults(self):
         """Test that local config uses defaults when environment variables not set."""
         self._create_local_file()

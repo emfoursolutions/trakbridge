@@ -17,7 +17,7 @@ import statistics
 from unittest.mock import AsyncMock, MagicMock, patch
 from typing import Dict, Any, List
 
-from services.cot_service import PersistentCOTService
+from services.cot_service_integration import QueuedCOTService
 from services.stream_manager import StreamManager
 from models.tak_server import TakServer
 from models.stream import Stream
@@ -33,7 +33,7 @@ class TestQueuePerformanceIntegration:
         point_count = 300
         batch_processing_time_limit = 30.0  # seconds
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="deepstate-test", host="localhost", port=8089)
         
         # Mock the actual transmission to avoid network calls
@@ -74,7 +74,7 @@ class TestQueuePerformanceIntegration:
         max_propagation_time = 15.0  # seconds (upper limit from spec)
         target_propagation_time = 5.0  # seconds (target from spec)
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="config-test", host="localhost", port=8089)
         
         # Fill queue with events
@@ -111,7 +111,7 @@ class TestQueuePerformanceIntegration:
         process = psutil.Process(os.getpid())
         initial_memory = process.memory_info().rss / 1024 / 1024  # MB
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="memory-test", host="localhost", port=8089)
         
         # Configure small queue to force overflow handling
@@ -142,7 +142,7 @@ class TestQueuePerformanceIntegration:
         batch_size = 8  # From specification
         event_count = 50
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="batch-test", host="localhost", port=8089)
         
         transmission_calls = []
@@ -178,7 +178,7 @@ class TestQueuePerformanceIntegration:
         stream_count = 5
         events_per_stream = 20
         
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         tak_servers = [
             TakServer(id=i, name=f"concurrent-{i}", host="localhost", port=8089+i)
             for i in range(1, stream_count + 1)
@@ -277,7 +277,7 @@ class TestQueueSystemIntegration:
     @pytest.mark.asyncio 
     async def test_monitoring_metrics_integration(self):
         """Test that queue metrics integrate with existing monitoring system"""
-        cot_service = PersistentCOTService()
+        cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="monitoring-test", host="localhost", port=8089)
         
         # Add some events

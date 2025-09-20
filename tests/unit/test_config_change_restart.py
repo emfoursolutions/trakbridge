@@ -38,6 +38,7 @@ class TestConfigChangeRestart:
         service._safe_get_stream_status = Mock()
         service._is_concurrency_error = Mock(return_value=False)
         service._update_callsign_mappings = Mock()
+        service._publish_config_change = Mock()
         return service
 
     @pytest.fixture
@@ -48,6 +49,15 @@ class TestConfigChangeRestart:
         stream.name = "Test Stream"
         stream.enable_callsign_mapping = False
         stream.tak_servers = []
+        stream.tak_server_id = None
+        stream.plugin_type = "garmin"
+        stream.poll_interval = 120
+        stream.cot_type = "a-f-G-U-C"
+        stream.cot_stale_time = 300
+        stream.cot_type_mode = "stream"
+        stream.callsign_identifier_field = None
+        stream.callsign_error_handling = "fallback"
+        stream.enable_per_callsign_cot_types = False
         stream.set_plugin_config = Mock()
         return stream
 
@@ -120,7 +130,7 @@ class TestConfigChangeRestart:
             mock_stream_manager.restart_stream_sync.assert_called_once_with(test_stream.id)
             mock_stream_manager.refresh_stream_tak_workers.assert_called_once_with(test_stream.id)
 
-    @patch('models.tak_server.TAKServer')
+    @patch('models.tak_server.TakServer')
     @patch('models.stream.Stream')
     @patch('plugins.plugin_manager.get_plugin_manager')
     @patch('services.stream_config_service.StreamConfigService')
@@ -138,13 +148,16 @@ class TestConfigChangeRestart:
     ):
         """Test that configuration changes don't trigger restart for already stopped streams."""
         with app.app_context():
-            # Setup
-            mock_query = Mock()
-            mock_query.options.return_value.filter_by.return_value.first_or_404.return_value = mock_stream
-            mock_stream_query.query = mock_query
+            # Setup - Mock the Stream.query chain
+            mock_query_chain = Mock()
+            mock_query_chain.options.return_value.filter_by.return_value.first_or_404.return_value = mock_stream
+            mock_stream_query.query = mock_query_chain
 
-            # Mock TAK server query
-            mock_tak_server.query.filter.return_value.all.return_value = [Mock(id=1, name="Test Server")]
+            # Mock TAK server query - handle both filter types
+            mock_tak_server_instance = Mock(id=1, name="Test Server")
+            mock_tak_server.query.filter.return_value.all.return_value = [mock_tak_server_instance]
+            # Also mock the specific pattern used in update_stream_safely
+            mock_tak_server.query.filter = Mock(return_value=Mock(all=Mock(return_value=[mock_tak_server_instance])))
 
             # Mock plugin manager and config service
             mock_plugin_manager.return_value.get_plugin_metadata.return_value = {
@@ -178,7 +191,7 @@ class TestConfigChangeRestart:
             # TAK worker refresh should still happen for configuration changes
             mock_stream_manager.refresh_stream_tak_workers.assert_called_once_with(1)
 
-    @patch('models.tak_server.TAKServer')
+    @patch('models.tak_server.TakServer')
     @patch('models.stream.Stream')
     @patch('plugins.plugin_manager.get_plugin_manager')
     @patch('services.stream_config_service.StreamConfigService')
@@ -196,13 +209,16 @@ class TestConfigChangeRestart:
     ):
         """Test that configuration updates succeed even if restart fails."""
         with app.app_context():
-            # Setup
-            mock_query = Mock()
-            mock_query.options.return_value.filter_by.return_value.first_or_404.return_value = mock_stream
-            mock_stream_query.query = mock_query
+            # Setup - Mock the Stream.query chain
+            mock_query_chain = Mock()
+            mock_query_chain.options.return_value.filter_by.return_value.first_or_404.return_value = mock_stream
+            mock_stream_query.query = mock_query_chain
 
-            # Mock TAK server query
-            mock_tak_server.query.filter.return_value.all.return_value = [Mock(id=1, name="Test Server")]
+            # Mock TAK server query - handle both filter types
+            mock_tak_server_instance = Mock(id=1, name="Test Server")
+            mock_tak_server.query.filter.return_value.all.return_value = [mock_tak_server_instance]
+            # Also mock the specific pattern used in update_stream_safely
+            mock_tak_server.query.filter = Mock(return_value=Mock(all=Mock(return_value=[mock_tak_server_instance])))
 
             # Mock plugin manager and config service
             mock_plugin_manager.return_value.get_plugin_metadata.return_value = {
