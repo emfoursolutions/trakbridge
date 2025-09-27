@@ -44,9 +44,50 @@ monitoring:
   # Reset statistics after this many seconds (0 = never reset)
   statistics_reset_interval: 3600
 
+# Queue Management Configuration (Phase 2)
+queue:
+  # Maximum events per queue (prevents unbounded growth)
+  max_size: 500
+  
+  # Events per transmission batch
+  batch_size: 20
+  
+  # Overflow strategy when queue is full
+  # Options: drop_oldest, drop_newest, block
+  overflow_strategy: "drop_oldest"
+  
+  # Flush queue immediately on configuration changes
+  flush_on_config_change: true
+
+# Transmission Configuration
+transmission:
+  # Maximum wait time to fill batch (milliseconds)
+  batch_timeout_ms: 100
+  
+  # How often to check for new events (milliseconds)
+  # Phase 3: Optimized from 50ms to 100ms to reduce polling overhead
+  queue_check_interval_ms: 100
+
+# Monitoring Configuration
+monitoring:
+  # Enable queue size logging
+  log_queue_stats: true
+  
+  # Log warning when queue exceeds this threshold
+  queue_warning_threshold: 400
+
 # Environment variable overrides
 # These can be set to override configuration values:
 # TRAKBRIDGE_PARALLEL_ENABLED=true/false
 # TRAKBRIDGE_BATCH_SIZE_THRESHOLD=number
 # TRAKBRIDGE_MAX_CONCURRENT_TASKS=number
 # TRAKBRIDGE_FALLBACK_ON_ERROR=true/false
+# Queue configuration overrides:
+# QUEUE_MAX_SIZE=500
+# QUEUE_BATCH_SIZE=20
+# QUEUE_OVERFLOW_STRATEGY=drop_oldest
+# QUEUE_FLUSH_ON_CONFIG_CHANGE=true
+# TRANSMISSION_BATCH_TIMEOUT_MS=100
+# TRANSMISSION_QUEUE_CHECK_INTERVAL_MS=100
+# MONITORING_LOG_QUEUE_STATS=true
+# MONITORING_QUEUE_WARNING_THRESHOLD=400

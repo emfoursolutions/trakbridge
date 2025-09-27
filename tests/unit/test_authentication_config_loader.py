@@ -167,10 +167,15 @@ authentication:
             config["authentication"]["providers"]["ldap"]["bind_password"], "ci-secret"
         )
 
-    @patch.dict(os.environ, {}, clear=True)
+    @patch.dict(os.environ, {"LDAP_ENABLED": "false"}, clear=True)
     def test_template_with_defaults(self):
         """Test template config uses default values when env vars not set."""
         self._create_template_file()
+
+        # Reset the secret manager to pick up the new environment variables
+        from config.secrets import reset_secret_manager
+
+        reset_secret_manager()
 
         loader = self._create_loader("development")
         loader.is_ci = True  # Force template usage
@@ -380,6 +385,11 @@ authentication:
         """Test that local config now supports environment variable substitution."""
         self._create_local_file()
 
+        # Reset the secret manager to pick up the new environment variables
+        from config.secrets import reset_secret_manager
+
+        reset_secret_manager()
+
         loader = self._create_loader("development")
         loader.is_ci = False  # Simulate local development
 
@@ -392,10 +402,17 @@ authentication:
             config["authentication"]["providers"]["ldap"]["default_role"], "admin"
         )
 
-    @patch.dict(os.environ, {}, clear=True)
+    @patch.dict(
+        os.environ, {"LDAP_ENABLED": "false", "LDAP_DEFAULT_ROLE": "user"}, clear=True
+    )
     def test_local_config_environment_defaults(self):
         """Test that local config uses defaults when environment variables not set."""
         self._create_local_file()
+
+        # Reset the secret manager to pick up the new environment variables
+        from config.secrets import reset_secret_manager
+
+        reset_secret_manager()
 
         loader = self._create_loader("development")
         loader.is_ci = False  # Simulate local development

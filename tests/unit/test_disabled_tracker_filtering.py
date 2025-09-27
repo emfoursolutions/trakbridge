@@ -35,12 +35,15 @@ class TestDisabledTrackerFiltering:
     @pytest.fixture
     def test_stream(self):
         """Create test stream with callsign mapping enabled"""
-        stream = Mock(spec=Stream)
+        stream = Mock()
         stream.id = 1
         stream.name = "Test Stream"
         stream.enable_callsign_mapping = True
         stream.callsign_identifier_field = "imei"
         stream.callsign_error_handling = "fallback"
+        stream.poll_interval = (
+            60  # Set numeric value to prevent division operator issues
+        )
         return stream
 
     @pytest.fixture
@@ -322,9 +325,7 @@ class TestDisabledTrackerFiltering:
             assert enabled_mappings["ENABLED001"].enabled is True
             assert enabled_mappings["ENABLED002"].enabled is True
 
-    def test_apply_callsign_mapping_filters_disabled_trackers(
-        self, app, db_session, stream_worker
-    ):
+    def test_apply_callsign_mapping_filters_disabled_trackers(self, app, db_session):
         """Test that _apply_callsign_mapping calls filtering for disabled trackers"""
         with app.app_context():
             # Create test stream in database
@@ -355,8 +356,14 @@ class TestDisabledTrackerFiltering:
             db_session.add_all([enabled_mapping, disabled_mapping])
             db_session.commit()
 
-            # Update worker's stream reference
-            stream_worker.stream = stream
+            # Create a real StreamWorker with access to the actual database
+            from services.database_manager import DatabaseManager
+            from services.session_manager import SessionManager
+
+            # Use the actual database session for this test
+            db_manager = DatabaseManager(lambda: app.app_context())
+            session_manager = SessionManager()
+            stream_worker = StreamWorker(stream, session_manager, db_manager)
 
             # Test locations with enabled and disabled trackers
             test_locations = [
@@ -473,6 +480,9 @@ class TestFilteringPerformance:
         test_stream = Mock()
         test_stream.id = 1
         test_stream.name = "Performance Test Stream"
+        test_stream.poll_interval = (
+            60  # Set numeric value to prevent division operator issues
+        )
         mock_session_manager = Mock()
         mock_db_manager = Mock()
         return StreamWorker(test_stream, mock_session_manager, mock_db_manager)

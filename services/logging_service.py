@@ -213,7 +213,7 @@ def log_primary_startup_banner(app, worker_count: Optional[int] = None):
         banner_lines = [
             "",
             "=" * 80,
-            " TrakBridge Application Starting (Primary Process)",
+            " TrakBridge Application Started",
             "=" * 80,
             f" Version: {version_info.get('version', 'unknown')}",
             f"  Build Source: {version_info.get('source', 'unknown')}",
@@ -292,7 +292,8 @@ def log_primary_startup_banner(app, worker_count: Optional[int] = None):
 
 def log_worker_initialization(app, worker_pid: Optional[int] = None):
     """
-    Log minimal worker initialization message.
+    Register worker with coordination service instead of individual logging.
+    Phase 2: Startup coordination - eliminates worker spam.
 
     Args:
         app: Flask application instance
@@ -302,12 +303,31 @@ def log_worker_initialization(app, worker_pid: Optional[int] = None):
         worker_pid = os.getpid()
 
     try:
+        from services.worker_coordination_service import worker_coordination
         from services.version import get_version
 
-        app.logger.info(
-            f"Worker process initialized - PID: {worker_pid} - Version: {get_version()}"
-        )
+        # Try to register with coordination service
+        worker_info = {
+            "version": get_version(),
+            "initialized_at": datetime.datetime.now().isoformat(),
+            "process_name": os.environ.get("WORKER_ID", f"worker-{worker_pid}"),
+        }
+
+        success = worker_coordination.register_worker_startup(worker_pid, worker_info)
+
+        if success:
+            # Only log debug message when coordination is working
+            app.logger.debug(
+                f"Worker {worker_pid} registered with coordination service"
+            )
+        else:
+            # Fallback to original behavior when coordination disabled
+            app.logger.info(
+                f"Worker process initialized - PID: {worker_pid} - Version: {get_version()}"
+            )
+
     except Exception as e:
+        # Fallback to original behavior on any error
         app.logger.info(
             f"Worker process initialized - PID: {worker_pid} - Version: unknown"
         )

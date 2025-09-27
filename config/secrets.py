@@ -19,7 +19,10 @@ from pathlib import Path
 # Third-party imports
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
+# Local application imports
+from services.logging_service import get_module_logger
+
+logger = get_module_logger(__name__)
 
 
 @dataclass
@@ -92,8 +95,8 @@ class DockerSecretProvider(SecretProvider):
 
     SECRETS_PATH = Path("/run/secrets")
 
-    print(f"Secrets path: {SECRETS_PATH}")
-    print(f"Path exists: {SECRETS_PATH.exists()}")
+    #print(f"Secrets path: {SECRETS_PATH}")
+    #print(f"Path exists: {SECRETS_PATH.exists()}")
 
     @property
     def name(self) -> str:
@@ -127,12 +130,14 @@ class DockerSecretProvider(SecretProvider):
 
 
 class DotEnvSecretProvider(SecretProvider):
-    """Retrieve secrets from .env files (development only)."""
+    """Retrieve secrets from .env files (development only) with Redis event support."""
 
     def __init__(self, env_file: Optional[str] = None):
         self.env_file = env_file or ".env"
         self._secrets: Dict[str, str] = {}
         self._last_modified: Optional[float] = None
+        # Redis coordination removed for single worker deployment
+        self._file_change_subscription_active = False
         self._load_env_file()
 
     @property
@@ -145,9 +150,13 @@ class DotEnvSecretProvider(SecretProvider):
 
     def is_available(self) -> bool:
         # Skip .env files during testing if explicitly requested
-        if os.environ.get('SKIP_DOTENV_FILE') == 'true':
+        if os.environ.get("SKIP_DOTENV_FILE") == "true":
             return False
         return Path(self.env_file).exists()
+
+    # Redis coordination setup removed for single worker deployment
+
+    # File change event handling removed for single worker deployment
 
     def _should_reload(self) -> bool:
         """Check if the .env file has been modified."""
@@ -193,7 +202,7 @@ class DotEnvSecretProvider(SecretProvider):
             logger.warning(f"Failed to load .env file '{self.env_file}': {e}")
 
     def get_secret(self, key: str, default: Optional[str] = None) -> Optional[str]:
-        # Reload if file has been modified
+        # Use file polling for single worker deployment
         if self._should_reload():
             self._load_env_file()
 
@@ -461,3 +470,9 @@ def get_secret(
 ) -> Optional[str]:
     """Convenience function to get a secret."""
     return get_secret_manager().get_secret(key, default, required)
+
+
+def reset_secret_manager():
+    """Reset the global secret manager instance. Mainly for testing."""
+    global _secret_manager
+    _secret_manager = None

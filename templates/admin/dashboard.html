@@ -58,6 +58,43 @@
     </div>
 </div>
 
+<!-- Monitoring Dashboard Cards -->
+<div class="row mb-4">
+    <!-- Queue Monitoring -->
+    <div class="col-lg-6 mb-3">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-stream"></i> Queue Monitoring
+                </h6>
+            </div>
+            <div class="card-body">
+                <div id="queue-monitoring" class="monitoring-data">
+                    <div class="text-muted text-center">Loading queue data...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Performance Metrics -->
+    <div class="col-lg-6 mb-3">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-tachometer-alt"></i> Performance Metrics
+                </h6>
+            </div>
+            <div class="card-body">
+                <div id="performance-metrics" class="monitoring-data">
+                    <div class="text-muted text-center">Loading performance data...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
 <!-- Content Cards -->
 <div class="row justify-content-center">
     <div class="col-lg-8">
@@ -148,71 +185,203 @@
 function refreshMetrics() {
     const refreshBtn = document.querySelector('[onclick="refreshMetrics()"]');
     const icon = refreshBtn.querySelector('i');
-    
+
     // Show loading state
     icon.classList.remove('fa-sync-alt');
     icon.classList.add('fa-spinner', 'fa-spin');
     refreshBtn.disabled = true;
-    
-    fetch('/api/metrics')
-        .then(response => response.json())
-        .then(data => {
-            // Update metrics if available
-            if (data.uptime) {
-                const uptimeElement = document.querySelector('[data-metric="uptime"]');
-                if (uptimeElement) {
-                    uptimeElement.textContent = data.uptime;
-                }
-            }
-            
-            if (data.streams_count !== undefined) {
-                const streamsElement = document.querySelector('[data-metric="streams"]');
-                if (streamsElement) {
-                    streamsElement.textContent = data.streams_count;
-                }
-            }
-            
-            if (data.running_streams !== undefined) {
-                const runningElement = document.querySelector('[data-metric="running"]');
-                if (runningElement) {
-                    runningElement.textContent = data.running_streams;
-                }
-            }
-            
-            if (data.servers_count !== undefined) {
-                const serversElement = document.querySelector('[data-metric="servers"]');
-                if (serversElement) {
-                    serversElement.textContent = data.servers_count;
-                }
-            }
-            
-            // Show success feedback
-            refreshBtn.classList.add('btn-success');
-            refreshBtn.classList.remove('btn-outline-secondary');
-            
-            setTimeout(() => {
-                refreshBtn.classList.remove('btn-success');
-                refreshBtn.classList.add('btn-outline-secondary');
-            }, 1000);
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            
-            // Show error feedback
-            refreshBtn.classList.add('btn-danger');
-            refreshBtn.classList.remove('btn-outline-secondary');
-            
-            setTimeout(() => {
-                refreshBtn.classList.remove('btn-danger');
-                refreshBtn.classList.add('btn-outline-secondary');
-            }, 2000);
-        })
-        .finally(() => {
-            // Reset button state
-            icon.classList.remove('fa-spinner', 'fa-spin');
-            icon.classList.add('fa-sync-alt');
-            refreshBtn.disabled = false;
-        });
+
+    // Fetch status and monitoring data
+    Promise.all([
+        fetch('/api/status').then(response => response.json()).catch(() => ({})),
+        fetch('/api/monitoring/dashboard').then(response => response.json()).catch(() => ({}))
+    ]).then(([statusData, monitoringData]) => {
+        console.log('API responses received:', {statusData, monitoringData});
+
+        // Update basic metrics from status data
+        updateBasicMetrics(statusData);
+
+        // Update monitoring dashboard (with status fallback)
+        updateMonitoringData(monitoringData, statusData);
+
+        // Show success feedback
+        refreshBtn.classList.add('btn-success');
+        refreshBtn.classList.remove('btn-outline-secondary');
+
+        setTimeout(() => {
+            refreshBtn.classList.remove('btn-success');
+            refreshBtn.classList.add('btn-outline-secondary');
+        }, 1000);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+
+        // Show error feedback
+        refreshBtn.classList.add('btn-danger');
+        refreshBtn.classList.remove('btn-outline-secondary');
+
+        setTimeout(() => {
+            refreshBtn.classList.remove('btn-danger');
+            refreshBtn.classList.add('btn-outline-secondary');
+        }, 2000);
+    })
+    .finally(() => {
+        // Reset button state
+        icon.classList.remove('fa-spinner', 'fa-spin');
+        icon.classList.add('fa-sync-alt');
+        refreshBtn.disabled = false;
+    });
+}
+
+function updateBasicMetrics(data) {
+    // Note: uptime is handled by the template, not the API
+
+    if (data.total_streams !== undefined) {
+        const streamsElement = document.querySelector('[data-metric="streams"]');
+        if (streamsElement) {
+            streamsElement.textContent = data.total_streams;
+        }
+    }
+
+    if (data.active_streams !== undefined) {
+        const runningElement = document.querySelector('[data-metric="running"]');
+        if (runningElement) {
+            runningElement.textContent = data.active_streams;
+        }
+    }
+
+    if (data.tak_servers !== undefined) {
+        const serversElement = document.querySelector('[data-metric="servers"]');
+        if (serversElement) {
+            serversElement.textContent = data.tak_servers;
+        }
+    }
+}
+
+function updateMonitoringData(data, statusData = {}) {
+    updateQueueMonitoring(data.queues || {});
+    updatePerformanceMetrics(data.performance || {});
+    updateSystemStatus(data.circuit_breakers || {}, data.recovery || {});
+}
+
+function updateQueueMonitoring(queues) {
+    const container = document.getElementById('queue-monitoring');
+    if (!container) return;
+
+    if (Object.keys(queues).length === 0) {
+        container.innerHTML = `
+            <div class="text-muted text-center">
+                <small><i class="fas fa-info-circle"></i> Queue monitoring data not available</small><br>
+                <small>Configure TAK servers and start streams to see queue metrics</small>
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+    for (const [queueId, metrics] of Object.entries(queues)) {
+        const queueName = metrics.name || queueId.replace('server_', 'Server ');  // Use actual server name if available
+        const statusClass = metrics.errors > 0 ? 'text-danger' : 'text-success';
+        const healthColor = metrics.health_score >= 90 ? 'bg-success' : metrics.health_score >= 70 ? 'bg-warning' : 'bg-danger';
+
+        html += `
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong class="text-muted">${queueName}</strong>
+                        <span class="badge ${healthColor}">Health: ${(metrics.health_score || 0).toFixed(0)}%</span>
+                    </div>
+                    <div class="row">
+                        <div class="col-sm-6">
+                            <small class="text-muted">Queue Size:</small> <span class="badge bg-secondary">${metrics.size || 0}</span><br>
+                            <small class="text-muted">Throughput:</small> <span class="badge bg-info">${(metrics.throughput || 0).toFixed(1)} events/sec</span>
+                        </div>
+                        <div class="col-sm-6">
+                            <small class="text-muted">Utilization:</small> <span class="badge bg-light text-dark">${(metrics.utilization || 0).toFixed(1)}%</span><br>
+                            ${metrics.errors > 0 ? `<small class="text-muted">Errors:</small> <span class="badge bg-danger">${metrics.errors}</span>` : '<small class="text-success">No errors</small>'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Add additional metrics if available
+        if (metrics.batches_per_second !== undefined || metrics.total_processed !== undefined) {
+            html += `
+                <div class="row mb-2">
+                    <div class="col-12">
+                        <small class="text-muted">
+                            ${metrics.batches_per_second !== undefined ? `${(metrics.batches_per_second * 60).toFixed(1)} batches/min` : ''}
+                            ${metrics.total_processed !== undefined ? ` • ${metrics.total_processed} total processed` : ''}
+                            ${metrics.total_batches !== undefined ? ` • ${metrics.total_batches} batches sent` : ''}
+                        </small>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    container.innerHTML = html;
+}
+
+
+function updatePerformanceMetrics(performance) {
+    const container = document.getElementById('performance-metrics');
+    if (!container) return;
+
+    console.log('Performance data received:', performance);
+
+    const responseTime = performance.avg_response_time || 0;
+    const cacheHitRatio = performance.cache_hit_ratio || 0;
+    const memoryUsage = performance.memory_usage || 0;
+    const cpuUsage = performance.cpu_usage || 0;
+
+    console.log('Performance values:', {responseTime, cacheHitRatio, memoryUsage, cpuUsage});
+
+    // Check if we have any meaningful performance data
+    const hasData = cacheHitRatio > 0 || memoryUsage > 0 || cpuUsage > 0 || responseTime > 0;
+    console.log('Performance hasData:', hasData);
+
+    if (!hasData) {
+        container.innerHTML = `
+            <div class="text-muted text-center">
+                <small><i class="fas fa-info-circle"></i> Performance metrics collecting...</small><br>
+                <small>Metrics will appear as system processes data</small>
+            </div>
+        `;
+        return;
+    }
+
+    let html = `
+        <div class="row mb-2">
+            <div class="col-sm-8"><small class="text-muted">Avg Response Time</small></div>
+            <div class="col-sm-4"><span class="badge bg-info">${(responseTime * 1000).toFixed(0)}ms</span></div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-sm-8"><small class="text-muted">Cache Hit Ratio</small></div>
+            <div class="col-sm-4"><span class="badge bg-success">${(cacheHitRatio * 100).toFixed(1)}%</span></div>
+        </div>
+    `;
+
+    if (memoryUsage > 0) {
+        html += `
+            <div class="row mb-2">
+                <div class="col-sm-8"><small class="text-muted">Memory Usage</small></div>
+                <div class="col-sm-4"><span class="badge bg-warning">${memoryUsage.toFixed(0)}MB</span></div>
+            </div>
+        `;
+    }
+
+    if (cpuUsage > 0) {
+        html += `
+            <div class="row mb-2">
+                <div class="col-sm-8"><small class="text-muted">CPU Usage</small></div>
+                <div class="col-sm-4"><span class="badge bg-warning">${cpuUsage.toFixed(1)}%</span></div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
 }
 
 // Refresh metrics every 30 seconds

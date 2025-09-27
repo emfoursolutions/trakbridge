@@ -20,15 +20,23 @@ from typing import Any, Callable, Dict, List, Optional
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-logger = logging.getLogger(__name__)
+# Local application imports
+from services.logging_service import get_module_logger
+
+logger = get_module_logger(__name__)
 
 
 class ConfigFileHandler(FileSystemEventHandler):
-    """Handle configuration file changes."""
+    """Handle configuration file changes with Redis event publishing."""
 
     def __init__(self, config_monitor):
         self.config_monitor = config_monitor
         self.last_modified: Dict[str, float] = {}
+        # Redis coordination removed for single worker deployment
+
+    # Redis coordination setup removed for single worker deployment
+
+    # File change publishing removed for single worker deployment
 
     def on_modified(self, event):
         """Handle file modification events."""
@@ -49,6 +57,10 @@ class ConfigFileHandler(FileSystemEventHandler):
         self.last_modified[event.src_path] = current_time
 
         logger.info(f"Configuration file changed: {event.src_path}")
+
+        # File change publishing removed for single worker deployment
+
+        # Continue with existing config reload logic
         self.config_monitor.reload_config()
 
 

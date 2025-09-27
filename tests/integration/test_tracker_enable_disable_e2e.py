@@ -100,7 +100,11 @@ class TestTrackerEnableDisableE2E:
             assert mapping_dict["E2E003"].enabled is True
 
             # 3. Test stream processing with enabled/disabled filtering
-            mock_db_manager = Mock()
+            # Use real database manager to access the callsign mappings we created
+            from services.database_manager import DatabaseManager
+            from flask import current_app
+
+            db_manager = DatabaseManager(lambda: current_app.app_context())
             mock_session_manager = Mock()
 
             # Mock GPS data including both enabled and disabled trackers
@@ -135,7 +139,7 @@ class TestTrackerEnableDisableE2E:
             ]
 
             # Create stream worker and apply callsign mapping
-            worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
+            worker = StreamWorker(stream, mock_session_manager, db_manager)
 
             async def test_processing():
                 await worker._apply_callsign_mapping(mock_gps_locations)
@@ -281,9 +285,13 @@ class TestTrackerEnableDisableE2E:
             assert len(mappings) == 0
 
             # Test stream processing with no trackers
-            mock_db_manager = Mock()
+            # Use real database manager to access the callsign mappings we created
+            from services.database_manager import DatabaseManager
+            from flask import current_app
+
+            db_manager = DatabaseManager(lambda: current_app.app_context())
             mock_session_manager = Mock()
-            worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
+            worker = StreamWorker(stream, mock_session_manager, db_manager)
 
             empty_locations = []
 
@@ -343,9 +351,13 @@ class TestTrackerEnableDisableE2E:
             db_session.commit()
 
             # Test stream processing - should filter out all locations
-            mock_db_manager = Mock()
+            # Use real database manager to access the callsign mappings we created
+            from services.database_manager import DatabaseManager
+            from flask import current_app
+
+            db_manager = DatabaseManager(lambda: current_app.app_context())
             mock_session_manager = Mock()
-            worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
+            worker = StreamWorker(stream, mock_session_manager, db_manager)
 
             all_disabled_locations = [
                 {
@@ -369,15 +381,11 @@ class TestTrackerEnableDisableE2E:
             ]
 
             async def test_all_disabled():
-                # Apply callsign mapping first
+                # Apply callsign mapping - this already filters disabled trackers internally
                 await worker._apply_callsign_mapping(all_disabled_locations)
-                # Then filter disabled trackers
-                enabled_locations = [
-                    loc
-                    for loc in all_disabled_locations
-                    if worker._is_tracker_enabled(loc)
-                ]
-                return enabled_locations
+                # The _apply_callsign_mapping method modifies the list in place,
+                # removing disabled tracker locations
+                return all_disabled_locations
 
             enabled_locations = asyncio.run(test_all_disabled())
 
@@ -429,9 +437,13 @@ class TestTrackerEnableDisableE2E:
                 assert mapping.enabled is True  # Migration should set default to True
 
             # Test that existing mappings continue to work after migration
-            mock_db_manager = Mock()
+            # Use real database manager to access the callsign mappings we created
+            from services.database_manager import DatabaseManager
+            from flask import current_app
+
+            db_manager = DatabaseManager(lambda: current_app.app_context())
             mock_session_manager = Mock()
-            worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
+            worker = StreamWorker(stream, mock_session_manager, db_manager)
 
             production_locations = [
                 {
@@ -504,9 +516,13 @@ class TestTrackerEnableDisableE2E:
                 large_locations.append(location)
 
             # Test performance of callsign mapping with large dataset
-            mock_db_manager = Mock()
+            # Use real database manager to access the callsign mappings we created
+            from services.database_manager import DatabaseManager
+            from flask import current_app
+
+            db_manager = DatabaseManager(lambda: current_app.app_context())
             mock_session_manager = Mock()
-            worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
+            worker = StreamWorker(stream, mock_session_manager, db_manager)
 
             start_time = time.time()
 
@@ -593,9 +609,13 @@ class TestTrackerEnableDisableE2E:
                 db_session.commit()
 
                 # Test processing for each provider
-                mock_db_manager = Mock()
+                # Use real database manager to access the callsign mappings we created
+                from services.database_manager import DatabaseManager
+                from flask import current_app
+
+                db_manager = DatabaseManager(lambda: current_app.app_context())
                 mock_session_manager = Mock()
-                worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
+                worker = StreamWorker(stream, mock_session_manager, db_manager)
 
                 # Create provider-specific location data structure
                 if provider == "garmin":

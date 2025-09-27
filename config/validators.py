@@ -20,7 +20,10 @@ from urllib.parse import urlparse
 
 import yaml
 
-logger = logging.getLogger(__name__)
+# Local application imports
+from services.logging_service import get_module_logger
+
+logger = get_module_logger(__name__)
 
 
 class ConfigValidator:

@@ -11,22 +11,25 @@ import pytest
 
 sys.path.append(".")
 
-from services.cot_service import PersistentCOTService
+from services.cot_service import get_cot_service, reset_cot_service
 
 
 def test_cot_service_workers_access():
-    """Test that PersistentCOTService.workers is accessible"""
+    """Test that QueuedCOTService.workers is accessible"""
 
-    print("Testing PersistentCOTService workers access...")
+    print("Testing QueuedCOTService workers access...")
 
     try:
-        # Create service
-        service = PersistentCOTService()
+        # Reset any existing singleton instance first
+        reset_cot_service()
+
+        # Get service using singleton pattern
+        service = get_cot_service()
 
         # Test workers attribute exists and is a dict
         assert hasattr(
             service, "workers"
-        ), "PersistentCOTService should have workers attribute"
+        ), "QueuedCOTService should have workers attribute"
         assert isinstance(service.workers, dict), "workers should be a dictionary"
         assert len(service.workers) == 0, "workers should start empty"
 
@@ -119,10 +122,10 @@ if __name__ == "__main__":
         test_cot_service_workers_access()
         test_plugin_config_extraction()
         test_stream_constructor()
-        
+
         print("\n🎉 ALL TESTS PASSED!")
         print("Both fixes are working correctly:")
-        print("  1. ✅ PersistentCOTService.workers direct access")
+        print("  1. ✅ QueuedCOTService.workers direct access")
         print("  2. ✅ Plugin config cot_type_mode extraction")
         print("  3. ✅ Stream constructor accepts cot_type_mode")
         sys.exit(0)

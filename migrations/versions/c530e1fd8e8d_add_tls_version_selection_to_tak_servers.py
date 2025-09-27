@@ -24,7 +24,13 @@ def upgrade():
     if not column_exists("tak_servers", "tls_version"):
         with op.batch_alter_table("tak_servers", schema=None) as batch_op:
             batch_op.add_column(
-                sa.Column("tls_version", sa.String(length=10), nullable=False, default="1.3", server_default="1.3")
+                sa.Column(
+                    "tls_version",
+                    sa.String(length=10),
+                    nullable=False,
+                    default="1.3",
+                    server_default="1.3",
+                )
             )
         print("Added tls_version column to tak_servers table")
     else:

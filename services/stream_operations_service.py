@@ -45,6 +45,8 @@ from typing import Any, Dict, Optional
 from models.stream import Stream
 from services.exceptions import DatabaseError, StreamConfigurationError
 
+# Worker coordination import removed for single worker deployment
+
 logger = logging.getLogger(__name__)
 
 
@@ -54,6 +56,7 @@ class StreamOperationsService:
     def __init__(self, stream_manager: Any, db: Any) -> None:
         self.stream_manager = stream_manager
         self.db = db
+        # Use global worker coordination instance
 
     def _get_session(self):
         """Get the database session, handling both scoped session and db.session patterns"""
@@ -113,6 +116,8 @@ class StreamOperationsService:
                 return True
 
         return False
+
+    # Configuration change publishing removed for single worker deployment
 
     def _get_database_type(self) -> str:
         """Get the current database type for logging purposes"""
@@ -242,6 +247,8 @@ class StreamOperationsService:
             # Handle callsign mappings if enabled
             if stream.enable_callsign_mapping:
                 self._create_callsign_mappings(stream, data)
+
+            # Configuration change notification removed for single worker deployment
 
             session.commit()
 
@@ -561,6 +568,8 @@ class StreamOperationsService:
                 if stream.enable_callsign_mapping:
                     self._update_callsign_mappings(stream, data)
 
+                # Configuration change notification removed for single worker deployment
+
                 # Attempt to commit the transaction
                 self._get_session().commit()
 
@@ -579,7 +588,7 @@ class StreamOperationsService:
 
                 # Restart the stream if it was running before
                 if was_running:
-                    self.stream_manager.start_stream_sync(stream_id)
+                    self.stream_manager.restart_stream_sync(stream_id)
 
                 return {
                     "success": True,

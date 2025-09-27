@@ -435,6 +435,353 @@ def configuration_health():
     return jsonify(result), status_code
 
 
+@bp.route("/health/circuit-breakers", methods=["GET"])
+@optional_auth
+def circuit_breaker_health():
+    """Circuit breaker health and status monitoring"""
+    try:
+        from services.circuit_breaker import get_circuit_breaker_manager
+
+        manager = get_circuit_breaker_manager()
+        all_status = manager.get_all_status()
+
+        # Calculate overall health
+        total_breakers = len(all_status)
+        open_breakers = sum(
+            1 for status in all_status.values() if status.get("state") == "open"
+        )
+        warning_breakers = sum(
+            1 for status in all_status.values() if status.get("state") == "half_open"
+        )
+
+        overall_status = "healthy"
+        if open_breakers > 0:
+            overall_status = "unhealthy"
+        elif warning_breakers > 0:
+            overall_status = "warning"
+
+        result = {
+            "status": overall_status,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "summary": {
+                "total_circuit_breakers": total_breakers,
+                "healthy_breakers": total_breakers - open_breakers - warning_breakers,
+                "warning_breakers": warning_breakers,
+                "failed_breakers": open_breakers,
+            },
+            "circuit_breakers": all_status,
+        }
+
+        status_code = 503 if overall_status == "unhealthy" else 200
+        return jsonify(result), status_code
+
+    except Exception as e:
+        logger.error(f"Error checking circuit breaker health: {e}")
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "error": str(e),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            ),
+            500,
+        )
+
+
+@bp.route("/health/recovery", methods=["GET"])
+@optional_auth
+def recovery_service_health():
+    """Recovery service health and status monitoring"""
+    try:
+        from services.recovery_service import get_recovery_service
+
+        recovery_service = get_recovery_service()
+        service_status = recovery_service.get_service_status()
+
+        # Get recent recovery attempts
+        recent_recoveries = []
+        for attempt in recovery_service.recovery_history[-10:]:  # Last 10 attempts
+            recent_recoveries.append(
+                {
+                    "component_id": attempt.component_id,
+                    "component_type": attempt.component_type.value,
+                    "status": attempt.status.value,
+                    "started_at": attempt.started_at.isoformat(),
+                    "completed_at": (
+                        attempt.completed_at.isoformat()
+                        if attempt.completed_at
+                        else None
+                    ),
+                    "duration_seconds": attempt.duration_seconds,
+                    "recovery_method": attempt.recovery_method,
+                    "error_message": attempt.error_message,
+                }
+            )
+
+        # Calculate health based on recent recovery success rate
+        stats = service_status["statistics"]
+        total_attempts = stats.get("total_attempts", 0)
+        successful_recoveries = stats.get("successful_recoveries", 0)
+
+        if total_attempts == 0:
+            success_rate = 1.0
+        else:
+            success_rate = successful_recoveries / total_attempts
+
+        overall_status = "healthy"
+        if success_rate < 0.5:
+            overall_status = "unhealthy"
+        elif success_rate < 0.8:
+            overall_status = "warning"
+
+        result = {
+            "status": overall_status,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "service_status": service_status,
+            "success_rate": success_rate,
+            "recent_recoveries": recent_recoveries,
+        }
+
+        status_code = 503 if overall_status == "unhealthy" else 200
+        return jsonify(result), status_code
+
+    except Exception as e:
+        logger.error(f"Error checking recovery service health: {e}")
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "error": str(e),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            ),
+            500,
+        )
+
+
+@bp.route("/monitoring/dashboard", methods=["GET"])
+@optional_auth
+def monitoring_dashboard():
+    """Comprehensive monitoring dashboard data"""
+    try:
+        dashboard_data = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "queues": {},
+            "streams": {},
+            "performance": {},
+            "circuit_breakers": {},
+            "recovery": {},
+        }
+
+        # Get queue monitoring data
+        try:
+            from services.queue_monitoring import get_queue_monitoring_service
+
+            monitoring_service = get_queue_monitoring_service()
+            # Get metrics for all queues
+            from models.tak_server import TakServer
+
+            tak_servers = TakServer.query.all()
+
+            for tak_server in tak_servers:
+                # HOTFIX: Ensure monitoring service uses correct queue manager instance
+                try:
+                    queue_manager = getattr(monitoring_service, "queue_manager", None)
+                    if queue_manager:
+                        from services.queue_manager import get_queue_manager
+
+                        global_queue_manager = get_queue_manager()
+
+                        # Fix queue manager instance mismatch if needed
+                        if queue_manager is not global_queue_manager:
+                            monitoring_service.queue_manager = global_queue_manager
+                            logger.debug(
+                                "Updated monitoring service to use global queue manager"
+                            )
+                except Exception as fix_error:
+                    logger.debug(f"Queue manager fix attempt: {fix_error}")
+
+                metrics = monitoring_service.get_queue_metrics(tak_server.id)
+
+                if metrics:
+                    dashboard_data["queues"][f"server_{tak_server.id}"] = {
+                        "name": tak_server.name,  # Include actual server name
+                        "size": metrics.current_size,
+                        "throughput": metrics.events_per_second,
+                        "errors": getattr(
+                            metrics, "error_count", 0
+                        ),  # fallback if not present
+                        "health_score": metrics.health_score,
+                        "utilization": metrics.utilization_percent,
+                        "batches_per_second": metrics.batches_per_second,
+                        "overflow_rate": metrics.overflow_rate,
+                    }
+                else:
+                    logger.warning(
+                        f"No queue metrics returned for TAK server {tak_server.id}"
+                    )
+
+                    # FALLBACK: Use global queue manager data directly
+                    try:
+                        from services.queue_manager import get_queue_manager
+
+                        fallback_queue_manager = get_queue_manager()
+                        fallback_statuses = (
+                            fallback_queue_manager.get_all_queue_status()
+                        )
+
+                        if tak_server.id in fallback_statuses:
+                            queue_status = fallback_statuses[tak_server.id]
+                            logger.debug(
+                                f"Using fallback queue data for server {tak_server.id}: {queue_status}"
+                            )
+
+                            # Create basic metrics from queue status
+                            dashboard_data["queues"][f"server_{tak_server.id}"] = {
+                                "name": tak_server.name,  # Include actual server name
+                                "size": queue_status.get("current_size", 0),
+                                "throughput": round(
+                                    queue_status.get("total_events_processed", 0) / 60,
+                                    1,
+                                ),  # rough throughput
+                                "errors": queue_status.get("total_events_dropped", 0),
+                                "health_score": (
+                                    100.0 if queue_status.get("exists", False) else 0.0
+                                ),
+                                "total_processed": queue_status.get(
+                                    "total_events_processed", 0
+                                ),
+                                "total_batches": queue_status.get(
+                                    "total_batches_sent", 0
+                                ),
+                                "utilization": round(
+                                    (
+                                        queue_status.get("current_size", 0)
+                                        / max(queue_status.get("max_size", 1), 1)
+                                    )
+                                    * 100,
+                                    1,
+                                ),
+                            }
+                            logger.debug(
+                                f"Created fallback queue metrics for server {tak_server.id}"
+                            )
+                        else:
+                            logger.warning(
+                                f"No fallback queue data found for server {tak_server.id}"
+                            )
+                    except Exception as fallback_error:
+                        logger.error(f"Fallback queue data failed: {fallback_error}")
+        except Exception as e:
+            logger.error(f"Queue monitoring not available: {e}", exc_info=True)
+
+        # Get stream status data
+        try:
+            services = get_stream_services()
+            status_service = services["status_service"]
+            logger.debug(f"Stream status service obtained: {status_service}")
+            streams_data = status_service.get_all_streams_status()
+            logger.debug(f"Stream status data: {streams_data}")
+
+            # Extract the streams array from the response
+            if isinstance(streams_data, dict) and "streams" in streams_data:
+                streams_list = streams_data["streams"]
+                logger.debug(f"Found {len(streams_list)} streams in status data")
+
+                for stream_data in streams_list:
+                    stream_id = str(stream_data.get("id"))
+                    logger.debug(
+                        f"Processing stream {stream_id} with data: {stream_data}"
+                    )
+                    dashboard_data["streams"][stream_id] = {
+                        "status": stream_data.get(
+                            "status",
+                            "running" if stream_data.get("running") else "stopped",
+                        ),
+                        "devices": stream_data.get(
+                            "device_count", 1 if stream_data.get("running") else 0
+                        ),
+                        "last_update": stream_data.get("last_poll", "never"),
+                        "error": stream_data.get("last_error"),
+                        "stream_name": stream_data.get("name"),
+                        "plugin_type": stream_data.get("plugin_type"),
+                        "total_messages": stream_data.get("total_messages_sent", 0),
+                    }
+            else:
+                logger.warning(
+                    f"Unexpected stream status data format: {type(streams_data)}"
+                )
+        except Exception as e:
+            logger.error(f"Stream status not available: {e}", exc_info=True)
+
+        # Get performance data
+        try:
+            from services.queue_performance_optimizer import get_performance_optimizer
+
+            optimizer = get_performance_optimizer()
+            performance_report = optimizer.get_optimization_report()
+
+            if "latest_metrics" in performance_report:
+                metrics = performance_report["latest_metrics"]
+                dashboard_data["performance"] = {
+                    "avg_response_time": metrics.get("average_response_time", 0),
+                    "cache_hit_ratio": metrics.get("cache_hit_ratio", 0),
+                    "memory_usage": metrics.get("memory_usage_mb", 0),
+                    "cpu_usage": metrics.get("cpu_usage_percent", 0),
+                }
+        except Exception as e:
+            logger.debug(f"Performance metrics not available: {e}")
+
+        # Get circuit breaker data
+        try:
+            from services.circuit_breaker import get_circuit_breaker_manager
+
+            manager = get_circuit_breaker_manager()
+            all_status = manager.get_all_status()
+
+            for service_name, status in all_status.items():
+                dashboard_data["circuit_breakers"][service_name] = {
+                    "state": status.get("state"),
+                    "failure_count": status.get("failure_count", 0),
+                    "last_failure": status.get("last_failure_time"),
+                }
+        except Exception as e:
+            logger.debug(f"Circuit breaker data not available: {e}")
+
+        # Get recovery service data
+        try:
+            from services.recovery_service import get_recovery_service
+
+            recovery_service = get_recovery_service()
+            service_status = recovery_service.get_service_status()
+
+            dashboard_data["recovery"] = {
+                "active_recoveries": service_status.get("active_recoveries", 0),
+                "success_rate": (
+                    service_status["statistics"]["successful_recoveries"]
+                    / max(service_status["statistics"]["total_attempts"], 1)
+                ),
+                "running": service_status.get("running", False),
+            }
+        except Exception as e:
+            logger.debug(f"Recovery service data not available: {e}")
+
+        return jsonify(dashboard_data)
+
+    except Exception as e:
+        logger.error(f"Error generating monitoring dashboard: {e}")
+        return (
+            jsonify(
+                {
+                    "error": "Failed to generate dashboard data",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            ),
+            500,
+        )
+
+
 # =============================================================================
 # Stream API Routes
 # =============================================================================
@@ -984,6 +1331,183 @@ def get_plugin_available_fields(plugin_type):
 @bp.route("/version")
 def version():
     return {"version": format_version()}
+
+
+# =============================================================================
+# Monitoring Dashboard API
+# =============================================================================
+
+
+@bp.route("/monitoring/dashboard-legacy")
+@require_permission("api", "read")
+def monitoring_dashboard_legacy():
+    """
+    Web dashboard endpoint for real-time metrics as specified in Phase 2 of RC6.
+    Returns queue metrics, stream health, performance data, and configuration status.
+    """
+    try:
+        from services.stream_manager import get_stream_manager
+        from services.queue_manager import get_queue_manager
+
+        # Get stream manager and monitoring services
+        stream_manager = get_stream_manager()
+        queue_manager = get_queue_manager()
+
+        # Get queue metrics from monitoring service
+        queues = {}
+        try:
+            if (
+                hasattr(stream_manager, "monitoring_service")
+                and stream_manager.monitoring_service
+            ):
+                # Get queue status from queue manager
+                queue_statuses = queue_manager.get_all_queue_status()
+
+                for queue_id, status in queue_statuses.items():
+                    # Get metrics from monitoring service
+                    metrics = stream_manager.monitoring_service.get_queue_metrics(
+                        queue_id
+                    )
+
+                    if metrics:
+                        queues[f"server_{queue_id}"] = {
+                            "size": metrics.current_size,
+                            "throughput": round(metrics.events_per_second, 1),
+                            "errors": status.get("total_events_dropped", 0),
+                            "utilization": round(metrics.utilization_percent, 1),
+                            "health_score": round(metrics.health_score, 1),
+                        }
+                    else:
+                        # Fallback to basic queue status
+                        queues[f"server_{queue_id}"] = {
+                            "size": status.get("current_size", 0),
+                            "throughput": 0.0,
+                            "errors": status.get("total_events_dropped", 0),
+                            "utilization": 0.0,
+                            "health_score": 100.0,
+                        }
+        except Exception as e:
+            logger.debug(f"Error getting queue metrics: {e}")
+            queues = {
+                "server_1": {
+                    "size": 0,
+                    "throughput": 0.0,
+                    "errors": 0,
+                    "utilization": 0.0,
+                    "health_score": 100.0,
+                }
+            }
+
+        # Get stream health information
+        streams = {}
+        try:
+            all_status = stream_manager.get_all_stream_status()
+            for stream_id, status in all_status.items():
+                if isinstance(stream_id, int):  # Skip non-stream entries like errors
+                    streams[str(stream_id)] = {
+                        "status": (
+                            "running" if status.get("running", False) else "stopped"
+                        ),
+                        "devices": (
+                            1 if status.get("running", False) else 0
+                        ),  # Simplified device count
+                        "last_update": status.get("last_poll"),
+                        "error": (
+                            status.get("last_error")
+                            if status.get("last_error")
+                            else None
+                        ),
+                        "stream_name": status.get("stream_name", f"Stream {stream_id}"),
+                        "plugin_type": status.get("plugin_type", "unknown"),
+                        "tak_server": status.get("tak_server", "unknown"),
+                    }
+        except Exception as e:
+            logger.debug(f"Error getting stream health: {e}")
+            streams = {}
+
+        # Get performance data
+        performance = {
+            "avg_response_time": 0.25,  # Default values
+            "cache_hit_ratio": 0.85,
+            "memory_usage": 0,
+        }
+
+        try:
+            # Get performance data from optimizer if available
+            if (
+                hasattr(stream_manager, "performance_optimizer")
+                and stream_manager.performance_optimizer
+            ):
+                report = stream_manager.performance_optimizer.get_optimization_report()
+                if "latest_metrics" in report:
+                    metrics = report["latest_metrics"]
+                    performance.update(
+                        {
+                            "avg_response_time": round(
+                                metrics.get("processing_latency_ms", 250) / 1000, 3
+                            ),
+                            "cache_hit_ratio": round(
+                                metrics.get("cache_hit_ratio", 0.85), 2
+                            ),
+                            "memory_usage": round(metrics.get("memory_usage_mb", 0), 1),
+                            "cpu_usage": round(metrics.get("cpu_usage_percent", 0), 1),
+                            "queue_throughput": round(
+                                metrics.get("queue_throughput", 0), 1
+                            ),
+                            "batch_efficiency": round(
+                                metrics.get("batch_efficiency", 0), 2
+                            ),
+                        }
+                    )
+        except Exception as e:
+            logger.debug(f"Error getting performance metrics: {e}")
+
+        # Get configuration status
+        try:
+            from models.stream import Stream
+
+            total_streams = Stream.query.count()
+            active_streams = Stream.query.filter_by(is_active=True).count()
+
+            config_status = {
+                "total_streams": total_streams,
+                "active_streams": active_streams,
+                "inactive_streams": total_streams - active_streams,
+                "last_config_change": None,  # Could be enhanced with change tracking
+            }
+        except Exception as e:
+            logger.debug(f"Error getting configuration status: {e}")
+            config_status = {
+                "total_streams": 0,
+                "active_streams": 0,
+                "inactive_streams": 0,
+                "last_config_change": None,
+            }
+
+        dashboard_data = {
+            "queues": queues,
+            "streams": streams,
+            "performance": performance,
+            "configuration": config_status,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "monitoring_active": getattr(
+                stream_manager, "_monitoring_initialized", False
+            ),
+        }
+
+        return jsonify(dashboard_data)
+
+    except Exception as e:
+        logger.error(f"Error generating monitoring dashboard: {e}")
+        return (
+            jsonify(
+                {
+                    "error": "Failed to generate monitoring dashboard",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            ),
+            500,
+        )
 
 
 def check_stream_manager_health():

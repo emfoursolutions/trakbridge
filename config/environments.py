@@ -69,7 +69,7 @@ class DevelopmentConfig(BaseConfig):
                 "pool_timeout": 30,
                 "connect_args": {
                     "connect_timeout": 60,
-                    "read_timeout": 60,  # Increased for MariaDB 11 
+                    "read_timeout": 60,  # Increased for MariaDB 11
                     "write_timeout": 60,  # Increased for MariaDB 11
                     "autocommit": True,  # Prevent connection packet errors
                     "charset": "utf8mb4",
@@ -152,11 +152,11 @@ class ProductionConfig(BaseConfig):
                 "pool_timeout": 60,
                 "connect_args": {
                     "connect_timeout": 90,  # Longer timeout for production
-                    "read_timeout": 120,     # Extended read timeout for MariaDB 11
-                    "write_timeout": 120,    # Extended write timeout for MariaDB 11
-                    "charset": "utf8mb4",   # Character set for MySQL
-                    "autocommit": True,     # MariaDB 11 compatibility - prevent packet errors
-                    "local_infile": 0,      # Security: Disable local file loading
+                    "read_timeout": 120,  # Extended read timeout for MariaDB 11
+                    "write_timeout": 120,  # Extended write timeout for MariaDB 11
+                    "charset": "utf8mb4",  # Character set for MySQL
+                    "autocommit": True,  # MariaDB 11 compatibility - prevent packet errors
+                    "local_infile": 0,  # Security: Disable local file loading
                     # MariaDB 11 production optimizations
                     "use_unicode": True,
                     "sql_mode": "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO",
@@ -257,11 +257,11 @@ class TestingConfig(BaseConfig):
         """Use database appropriate for testing - SQLite for unit tests, PostgreSQL/MySQL for integration tests."""
         # Follow same precedence as base config: DB_TYPE takes precedence over DATABASE_URL
         explicit_db_type = self.secret_manager.get_secret("DB_TYPE")
-        
+
         if explicit_db_type:
             # DB_TYPE explicitly set - use parent class logic to build appropriate URI
             return super().SQLALCHEMY_DATABASE_URI
-            
+
         # Fallback: Check if DATABASE_URL is explicitly set (for integration tests)
         database_url = self.secret_manager.get_secret("DATABASE_URL")
         if database_url:
@@ -313,16 +313,20 @@ class TestingConfig(BaseConfig):
         # Use same precedence logic as SQLALCHEMY_DATABASE_URI to ensure consistency
         # Check explicit DB_TYPE first (highest priority - same as database URI logic)
         explicit_db_type = self.secret_manager.get_secret("DB_TYPE")
-        
+
         if explicit_db_type:
             db_type = explicit_db_type
         else:
             # Check if DATABASE_URL is set and detect type from it
             database_url = self.secret_manager.get_secret("DATABASE_URL")
             if database_url:
-                if database_url.startswith("postgresql://") or database_url.startswith("postgres://"):
+                if database_url.startswith("postgresql://") or database_url.startswith(
+                    "postgres://"
+                ):
                     db_type = "postgresql"
-                elif database_url.startswith("mysql://") or database_url.startswith("mysql+"):
+                elif database_url.startswith("mysql://") or database_url.startswith(
+                    "mysql+"
+                ):
                     db_type = "mysql"
                 elif database_url.startswith("sqlite://"):
                     db_type = "sqlite"

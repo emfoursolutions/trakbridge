@@ -57,6 +57,7 @@ class TestCallsignMappingIntegration:
 
             # 3. Create stream worker with mock dependencies
             mock_db_manager = Mock()
+            mock_db_manager.get_stream_with_relationships.return_value = stream
             mock_session_manager = Mock()
             worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
 
@@ -152,6 +153,7 @@ class TestCallsignMappingIntegration:
 
             # Create stream worker with real Garmin plugin
             mock_db_manager = Mock()
+            mock_db_manager.get_stream_with_relationships.return_value = stream
             mock_session_manager = Mock()
             worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
 
@@ -214,12 +216,16 @@ class TestCallsignMappingIntegration:
 
             # No callsign mappings created - all will be unmapped
 
-            mock_db_manager = Mock()
+            # Create separate mock managers for each worker since they need different streams
+            fallback_mock_db_manager = Mock()
+            fallback_mock_db_manager.get_stream_with_relationships.return_value = (
+                fallback_stream
+            )
             mock_session_manager = Mock()
 
             # Test fallback mode
             fallback_worker = StreamWorker(
-                fallback_stream, mock_session_manager, mock_db_manager
+                fallback_stream, mock_session_manager, fallback_mock_db_manager
             )
             fallback_locations = [
                 {
@@ -233,9 +239,15 @@ class TestCallsignMappingIntegration:
                 }
             ]
 
+            # Create separate mock manager for skip mode
+            skip_mock_db_manager = Mock()
+            skip_mock_db_manager.get_stream_with_relationships.return_value = (
+                skip_stream
+            )
+
             # Test skip mode
             skip_worker = StreamWorker(
-                skip_stream, mock_session_manager, mock_db_manager
+                skip_stream, mock_session_manager, skip_mock_db_manager
             )
             skip_locations = [
                 {

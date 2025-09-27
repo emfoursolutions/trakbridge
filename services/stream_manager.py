@@ -41,10 +41,11 @@ import logging
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 # Local application imports
-from services.cot_service import cot_service
+from services.cot_service import get_cot_service
+from services.config_cache_service import get_config_cache_service
 from services.database_manager import DatabaseManager
 from services.exceptions import (
     StreamConfigurationError,
@@ -52,8 +53,12 @@ from services.exceptions import (
     StreamNotFoundError,
 )
 from services.logging_service import get_module_logger
+from services.queue_monitoring import get_queue_monitoring_service
+from services.queue_performance_optimizer import get_performance_optimizer
 from services.session_manager import SessionManager
 from services.stream_worker import StreamWorker
+
+# Worker coordination import removed for single worker deployment
 
 # Global stream manager instance - use singleton pattern to prevent multiple instances
 _stream_manager_instance = None
@@ -81,12 +86,22 @@ class StreamManager:
         self._loop_thread = None
         self._manager_lock = threading.Lock()
 
+        # Worker coordination removed for single worker deployment
+
         # Initialize dependencies
         self.db_manager = DatabaseManager(app_context_factory)
         self.session_manager = SessionManager()
+        self.config_cache = get_config_cache_service()
+
+        # Initialize monitoring services (Phase 2)
+        self.monitoring_service = get_queue_monitoring_service()
+        self.performance_optimizer = get_performance_optimizer()
+        self._monitoring_initialized = False
 
         # Initialize persistent COT service flag
         self._cot_service_initialized = False
+
+        # Worker coordination setup removed for single worker deployment
 
         # Start background loop
         self._start_background_loop()
@@ -132,6 +147,30 @@ class StreamManager:
 
         logger.info(f"Stream {stream.id} has no TAK servers configured")
         return False
+
+    def _get_all_tak_servers(self, stream):
+        """
+        Get all TAK servers for a stream (single or multi-server configuration).
+
+        Args:
+            stream: Stream object
+
+        Returns:
+            Generator of TAK server objects
+        """
+        # Handle legacy single-server configuration
+        if hasattr(stream, "tak_server") and stream.tak_server:
+            yield stream.tak_server
+
+        # Handle multi-server configuration
+        if hasattr(stream, "tak_servers"):
+            try:
+                for tak_server in stream.tak_servers:
+                    yield tak_server
+            except Exception as e:
+                logger.warning(
+                    f"Error accessing tak_servers for stream {stream.id}: {e}"
+                )
 
     def _get_tak_server_display(self, stream) -> str:
         """
@@ -182,6 +221,330 @@ class StreamManager:
 
         return None
 
+    # Worker coordination subscriber removed for single worker deployment
+
+    # Coordination listener removed for single worker deployment
+
+    # Configuration version tracking and coordination restart methods removed for single worker deployment
+
+    async def _preload_configurations(self):
+        """Preload stream configurations into cache for faster startup"""
+        try:
+            logger.info("Preloading stream configurations")
+
+            # Get all streams from database
+            all_streams = self.db_manager.get_all_streams_with_relationships()
+
+            preload_count = 0
+            for stream in all_streams:
+                try:
+                    # Create cache key for stream configuration
+                    cache_key = f"stream_config:{stream.id}"
+
+                    # Preload stream configuration
+                    config_data = {
+                        "plugin_type": stream.plugin_type,
+                        "plugin_config": stream.plugin_config,
+                        "cot_type": stream.cot_type,
+                        "poll_interval": stream.poll_interval,
+                        "is_active": stream.is_active,
+                    }
+
+                    await self.config_cache.preload_configuration(
+                        cache_key, config_data
+                    )
+                    preload_count += 1
+
+                    logger.debug(
+                        f"Preloaded config for stream {stream.id} ({stream.name})"
+                    )
+
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to preload config for stream {stream.id}: {e}"
+                    )
+
+            logger.info(
+                f"Configuration preloading completed: {preload_count} configurations cached"
+            )
+
+        except Exception as e:
+            logger.error(f"Error during configuration preloading: {e}")
+
+    async def hot_reload_stream_configuration(self, stream_id: int) -> bool:
+        """
+        Hot-reload configuration for a specific stream without full restart.
+
+        This implements the configuration hot-reload capability from Phase 3,
+        allowing configuration changes to be applied without stopping/restarting
+        the entire stream where possible.
+
+        Args:
+            stream_id: ID of the stream to reload configuration for
+
+        Returns:
+            True if configuration was successfully reloaded, False otherwise
+        """
+        try:
+            logger.info(f"Hot-reloading configuration for stream {stream_id}")
+
+            # Get fresh stream data from database
+            stream = await asyncio.get_event_loop().run_in_executor(
+                None, self.db_manager.get_stream_with_relationships, stream_id
+            )
+
+            if not stream:
+                logger.error(f"Stream {stream_id} not found for hot-reload")
+                return False
+
+            # Create cache key for stream configuration
+            cache_key = f"stream_config:{stream.id}"
+
+            # Create new configuration data
+            new_config_data = {
+                "plugin_type": stream.plugin_type,
+                "plugin_config": stream.plugin_config,
+                "cot_type": stream.cot_type,
+                "poll_interval": stream.poll_interval,
+                "is_active": stream.is_active,
+                "last_reload": datetime.now(timezone.utc).isoformat(),
+            }
+
+            # Check if configuration has actually changed
+            config_changed = await self.config_cache.has_configuration_changed(
+                cache_key, new_config_data
+            )
+
+            if not config_changed:
+                logger.debug(
+                    f"No configuration changes detected for stream {stream_id}"
+                )
+                return True
+
+            # Update configuration in cache
+            await self.config_cache.update_configuration(cache_key, new_config_data)
+
+            # Check if stream is currently running
+            is_running = stream_id in self._stream_workers
+
+            if is_running:
+                logger.info(f"Stream {stream_id} is running, applying hot-reload")
+
+                # For certain configuration changes, we can hot-reload without restart
+                # Check if only non-critical settings changed
+                old_config = await self.config_cache.get_configuration(cache_key)
+                can_hot_reload = self._can_hot_reload_changes(
+                    old_config, new_config_data
+                )
+
+                if can_hot_reload:
+                    # Apply configuration changes to running worker
+                    worker = self._stream_workers.get(stream_id)
+                    if worker and hasattr(worker, "update_configuration"):
+                        try:
+                            await worker.update_configuration(new_config_data)
+                            logger.info(f"Hot-reload successful for stream {stream_id}")
+                            return True
+                        except Exception as e:
+                            logger.warning(
+                                f"Hot-reload failed, falling back to restart: {e}"
+                            )
+
+                # If hot-reload not possible, restart the stream
+                logger.info(f"Restarting stream {stream_id} for configuration changes")
+                await self._restart_stream_async(stream_id)
+            else:
+                logger.info(
+                    f"Stream {stream_id} not running, configuration updated in cache"
+                )
+
+            # Clear plugin validation cache to force fresh validation
+            from plugins.plugin_manager import PluginManager
+
+            plugin_manager = PluginManager()
+            plugin_manager.clear_validation_cache()
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error during hot-reload for stream {stream_id}: {e}")
+            return False
+
+    def _can_hot_reload_changes(self, old_config: Dict, new_config: Dict) -> bool:
+        """
+        Determine if configuration changes can be hot-reloaded without restart.
+
+        Safe to hot-reload:
+        - poll_interval changes
+        - cot_type changes
+        - Minor plugin_config updates (non-authentication related)
+
+        Requires restart:
+        - plugin_type changes
+        - Authentication credential changes
+        - TAK server configuration changes
+        """
+        if not old_config:
+            return False
+
+        # Plugin type changes require restart
+        if old_config.get("plugin_type") != new_config.get("plugin_type"):
+            return False
+
+        # Check for authentication-related plugin config changes
+        old_plugin_config = old_config.get("plugin_config", {})
+        new_plugin_config = new_config.get("plugin_config", {})
+
+        # Look for credential/authentication changes that require restart
+        auth_fields = [
+            "username",
+            "password",
+            "api_key",
+            "token",
+            "client_id",
+            "client_secret",
+        ]
+        for field in auth_fields:
+            if old_plugin_config.get(field) != new_plugin_config.get(field):
+                logger.debug(
+                    f"Authentication field '{field}' changed, restart required"
+                )
+                return False
+
+        # Poll interval and CoT type changes are safe for hot-reload
+        return True
+
+    async def _optimize_connection_health_checks(self):
+        """Optimize connection health checks by running them in parallel"""
+        try:
+            logger.info("Performing optimized connection health pre-checks")
+
+            # Get all active streams to check connections
+            active_streams = self.db_manager.get_active_streams()
+
+            if not active_streams:
+                logger.info("No active streams found for health checks")
+                return
+
+            # Initialize session manager for connection testing
+            await self.session_manager.initialize()
+
+            async def check_connection_health(stream):
+                """Check health of a single stream's connections"""
+                try:
+                    health_status = {
+                        "stream_id": stream.id,
+                        "stream_name": stream.name,
+                        "plugin_health": False,
+                        "tak_server_health": False,
+                        "overall_health": False,
+                    }
+
+                    # Quick plugin API health check if applicable
+                    if hasattr(stream, "plugin_config") and stream.plugin_config:
+                        plugin_config = stream.plugin_config
+
+                        # Check for API endpoint in plugin config
+                        api_url = None
+                        for key, value in plugin_config.items():
+                            if (
+                                "url" in key.lower()
+                                and isinstance(value, str)
+                                and value.startswith("http")
+                            ):
+                                api_url = value
+                                break
+
+                        if api_url:
+                            try:
+                                # Quick HEAD request to check if endpoint is reachable
+                                session = await self.session_manager.get_session()
+                                async with session.head(api_url, timeout=5) as response:
+                                    health_status["plugin_health"] = (
+                                        response.status < 500
+                                    )
+                            except Exception:
+                                health_status["plugin_health"] = False
+
+                    # TAK server connectivity check
+                    if hasattr(stream, "tak_server") and stream.tak_server:
+                        try:
+                            # Simple connectivity check (not full PyTAK connection)
+                            tak_server = stream.tak_server
+                            host = tak_server.host
+                            port = tak_server.port
+
+                            # Quick socket connection test
+                            import socket
+
+                            try:
+                                with socket.socket(
+                                    socket.AF_INET, socket.SOCK_STREAM
+                                ) as sock:
+                                    sock.settimeout(3)
+                                    result = sock.connect_ex((host, port))
+                                    health_status["tak_server_health"] = result == 0
+                            except Exception:
+                                health_status["tak_server_health"] = False
+                        except Exception:
+                            health_status["tak_server_health"] = False
+
+                    # Overall health assessment
+                    health_status["overall_health"] = (
+                        health_status["plugin_health"] or not api_url
+                    ) and health_status["tak_server_health"]
+
+                    return health_status
+
+                except Exception as e:
+                    logger.debug(f"Error checking health for stream {stream.id}: {e}")
+                    return {
+                        "stream_id": stream.id,
+                        "stream_name": getattr(stream, "name", "Unknown"),
+                        "plugin_health": False,
+                        "tak_server_health": False,
+                        "overall_health": False,
+                        "error": str(e),
+                    }
+
+            # Run all health checks in parallel
+            logger.info(
+                f"Running health checks for {len(active_streams)} streams in parallel"
+            )
+            health_check_tasks = [
+                check_connection_health(stream) for stream in active_streams
+            ]
+            health_results = await asyncio.gather(
+                *health_check_tasks, return_exceptions=True
+            )
+
+            # Process and report results
+            healthy_count = 0
+            unhealthy_count = 0
+            for result in health_results:
+                if isinstance(result, Exception):
+                    logger.error(f"Health check task failed: {result}")
+                    unhealthy_count += 1
+                else:
+                    if result["overall_health"]:
+                        healthy_count += 1
+                        logger.debug(
+                            f"Stream {result['stream_id']} ({result['stream_name']}) is healthy"
+                        )
+                    else:
+                        unhealthy_count += 1
+                        logger.warning(
+                            f"Stream {result['stream_id']} ({result['stream_name']}) has health issues"
+                        )
+
+            logger.info(
+                f"Connection health pre-checks completed: "
+                f"{healthy_count} healthy, {unhealthy_count} unhealthy out of {len(active_streams)} streams"
+            )
+
+        except Exception as e:
+            logger.error(f"Error during connection health optimization: {e}")
+
     async def _initialize_persistent_cot_service(self):
         """
         Initialize persistent COT service for all TAK servers.
@@ -224,28 +587,60 @@ class StreamManager:
                             f"Error accessing multi-server relationship for stream {stream.id}: {e}"
                         )
 
-            # Start persistent workers for each unique TAK server
+            # Start persistent workers for each unique TAK server in parallel
             workers_started = 0
             workers_failed = 0
 
-            for tak_server in tak_servers.values():
-                try:
-                    logger.info(
-                        f"Starting persistent worker for TAK server: {tak_server.name}"
-                    )
-                    success = await cot_service.start_worker(tak_server)
-                    if success:
-                        workers_started += 1
-                    else:
-                        workers_failed += 1
-                        logger.warning(
-                            f"Failed to start worker for TAK server: {tak_server.name}"
+            if tak_servers:
+                logger.info(f"Starting {len(tak_servers)} TAK workers in parallel")
+
+                # Create tasks for parallel TAK server connection
+                async def start_tak_worker(tak_server):
+                    """Start a single TAK worker with error handling"""
+                    try:
+                        logger.info(
+                            f"Starting persistent worker for TAK server: {tak_server.name}"
                         )
-                except Exception as e:
-                    workers_failed += 1
-                    logger.error(
-                        f"Error starting worker for TAK server {tak_server.name}: {e}"
-                    )
+                        success = await get_cot_service().start_worker(tak_server)
+                        return tak_server, success, None
+                    except Exception as e:
+                        logger.error(
+                            f"Error starting worker for TAK server {tak_server.name}: {e}"
+                        )
+                        return tak_server, False, e
+
+                # Execute all TAK worker startups concurrently
+                tasks = [
+                    start_tak_worker(tak_server) for tak_server in tak_servers.values()
+                ]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # Process results
+                for result in results:
+                    if isinstance(result, Exception):
+                        workers_failed += 1
+                        logger.error(
+                            f"Unexpected error in TAK worker startup task: {result}"
+                        )
+                    else:
+                        tak_server, success, error = result
+                        if success:
+                            workers_started += 1
+                            logger.info(
+                                f"Successfully started worker for TAK server: {tak_server.name}"
+                            )
+                        else:
+                            workers_failed += 1
+                            if error:
+                                logger.error(
+                                    f"Failed to start worker for TAK server {tak_server.name}: {error}"
+                                )
+                            else:
+                                logger.warning(
+                                    f"Failed to start worker for TAK server: {tak_server.name}"
+                                )
+            else:
+                logger.info("No TAK servers found to initialize")
 
             logger.info(
                 f"Initialized persistent COT service: {workers_started} workers started, "
@@ -257,6 +652,49 @@ class StreamManager:
             logger.error(
                 f"Error initializing persistent COT service: {e}", exc_info=True
             )
+
+    async def _initialize_monitoring_services(self):
+        """
+        Initialize monitoring services as specified in Phase 2 of RC6.
+        Activates existing QueueMonitoringService and QueuePerformanceOptimizer.
+        """
+        if self._monitoring_initialized:
+            return
+
+        try:
+            logger.info("Initializing monitoring services (Phase 2)")
+
+            # Start queue monitoring service
+            logger.info("Starting QueueMonitoringService")
+            await self.monitoring_service.start_monitoring()
+
+            # Start performance optimizer
+            logger.info("Starting QueuePerformanceOptimizer")
+            await self.performance_optimizer.start_optimization()
+
+            self._monitoring_initialized = True
+            logger.info("Monitoring services initialized successfully")
+
+        except Exception as e:
+            logger.error(f"Error initializing monitoring services: {e}", exc_info=True)
+
+    async def _cleanup_monitoring_services(self):
+        """Clean up monitoring services during shutdown"""
+        try:
+            logger.info("Stopping monitoring services")
+
+            # Stop queue monitoring service
+            if hasattr(self.monitoring_service, "stop_monitoring"):
+                await self.monitoring_service.stop_monitoring()
+                logger.info("QueueMonitoringService stopped")
+
+            # Stop performance optimizer
+            if hasattr(self.performance_optimizer, "stop_optimization"):
+                await self.performance_optimizer.stop_optimization()
+                logger.info("QueuePerformanceOptimizer stopped")
+
+        except Exception as e:
+            logger.error(f"Error cleaning up monitoring services: {e}", exc_info=True)
 
     def _start_background_loop(self):
         """Start the background event loop in a separate thread"""
@@ -344,7 +782,12 @@ class StreamManager:
         logger.info("StreamManager background loop started")
 
         # Initialize persistent COT service after loop starts
+        await self._preload_configurations()
+        await self._optimize_connection_health_checks()
         await self._initialize_persistent_cot_service()
+
+        # Initialize monitoring services (Phase 2)
+        await self._initialize_monitoring_services()
 
         try:
             while not self._shutdown_event.is_set():
@@ -407,7 +850,7 @@ class StreamManager:
     async def start_stream(self, stream_id: int) -> bool:
         """Start a specific stream with enhanced checking and error handling"""
         try:
-            logger.info(f"Starting stream {stream_id}")
+            logger.debug(f"Starting stream {stream_id}")
 
             # Check if already running
             if stream_id in self.workers:
@@ -483,7 +926,7 @@ class StreamManager:
 
             if success:
                 # The StreamWorker already ensures the persistent PyTAK worker is running
-                # No need to call cot_service.start_worker() again here
+                # No need to call get_cot_service().start_worker() again here
                 logger.debug(f"Stream {stream_id} started successfully.")
 
                 self.workers[stream_id] = worker
@@ -544,11 +987,96 @@ class StreamManager:
             return False
 
     async def restart_stream(self, stream_id: int) -> bool:
-        """Restart a specific stream"""
-        logger.info(f"Restarting stream {stream_id}")
+        """Enhanced restart with comprehensive worker cleanup"""
+        logger.debug(f"Restarting stream {stream_id} with comprehensive worker cleanup")
+        logger.debug(
+            f"Stream restart initiated at {datetime.now(timezone.utc)} - potential configuration change trigger"
+        )
+
+        # Get stream and flush queues (existing logic)...
+        try:
+            stream = await asyncio.get_event_loop().run_in_executor(
+                None, self.db_manager.get_stream_with_relationships, stream_id
+            )
+            if stream and (self._has_tak_servers_configured(stream)):
+                total_flushed = 0
+                # Flush queues for all associated TAK servers
+
+                # Handle legacy single-server configuration
+                if hasattr(stream, "tak_server") and stream.tak_server:
+                    try:
+                        flushed_count = await get_cot_service().flush_queue(
+                            stream.tak_server.id
+                        )
+                        total_flushed += flushed_count
+                        logger.info(
+                            f"Flushed {flushed_count} events from TAK server '{stream.tak_server.name}' queue"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to flush queue for TAK server {stream.tak_server.id}: {e}"
+                        )
+
+                # Handle multi-server configuration
+                if hasattr(stream, "tak_servers"):
+                    try:
+                        for tak_server in stream.tak_servers:
+                            try:
+                                flushed_count = await get_cot_service().flush_queue(
+                                    tak_server.id
+                                )
+                                total_flushed += flushed_count
+                                logger.info(
+                                    f"Flushed {flushed_count} events from TAK server '{tak_server.name}' queue"
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to flush queue for TAK server {tak_server.id}: {e}"
+                                )
+                    except Exception as e:
+                        logger.warning(
+                            f"Error accessing multi-server relationship for stream {stream_id}: {e}"
+                        )
+
+                if total_flushed > 0:
+                    logger.info(f"Stream restart: flushed {total_flushed} total events")
+                else:
+                    logger.info("Stream restart: no events to flush")
+
+                # Enhanced worker cleanup before restart
+                if stream and self._has_tak_servers_configured(stream):
+                    logger.debug(
+                        f"Stream restart triggering comprehensive worker cleanup for stream {stream_id} at {datetime.now(timezone.utc)}"
+                    )
+                    for tak_server in self._get_all_tak_servers(stream):
+                        logger.debug(
+                            f"Stream restart cleanup: stopping all workers for TAK server {tak_server.name} (ID: {tak_server.id})"
+                        )
+                        await get_cot_service().stop_all_workers_for_server(
+                            tak_server.id
+                        )
+                        logger.debug(
+                            f"Comprehensive worker cleanup completed for TAK server {tak_server.name}"
+                        )
+            else:
+                logger.warning(f"Stream {stream_id} has no TAK servers configured")
+        except Exception as e:
+            logger.error(f"Error during queue flush for stream {stream_id}: {e}")
+            # Continue with restart even if flush fails
+
+        # Proceed with normal restart sequence
+        logger.debug(
+            f"Beginning stream restart sequence: stop -> sleep -> start for stream {stream_id}"
+        )
         await self.stop_stream(stream_id)
-        await asyncio.sleep(2)  # Give time for cleanup
-        return await self.start_stream(stream_id)
+        logger.debug(f"Stream {stream_id} stopped, waiting 2 seconds for cleanup")
+        await asyncio.sleep(2)
+        logger.debug(f"Starting stream {stream_id} after restart cleanup")
+        result = await self.start_stream(stream_id)
+        logger.debug(
+            f"Stream restart completed for {stream_id}: {'success' if result else 'failed'}"
+        )
+        return result
 
     async def stop_all(self, skip_db_update=False):
         """Stop all running streams with enhanced database operations"""
@@ -738,7 +1266,7 @@ class StreamManager:
         try:
             if hasattr(self, "cot_service") and self.cot_service:
                 # Get running workers directly from the service
-                running_workers = self.cot_service.workers
+                running_workers = get_cot_service().workers
                 if running_workers:
                     logger.info(
                         f"Stopping {len(running_workers)} persistent COT workers"
@@ -897,7 +1425,7 @@ class StreamManager:
                         )
 
             # Get currently running workers
-            running_workers = cot_service.workers
+            running_workers = get_cot_service().workers
 
             # Convert to set of keys for comparison
             running_tak_server_keys = set()
@@ -934,7 +1462,7 @@ class StreamManager:
                     logger.info(
                         f"Starting missing persistent worker for TAK server: {tak_server.name}"
                     )
-                    success = cot_service.start_worker(tak_server)
+                    success = get_cot_service().start_worker(tak_server)
                     if success:
                         workers_started += 1
                         logger.info(
@@ -1072,7 +1600,7 @@ class StreamManager:
             logger.info("Checking persistent COT service health and worker status")
 
             # Get initial worker count for comparison
-            running_workers_before = cot_service.workers
+            running_workers_before = get_cot_service().workers
             workers_before_count = (
                 len(running_workers_before) if running_workers_before else 0
             )
@@ -1082,7 +1610,7 @@ class StreamManager:
             self.ensure_tak_workers_running()
 
             # Check worker health status after ensuring workers are running
-            running_workers_after = cot_service.workers
+            running_workers_after = get_cot_service().workers
             workers_after_count = (
                 len(running_workers_after) if running_workers_after else 0
             )
@@ -1115,7 +1643,9 @@ class StreamManager:
                             )
                             try:
                                 # Restart the unhealthy worker
-                                restart_success = cot_service.restart_worker(tak_server)
+                                restart_success = get_cot_service().restart_worker(
+                                    tak_server
+                                )
                                 if restart_success:
                                     logger.info(
                                         f"Successfully restarted TAK worker for {server_name}"
@@ -1170,6 +1700,19 @@ class StreamManager:
             except Exception as e:
                 logger.error(f"Error stopping streams during shutdown: {e}")
 
+        # Clean up monitoring services
+        if self._monitoring_initialized and self._loop and not self._loop.is_closed():
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    self._cleanup_monitoring_services(), self._loop
+                )
+                future.result(timeout=10)
+                logger.info("Monitoring services cleaned up during shutdown")
+            except Exception as e:
+                logger.error(
+                    f"Error cleaning up monitoring services during shutdown: {e}"
+                )
+
         # Clean up persistent COT service - This is NOT a coroutine
         try:
             self._cleanup_persistent_cot_service()
@@ -1187,6 +1730,8 @@ class StreamManager:
             except Exception as e:
                 logger.error(f"Error cancelling health check task: {e}")
 
+        # Coordination thread cleanup removed for single worker deployment
+
         # Wait for thread to finish with timeout
         if self._loop_thread and self._loop_thread.is_alive():
             self._loop_thread.join(timeout=15)  # Reduced timeout
@@ -1194,6 +1739,8 @@ class StreamManager:
                 logger.warning("Background thread did not terminate within timeout")
             else:
                 logger.info("Background thread terminated successfully")
+
+        # Worker coordination service close removed for single worker deployment
 
         # Clear references to avoid memory leaks
         self.workers.clear()
@@ -1277,6 +1824,38 @@ class StreamManager:
                 )
                 return False
 
+    def hot_reload_stream_configuration_sync(self, stream_id: int) -> bool:
+        """
+        Thread-safe wrapper for hot-reloading stream configuration from Flask routes.
+
+        Implements zero-downtime configuration changes where possible, falling back
+        to restart only when necessary (e.g., authentication credential changes).
+        """
+        with self._manager_lock:
+            try:
+                # Validate stream exists before hot-reload
+                try:
+                    stream = self.db_manager.get_stream(stream_id)
+                    if not stream:
+                        logger.error(
+                            f"Cannot hot-reload stream {stream_id}: not found in database"
+                        )
+                        return False
+                except Exception as e:
+                    logger.error(
+                        f"Database error checking stream {stream_id} for hot-reload: {e}"
+                    )
+                    return False
+
+                return self._run_coroutine_threadsafe(
+                    self.hot_reload_stream_configuration(stream_id), timeout=60
+                )
+            except Exception as e:
+                logger.error(
+                    f"Error in hot_reload_stream_configuration_sync for stream {stream_id}: {e}"
+                )
+                return False
+
     def refresh_stream_tak_workers(self, stream_id: int) -> bool:
         """
         Refresh TAK workers for a specific stream after configuration changes.
@@ -1353,7 +1932,7 @@ class StreamManager:
                 return True  # Not an error if no servers are configured
 
             # Get currently running workers
-            running_workers = cot_service.workers
+            running_workers = get_cot_service().workers
             running_server_keys = set()
             if running_workers:
                 for tak_server in running_workers.keys():
@@ -1377,7 +1956,7 @@ class StreamManager:
                     logger.info(
                         f"Starting missing persistent worker for TAK server: {tak_server.name}"
                     )
-                    success = await cot_service.start_worker(tak_server)
+                    success = await get_cot_service().start_worker(tak_server)
                     if success:
                         workers_started += 1
                         logger.info(

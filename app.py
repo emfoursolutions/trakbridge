@@ -29,8 +29,11 @@ from typing import Optional
 from dotenv import load_dotenv
 from flask import Flask, has_app_context, jsonify, render_template
 from flask_migrate import Migrate
-from sqlalchemy import event, inspect
+from sqlalchemy import event
 from sqlalchemy.pool import Pool
+
+# Load environment variables FIRST before any imports that need them
+load_dotenv()
 
 # Local application imports
 from config.environments import get_config
@@ -39,6 +42,7 @@ from services.cli.version_commands import register_version_commands
 from services.logging_service import setup_logging
 from services.stream_manager import StreamManager
 from services.version import get_version, is_development_build
+
 
 # Initialize extensions
 migrate = Migrate()
@@ -53,8 +57,6 @@ _startup_progress = []
 
 # Global flags to prevent duplicate startup - UPDATED
 _startup_thread_started = False
-
-load_dotenv()
 
 # Set up logger
 logger = logging.getLogger("main")
@@ -172,51 +174,14 @@ def initialize_database_safely():
             raise db_error
 
 
-def get_worker_count() -> int:
-    """
-    Get the number of workers from environment variable or hypercorn.toml.
-    Returns the worker count for proper startup banner coordination.
-    """
-    try:
-        # Check HYPERCORN_WORKERS environment variable first (from docker-compose.yml)
-        env_workers = os.environ.get("HYPERCORN_WORKERS")
-        if env_workers and env_workers.isdigit():
-            workers = int(env_workers)
-            if 1 <= workers <= 16:  # Validate safe range
-                return workers
-
-        # Fall back to hypercorn.toml (always exists per user confirmation)
-        config_file = os.path.join(os.path.dirname(__file__), "hypercorn.toml")
-        if os.path.exists(config_file):
-            with open(config_file, "r") as f:
-                content = f.read()
-                import re
-
-                match = re.search(r"^workers\s*=\s*(\d+)", content, re.MULTILINE)
-                if match:
-                    workers = int(match.group(1))
-                    if 1 <= workers <= 16:  # Validate safe range
-                        return workers
-
-    except (ValueError, FileNotFoundError, IOError) as e:
-        # Use basic logging since logger may not be fully initialized yet
-        print(f"Warning: Error detecting worker count: {e}")
-
-    # Default to 4 (matches hypercorn.toml default)
-    return 4
-
-
 def log_full_startup_info(app):
     """Log comprehensive startup information for the primary process"""
     try:
         from services.logging_service import log_primary_startup_banner
         from services.version import format_version, get_build_info, get_version_info
 
-        # Get worker count from multiple sources
-        worker_count = get_worker_count()
-
-        # Log enhanced startup banner with worker coordination info
-        log_primary_startup_banner(app, worker_count)
+        # Log startup banner
+        log_primary_startup_banner(app)
 
         # Log detailed version information
         version_info = get_version_info()
@@ -283,7 +248,7 @@ def is_hypercorn_environment() -> bool:
 def should_run_delayed_startup() -> bool:
     """
     Determine if this process should run the delayed startup tasks.
-    Uses environment-aware coordination that works optimally with different servers.
+    For single worker deployment, always run startup tasks.
     """
     # Skip delayed startup in testing environment to prevent race conditions
     try:
@@ -296,67 +261,24 @@ def should_run_delayed_startup() -> bool:
         # No application context available, continue with normal logic
         pass
 
-    # For Hypercorn environments - let each worker handle its own startup
-    # Hypercorn already provides process coordination via the master process
+    # Single worker deployment - always run startup tasks
     if is_hypercorn_environment():
-        logger.debug(
-            "Hypercorn environment detected - allowing worker startup without coordination"
-        )
+        logger.debug("Single worker hypercorn deployment - running startup tasks")
         return True
 
-    # For other environments (Flask dev server, etc.) - use coordination
-    # to prevent multiple processes from running startup tasks simultaneously
-    startup_task_file = Path(tempfile.gettempdir()) / "trakbridge_startup_tasks.flag"
-
-    try:
-        # Check if startup tasks have been completed recently
-        if startup_task_file.exists():
-            # Check if the file is recent (within last 30 seconds)
-            file_age = time.time() - startup_task_file.stat().st_mtime
-            if file_age < 30:
-                # Recent startup completion, don't run again
-                logger.debug(
-                    "Recent startup completion detected - skipping startup tasks"
-                )
-                return False
-            else:
-                # Old file, remove it and run startup tasks
-                try:
-                    startup_task_file.unlink()
-                    logger.debug("Cleaned up stale startup coordination file")
-                except OSError:
-                    pass
-
-        # Try atomic file creation - only first process succeeds
-        startup_task_file.touch(exist_ok=False)
-        logger.debug("Acquired startup coordination - running startup tasks")
-        return True
-
-    except FileExistsError:
-        # Another process is handling it right now
-        logger.debug("Another process is handling startup tasks")
-        return False
-
-    except (IOError, OSError) as e:
-        # Couldn't create file - be more permissive and allow startup
-        logger.warning(
-            f"Could not create startup tasks coordination file: {e}, allowing startup anyway"
-        )
-        return True
+    # Default to true for single worker deployment
+    logger.debug("Single worker deployment - running startup tasks")
+    return True
 
 
-def cleanup_all_startup_resources():
-    """Clean up all startup coordination resources"""
-    temp_dir = Path(tempfile.gettempdir())
-    lock_files = ["trakbridge_startup.lock", "trakbridge_startup_tasks.lock"]
+def _should_log_ready_banner() -> bool:
+    """
+    For single worker deployment, always log the ready banner.
+    """
+    return True
 
-    for lock_file in lock_files:
-        lock_path = temp_dir / lock_file
-        try:
-            if lock_path.exists():
-                lock_path.unlink()
-        except OSError:
-            pass  # Ignore cleanup errors
+
+# Coordination functions removed for single worker deployment
 
 
 def create_app(config_name=None):
@@ -417,9 +339,9 @@ def create_app(config_name=None):
 
         # Import models AFTER db.init_app to avoid circular imports
         # Import them individually rather than through the __init__.py
-        from models.stream import Stream
-        from models.tak_server import TakServer
-        from models.user import User, UserSession
+        from models.stream import Stream  # noqa: F401
+        from models.tak_server import TakServer  # noqa: F401
+        from models.user import User, UserSession  # noqa: F401
 
         # Register models with SQLAlchemy - use checkfirst=True to avoid conflicts
         db.Model.metadata.create_all(bind=db.engine, checkfirst=True)
@@ -501,39 +423,35 @@ def create_app(config_name=None):
 def setup_version_context_processor(app):
     """Set up version context processor and after-request banner system."""
 
-    # Set up banner to log after first request via middleware
+    # Set up simple banner logging for single worker deployment
     banner_logged = False
 
     @app.before_request
     def maybe_log_ready_banner():
-        """Log comprehensive banner on first request (when app is fully operational)"""
+        """Log application ready banner once per startup."""
         nonlocal banner_logged
 
         if not banner_logged:
-            banner_file = Path(tempfile.gettempdir()) / "trakbridge_ready_banner.flag"
-            try:
-                # Atomic file creation - only first worker succeeds
-                banner_file.touch(exist_ok=False)
-                banner_logged = True
+            banner_logged = True  # Prevent re-entry
 
-                # Log comprehensive "Application Ready" banner
-                from services.logging_service import log_primary_startup_banner
+            # Use simple coordination for single worker
+            if _should_log_ready_banner():
+                _log_startup_banner()
 
-                worker_count = get_worker_count()
+    def _log_startup_banner():
+        """Log the startup banner"""
+        try:
+            from services.logging_service import log_primary_startup_banner
 
-                app.logger.info("=" * 80)
-                app.logger.info("TrakBridge Application Ready - Now Serving Requests")
-                app.logger.info("=" * 80)
+            # Include system information
+            log_primary_startup_banner(app)
 
-                # Include all the useful system information
-                log_primary_startup_banner(app, worker_count)
+            app.logger.info("Application fully operational and handling traffic")
+            app.logger.info("=" * 80)
 
-                app.logger.info("Application fully operational and handling traffic")
-                app.logger.info("=" * 80)
-
-            except FileExistsError:
-                # Another worker already logged the banner
-                banner_logged = True
+            # Banner logged for single worker deployment
+        except Exception as e:
+            app.logger.error(f"Failed to log startup banner: {e}")
 
     @app.context_processor
     def inject_version_info():
@@ -542,7 +460,7 @@ def setup_version_context_processor(app):
             from services.version import get_build_info, get_version_info
 
             version_info = get_version_info()
-            build_info = get_build_info()
+            get_build_info()  # Called for side effects, not stored
 
             # Create a simplified version object for templates
             app_version = {
@@ -671,7 +589,7 @@ def initialize_admin_user_if_needed():
             )
             add_startup_progress("⚠️  Default password must be changed on first login")
         else:
-            logger.info(
+            logger.debug(
                 "Initial admin user creation not needed - admin users already exist"
             )
             add_startup_progress("✓ Admin users already exist, bootstrap not needed")
@@ -684,8 +602,6 @@ def initialize_admin_user_if_needed():
 def start_active_streams():
     """Start all active streams with enhanced logging and proper error handling."""
     from flask import current_app
-
-    from services.version import get_version
 
     stream_manager = getattr(current_app, "stream_manager", None)
     if stream_manager is None:
@@ -772,11 +688,11 @@ def start_active_streams():
                     try:
                         success = stream_manager.start_stream_sync(stream.id)
                         if success:
-                            logger.info(
+                            logger.debug(
                                 f"Successfully started stream {stream.id} ({stream.name})"
                             )
                             add_startup_progress(
-                                f"✓ Successfully started stream {stream.id} ({stream.name})"
+                                f"Successfully started stream {stream.id} ({stream.name})"
                             )
                             # Clear any previous error
                             fresh_stream = db.session.get(Stream, stream.id)
@@ -858,14 +774,16 @@ def start_active_streams():
                 )
                 failed_count += 1
 
-        # Log final results
-        logger.info("=" * 50)
-        logger.info("Stream Startup Results:")
-        logger.info(f"Started: {started_count}")
-        logger.info(f" Failed: {failed_count}")
-        logger.info(f"  Total: {len(active_streams)}")
-        logger.info(f"Success Rate: {(started_count / len(active_streams) * 100):.1f}%")
-        logger.info("=" * 50)
+            # Log final results for single worker deployment
+            logger.info("=" * 50)
+            logger.info("Stream Startup Results:")
+            logger.info(f"Started: {started_count}")
+            logger.info(f" Failed: {failed_count}")
+            logger.info(f"  Total: {len(active_streams)}")
+            logger.info(
+                f"Success Rate: {(started_count / len(active_streams) * 100):.1f}%"
+            )
+            logger.info("=" * 50)
 
         add_startup_progress(
             f"Stream startup complete: {started_count} started, {failed_count} failed"
@@ -943,8 +861,7 @@ def setup_cleanup_handlers():
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
 
-        # Clean up startup coordination resources
-        cleanup_all_startup_resources()
+        # Startup coordination resources cleanup removed for single worker
 
         logger.info("Application cleanup completed")
 
@@ -964,8 +881,7 @@ def setup_cleanup_handlers():
         except Exception as e:
             logger.error(f"Error during stream manager shutdown: {e}")
 
-        # Clean up startup coordination resources
-        cleanup_all_startup_resources()
+        # Startup coordination resources cleanup removed for single worker
 
     # Register cleanup handlers
     atexit.register(safe_stream_manager_shutdown)
@@ -1198,6 +1114,11 @@ else:
     # For direct execution and server imports (like Hypercorn)
     app = create_app()
 
+    # Phase 2: Register worker for startup coordination
+    # This ensures individual workers register with the coordination service
+    with app.app_context():
+        log_simple_worker_init(app)
+
 
 # Delayed startup function that runs in a separate thread
 def safe_log(level_func, message):
@@ -1231,7 +1152,7 @@ def delayed_startup():
         time.sleep(5)
 
         with app.app_context():
-            safe_log(logger.info, "Running delayed startup tasks (PRIMARY PROCESS)...")
+            safe_log(logger.debug, "Running delayed startup tasks (PRIMARY PROCESS)...")
             add_startup_progress("Checking system components...")
 
             # Log system status
@@ -1271,12 +1192,10 @@ def delayed_startup():
             # Calculate startup time
             startup_time = (dt.now() - startup_start_time).total_seconds()
 
-            # Log startup completion with safe logging
-            safe_log(logger.info, "=" * 60)
-            safe_log(logger.info, "TrakBridge Application Startup Complete!")
-            safe_log(logger.info, f"Total Startup Time: {startup_time:.2f} seconds")
-            safe_log(logger.info, f"Ready at: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            safe_log(logger.info, "=" * 60)
+            # Startup completion will be logged by the coordinated banner system
+            # No need to log duplicate startup messages here
+
+            # Worker coordination registration removed - not needed for basic operation
 
             add_startup_progress(
                 f"Startup complete! Ready in {startup_time:.2f} seconds"

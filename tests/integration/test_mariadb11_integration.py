@@ -51,7 +51,9 @@ class TestMariaDB11EndToEnd:
 
             # Connection pool settings
             assert engine_options["pool_pre_ping"] is True
-            assert engine_options["pool_recycle"] == 1800  # Updated for better connection stability
+            assert (
+                engine_options["pool_recycle"] == 1800
+            )  # Updated for better connection stability
             assert engine_options["pool_size"] == 50  # Production value
             assert engine_options["max_overflow"] == 100
 
@@ -79,13 +81,17 @@ class TestMariaDB11EndToEnd:
             if "charset" in connect_args:
                 assert connect_args["charset"] == "utf8mb4"
             # Verify autocommit is properly configured in connect_args
-            assert connect_args["autocommit"] is True, "autocommit should be True for MariaDB 11 stability"
+            assert (
+                connect_args["autocommit"] is True
+            ), "autocommit should be True for MariaDB 11 stability"
             if "local_infile" in connect_args:
                 assert connect_args["local_infile"] == 0
 
             # SQL mode is now configured in connect_args init_command
             if "init_command" in connect_args:
-                assert "sql_mode" in connect_args["init_command"], "SQL mode set for compatibility"
+                assert (
+                    "sql_mode" in connect_args["init_command"]
+                ), "SQL mode set for compatibility"
 
     def test_mariadb11_backward_compatibility(self):
         """Test that existing MySQL configurations continue to work"""
@@ -150,7 +156,9 @@ class TestMariaDB11EndToEnd:
             if "charset" in connect_args:
                 assert connect_args["charset"] == "utf8mb4"
             # Verify autocommit is properly configured in connect_args
-            assert connect_args["autocommit"] is True, "autocommit should be True for MariaDB 11 stability"
+            assert (
+                connect_args["autocommit"] is True
+            ), "autocommit should be True for MariaDB 11 stability"
 
     def test_mariadb11_testing_environment(self):
         """Test MariaDB 11 compatibility in testing environment"""
@@ -195,7 +203,9 @@ class TestMariaDB11EndToEnd:
                     30,
                 ]  # Allow different config sources
             # Verify autocommit is properly configured in connect_args
-            assert connect_args["autocommit"] is True, "autocommit should be True for MariaDB 11 stability"
+            assert (
+                connect_args["autocommit"] is True
+            ), "autocommit should be True for MariaDB 11 stability"
             if "local_infile" in connect_args:
                 assert connect_args["local_infile"] == 0
 
@@ -339,4 +349,6 @@ class TestMariaDB11EndToEnd:
 
             # SQL mode compatibility (now in connect_args init_command)
             if "init_command" in connect_args:
-                assert "sql_mode" in connect_args["init_command"], "SQL mode set for compatibility"
+                assert (
+                    "sql_mode" in connect_args["init_command"]
+                ), "SQL mode set for compatibility"

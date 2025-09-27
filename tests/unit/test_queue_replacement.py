@@ -14,7 +14,8 @@ import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
-from services.cot_service import PersistentCOTService
+from services.cot_service_integration import QueuedCOTService, reset_queued_cot_service
+from services.cot_service import get_cot_service, reset_cot_service
 from tests.fixtures.mock_location_data import generate_mock_gps_points
 
 
@@ -24,10 +25,16 @@ class TestQueueReplacement:
     All tests should FAIL initially until enhanced queue logic is implemented
     """
 
+    @pytest.fixture(autouse=True)
+    def setup_method(self):
+        """Reset singleton before each test"""
+        reset_cot_service()
+        reset_queued_cot_service()
+
     @pytest.fixture
     def cot_service(self):
         """Create COT service instance for testing"""
-        return PersistentCOTService()
+        return get_cot_service()
 
     @pytest.fixture
     def sample_cot_events(self):
@@ -149,17 +156,11 @@ class TestQueueReplacement:
         """
         tak_server_id = 1
 
-        # Mock the queue
-        mock_queue = Mock()
-        mock_queue.qsize.return_value = 0
-        mock_queue.put = AsyncMock()
-        cot_service.queues = {tak_server_id: mock_queue}
-
         # Mock device state manager
         mock_device_manager = Mock()
         mock_device_manager.should_update_device.return_value = True
         mock_device_manager.device_states = {}  # Empty dict for new devices
-        cot_service.device_state_manager = mock_device_manager
+        cot_service.device_state_managers[tak_server_id] = mock_device_manager
 
         # Mock UID extraction to return different UIDs for each event
         cot_service.extract_uid_from_cot_event = Mock(
@@ -169,15 +170,19 @@ class TestQueueReplacement:
             return_value=datetime.now(timezone.utc)
         )
 
-        # Test enqueueing new events
-        result = await cot_service.enqueue_with_replacement(
-            sample_cot_events, tak_server_id
-        )
+        # Mock the queue manager's enqueue_event method directly
+        with patch.object(
+            cot_service.queue_manager, "enqueue_event", new_callable=AsyncMock
+        ) as mock_enqueue:
+            # Test enqueueing new events
+            result = await cot_service.enqueue_with_replacement(
+                sample_cot_events, tak_server_id
+            )
 
-        assert result is True, "Should successfully enqueue new events"
-        assert mock_queue.put.call_count == len(
-            sample_cot_events
-        ), f"Should call put {len(sample_cot_events)} times"
+            assert result is True, "Should successfully enqueue new events"
+            assert mock_enqueue.call_count == len(
+                sample_cot_events
+            ), f"Should call enqueue_event {len(sample_cot_events)} times"
 
     @pytest.mark.asyncio
     async def test_enqueue_with_replacement_replaces_old_events(
@@ -189,14 +194,6 @@ class TestQueueReplacement:
         """
         tak_server_id = 1
 
-        # Mock the queue with existing events
-        mock_queue = Mock()
-        mock_queue.qsize.return_value = 3
-        mock_queue.put = AsyncMock()
-        # Simulate queue containing old events
-        mock_queue._queue = list(sample_cot_events)  # Internal queue state
-        cot_service.queues = {tak_server_id: mock_queue}
-
         # Mock device state manager - devices exist and should be updated
         mock_device_manager = Mock()
         mock_device_manager.should_update_device.return_value = True
@@ -205,7 +202,7 @@ class TestQueueReplacement:
             "device-001": {},
             "device-002": {},
         }  # Existing devices
-        cot_service.device_state_manager = mock_device_manager
+        cot_service.device_state_managers[tak_server_id] = mock_device_manager
 
         # Mock UID extraction to return consistent UIDs
         cot_service.extract_uid_from_cot_event = Mock(
@@ -215,10 +212,15 @@ class TestQueueReplacement:
             return_value=datetime.now(timezone.utc)
         )
 
-        # Use patch to mock remove_events_by_uid method
-        with patch.object(
-            cot_service, "remove_events_by_uid", AsyncMock(return_value=3)
-        ) as mock_remove:
+        # Use patch to mock remove_events_by_uid method and enqueue_event
+        with (
+            patch.object(
+                cot_service, "remove_events_by_uid", AsyncMock(return_value=3)
+            ) as mock_remove,
+            patch.object(
+                cot_service.queue_manager, "enqueue_event", new_callable=AsyncMock
+            ) as mock_enqueue,
+        ):
             # Test enqueueing updated events
             result = await cot_service.enqueue_with_replacement(
                 updated_cot_events, tak_server_id
@@ -249,7 +251,7 @@ class TestQueueReplacement:
         """
         tak_server_id = 1
 
-        # Mock the queue with events
+        # Mock the queue with events - patch the queues property
         mock_queue = Mock()
         # Set up proper queue behavior - start with events, then empty
         mock_queue.empty.side_effect = [
@@ -262,20 +264,22 @@ class TestQueueReplacement:
             sample_cot_events  # Return the events in order
         )
         mock_queue.put = AsyncMock()
-        cot_service.queues = {tak_server_id: mock_queue}
 
         # Mock UID extraction to return predictable UIDs
         cot_service.extract_uid_from_cot_event = Mock(
             side_effect=["device-000", "device-001", "device-002"]
         )
 
-        # Remove events for specific UIDs
-        uids_to_remove = ["device-000", "device-001"]
-        removed_count = await cot_service.remove_events_by_uid(
-            tak_server_id, uids_to_remove
-        )
+        with patch.dict(cot_service.queue_manager.queues, {tak_server_id: mock_queue}):
+            # Remove events for specific UIDs
+            uids_to_remove = ["device-000", "device-001"]
+            removed_count = await cot_service.remove_events_by_uid(
+                tak_server_id, uids_to_remove
+            )
 
-        assert removed_count == 2, f"Should remove 2 events, removed {removed_count}"
+            assert (
+                removed_count == 2
+            ), f"Should remove 2 events, removed {removed_count}"
 
     @pytest.mark.asyncio
     async def test_enqueue_with_replacement_logs_replacement_stats(
@@ -288,15 +292,10 @@ class TestQueueReplacement:
         tak_server_id = 1
 
         # Setup mocks
-        mock_queue = Mock()
-        mock_queue.qsize.return_value = 0
-        mock_queue.put = AsyncMock()
-        cot_service.queues = {tak_server_id: mock_queue}
-
         mock_device_manager = Mock()
         mock_device_manager.should_update_device.return_value = True
         mock_device_manager.device_states = {"device-001": {}}  # Device exists
-        cot_service.device_state_manager = mock_device_manager
+        cot_service.device_state_managers[tak_server_id] = mock_device_manager
 
         cot_service.extract_uid_from_cot_event = Mock(return_value="device-001")
         cot_service.extract_timestamp_from_cot_event = Mock(
@@ -304,8 +303,13 @@ class TestQueueReplacement:
         )
         cot_service.remove_events_by_uid = AsyncMock(return_value=1)  # Mock removal
 
-        # Test with logging capture
-        with patch("services.cot_service.logger") as mock_logger:
+        # Test with logging capture and queue manager mocking
+        with (
+            patch("services.cot_service_integration.logger") as mock_logger,
+            patch.object(
+                cot_service.queue_manager, "enqueue_event", new_callable=AsyncMock
+            ),
+        ):
             await cot_service.enqueue_with_replacement(sample_cot_events, tak_server_id)
 
             # Should log replacement statistics
@@ -346,12 +350,6 @@ class TestQueueReplacement:
         )
         mixed_events.append(update_event)
 
-        # Setup mocks
-        mock_queue = Mock()
-        mock_queue.qsize.return_value = 1  # One existing event
-        mock_queue.put = AsyncMock()
-        cot_service.queues = {tak_server_id: mock_queue}
-
         # Mock device state manager - new device is new, existing device should be updated
         mock_device_manager = Mock()
 
@@ -364,7 +362,7 @@ class TestQueueReplacement:
         mock_device_manager.device_states = {
             "device-000": {}
         }  # Only device-000 exists, new-device-999 is new
-        cot_service.device_state_manager = mock_device_manager
+        cot_service.device_state_managers[tak_server_id] = mock_device_manager
 
         # Mock UID extraction
         def mock_extract_uid(event):
@@ -375,16 +373,21 @@ class TestQueueReplacement:
         cot_service.extract_uid_from_cot_event = Mock(side_effect=mock_extract_uid)
         cot_service.extract_timestamp_from_cot_event = Mock(return_value=base_time)
 
-        # Mock removal method
+        # Mock removal method and enqueue
         cot_service.remove_events_by_uid = AsyncMock(return_value=1)
 
-        result = await cot_service.enqueue_with_replacement(mixed_events, tak_server_id)
+        with patch.object(
+            cot_service.queue_manager, "enqueue_event", new_callable=AsyncMock
+        ):
+            result = await cot_service.enqueue_with_replacement(
+                mixed_events, tak_server_id
+            )
 
-        assert result is True, "Should handle mixed event types successfully"
-        # Should remove old events for both devices (they both passed should_update_device)
-        cot_service.remove_events_by_uid.assert_called_once_with(
-            tak_server_id, ["new-device-999", "device-000"]
-        )
+            assert result is True, "Should handle mixed event types successfully"
+            # Should remove old events for both devices (they both passed should_update_device)
+            cot_service.remove_events_by_uid.assert_called_once_with(
+                tak_server_id, ["new-device-999", "device-000"]
+            )
 
     @pytest.mark.asyncio
     async def test_enqueue_with_replacement_skips_older_events(self, cot_service):
@@ -403,12 +406,6 @@ class TestQueueReplacement:
             "utf-8"
         )
 
-        # Setup mocks
-        mock_queue = Mock()
-        mock_queue.qsize.return_value = 0
-        mock_queue.put = AsyncMock()
-        cot_service.queues = {tak_server_id: mock_queue}
-
         # Mock device state manager - should NOT update old events
         mock_device_manager = Mock()
         mock_device_manager.should_update_device.return_value = (
@@ -419,11 +416,16 @@ class TestQueueReplacement:
         cot_service.extract_uid_from_cot_event = Mock(return_value="device-000")
         cot_service.extract_timestamp_from_cot_event = Mock(return_value=old_time)
 
-        result = await cot_service.enqueue_with_replacement([old_event], tak_server_id)
+        with patch.object(
+            cot_service.queue_manager, "enqueue_event", new_callable=AsyncMock
+        ) as mock_enqueue:
+            result = await cot_service.enqueue_with_replacement(
+                [old_event], tak_server_id
+            )
 
-        assert result is True, "Should complete successfully"
-        # Should NOT call put since event is too old
-        mock_queue.put.assert_not_called()
+            assert result is True, "Should complete successfully"
+            # Should NOT call enqueue since event is too old
+            mock_enqueue.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_enqueue_with_replacement_queue_size_stabilization(
@@ -435,18 +437,12 @@ class TestQueueReplacement:
         """
         tak_server_id = 1
 
-        # Simulate queue already has 300 events from previous fetch
-        mock_queue = Mock()
-        mock_queue.qsize.side_effect = [300, 300]  # Before and after should be similar
-        mock_queue.put = AsyncMock()
-        cot_service.queues = {tak_server_id: mock_queue}
-
         # Mock device state manager - all devices should be updated
         mock_device_manager = Mock()
         mock_device_manager.should_update_device.return_value = True
         # Create device_states dict with 300 devices to simulate existing devices
         mock_device_manager.device_states = {f"device-{i:03d}": {} for i in range(300)}
-        cot_service.device_state_manager = mock_device_manager
+        cot_service.device_state_managers[tak_server_id] = mock_device_manager
 
         # Mock that we remove old events for all UIDs - use a counter to generate unique UIDs
         uid_counter = 0
@@ -470,19 +466,22 @@ class TestQueueReplacement:
             sample_cot_events[0]
         ] * 300  # Each will get unique UID from mock
 
-        result = await cot_service.enqueue_with_replacement(
-            large_event_batch, tak_server_id
-        )
+        with patch.object(
+            cot_service.queue_manager, "enqueue_event", new_callable=AsyncMock
+        ) as mock_enqueue:
+            result = await cot_service.enqueue_with_replacement(
+                large_event_batch, tak_server_id
+            )
 
-        assert result is True, "Should handle large batch successfully"
+            assert result is True, "Should handle large batch successfully"
 
-        # Key test: should remove old events before adding new ones
-        cot_service.remove_events_by_uid.assert_called_once()
+            # Key test: should remove old events before adding new ones
+            cot_service.remove_events_by_uid.assert_called_once()
 
-        # Should add exactly the same number of new events
-        assert (
-            mock_queue.put.call_count == 300
-        ), f"Should add 300 new events, added {mock_queue.put.call_count}"
+            # Should add exactly the same number of new events
+            assert (
+                mock_enqueue.call_count == 300
+            ), f"Should add 300 new events, added {mock_enqueue.call_count}"
 
 
 if __name__ == "__main__":
