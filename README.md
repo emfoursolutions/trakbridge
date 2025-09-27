@@ -5,21 +5,21 @@ A web application for bridging tracking devices and services to TAK (Team Awaren
 ## Features
 
 - **Multi-Source Integration**: Support for GPS trackers, OSINT platforms, and emergency management systems
-- **Plugin Categorization**: Organized plugin system with OSINT, Tracker, and EMS categories
+- **Plugin Categorisation**: Organised plugin system with OSINT, Tracker, and EMS categories
 - **Authentication System**: Multi-provider authentication (Local, LDAP, OIDC) with role-based access control
 - **TAK Server Management**: Configure multiple TAK server connections with certificate support
 - **Real-Time Streaming**: Continuous data forwarding with health monitoring and circuit breaker protection
-- **Web Interface**: Secure dashboard for stream management and monitoring with categorized plugin selection
+- **Web Interface**: Secure dashboard for stream management and monitoring with categorised plugin selection
 - **Role-Based Access**: Viewer, User, Operator, and Admin roles with appropriate UI controls
 - **Plugin Architecture**: Extensible system for adding new data sources with external plugin support
 - **Enterprise Ready**: Multi-database support, SSL/TLS, backup & recovery, audit logging
 - **Security Hardened**: Comprehensive security implementations including field-level encryption
-- **Performance Optimized**: uvloop integration, connection pooling, intelligent caching (2-3x performance boost)
+- **Performance Optimised**: uvloop integration, connection pooling, intelligent caching (2-3x performance boost)
 - **Single Worker Architecture**: Simplified deployment with single Hypercorn worker for improved efficiency and debugging
 - **Real-Time Monitoring**: Integrated dashboard with queue metrics, stream health, and performance graphs
 - **Circuit Breaker Protection**: Automatic failure recovery with intelligent retry mechanisms
 - **Hot Configuration Reload**: Zero-downtime configuration changes with validation caching
-- **Resource Management**: Memory optimization, leak prevention, and capacity monitoring
+- **Resource Management**: Memory optimisation, leak prevention, and capacity monitoring
 
 <img width="1900" height="690" alt="image" src="https://github.com/user-attachments/assets/d09d3e17-de62-4524-a0d6-d1990c827ac7" />
 
@@ -47,7 +47,7 @@ Access the web interface at `https://yourdomain.com`
 - You'll be forced to change the password on first logins
 
 ### Environment Configuration
-All configuration is managed directly in the docker-compose.yml file. Edit the `x-environment` section to customize your deployment:
+All configuration is managed directly in the docker-compose.yml file. Edit the `x-environment` section to customise your deployment:
 
 ```yaml
 # Edit these values in docker-compose.yml
@@ -103,7 +103,7 @@ hypercorn app.py  # Single worker deployment for optimal performance
 1. **Login**: Use default admin credentials (change password on first login)
 2. **Create Users**: Set up user accounts with appropriate roles (Admin → User Management)
 3. **Configure TAK Server**: Add your TAK server details and certificates
-4. **Create Stream**: Select from categorized data sources (OSINT, Tracker, EMS) and configure credentials
+4. **Create Stream**: Select from categorised data sources (OSINT, Tracker, EMS) and configure credentials
 5. **Start Streaming**: Monitor real-time data flow to your TAK server
 
 ## Documentation
@@ -132,7 +132,7 @@ hypercorn app.py  # Single worker deployment for optimal performance
 
 ### External Plugin Support
 - Docker volume mount support for custom plugins
-- Plugin categorization system for organized management
+- Plugin categorisation system for organised management
 - API endpoints for category-based plugin discovery
 
 ## Health Check & Monitoring

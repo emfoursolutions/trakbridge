@@ -1,17 +1,17 @@
 ## [v1.0.0] - 2025-09-27
 
 ### Added
-- **Performance Foundation Optimizations**
+- **Performance Foundation optimisations**
   - uvloop integration providing 2-3x asyncio performance improvement for Python 3.12
-  - Upgraded aiohttp to latest version (3.10+) with DNS caching and writer scheduling optimizations
+  - Upgraded aiohttp to latest version (3.10+) with DNS caching and writer scheduling optimisations
   - Connection pooling with persistent HTTP sessions for plugin APIs
   - Intelligent caching with aiocache for API response caching with TTL
-  - Database performance optimization with connection pooling and optimized validation logic
+  - Database performance optimisation with connection pooling and optimised validation logic
   - Parallel TAK connections for faster startup times (30-40% improvement)
   - Configuration pre-loading and caching to avoid re-parsing during saves
 
 - **Monitoring Integration & Web Dashboard**
-  - Activated existing QueueMonitoringService and QueuePerformanceOptimizer integration
+  - Activated existing QueueMonitoringService and QueuePerformanceoptimiser integration
   - Real-time monitoring dashboard at `/api/monitoring/dashboard` endpoint
   - Queue metrics display: queue sizes, throughput, latency, error rates
   - Stream health monitoring: status, plugin API response times, TAK connection health
@@ -25,12 +25,12 @@
 - **Architecture Cleanup & Data Transfer Objects**
   - Clean Data Transfer Objects (DTOs) replacing complex mock relationships
   - StreamDTO and TakServerDTO with clean, typed fields and ORM conversion
-  - Configuration optimization with validation result caching using `@lru_cache`
+  - Configuration optimisation with validation result caching using `@lru_cache`
   - Configuration hot-reload capabilities for changes without full restart
   - Consolidated configuration loading with single path for all operations
-  - Optimized queue polling with fine-tuned intervals based on load
+  - optimised queue polling with fine-tuned intervals based on load
   - Code simplification with removal of duplicate coordination logic
-  - Standardized plugin interfaces with consistent callsign mapping contracts
+  - Standardised plugin interfaces with consistent callsign mapping contracts
   - Consolidated error handling using existing security helpers consistently
 
 - **Circuit Breaker Protection & Production Features**
@@ -44,10 +44,10 @@
   - Resource monitoring tracking memory usage and detecting leaks
   - Capacity monitoring to track resource usage and predict scaling needs
 
-- **Memory & Performance Optimization**
+- **Memory & Performance optimisation**
   - Streaming processing for efficient handling of large GPS point sets (300-400 points)
-  - Connection pool optimization right-sized for typical load patterns
-  - Proactive garbage collection optimization and memory management
+  - Connection pool optimisation right-sized for typical load patterns
+  - Proactive garbage collection optimisation and memory management
   - 90% reduction in complex mock object creation overhead
   - Memory leak prevention with proactive resource management
 
@@ -63,17 +63,17 @@
   - Configuration validation caching for 50-70% faster config saves
   - Configuration hashing strategy to detect changes efficiently
   - Hot-reload capabilities enabling zero-downtime configuration changes
-  - Batch processing optimization for queue operations
+  - Batch processing optimisation for queue operations
 
 - **Stream Processing Architecture**
   - Enhanced stream manager integration with monitoring and performance services
-  - Optimized database operations with indexed queries and efficient filtering
+  - optimised database operations with indexed queries and efficient filtering
   - Improved error handling and fallback mechanisms for processing failures
 
 ### Performance Improvements
 - **2-3x async performance improvement** with uvloop integration
-- **50-70% faster config saves** through DTO optimization and validation caching
-- **30-40% faster startup times** with lazy loading and parallel initialization
+- **50-70% faster config saves** through DTO optimisation and validation caching
+- **30-40% faster startup times** with lazy loading and parallel initialisation
 - **Real-time system visibility** through integrated monitoring dashboard
 - **90% reduction** in complex mock object creation overhead
 - **Zero-downtime configuration changes** with hot-reload capabilities
@@ -91,7 +91,7 @@
 - **Individual Tracker Enable/Disable Control**
   - Checkbox controls for enabling/disabling individual trackers in callsign mapping
   - Selective control over which trackers send CoT data to TAK servers while preserving configuration
-  - Visual feedback with smooth transitions and color-coded highlighting
+  - Visual feedback with smooth transitions and colour-coded highlighting
   - Bulk operations: "Enable All" and "Disable All" buttons for quick management
   - State persistence across tracker refreshes - existing enabled/disabled status preserved
   - Enhanced accessibility with ARIA labels and keyboard navigation support
@@ -107,7 +107,7 @@
 - **Performance Enhancements**
   - Parallel processing implementation using asyncio.gather() for CoT event creation
   - Configurable performance settings in `config/settings/performance.yaml`
-  - Database query optimization with indexed enabled column for efficient filtering
+  - Database query optimisation with indexed enabled column for efficient filtering
   - Processing time improvements: <2 seconds for 100+ trackers with enable/disable control
 
 - **Queue Management System**
@@ -122,7 +122,7 @@
   - Comprehensive tooltips and help text for tracker enable/disable functionality
   - Progressive enhancement - features gracefully degrade if JavaScript fails
   - Enhanced information panels with step-by-step guidance
-  - Improved visual states for disabled trackers (opacity, background color, readonly inputs)
+  - Improved visual states for disabled trackers (opacity, background colour, readonly inputs)
 
 ### Changed
 - **Database Schema Enhancement**
@@ -141,7 +141,7 @@
 - Database migration safety with comprehensive existence checks
 - Form submission handling for multiple server selection and tracker enabled status
 - Edge case handling for scenarios with no trackers discovered or all trackers disabled
-- Performance optimization for large tracker counts with efficient filtering
+- Performance optimisation for large tracker counts with efficient filtering
 
 ## [v1.0.0-rc.4] - 2025-09-05
 
@@ -159,10 +159,10 @@
   - Live tracker discovery with auto-assignment and refresh capabilities
 
 - **Code Quality & Refactoring Planning**
-  - Comprehensive analysis of logging rationalization opportunities (56+ files)
-  - Configuration pattern standardization plan (19 files)
+  - Comprehensive analysis of logging rationalisation opportunities (56+ files)
+  - Configuration pattern standardisation plan (19 files)
   - Database operation pattern extraction (24+ files)
-  - Import optimization and dependency consolidation planning
+  - Import optimisation and dependency consolidation planning
 
 ### Changed
 - **Database Concurrency Improvements**
@@ -212,8 +212,8 @@
 
 ### Fixed
 - **Critical Database Fixes**
-  - Fixed SQLite database initialization loop causing 120+ second hangs
-  - SQLite production optimization with automatic worker reduction
+  - Fixed SQLite database initialisation loop causing 120+ second hangs
+  - SQLite production optimisation with automatic worker reduction
   - Bootstrap coordination preventing duplicate admin user creation
   - Fixed "cannot access local variable 'db'" error in bootstrap logic
 - **Authentication & Session Fixes**
@@ -221,11 +221,11 @@
   - Fixed environment variable loading differences between dev/production
   - Improved cross-provider session tracking and lifecycle
 - **Maritime CoT Types** - Fixed display in ATAK and WinTAK clients
-- Variable scoping errors in database initialization resolved
+- Variable scoping errors in database initialisation resolved
 - Test suite reliability improvements in bootstrap service coordination
 
 ### Changed
-- **SQLite Production Support** - Reliable SQLite deployment with appropriate optimizations
+- **SQLite Production Support** - Reliable SQLite deployment with appropriate optimisations
 - Docker vs local environment LDAP role mapping discrepancies resolved
 - Bootstrap loop prevention for missing database files
 
@@ -241,32 +241,32 @@
   - Comprehensive password policies and security enforcement
   - Audit logging for all authentication events
 
-- **Plugin Categorization System**
+- **Plugin Categorisation System**
   - Three main plugin categories: OSINT, Tracker, EMS
-  - Category-based UI organization for improved user experience
+  - Category-based UI organisation for improved user experience
   - RESTful API endpoints for plugin category discovery (`/api/plugins/categories`, `/api/plugins/by-category/{category}`)
   - Dynamic category mapping system for existing and new plugins
-  - Enhanced plugin selection with organized category dropdown
-  - Deepstate plugin properly categorized as OSINT (no longer "Coming Soon")
+  - Enhanced plugin selection with organised category dropdown
+  - Deepstate plugin properly categorised as OSINT (no longer "Coming Soon")
 
 - **Docker Compose Configuration Refactoring**
   - Eliminated .env file dependencies for simplified deployment
   - Direct environment variable configuration in docker-compose.yml
   - Docker secrets integration for sensitive data (passwords, encryption keys)
   - Multi-environment support (development, staging, production)
-  - Centralized configuration management approach
+  - Centralised configuration management approach
 
 - **Comprehensive Documentation Overhaul**
   - User-focused documentation for Docker deployments
   - Complete authentication setup guides for all providers
-  - Plugin development guides with categorization examples
+  - Plugin development guides with categorisation examples
   - Updated installation, upgrade, and administrator guides
   - Docker-first configuration examples throughout
 
 ### Changed
 - **BREAKING**: Authentication is now required for all access (major change from v1.0.0-beta.4)
 - **BREAKING**: Configuration moved from .env files to docker-compose.yml environment variables
-- Plugin selection UI now organized by categories (OSINT, Tracker, EMS)
+- Plugin selection UI now organised by categories (OSINT, Tracker, EMS)
 - Documentation approach shifted from development-focused to user deployment-focused
 - Default credentials: admin / TrakBridge-Setup-2025! (forced password change on first login)
 
@@ -326,7 +326,7 @@
 
 ### Changed
 - **Garmin Plugin Refactor**  
-  Removed redundant functions and centralized timestamp handling and KML parsing for improved maintainability and consistency.
+  Removed redundant functions and centralised timestamp handling and KML parsing for improved maintainability and consistency.
 
 ### Improved
 - **cot_service Logging**  
