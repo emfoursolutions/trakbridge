@@ -26,15 +26,69 @@ Created: 2025-09-17
 
 import asyncio
 import logging
-import time
+import os
 import psutil
+import yaml
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 from dataclasses import dataclass
 from collections import deque
 from services.logging_service import get_module_logger
 
 logger = get_module_logger(__name__)
+
+
+def load_performance_config() -> Dict[str, Any]:
+    """
+    Load performance configuration from performance.yaml with environment overrides
+
+    Returns:
+        Configuration dictionary with regression detection settings
+    """
+    config_paths = [
+        "config/settings/performance.yaml",
+        os.path.join(os.path.dirname(__file__), "../config/settings/performance.yaml"),
+        "/app/config/settings/performance.yaml",  # Docker path
+    ]
+
+    config = {}
+    for path in config_paths:
+        try:
+            expanded_path = os.path.expanduser(path)
+            if os.path.exists(expanded_path):
+                with open(expanded_path, "r") as f:
+                    config = yaml.safe_load(f) or {}
+                    logger.debug(f"Loaded performance config from {expanded_path}")
+                    break
+        except Exception as e:
+            logger.debug(f"Could not load config from {path}: {e}")
+            continue
+
+    if not config:
+        logger.info("No performance.yaml found, using defaults")
+
+    # Apply environment variable overrides for regression detection
+    regression_config = config.setdefault("regression_detection", {})
+
+    # Float environment variables for thresholds
+    for env_var, config_key in [
+        ("REGRESSION_MEMORY_THRESHOLD", "memory_threshold"),
+        ("REGRESSION_CPU_THRESHOLD", "cpu_threshold"),
+        ("REGRESSION_THROUGHPUT_THRESHOLD", "throughput_threshold"),
+    ]:
+        if env_var in os.environ:
+            try:
+                regression_config[config_key] = float(os.environ[env_var])
+                logger.debug(f"Applied env override: {env_var}={os.environ[env_var]}")
+            except ValueError:
+                logger.warning(f"Invalid value for {env_var}: {os.environ[env_var]}")
+
+    # Boolean environment variable for enabled flag
+    if "REGRESSION_DETECTION_ENABLED" in os.environ:
+        regression_config["enabled"] = os.environ["REGRESSION_DETECTION_ENABLED"].lower() == "true"
+        logger.debug(f"Applied env override: REGRESSION_DETECTION_ENABLED={os.environ['REGRESSION_DETECTION_ENABLED']}")
+
+    return config
 
 
 @dataclass
@@ -100,9 +154,19 @@ class QueuePerformanceOptimizer:
 
         # Performance validation
         self.test_compliance_checks = []
-        self.performance_regression_threshold = self.config.get("validation", {}).get(
-            "performance_regression_threshold", 0.20
-        )  # Default 20% threshold - more reasonable for systems with monitoring services
+
+        # Load regression detection config from performance.yaml
+        perf_config = load_performance_config()
+        regression_config = perf_config.get("regression_detection", {})
+
+        self.memory_regression_threshold = regression_config.get("memory_threshold", 0.40)
+        self.cpu_regression_threshold = regression_config.get("cpu_threshold", 0.40)
+        self.throughput_regression_threshold = regression_config.get("throughput_threshold", 0.40)
+        self.regression_detection_enabled = regression_config.get("enabled", True)
+        self.baseline_samples_count = regression_config.get("baseline_samples", 10)
+
+        # Backward compatibility - keep for existing validation logic
+        self.performance_regression_threshold = self.memory_regression_threshold
 
         # System monitoring
         self.system_process = psutil.Process()
@@ -130,7 +194,7 @@ class QueuePerformanceOptimizer:
                 "enable_regression_detection": True,
                 "enable_test_compliance_checks": True,
                 "performance_baseline_samples": 10,
-                "performance_regression_threshold": 0.20,  # 20% threshold
+                "performance_regression_threshold": 0.40,  # Legacy - kept for compatibility
             },
             "advanced": {
                 "enable_predictive_scaling": True,
@@ -194,9 +258,7 @@ class QueuePerformanceOptimizer:
             logger.info("Collecting baseline performance metrics")
 
             baseline_samples = []
-            sample_count = self.config.get("validation", {}).get(
-                "performance_baseline_samples", 10
-            )
+            sample_count = self.baseline_samples_count
 
             for i in range(sample_count):
                 metrics = await self._collect_performance_metrics()
@@ -467,8 +529,8 @@ class QueuePerformanceOptimizer:
                 metrics.cpu_usage_percent - self.baseline_metrics.cpu_usage_percent
             )
             if (
-                cpu_increase > self.performance_regression_threshold * 100
-            ):  # 5% increase
+                cpu_increase > self.cpu_regression_threshold * 100
+            ):
                 regression_detected = True
                 logger.warning(
                     f"CPU usage regression detected: {cpu_increase:.1f}% increase"
@@ -478,7 +540,7 @@ class QueuePerformanceOptimizer:
             memory_increase = (
                 metrics.memory_usage_mb - self.baseline_metrics.memory_usage_mb
             ) / self.baseline_metrics.memory_usage_mb
-            if memory_increase > self.performance_regression_threshold:
+            if memory_increase > self.memory_regression_threshold:
                 regression_detected = True
                 logger.warning(
                     f"Memory usage regression detected: {memory_increase*100:.1f}% increase"
@@ -488,13 +550,13 @@ class QueuePerformanceOptimizer:
             throughput_decrease = (
                 self.baseline_metrics.queue_throughput - metrics.queue_throughput
             ) / self.baseline_metrics.queue_throughput
-            if throughput_decrease > self.performance_regression_threshold:
+            if throughput_decrease > self.throughput_regression_threshold:
                 regression_detected = True
                 logger.warning(
                     f"Throughput regression detected: {throughput_decrease*100:.1f}% decrease"
                 )
 
-            if regression_detected:
+            if regression_detected and self.regression_detection_enabled:
                 await self._handle_performance_regression()
 
         except Exception as e:

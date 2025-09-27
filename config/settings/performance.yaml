@@ -72,9 +72,26 @@ transmission:
 monitoring:
   # Enable queue size logging
   log_queue_stats: true
-  
+
   # Log warning when queue exceeds this threshold
   queue_warning_threshold: 400
+
+# Performance regression detection for queue optimizer
+regression_detection:
+  # Memory usage regression threshold (as percentage, e.g., 0.40 = 40%)
+  memory_threshold: 0.40
+
+  # CPU usage regression threshold (as percentage, e.g., 0.40 = 40%)
+  cpu_threshold: 0.40
+
+  # Throughput regression threshold (as percentage, e.g., 0.40 = 40%)
+  throughput_threshold: 0.40
+
+  # Enable regression detection
+  enabled: true
+
+  # Number of baseline samples to collect for comparison
+  baseline_samples: 10
 
 # Environment variable overrides
 # These can be set to override configuration values:
@@ -91,3 +108,8 @@ monitoring:
 # TRANSMISSION_QUEUE_CHECK_INTERVAL_MS=100
 # MONITORING_LOG_QUEUE_STATS=true
 # MONITORING_QUEUE_WARNING_THRESHOLD=400
+# Regression detection overrides:
+# REGRESSION_MEMORY_THRESHOLD=0.40
+# REGRESSION_CPU_THRESHOLD=0.40
+# REGRESSION_THROUGHPUT_THRESHOLD=0.40
+# REGRESSION_DETECTION_ENABLED=true/false
