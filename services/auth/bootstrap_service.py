@@ -308,6 +308,10 @@ class BootstrapService:
             True if migrations are complete, False otherwise
         """
         try:
+            # If running in a container, trust that the entrypoint already validated migrations
+            if os.getenv('CONTAINER_MANAGED', '').lower() == 'true':
+                logger.debug("Container-managed deployment detected, skipping heavy migration checks")
+                return True
             # First check if this is SQLite and if the database file actually exists
             database_url = str(db.engine.url)
             if database_url.startswith("sqlite:///"):

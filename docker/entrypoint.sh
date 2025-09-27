@@ -473,7 +473,7 @@ validate_schema() {
             if command -v flask >/dev/null 2>&1; then
                 # Fast path: Check if migration state is consistent
                 log_debug "Checking migration state consistency..."
-                local current_rev=$(flask db current 2>/dev/null || echo "unknown")
+                local current_rev=$(flask db current 2>/dev/null | awk '{print $1}' || echo "unknown")
                 local head_rev=$(flask db heads 2>/dev/null | head -n1 | awk '{print $1}' || echo "unknown")
                 
                 log_debug "Current revision: $current_rev"
@@ -533,7 +533,7 @@ run_migrations() {
     log_info "Flask-Migrate is configured, proceeding with migration check..."
     
     # Get current migration state
-    local current_rev=$(flask db current 2>/dev/null || echo "")
+    local current_rev=$(flask db current 2>/dev/null | awk '{print $1}' || echo "")
     log_info "Current migration revision: ${current_rev:-none}"
     
     # Handle initial database setup
@@ -562,7 +562,7 @@ run_migrations() {
         log_info "Latest available migration revision: ${head_rev:-unknown}"
         
         # Get current revision again after potential stamping
-        current_rev=$(flask db current 2>/dev/null || echo "")
+        current_rev=$(flask db current 2>/dev/null | awk '{print $1}' || echo "")
         
         if [[ -n "$head_rev" ]] && [[ "$current_rev" != "$head_rev" ]]; then
             log_info "Pending migrations detected, running flask db upgrade..."

@@ -92,6 +92,11 @@ x-environment: &common-environment
   LDAP_DEFAULT_ROLE: "user"
   LDAP_CONNECTION_TIMEOUT: "10"
   LDAP_RESPONSE_TIMEOUT: "30"
+
+  # Container Management & Startup Optimization
+  CONTAINER_MANAGED: "true"
+  SCHEMA_VALIDATION_MODE: "fast"
+  MIGRATION_TIMEOUT: "30"
   
   # OIDC/SSO Settings (set OIDC_ENABLED to "true" and configure for your identity provider)
   OIDC_ENABLED: "false"
