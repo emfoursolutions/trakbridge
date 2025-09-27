@@ -910,7 +910,7 @@ start_server() {
             ;;
         "production"|"staging")
             # Sanitize and validate environment variables
-            local workers=${HYPERCORN_WORKERS:-4}
+            local workers=1
             local worker_class=${HYPERCORN_WORKER_CLASS:-asyncio}
             local bind=${HYPERCORN_BIND:-0.0.0.0:5000}
             local keep_alive=${HYPERCORN_KEEP_ALIVE:-5}
@@ -931,8 +931,8 @@ start_server() {
 
             # Validate numeric values to prevent injection
             if ! [[ "$workers" =~ ^[0-9]+$ ]] || [[ "$workers" -lt 1 ]] || [[ "$workers" -gt 16 ]]; then
-                log_warn "Invalid HYPERCORN_WORKERS value '$workers', using default: 4"
-                workers=4
+                log_warn "Invalid HYPERCORN_WORKERS value '$workers', using default: 1"
+                workers=1
             fi
             
             if ! [[ "$keep_alive" =~ ^[0-9]+$ ]] || [[ "$keep_alive" -lt 1 ]] || [[ "$keep_alive" -gt 300 ]]; then
