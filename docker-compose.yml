@@ -7,7 +7,7 @@
 #   docker-compose --profile postgres up      # App + PostgreSQL
 #   docker-compose --profile mysql up         # App + MySQL
 #   docker-compose --profile nginx up         # App + Nginx reverse proxy
-#   docker-compose --profile postgres --profile nginx up  # Full stack
+#   docker-compose --profile postgres --profile nginx up  # Full stack (single worker deployment)
 #
 # Configuration:
 #   Edit the 'x-environment' section below to customize your deployment
@@ -17,8 +17,13 @@
 #   Default configuration files are automatically installed on first run.
 #   Set TRAKBRIDGE_CONFIG_UPDATE_MODE to control how configs are updated:
 #     - "preserve": Keep existing configs (default)
-#     - "overwrite": Replace with container defaults  
+#     - "overwrite": Replace with container defaults
 #     - "merge": Smart merge (future feature)
+#
+# Single Worker Deployment:
+#   TrakBridge now operates as a single worker deployment optimized for Hypercorn.
+#   Redis coordination has been removed for simplified deployment and reduced resource usage.
+#   All configuration changes apply immediately without coordination delays.
 #
 # =============================================================================
 
@@ -63,8 +68,7 @@ x-environment: &common-environment
   DEFAULT_POLL_INTERVAL: "120"
   HTTP_TIMEOUT: "30"
   
-  # Hypercorn Settings
-  HYPERCORN_WORKERS: "4"
+  # Hypercorn Settings - single worker optimal for TrakBridge architecture
   HYPERCORN_KEEP_ALIVE: "5"
   HYPERCORN_MAX_REQUESTS: "1000"
   HYPERCORN_MAX_REQUESTS_JITTER: "100"
@@ -117,6 +121,9 @@ x-environment: &common-environment
   SESSION_SECURE_COOKIES: "true"
   SESSION_COOKIE_DOMAIN: ""  # Leave blank for auto-detection
   SESSION_COOKIE_PATH: "/"
+
+  # Worker coordination removed for single worker deployment
+  # ENABLE_WORKER_COORDINATION and REDIS_URL removed - no longer needed
   
 # Secret file paths - customize if needed
 x-secrets: &common-secrets
@@ -125,6 +132,7 @@ x-secrets: &common-secrets
   TB_MASTER_KEY_FILE: "./secrets/tb_master_key"
   LDAP_BIND_PASSWORD_FILE: "./secrets/ldap_bind_password"
   OIDC_CLIENT_SECRET_FILE: "./secrets/oidc_client_secret"
+  # REDIS_PASSWORD_FILE: "./secrets/redis_password" - removed for single worker deployment
 
 services:
   # =============================================================================
@@ -148,6 +156,7 @@ services:
       - tb_master_key
       - ldap_bind_password
       - oidc_client_secret
+      # - redis_password  # removed for single worker deployment
 
     ports:
       - "5000:5000"  # Change first port if you need external access on different port
@@ -174,6 +183,7 @@ services:
       mysql:
         condition: service_healthy
         required: false
+      # redis dependency removed for single worker deployment
 
     networks:
       - trakbridge
@@ -306,6 +316,13 @@ services:
           memory: 512M
 
   # =============================================================================
+  # Redis Service - REMOVED for single worker deployment
+  # =============================================================================
+  # Redis worker coordination has been removed in favor of single worker deployment.
+  # This reduces resource usage and eliminates coordination complexity.
+  # For scaling, use container-level horizontal scaling instead of worker coordination.
+
+  # =============================================================================
   # Nginx Reverse Proxy (Optional)
   # =============================================================================
   nginx:
@@ -342,6 +359,7 @@ volumes:
     driver: local
   mysql_data:
     driver: local
+  # redis_data volume removed for single worker deployment
 
 # =============================================================================
 # Secrets
@@ -357,3 +375,4 @@ secrets:
     file: ./secrets/ldap_bind_password
   oidc_client_secret:
     file: ./secrets/oidc_client_secret
+  # redis_password secret removed for single worker deployment

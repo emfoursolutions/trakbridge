@@ -248,150 +248,16 @@ class DatabaseManager:
 
     @staticmethod
     def _create_detached_stream_copy(stream):
-        """Create a detached copy of stream with all necessary data"""
+        """Create a clean DTO copy of stream with all necessary data"""
+        from models.dto import StreamDTO
 
-        # Create a simple object to hold stream data
-        from types import SimpleNamespace
-
-        # Copy basic stream attributes
-        stream_copy = SimpleNamespace()
-        stream_copy.id = stream.id
-        stream_copy.name = stream.name
-        stream_copy.plugin_type = stream.plugin_type
-        stream_copy.is_active = stream.is_active
-        stream_copy.last_poll = stream.last_poll
-        stream_copy.last_error = stream.last_error
-        stream_copy.poll_interval = stream.poll_interval
-        stream_copy.cot_type = stream.cot_type
-        stream_copy.cot_stale_time = stream.cot_stale_time
-        stream_copy.plugin_config = stream.plugin_config
-        stream_copy.total_messages_sent = getattr(stream, "total_messages_sent", 0)
-
-        # Copy TAK server data if it exists
-        if stream.tak_server:
-            tak_copy = SimpleNamespace()
-            tak_copy.id = stream.tak_server.id
-            tak_copy.name = stream.tak_server.name
-            tak_copy.host = stream.tak_server.host
-            tak_copy.port = stream.tak_server.port
-            tak_copy.protocol = stream.tak_server.protocol
-            tak_copy.verify_ssl = stream.tak_server.verify_ssl
-            tak_copy.cert_p12 = stream.tak_server.cert_p12
-            tak_copy.cert_password = stream.tak_server.get_cert_password()
-            tak_copy.has_cert_password = stream.tak_server.has_cert_password
-
-            # Add method to get cert password (for compatibility)
-            def get_cert_password():
-                return tak_copy.cert_password
-
-            tak_copy.get_cert_password = get_cert_password
-            stream_copy.tak_server = tak_copy
-        else:
-            stream_copy.tak_server = None
-
-        # Copy multi-server relationships (tak_servers)
-        if hasattr(stream, "tak_servers"):
-            try:
-                # Get all servers from the relationship
-                tak_servers_list = list(stream.tak_servers)
-
-                # Create SimpleNamespace copies for each server
-                tak_servers_copies = []
-                for tak_server in tak_servers_list:
-                    server_copy = SimpleNamespace()
-                    server_copy.id = tak_server.id
-                    server_copy.name = tak_server.name
-                    server_copy.host = tak_server.host
-                    server_copy.port = tak_server.port
-                    server_copy.protocol = tak_server.protocol
-                    server_copy.verify_ssl = tak_server.verify_ssl
-                    server_copy.cert_p12 = tak_server.cert_p12
-                    server_copy.cert_password = tak_server.get_cert_password()
-                    server_copy.has_cert_password = tak_server.has_cert_password
-
-                    # Add method to get cert password (for compatibility)
-                    def make_get_cert_password(cert_password):
-                        def get_cert_password():
-                            return cert_password
-
-                        return get_cert_password
-
-                    server_copy.get_cert_password = make_get_cert_password(
-                        server_copy.cert_password
-                    )
-
-                    tak_servers_copies.append(server_copy)
-
-                # Create mock relationship object that supports count(), all(), and iteration
-                class MockTakServersRelationship:
-                    def __init__(self, servers_list):
-                        self._servers_list = servers_list
-
-                    def count(self):
-                        return len(self._servers_list)
-
-                    def all(self):
-                        return self._servers_list
-
-                    def __iter__(self):
-                        return iter(self._servers_list)
-
-                    def __len__(self):
-                        return len(self._servers_list)
-
-                stream_copy.tak_servers = MockTakServersRelationship(tak_servers_copies)
-
-            except Exception as e:
-                # If there's an error accessing tak_servers, create empty relationship
-                logger.debug(f"Error copying tak_servers for stream {stream.id}: {e}")
-
-                class MockTakServersRelationship:
-                    def __init__(self, servers_list=None):
-                        self._servers_list = servers_list or []
-
-                    def count(self):
-                        return 0
-
-                    def all(self):
-                        return []
-
-                    def __iter__(self):
-                        return iter([])
-
-                    def __len__(self):
-                        return 0
-
-                stream_copy.tak_servers = MockTakServersRelationship([])
-        else:
-            # Create empty relationship if tak_servers doesn't exist
-            class MockTakServersRelationship:
-                def __init__(self, servers_list=None):
-                    self._servers_list = servers_list or []
-
-                def count(self):
-                    return 0
-
-                def all(self):
-                    return []
-
-                def __iter__(self):
-                    return iter([])
-
-                def __len__(self):
-                    return 0
-
-            stream_copy.tak_servers = MockTakServersRelationship([])
-
-        # Copy missing fields needed for validation
-        stream_copy.tak_server_id = getattr(stream, "tak_server_id", None)
-
-        # Add method to get plugin config
-        def get_plugin_config():
-            return stream_copy.plugin_config or {}
-
-        stream_copy.get_plugin_config = get_plugin_config
-
-        return stream_copy
+        try:
+            # Use the clean DTO conversion method
+            return StreamDTO.from_orm(stream)
+        except Exception as e:
+            logger.error(f"Error creating StreamDTO from ORM object: {e}")
+            logger.debug(f"Stream attributes: {dir(stream)}")
+            raise
 
     def update_stream_status(
         self,

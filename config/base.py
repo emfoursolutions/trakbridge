@@ -240,7 +240,7 @@ class BaseConfig:
         """Build database URI from configuration and secrets."""
         # Check if explicit DB_TYPE is set - this takes precedence over DATABASE_URL
         explicit_db_type = self.secret_manager.get_secret("DB_TYPE")
-        
+
         if explicit_db_type:
             # DB_TYPE explicitly set - build URI from components regardless of DATABASE_URL
             db_type = explicit_db_type
@@ -252,7 +252,7 @@ class BaseConfig:
                 return self._build_postgresql_uri()
             else:
                 raise ValueError(f"Unsupported database type: {db_type}")
-        
+
         # Check for explicit DATABASE_URL (fallback when DB_TYPE not set)
         database_url = self.secret_manager.get_secret("DATABASE_URL")
         if database_url:
@@ -274,7 +274,7 @@ class BaseConfig:
         """Build SQLite database URI."""
         # Note: DATABASE_URL precedence is handled in SQLALCHEMY_DATABASE_URI property
         # This method builds URI from individual components when DB_TYPE=sqlite is explicitly set
-        
+
         db_name = self.secret_manager.get_secret(
             "DB_NAME",
             self.db_config.get("defaults", {})
@@ -283,7 +283,9 @@ class BaseConfig:
         )
 
         # For testing environment, use in-memory database unless explicit DB_NAME is provided
-        if self.environment == "testing" and not self.secret_manager.get_secret("DB_NAME"):
+        if self.environment == "testing" and not self.secret_manager.get_secret(
+            "DB_NAME"
+        ):
             return self.db_config.get("database_uri", "sqlite:///:memory:")
 
         # For Docker/production, use absolute paths; for development, use relative to app root

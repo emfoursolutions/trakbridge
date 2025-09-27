@@ -29,12 +29,46 @@ Created: 18-Jul-2025
 
 # Standard library imports
 import logging
+from functools import lru_cache
+import hashlib
+import json
+import time
 from typing import Any, Dict, List, Optional
 
 # Local application imports
 from models.stream import Stream
+from services.logging_service import get_module_logger
+from services.config_cache_service import get_config_cache_service
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
+
+
+def track_config_operation(operation_name: str):
+    """
+    Decorator to track performance of configuration operations (Phase 2).
+    Logs timing information for config saves, validation, and other operations.
+    """
+
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            start_time = time.time()
+            try:
+                result = func(*args, **kwargs)
+                duration = (time.time() - start_time) * 1000  # Convert to milliseconds
+                logger.info(
+                    f"Config operation '{operation_name}' completed in {duration:.1f}ms"
+                )
+                return result
+            except Exception as e:
+                duration = (time.time() - start_time) * 1000
+                logger.warning(
+                    f"Config operation '{operation_name}' failed after {duration:.1f}ms: {e}"
+                )
+                raise
+
+        return wrapper
+
+    return decorator
 
 
 class StreamConfigService:
@@ -42,66 +76,115 @@ class StreamConfigService:
 
     def __init__(self, plugin_manager: Any) -> None:
         self.plugin_manager = plugin_manager
+        self.config_cache = get_config_cache_service()
 
-    def validate_plugin_config_security(
+    @staticmethod
+    def _get_config_hash(plugin_type: str, config: Dict[str, Any]) -> str:
+        """Generate a hash of the configuration for caching purposes"""
+        # Create a deterministic string representation of the config
+        config_str = json.dumps(
+            {"plugin_type": plugin_type, "config": config}, sort_keys=True
+        )
+        return hashlib.md5(config_str.encode()).hexdigest()
+
+    @lru_cache(maxsize=128)
+    @track_config_operation("cached_validate_config")
+    def _cached_validate_plugin_config_security(
+        self, plugin_type: str, config_hash: str, config_json: str
+    ) -> str:
+        """Cached validation of plugin configuration security"""
+        # Deserialize config from JSON
+        config = json.loads(config_json)
+
+        # Perform the actual validation
+        validation_result = self._perform_validation(plugin_type, config)
+
+        # Return as JSON string for caching
+        return json.dumps(validation_result)
+
+    def _perform_validation(
         self, plugin_type: str, config: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Validate plugin configuration for security issues"""
+        """Perform the actual validation logic"""
+        validation_result: Dict[str, Any] = {
+            "valid": True,
+            "warnings": [],
+            "errors": [],
+            "security_issues": [],
+        }
+
+        # Get plugin metadata to identify sensitive fields
+        metadata = self.plugin_manager.get_plugin_metadata(plugin_type)
+        if not metadata:
+            validation_result["errors"].append(f"Plugin type '{plugin_type}' not found")
+            validation_result["valid"] = False
+            return validation_result
+
+        # Check for sensitive fields that should be encrypted
+        sensitive_fields = []
+        for field_data in metadata.get("config_fields", []):
+            if isinstance(field_data, dict) and field_data.get("sensitive"):
+                sensitive_fields.append(field_data["name"])
+            elif hasattr(field_data, "sensitive") and field_data.sensitive:
+                sensitive_fields.append(field_data.name)
+
+        # Validate sensitive fields
+        for field_name in sensitive_fields:
+            if field_name in config:
+                value = config[field_name]
+                if isinstance(value, str) and len(value) < 8:
+                    validation_result["warnings"].append(
+                        f"Password '{field_name}' is very short (less than 8 characters)"
+                    )
+                if isinstance(value, str) and value.lower() in [
+                    "password",
+                    "123456",
+                    "admin",
+                ]:
+                    validation_result["security_issues"].append(
+                        f"Password '{field_name}' appears to be weak"
+                    )
+
+        # Check for common security issues
+        for key, value in config.items():
+            if isinstance(value, str):
+                if "password" in key.lower() and value == "password":
+                    validation_result["security_issues"].append(
+                        f"Field '{key}' contains default password value"
+                    )
+                if "url" in key.lower() and not value.startswith(
+                    ("http://", "https://")
+                ):
+                    validation_result["warnings"].append(
+                        f"URL field '{key}' may not be properly formatted"
+                    )
+
+        return validation_result
+
+    @track_config_operation("validate_plugin_config_security")
+    async def validate_plugin_config_security(
+        self, plugin_type: str, config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Validate plugin configuration for security issues with advanced caching"""
         try:
-            validation_result: Dict[str, Any] = {
-                "valid": True,
-                "warnings": [],
-                "errors": [],
-                "security_issues": [],
-            }
+            # Generate cache key for this configuration
+            cache_key = f"plugin_security:{plugin_type}"
 
-            # Get plugin metadata to identify sensitive fields
-            metadata = self.plugin_manager.get_plugin_metadata(plugin_type)
-            if not metadata:
-                validation_result["errors"].append(
-                    f"Plugin type '{plugin_type}' not found"
-                )
-                validation_result["valid"] = False
-                return validation_result
+            # Check if we have a cached validation result
+            cached_result = await self.config_cache.get_cached_validation(
+                cache_key, config
+            )
+            if cached_result:
+                logger.debug(f"Using cached validation for {plugin_type}")
+                return cached_result
 
-            # Check for sensitive fields that should be encrypted
-            sensitive_fields = []
-            for field_data in metadata.get("config_fields", []):
-                if isinstance(field_data, dict) and field_data.get("sensitive"):
-                    sensitive_fields.append(field_data["name"])
-                elif hasattr(field_data, "sensitive") and field_data.sensitive:
-                    sensitive_fields.append(field_data.name)
+            # Perform validation
+            validation_result = self._perform_validation(plugin_type, config)
 
-            # Validate sensitive fields
-            for field_name in sensitive_fields:
-                if field_name in config:
-                    value = config[field_name]
-                    if isinstance(value, str) and len(value) < 8:
-                        validation_result["warnings"].append(
-                            f"Password '{field_name}' is very short (less than 8 characters)"
-                        )
-                    if isinstance(value, str) and value.lower() in [
-                        "password",
-                        "123456",
-                        "admin",
-                    ]:
-                        validation_result["security_issues"].append(
-                            f"Password '{field_name}' appears to be weak"
-                        )
-
-            # Check for common security issues
-            for key, value in config.items():
-                if isinstance(value, str):
-                    if "password" in key.lower() and value == "password":
-                        validation_result["security_issues"].append(
-                            f"Field '{key}' contains default password value"
-                        )
-                    if "url" in key.lower() and not value.startswith(
-                        ("http://", "https://")
-                    ):
-                        validation_result["warnings"].append(
-                            f"URL field '{key}' may not be properly formatted"
-                        )
+            # Cache the validation result
+            await self.config_cache.cache_validation_result(
+                cache_key, config, validation_result, ttl=1800  # 30 minutes
+            )
 
             return validation_result
 
@@ -114,6 +197,7 @@ class StreamConfigService:
                 "security_issues": [],
             }
 
+    @track_config_operation("extract_plugin_config")
     def extract_plugin_config_from_request(
         self, data: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -253,6 +337,7 @@ class StreamConfigService:
             return new_config
 
     @staticmethod
+    @track_config_operation("export_stream_config")
     def export_stream_config(
         stream_id: int, include_sensitive: bool = False
     ) -> Dict[str, Any]:

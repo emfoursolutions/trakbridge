@@ -12,6 +12,7 @@ Created: 2025-07-05
 """
 
 # Standard library imports
+import hashlib
 import importlib
 import importlib.util
 import inspect
@@ -20,6 +21,7 @@ import logging
 import os
 import pkgutil
 import sys
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
 
 # Local imports for JSON validation
@@ -490,6 +492,57 @@ class PluginManager:
             logger.error(f"Failed to get config schema for plugin {plugin_name}: {e}")
             return None
 
+    def _get_config_hash(self, config: Dict[str, Any]) -> str:
+        """Generate a hash of the configuration for caching purposes"""
+        config_str = json.dumps(config, sort_keys=True)
+        return hashlib.md5(config_str.encode()).hexdigest()
+
+    @lru_cache(maxsize=128)
+    def _cached_validate_plugin_config(
+        self, plugin_name: str, config_hash: str, config_json: str
+    ) -> Dict[str, Any]:
+        """
+        Cache expensive validation operations using @lru_cache.
+
+        This method provides significant performance improvements for config saves
+        by caching validation results based on plugin name and config hash.
+
+        Args:
+            plugin_name: Name of the plugin
+            config_hash: MD5 hash of the configuration for cache key
+            config_json: JSON representation of configuration
+
+        Returns:
+            Validation result dictionary
+        """
+        if plugin_name not in self.plugins:
+            return {
+                "valid": False,
+                "errors": [f"Plugin '{plugin_name}' not found"],
+                "warnings": [],
+            }
+
+        try:
+            # Parse the JSON config
+            config = json.loads(config_json) if config_json else {}
+            plugin_class = self.plugins[plugin_name]
+            plugin_instance = plugin_class(config)
+            is_valid = plugin_instance.validate_config()
+
+            return {
+                "valid": is_valid,
+                "errors": [] if is_valid else ["Configuration validation failed"],
+                "warnings": [],
+                "cached": True,  # Indicate this result was cached
+            }
+        except Exception as e:
+            return {
+                "valid": False,
+                "errors": [f"Validation error: {str(e)}"],
+                "warnings": [],
+                "cached": True,
+            }
+
     def validate_plugin_config(
         self, plugin_name: str, config: Union[Dict[str, Any], str, None]
     ) -> Dict[str, Any]:
@@ -516,26 +569,45 @@ class PluginManager:
         # Normalize configuration
         normalized_config = self._validate_and_normalize_config(config)
 
-        plugin_class = self.plugins[plugin_name]
-        try:
-            plugin_instance = plugin_class(normalized_config)
-            is_valid = plugin_instance.validate_config()
+        # Use cached validation for performance improvement
+        config_hash = self._get_config_hash(normalized_config)
+        config_json = json.dumps(normalized_config, sort_keys=True)
 
-            warnings = []
-            if isinstance(config, str) and config.strip():
-                warnings.append("String configuration was converted to dictionary")
+        # Get cached result
+        result = self._cached_validate_plugin_config(
+            plugin_name, config_hash, config_json
+        )
 
-            return {
-                "valid": is_valid,
-                "errors": [] if is_valid else ["Configuration validation failed"],
-                "warnings": warnings,
-            }
-        except Exception as e:
-            return {
-                "valid": False,
-                "errors": [f"Validation error: {str(e)}"],
-                "warnings": [],
-            }
+        # Add warnings for string conversion
+        warnings = result.get("warnings", []).copy()
+        if isinstance(config, str) and config.strip():
+            warnings.append("String configuration was converted to dictionary")
+
+        # Update warnings in result
+        result = result.copy()
+        result["warnings"] = warnings
+
+        return result
+
+    def clear_validation_cache(self):
+        """Clear the validation cache to force fresh validation results"""
+        self._cached_validate_plugin_config.cache_clear()
+        logger.info("Plugin validation cache cleared")
+
+    def get_cache_info(self) -> Dict[str, Any]:
+        """Get cache statistics for monitoring purposes"""
+        cache_info = self._cached_validate_plugin_config.cache_info()
+        return {
+            "hits": cache_info.hits,
+            "misses": cache_info.misses,
+            "current_size": cache_info.currsize,
+            "max_size": cache_info.maxsize,
+            "hit_ratio": (
+                cache_info.hits / (cache_info.hits + cache_info.misses)
+                if (cache_info.hits + cache_info.misses) > 0
+                else 0.0
+            ),
+        }
 
     async def test_plugin_connection(
         self, plugin_name: str, config: Union[Dict[str, Any], str, None]

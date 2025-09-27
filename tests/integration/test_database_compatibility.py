@@ -14,6 +14,7 @@ from unittest.mock import patch
 from contextlib import contextmanager
 
 from config.environments import get_config
+
 # from app import create_app  # Not needed for database URI tests
 
 
@@ -60,9 +61,10 @@ def clean_database_env():
         try:
             secret_manager = get_secret_manager()
             secret_manager.clear_cache()
-            
+
             # Force recreation of the global secret manager instance
             import config.secrets
+
             config.secrets._secret_manager = None
         except Exception as e:
             print(f"WARNING: Could not clear secret manager cache: {e}")
@@ -82,11 +84,13 @@ def clean_database_env():
         # Clear secret manager cache and force recreation again to restore normal operation
         try:
             from config.secrets import get_secret_manager
+
             secret_manager = get_secret_manager()
             secret_manager.clear_cache()
-            
+
             # Force recreation of the global secret manager instance
             import config.secrets
+
             config.secrets._secret_manager = None
         except Exception as e:
             print(f"WARNING: Could not clear secret manager cache in cleanup: {e}")
@@ -284,7 +288,7 @@ class TestCrossDatabaseCompatibility:
             {
                 "DB_TYPE": "postgresql",
                 "DB_HOST": "localhost",
-                "DB_USER": "trakbridge", 
+                "DB_USER": "trakbridge",
                 "DB_PASSWORD": "password",
                 "DB_NAME": "trakbridge",
             },
@@ -292,7 +296,7 @@ class TestCrossDatabaseCompatibility:
                 "DB_TYPE": "mysql",
                 "DB_HOST": "localhost",
                 "DB_USER": "trakbridge",
-                "DB_PASSWORD": "password", 
+                "DB_PASSWORD": "password",
                 "DB_NAME": "trakbridge",
             },
         ]
@@ -300,12 +304,13 @@ class TestCrossDatabaseCompatibility:
         for db_config in database_configs:
             with clean_database_env(), patch.dict(os.environ, db_config, clear=False):
                 from config.environments import get_config
+
                 config = get_config("testing")
                 uri = config.SQLALCHEMY_DATABASE_URI
-                
+
                 # Verify the URI was built correctly for each database type
                 db_type = db_config["DB_TYPE"]
-                
+
                 if db_type == "sqlite":
                     assert uri.startswith("sqlite:///")
                 elif db_type == "postgresql":

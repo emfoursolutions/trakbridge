@@ -11,7 +11,9 @@
 #
 # Usage:
 #   docker-compose -f docker-compose-dev.yml --profile postgres up -d
+#   docker-compose -f docker-compose-dev.yml --profile postgres --profile redis up -d
 #   docker-compose -f docker-compose-dev.yml --profile postgres --profile nginx up -d
+#   docker-compose -f docker-compose-dev.yml --profile postgres --profile redis --profile nginx up -d
 #
 # Features:
 #   - Development-optimized settings (debug mode, verbose logging)
@@ -32,7 +34,7 @@ services:
     # Development environment configuration
     environment:
       # Flask environment - Development mode
-      FLASK_ENV: "production"
+      FLASK_ENV: "development"
       FLASK_APP: "app.py"
       
       # Dynamic user creation for runtime
@@ -123,12 +125,16 @@ services:
       SESSION_COOKIE_DOMAIN: "${SESSION_COOKIE_DOMAIN:-}"
       SESSION_COOKIE_PATH: "${SESSION_COOKIE_PATH:-/}"
 
+      # Worker coordination removed for single worker deployment
+      # ENABLE_WORKER_COORDINATION and REDIS_URL removed - no longer needed
+
       # Secret file paths (if secrets are in /app/secrets instead of /run/secrets)
       DB_PASSWORD_FILE: "/app/secrets/db_password"
       SECRET_KEY_FILE: "/app/secrets/secret_key" 
       TB_MASTER_KEY_FILE: "/app/secrets/tb_master_key"
       LDAP_BIND_PASSWORD_FILE: "/app/secrets/ldap_bind_password"
       OIDC_CLIENT_SECRET_FILE: "/app/secrets/oidc_client_secret"
+      # REDIS_PASSWORD_FILE: "/app/secrets/redis_password" - removed for single worker deployment
 
     # Secrets - use Docker Compose secrets for consistency with production
     secrets:
@@ -137,6 +143,7 @@ services:
       - tb_master_key
       - ldap_bind_password
       - oidc_client_secret
+      # - redis_password  # removed for single worker deployment
 
     # Ports
     ports:
@@ -165,6 +172,7 @@ services:
       mysql:
         condition: service_healthy
         required: false
+      # redis dependency removed for single worker deployment
 
     # Resource limits (optional)
     deploy:
@@ -212,8 +220,6 @@ services:
       -c log_lock_waits=off
       -c log_min_duration_statement=-1
       -c log_statement=none
-      -c fsync=off
-      -c synchronous_commit=off
 
     environment:
       POSTGRES_DB: "trakbridge_dev"
@@ -307,29 +313,9 @@ services:
         reservations:
           memory: 256M
 
-  # Redis (optional, for caching/sessions)
-  redis:
-    image: redis:7-alpine
-    container_name: ${COMPOSE_PROJECT_NAME:-trakbridge}-redis
-    restart: unless-stopped
-    profiles:
-      - redis
-      - cache
-
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-
-    volumes:
-      - redis_data:/data
-
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-    networks:
-      - app-network
+  # Redis Service - REMOVED for single worker deployment
+  # Redis worker coordination has been removed in favor of single worker deployment.
+  # This reduces resource usage and eliminates coordination complexity.
 
   # Nginx reverse proxy (optional)
   nginx:
@@ -371,9 +357,7 @@ volumes:
     driver: local
     name: ${COMPOSE_PROJECT_NAME:-trakbridge}-mysql-data
 
-  redis_data:
-    driver: local
-    name: ${COMPOSE_PROJECT_NAME:-trakbridge}-redis-data
+  # redis_data volume removed for single worker deployment
 
 secrets:
   db_password:
@@ -386,3 +370,4 @@ secrets:
     file: ./secrets/ldap_bind_password
   oidc_client_secret:
     file: ./secrets/oidc_client_secret
+  # redis_password secret removed for single worker deployment

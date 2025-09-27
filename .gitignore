@@ -60,6 +60,8 @@ dev/
 CLAUDE.md
 test-reports/
 .claude/
+.claude/agents/
+.idea/
 
 # Database init scripts - track base files but ignore local customizations
 docker/init-scripts/*.local.sql

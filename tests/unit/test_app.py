@@ -16,9 +16,7 @@ class TestAppCreation:
         test_env = {
             "FLASK_ENV": "testing",
             "SECRET_KEY": "test-secret-key",
-            "TRAKBRIDGE_ENCRYPTION_KEY": (
-                "test-encryption-key-for-testing-12345"
-            ),
+            "TRAKBRIDGE_ENCRYPTION_KEY": ("test-encryption-key-for-testing-12345"),
             "DATABASE_URL": "sqlite:///:memory:",
             "DB_TYPE": "",  # Clear CI-set DB_TYPE for DATABASE_URL precedence
         }
@@ -41,9 +39,7 @@ class TestAppCreation:
         test_env = {
             "FLASK_ENV": "testing",
             "SECRET_KEY": "test-secret-key-for-production-test",
-            "TRAKBRIDGE_ENCRYPTION_KEY": (
-                "test-encryption-key-for-testing-12345"
-            ),
+            "TRAKBRIDGE_ENCRYPTION_KEY": ("test-encryption-key-for-testing-12345"),
             "DATABASE_URL": "sqlite:///:memory:",
             "DB_TYPE": "",  # Clear CI-set DB_TYPE for DATABASE_URL precedence
         }
@@ -121,9 +117,7 @@ class TestAppBlueprints:
         ]
 
         for expected in expected_blueprints:
-            assert expected in blueprint_names, (
-                f"Blueprint '{expected}' not registered"
-            )
+            assert expected in blueprint_names, f"Blueprint '{expected}' not registered"
 
 
 class TestAppHelpers:

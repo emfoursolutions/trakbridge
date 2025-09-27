@@ -8,12 +8,18 @@ A web application for bridging tracking devices and services to TAK (Team Awaren
 - **Plugin Categorization**: Organized plugin system with OSINT, Tracker, and EMS categories
 - **Authentication System**: Multi-provider authentication (Local, LDAP, OIDC) with role-based access control
 - **TAK Server Management**: Configure multiple TAK server connections with certificate support
-- **Real-Time Streaming**: Continuous data forwarding with health monitoring
+- **Real-Time Streaming**: Continuous data forwarding with health monitoring and circuit breaker protection
 - **Web Interface**: Secure dashboard for stream management and monitoring with categorized plugin selection
 - **Role-Based Access**: Viewer, User, Operator, and Admin roles with appropriate UI controls
 - **Plugin Architecture**: Extensible system for adding new data sources with external plugin support
 - **Enterprise Ready**: Multi-database support, SSL/TLS, backup & recovery, audit logging
 - **Security Hardened**: Comprehensive security implementations including field-level encryption
+- **Performance Optimized**: uvloop integration, connection pooling, intelligent caching (2-3x performance boost)
+- **Single Worker Architecture**: Simplified deployment with single Hypercorn worker for improved efficiency and debugging
+- **Real-Time Monitoring**: Integrated dashboard with queue metrics, stream health, and performance graphs
+- **Circuit Breaker Protection**: Automatic failure recovery with intelligent retry mechanisms
+- **Hot Configuration Reload**: Zero-downtime configuration changes with validation caching
+- **Resource Management**: Memory optimization, leak prevention, and capacity monitoring
 
 <img width="1900" height="690" alt="image" src="https://github.com/user-attachments/assets/d09d3e17-de62-4524-a0d6-d1990c827ac7" />
 
@@ -89,7 +95,7 @@ cd trakbridge
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install .
-hypercorn app.py
+hypercorn app.py  # Single worker deployment for optimal performance
 ```
 
 ## Basic Usage
@@ -112,6 +118,7 @@ hypercorn app.py
 - [API Reference](docs/API_REFERENCE.md) - Complete API documentation
 - [Upgrade Guide](docs/UPGRADE_GUIDE.md) - Version upgrade procedures
 - [Performance Guide](docs/PERFORMANCE_CONFIGURATION.md) - Performance Tuning Guide
+- [Monitoring Guide](docs/MONITORING.md) - Real-time monitoring and dashboards
 
 ## Supported Providers
 
@@ -128,11 +135,22 @@ hypercorn app.py
 - Plugin categorization system for organized management
 - API endpoints for category-based plugin discovery
 
-## Health Check
+## Health Check & Monitoring
 
 ```bash
+# Basic health check
 curl -f https://yourdomain.com/api/health
+
+# Real-time monitoring dashboard
+curl https://yourdomain.com/api/monitoring/dashboard
 ```
+
+The v1.0.0 release includes comprehensive monitoring capabilities:
+- **Queue Metrics**: Real-time queue sizes, throughput, latency, and error rates
+- **Stream Health**: Plugin API response times and TAK connection status
+- **Performance Tracking**: Historical performance data with regression detection
+- **Resource Monitoring**: Memory usage tracking and leak detection
+- **Circuit Breaker Status**: External dependency health and failure recovery
 
 ## Contributing
 
@@ -155,4 +173,4 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 
 ---
 
-**TrakBridge** - Professional GPS tracking data bridge for TAK servers.
+**TrakBridge v1.0.0** - Production-ready GPS tracking data bridge for TAK servers with enterprise performance, monitoring, and reliability features.

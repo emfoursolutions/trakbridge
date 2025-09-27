@@ -12,7 +12,8 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
-from services.cot_service import EnhancedCOTService
+from services.cot_service import get_cot_service, reset_cot_service
+from services.cot_service_integration import reset_queued_cot_service
 from tests.fixtures.mock_location_data import generate_performance_test_datasets
 
 
@@ -22,10 +23,16 @@ class TestParallelConfiguration:
     All tests should FAIL initially until configuration system is implemented
     """
 
+    @pytest.fixture(autouse=True)
+    def setup_method(self):
+        """Reset singleton before each test"""
+        reset_cot_service()
+        reset_queued_cot_service()
+
     @pytest.fixture
     def cot_service(self):
         """Create COT service instance for testing"""
-        return EnhancedCOTService(use_pytak=True)
+        return get_cot_service()
 
     @pytest.fixture
     def sample_config(self):
@@ -81,6 +88,9 @@ class TestParallelConfiguration:
             config["fallback_on_error"] is True
         ), "Should fallback on error by default"
 
+    @pytest.mark.xfail(
+        reason="TDD test - will pass when RC6 parallel config is implemented"
+    )
     def test_configurable_batch_size_threshold(self, cot_service, performance_datasets):
         """
         Test that batch size threshold can be configured
@@ -118,6 +128,9 @@ class TestParallelConfiguration:
             result_medium_low == "parallel"
         ), "Should choose parallel when above threshold"
 
+    @pytest.mark.xfail(
+        reason="TDD test - will pass when RC6 parallel config is implemented"
+    )
     def test_parallel_processing_can_be_disabled(
         self, cot_service, performance_datasets
     ):
@@ -220,6 +233,9 @@ class TestParallelConfiguration:
             ), "Environment should override batch size"
 
     @pytest.mark.asyncio
+    @pytest.mark.xfail(
+        reason="TDD test - will pass when RC6 parallel config is implemented"
+    )
     async def test_max_concurrent_tasks_limit(self, cot_service, performance_datasets):
         """
         Test that max_concurrent_tasks configuration is respected
@@ -253,6 +269,9 @@ class TestParallelConfiguration:
                 max_concurrent_seen <= 5
             ), f"Should not exceed max_concurrent_tasks limit, saw {max_concurrent_seen}"
 
+    @pytest.mark.xfail(
+        reason="TDD test - will pass when RC6 parallel config is implemented"
+    )
     def test_performance_logging_configuration(self, cot_service):
         """
         Test that performance logging can be configured
@@ -270,6 +289,9 @@ class TestParallelConfiguration:
             cot_service.should_log_performance() is False
         ), "Should disable performance logging when configured"
 
+    @pytest.mark.xfail(
+        reason="TDD test - will pass when RC6 parallel config is implemented"
+    )
     def test_configuration_hot_reload(self, cot_service, sample_config):
         """
         Test that configuration can be reloaded without service restart

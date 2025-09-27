@@ -44,6 +44,15 @@ from utils.database_helpers import create_record, find_by_field
 
 logger = get_module_logger(__name__)
 
+# Import worker coordination service for Redis distributed locking
+try:
+    from services.worker_coordination_service import worker_coordination
+
+    REDIS_COORDINATION_AVAILABLE = True
+except ImportError:
+    worker_coordination = None
+    REDIS_COORDINATION_AVAILABLE = False
+
 
 class BootstrapService:
     """
@@ -93,6 +102,41 @@ class BootstrapService:
     def _acquire_bootstrap_lock(self, timeout_seconds: int = 30) -> bool:
         """
         Acquire exclusive lock for bootstrap process coordination
+        Uses Redis distributed locking when available, falls back to file locking
+
+        Args:
+            timeout_seconds: Maximum time to wait for lock
+
+        Returns:
+            True if lock acquired successfully, False if timeout
+        """
+        try:
+            # Try Redis distributed locking first if available
+            if REDIS_COORDINATION_AVAILABLE and worker_coordination.enabled:
+                logger.debug(
+                    "Attempting Redis distributed lock for bootstrap coordination"
+                )
+                return worker_coordination.acquire_bootstrap_lock(
+                    "admin_creation", ttl=timeout_seconds
+                )
+
+            # Fall back to file-based locking
+            logger.debug("Using file-based locking for bootstrap coordination")
+            return self._acquire_file_lock(timeout_seconds)
+
+        except Exception as e:
+            logger.error(f"Error acquiring bootstrap lock: {e}")
+            # Try file-based fallback even if Redis coordination failed
+            try:
+                return self._acquire_file_lock(timeout_seconds)
+            except Exception as fallback_error:
+                logger.error(f"Fallback file lock also failed: {fallback_error}")
+                return False
+
+    def _acquire_file_lock(self, timeout_seconds: int = 30) -> bool:
+        """
+        Acquire file-based exclusive lock for bootstrap process coordination
+        Fallback mechanism when Redis is unavailable
 
         Args:
             timeout_seconds: Maximum time to wait for lock
@@ -128,40 +172,67 @@ class BootstrapService:
                         f"Bootstrap locked by PID {os.getpid()} at {datetime.now(timezone.utc).isoformat()}\n"
                     )
                     self._lock_file.flush()
-                    logger.info(f"Bootstrap lock acquired by PID {os.getpid()}")
+                    logger.info(f"Bootstrap file lock acquired by PID {os.getpid()}")
                     return True
                 except (IOError, OSError):
                     # Lock is held by another process, wait and retry
                     time.sleep(0.5)
 
             logger.warning(
-                f"Failed to acquire bootstrap lock within {timeout_seconds} seconds"
+                f"Failed to acquire bootstrap file lock within {timeout_seconds} seconds"
             )
-            self._release_bootstrap_lock()
+            self._release_file_lock()
             return False
 
         except Exception as e:
-            logger.error(f"Error acquiring bootstrap lock: {e}")
-            self._release_bootstrap_lock()
+            logger.error(f"Error acquiring bootstrap file lock: {e}")
+            self._release_file_lock()
             return False
 
     def _release_bootstrap_lock(self) -> None:
         """
         Release bootstrap lock
+        Uses Redis distributed locking when available, falls back to file locking
+        """
+        try:
+            # Try Redis distributed lock release first if available
+            if REDIS_COORDINATION_AVAILABLE and worker_coordination.enabled:
+                logger.debug(
+                    "Releasing Redis distributed lock for bootstrap coordination"
+                )
+                worker_coordination.release_bootstrap_lock("admin_creation")
+
+            # Also release file lock if it was acquired
+            self._release_file_lock()
+
+        except Exception as e:
+            logger.debug(f"Error releasing bootstrap lock: {e}")
+            # Try file-based fallback
+            try:
+                self._release_file_lock()
+            except Exception as fallback_error:
+                logger.debug(
+                    f"Fallback file lock release also failed: {fallback_error}"
+                )
+
+    def _release_file_lock(self) -> None:
+        """
+        Release file-based bootstrap lock
+        Fallback mechanism when Redis is unavailable
         """
         try:
             if self._lock_file:
                 fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_UN)
                 self._lock_file.close()
                 self._lock_file = None
-                logger.debug("Bootstrap lock released")
+                logger.debug("Bootstrap file lock released")
 
             # Clean up lock file
             if os.path.exists(self.bootstrap_lock_path):
                 os.remove(self.bootstrap_lock_path)
 
         except Exception as e:
-            logger.debug(f"Error releasing bootstrap lock: {e}")
+            logger.debug(f"Error releasing bootstrap file lock: {e}")
 
     def _database_bootstrap_coordination(self) -> bool:
         """
@@ -410,7 +481,7 @@ class BootstrapService:
                 )
             else:
                 # First, wait for database migrations to complete
-                logger.info(
+                logger.debug(
                     "Waiting for database migrations to complete before bootstrap check..."
                 )
                 if not self._wait_for_migrations(max_wait_seconds=120):
@@ -421,7 +492,7 @@ class BootstrapService:
                     )
                     # Don't immediately return False - let's check if tables exist
                 else:
-                    logger.info(
+                    logger.debug(
                         "Database migrations completed successfully, proceeding with bootstrap check"
                     )
 

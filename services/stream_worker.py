@@ -24,11 +24,11 @@ Created: 18-Jul-2025
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Any, Dict, List
 
 # Local application imports
 from plugins.plugin_manager import get_plugin_manager
-from services.cot_service import cot_service
+from services.cot_service import get_cot_service
 
 
 class StreamWorker:
@@ -53,9 +53,155 @@ class StreamWorker:
             False  # Track if we've ensured the persistent worker exists
         )
 
+        # Adaptive polling optimization metrics
+        self._last_data_volumes = []  # Track last 10 poll data volumes
+        self._last_poll_durations = []  # Track last 10 poll durations
+        self._adaptive_interval_enabled = True
+        self._min_poll_interval = max(
+            5, stream.poll_interval // 4
+        )  # Minimum 5s or 1/4 configured
+        self._max_poll_interval = stream.poll_interval * 3  # Maximum 3x configured
+        self._base_poll_interval = stream.poll_interval
+
     @property
     def startup_complete(self):
         return self._startup_complete
+
+    def _calculate_adaptive_poll_interval(
+        self, data_count: int, poll_duration: float
+    ) -> float:
+        """
+        Calculate adaptive polling interval based on load and performance metrics.
+
+        Phase 3 optimization that fine-tunes polling intervals based on:
+        - Current data volume (more data = longer intervals)
+        - Poll duration (slower responses = longer intervals)
+        - Error rate (more errors = longer intervals)
+        - Historical patterns (trending data for stability)
+
+        Args:
+            data_count: Number of data points retrieved in last poll
+            poll_duration: Time taken for the poll operation in seconds
+
+        Returns:
+            Optimized polling interval in seconds
+        """
+        if not self._adaptive_interval_enabled:
+            return self._base_poll_interval
+
+        # Track metrics (keep last 10 samples)
+        self._last_data_volumes.append(data_count)
+        if len(self._last_data_volumes) > 10:
+            self._last_data_volumes.pop(0)
+
+        self._last_poll_durations.append(poll_duration)
+        if len(self._last_poll_durations) > 10:
+            self._last_poll_durations.pop(0)
+
+        # Calculate adjustment factors
+        interval = self._base_poll_interval
+
+        # Factor 1: Data volume adjustment
+        if len(self._last_data_volumes) >= 3:
+            avg_data_volume = sum(self._last_data_volumes) / len(
+                self._last_data_volumes
+            )
+
+            if avg_data_volume == 0:
+                # No data - increase interval to reduce unnecessary polling
+                interval *= 1.5
+                self.logger.debug(f"No data trend detected, increasing interval by 50%")
+            elif avg_data_volume > 50:
+                # High data volume - increase interval to reduce load
+                interval *= 1.3
+                self.logger.debug(
+                    f"High data volume ({avg_data_volume:.1f}), increasing interval by 30%"
+                )
+            elif avg_data_volume < 5:
+                # Low data volume - decrease interval slightly for responsiveness
+                interval *= 0.9
+                self.logger.debug(
+                    f"Low data volume ({avg_data_volume:.1f}), decreasing interval by 10%"
+                )
+
+        # Factor 2: Performance adjustment
+        if len(self._last_poll_durations) >= 3:
+            avg_poll_duration = sum(self._last_poll_durations) / len(
+                self._last_poll_durations
+            )
+
+            if avg_poll_duration > 10:
+                # Slow polls - increase interval to give more time
+                interval *= 1.4
+                self.logger.debug(
+                    f"Slow polling ({avg_poll_duration:.1f}s), increasing interval by 40%"
+                )
+            elif avg_poll_duration > 5:
+                # Moderately slow - slight increase
+                interval *= 1.2
+                self.logger.debug(
+                    f"Moderate polling speed ({avg_poll_duration:.1f}s), increasing interval by 20%"
+                )
+
+        # Factor 3: Error rate adjustment
+        if self._consecutive_errors > 0:
+            # Errors detected - increase interval progressively
+            error_multiplier = 1 + (self._consecutive_errors * 0.3)
+            interval *= error_multiplier
+            self.logger.debug(
+                f"Error adjustment: {self._consecutive_errors} errors, multiplier {error_multiplier:.1f}"
+            )
+
+        # Apply bounds
+        interval = max(self._min_poll_interval, min(self._max_poll_interval, interval))
+
+        # Log significant changes
+        if abs(interval - self._base_poll_interval) > self._base_poll_interval * 0.2:
+            self.logger.info(
+                f"Adaptive polling: {self._base_poll_interval}s -> {interval:.1f}s "
+                f"(data: {data_count}, duration: {poll_duration:.1f}s, errors: {self._consecutive_errors})"
+            )
+
+        return interval
+
+    def get_adaptive_polling_stats(self) -> Dict[str, Any]:
+        """Get adaptive polling statistics for monitoring and tuning"""
+        if not self._adaptive_interval_enabled:
+            return {"enabled": False, "base_interval": self._base_poll_interval}
+
+        recent_data_count = (
+            sum(self._last_data_volumes) / len(self._last_data_volumes)
+            if self._last_data_volumes
+            else 0
+        )
+        recent_poll_duration = (
+            sum(self._last_poll_durations) / len(self._last_poll_durations)
+            if self._last_poll_durations
+            else 0
+        )
+
+        return {
+            "enabled": True,
+            "base_interval": self._base_poll_interval,
+            "min_interval": self._min_poll_interval,
+            "max_interval": self._max_poll_interval,
+            "recent_avg_data_count": recent_data_count,
+            "recent_avg_poll_duration": recent_poll_duration,
+            "consecutive_errors": self._consecutive_errors,
+            "samples_collected": len(self._last_data_volumes),
+            "last_10_data_volumes": self._last_data_volumes.copy(),
+            "last_10_poll_durations": self._last_poll_durations.copy(),
+        }
+
+    def enable_adaptive_polling(self):
+        """Enable adaptive polling optimization"""
+        self._adaptive_interval_enabled = True
+        self.logger.info("Adaptive polling enabled")
+
+    def disable_adaptive_polling(self):
+        """Disable adaptive polling optimization"""
+        self._adaptive_interval_enabled = False
+        self.logger.info("Adaptive polling disabled, using base interval")
 
     async def start(self):
         """Start the stream worker with persistent PyTAK integration"""
@@ -105,7 +251,7 @@ class StreamWorker:
                 # Initialize persistent TAK server connections for all configured servers
                 target_servers = await self._get_target_tak_servers()
                 if target_servers:
-                    self.logger.info(
+                    self.logger.debug(
                         f"Initializing persistent workers for {len(target_servers)} TAK servers"
                     )
                     workers_initialized = 0
@@ -201,7 +347,7 @@ class StreamWorker:
                     )
 
             # Note: We don't stop the persistent worker here as other streams might be using it
-            # The PersistentCOTService manages worker lifecycle automatically
+            # The QueuedCOTService manages worker lifecycle automatically
             self._tak_worker_ensured = False
 
             # Update database only if not during shutdown
@@ -232,7 +378,8 @@ class StreamWorker:
     async def _ensure_persistent_tak_worker(self) -> bool:
         """Ensure persistent PyTAK worker exists for TAK server connection"""
         try:
-            if not cot_service:
+            service = get_cot_service()
+            if not service:
                 self.logger.error("Persistent COT service not available")
                 return False
 
@@ -242,7 +389,7 @@ class StreamWorker:
             )
 
             # Check if worker is already running
-            worker_status = cot_service.get_worker_status(tak_server.id)
+            worker_status = get_cot_service().get_worker_status(tak_server.id)
             if worker_status and worker_status.get("worker_running", False):
                 self.logger.debug(
                     f"Persistent worker already running for TAK server {tak_server.name}"
@@ -251,7 +398,7 @@ class StreamWorker:
                 return True
 
             # Start the worker
-            success = await cot_service.start_worker(tak_server)
+            success = await get_cot_service().start_worker(tak_server)
             if not success:
                 self.logger.error(
                     f"Failed to start persistent worker for TAK server {tak_server.name}"
@@ -259,7 +406,7 @@ class StreamWorker:
                 return False
 
             # Verify worker started successfully
-            worker_status = cot_service.get_worker_status(tak_server.id)
+            worker_status = get_cot_service().get_worker_status(tak_server.id)
             if not worker_status or not worker_status.get("worker_running", False):
                 self.logger.error(
                     f"Worker failed to start for TAK server {tak_server.name}"
@@ -325,11 +472,15 @@ class StreamWorker:
                     f"Poll cycle starting for stream '{self.stream.name}'"
                 )
 
+                # Track polling performance for adaptive intervals
+                poll_start_time = asyncio.get_event_loop().time()
+
                 # Fetch locations from GPS service
                 locations = []
                 try:
                     async with asyncio.timeout(90):  # 90 second timeout
-                        locations = await self.plugin.fetch_locations(
+                        # Use circuit breaker protected fetch method for fault tolerance
+                        locations = await self.plugin.fetch_locations_with_protection(
                             self.session_manager.session
                         )
                 except asyncio.TimeoutError:
@@ -356,7 +507,7 @@ class StreamWorker:
                             locations
                         )
                         if success:
-                            self.logger.info(
+                            self.logger.debug(
                                 f"Successfully sent {len(locations)} locations to TAK server(s)"
                             )
                         else:
@@ -372,7 +523,7 @@ class StreamWorker:
                             # Stop all workers
                             for server in target_servers:
                                 try:
-                                    await cot_service.stop_worker(server.id)
+                                    await get_cot_service().stop_worker(server.id)
                                 except Exception as e:
                                     self.logger.warning(
                                         f"Error stopping worker for {server.name}: {e}"
@@ -425,10 +576,20 @@ class StreamWorker:
                         last_poll_time=datetime.now(timezone.utc)
                     )
 
-                # Wait for next poll or stop signal
+                # Calculate adaptive polling interval based on performance
+                poll_end_time = asyncio.get_event_loop().time()
+                poll_duration = poll_end_time - poll_start_time
+                data_count = len(locations) if locations else 0
+
+                # Calculate optimized polling interval
+                adaptive_interval = self._calculate_adaptive_poll_interval(
+                    data_count, poll_duration
+                )
+
+                # Wait for next poll or stop signal using adaptive interval
                 try:
                     await asyncio.wait_for(
-                        self._stop_event.wait(), timeout=self.stream.poll_interval
+                        self._stop_event.wait(), timeout=adaptive_interval
                     )
                     # If we get here, stop was requested
                     break
@@ -491,7 +652,8 @@ class StreamWorker:
         - Backward compatibility maintained for existing streams
         """
         try:
-            if not cot_service:
+            service = get_cot_service()
+            if not service:
                 self.logger.error("Persistent COT service not available")
                 return False
 
@@ -546,7 +708,7 @@ class StreamWorker:
                 )
 
             # Create COT events once (shared across all servers)
-            from services.cot_service import EnhancedCOTService
+            from services.cot_service_integration import get_queued_cot_service
 
             try:
                 stream_default_cot_type = self.stream.cot_type or "a-f-G-U-C"
@@ -561,7 +723,8 @@ class StreamWorker:
                         f"First location cot_type: {first_location_cot_type}"
                     )
 
-                cot_events = await EnhancedCOTService().create_cot_events(
+                cot_service = get_queued_cot_service()
+                cot_events = await cot_service.create_cot_events(
                     locations,
                     stream_default_cot_type,
                     self.stream.cot_stale_time or 300,
@@ -631,10 +794,13 @@ class StreamWorker:
         """Get detailed health status of this worker"""
         # Get persistent worker status if available
         persistent_worker_status = None
-        if self.stream.tak_server and cot_service:
-            persistent_worker_status = cot_service.get_worker_status(
-                self.stream.tak_server.id
-            )
+        if self.stream.tak_server:
+            try:
+                persistent_worker_status = get_cot_service().get_worker_status(
+                    self.stream.tak_server.id
+                )
+            except Exception:
+                persistent_worker_status = None
 
         return {
             "running": self.running,
@@ -649,8 +815,8 @@ class StreamWorker:
             "task_done": self.task.done() if self.task else None,
             "task_cancelled": self.task.cancelled() if self.task else None,
             "persistent_worker_status": persistent_worker_status,
-            "total_persistent_workers": len(cot_service.workers) if cot_service else 0,
-            "total_persistent_queues": len(cot_service.queues) if cot_service else 0,
+            "total_persistent_workers": len(get_cot_service().workers),
+            "total_persistent_queues": len(get_cot_service().queues),
         }
 
     async def _apply_callsign_mapping(self, locations: List[Dict]) -> None:
@@ -814,11 +980,8 @@ class StreamWorker:
     async def _get_fresh_stream_config(self) -> dict:
         """Get fresh stream configuration from database"""
         try:
-            from database import db
-            from models.stream import Stream
-
-            # Query fresh configuration from database
-            fresh_stream = db.session.query(Stream).filter_by(id=self.stream.id).first()
+            # Use database manager for thread-safe database access
+            fresh_stream = self.db_manager.get_stream_with_relationships(self.stream.id)
             if fresh_stream:
                 return {
                     "enable_callsign_mapping": getattr(
@@ -1005,7 +1168,6 @@ class StreamWorker:
                     if multi_servers:
                         target_servers = list(multi_servers)
                         server_names = [s.name for s in target_servers]
-                        server_ids = [s.id for s in target_servers]
                         self.logger.info(
                             f"Using multi-server configuration: {len(target_servers)} servers found - Names: {server_names}"
                         )
@@ -1040,7 +1202,8 @@ class StreamWorker:
         Supports multiple servers with worker deduplication.
         """
         try:
-            if not cot_service:
+            service = get_cot_service()
+            if not service:
                 self.logger.error("Persistent COT service not available")
                 return False
 
@@ -1049,7 +1212,7 @@ class StreamWorker:
             )
 
             # Check if worker is already running
-            worker_status = cot_service.get_worker_status(tak_server.id)
+            worker_status = get_cot_service().get_worker_status(tak_server.id)
             if worker_status and worker_status.get("worker_running", False):
                 self.logger.debug(
                     f"Persistent worker already running for TAK server {tak_server.name}"
@@ -1057,7 +1220,7 @@ class StreamWorker:
                 return True
 
             # Start the worker
-            success = await cot_service.start_worker(tak_server)
+            success = await get_cot_service().start_worker(tak_server)
             if not success:
                 self.logger.error(
                     f"Failed to start persistent worker for TAK server {tak_server.name}"
@@ -1065,7 +1228,7 @@ class StreamWorker:
                 return False
 
             # Verify worker started successfully
-            worker_status = cot_service.get_worker_status(tak_server.id)
+            worker_status = get_cot_service().get_worker_status(tak_server.id)
             if not worker_status or not worker_status.get("worker_running", False):
                 self.logger.error(
                     f"Worker failed to start for TAK server {tak_server.name}"
@@ -1186,18 +1349,18 @@ class StreamWorker:
                 self.logger.debug(
                     f"Using queue replacement for large batch of {len(cot_events)} events to {server.name}"
                 )
-                success = await cot_service.enqueue_with_replacement(
+                success = await get_cot_service().enqueue_with_replacement(
                     cot_events, server.id
                 )
                 events_sent = len(cot_events) if success else 0
-                self.logger.info(
+                self.logger.debug(
                     f"Queue replacement result for {server.name}: success={success}, events_sent={events_sent}"
                 )
             else:
                 # Use individual enqueueing for small batches
                 events_sent = 0
                 for event in cot_events:
-                    success = await cot_service.enqueue_event(event, server.id)
+                    success = await get_cot_service().enqueue_event(event, server.id)
                     if success:
                         events_sent += 1
                     else:

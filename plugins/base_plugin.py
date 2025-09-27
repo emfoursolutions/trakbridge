@@ -139,7 +139,7 @@ class PluginConfigField:
 
 
 class BaseGPSPlugin(ABC):
-    """Enhanced base class for GPS tracking plugins with persistent COT support"""
+    """Enhanced base class for GPS tracking plugins with persistent COT support and circuit breaker protection"""
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
@@ -149,6 +149,10 @@ class BaseGPSPlugin(ABC):
         # Initialize stream reference as None - will be set by StreamWorker if in production
         self.stream = None
         self._in_production_context = False
+
+        # Circuit breaker integration for fault tolerance
+        self._circuit_breaker = None
+        self._circuit_breaker_initialized = False
 
     @property
     @abstractmethod
@@ -343,6 +347,141 @@ class BaseGPSPlugin(ABC):
                 return False
         return False
 
+    def _get_circuit_breaker(self):
+        """Get or create circuit breaker for this plugin instance"""
+        if not self._circuit_breaker_initialized:
+            try:
+                from services.circuit_breaker import (
+                    get_circuit_breaker_manager,
+                    CircuitBreakerConfig,
+                )
+
+                # Load circuit breaker configuration from performance config
+                cb_config = {}
+                try:
+                    # Try to load from performance config file
+                    import yaml
+                    import os
+
+                    config_path = os.path.join(
+                        os.path.dirname(__file__), "../config/settings/performance.yaml"
+                    )
+                    if os.path.exists(config_path):
+                        with open(config_path, "r") as f:
+                            perf_config = yaml.safe_load(f) or {}
+                            cb_config = perf_config.get("circuit_breaker", {})
+                except Exception as e:
+                    get_logger().debug(
+                        f"Could not load circuit breaker config: {e}, using defaults"
+                    )
+                    cb_config = {}
+
+                # Create circuit breaker config with plugin-specific settings
+                circuit_config = CircuitBreakerConfig(
+                    failure_threshold=cb_config.get("failure_threshold", 3),
+                    recovery_timeout=cb_config.get("recovery_timeout", 60.0),
+                    timeout=cb_config.get("timeout", 30.0),
+                    half_open_max_calls=cb_config.get("half_open_max_calls", 5),
+                    success_threshold=cb_config.get("success_threshold", 3),
+                    health_check_interval=cb_config.get("health_check_interval", 30.0),
+                )
+
+                # Get circuit breaker for this plugin
+                manager = get_circuit_breaker_manager()
+                service_name = f"plugin_{self.plugin_name}"
+                self._circuit_breaker = manager.get_circuit_breaker(
+                    service_name, circuit_config
+                )
+
+                # Set up health check if possible
+                self._circuit_breaker.set_health_check(self._health_check)
+
+                self._circuit_breaker_initialized = True
+                get_logger().info(
+                    f"Circuit breaker initialized for plugin {self.plugin_name}"
+                )
+
+            except Exception as e:
+                get_logger().error(
+                    f"Failed to initialize circuit breaker for {self.plugin_name}: {e}"
+                )
+                self._circuit_breaker = None
+                self._circuit_breaker_initialized = True
+
+        return self._circuit_breaker
+
+    async def fetch_locations_with_protection(
+        self, session: aiohttp.ClientSession
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch locations with circuit breaker protection.
+
+        This method wraps the plugin's fetch_locations method with circuit breaker
+        fault tolerance, providing automatic failure detection and recovery.
+        """
+        circuit_breaker = self._get_circuit_breaker()
+
+        if circuit_breaker:
+            try:
+                # Use circuit breaker to protect the fetch_locations call
+                return await circuit_breaker.call(self.fetch_locations, session)
+            except Exception as e:
+                from services.circuit_breaker import CircuitOpenError
+
+                if isinstance(e, CircuitOpenError):
+                    get_logger().warning(
+                        f"Circuit breaker is OPEN for {self.plugin_name}: {e}"
+                    )
+                    # Return empty list when circuit is open to prevent cascading failures
+                    return []
+                else:
+                    # Re-raise other exceptions
+                    raise
+        else:
+            # Fallback to direct call if circuit breaker not available
+            get_logger().debug(
+                f"Circuit breaker not available for {self.plugin_name}, using direct call"
+            )
+            return await self.fetch_locations(session)
+
+    async def _health_check(self) -> bool:
+        """
+        Default health check implementation.
+
+        Plugins can override this method to provide more sophisticated health checks.
+        This default implementation performs a basic connectivity test.
+        """
+        try:
+            import aiohttp
+            import asyncio
+
+            # Get plugin configuration
+            config = self.get_decrypted_config()
+
+            # Try to determine a URL to test from config
+            test_url = None
+            for url_field in ["url", "endpoint", "server_url", "api_url"]:
+                if url_field in config and config[url_field]:
+                    test_url = config[url_field]
+                    break
+
+            if not test_url:
+                get_logger().debug(
+                    f"No URL found for health check in {self.plugin_name}"
+                )
+                return True  # Can't test, assume healthy
+
+            # Perform a simple HEAD request to check connectivity
+            timeout = aiohttp.ClientTimeout(total=10.0)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.head(test_url) as response:
+                    # Consider any response (even errors) as "service is reachable"
+                    return True
+
+        except Exception as e:
+            get_logger().debug(f"Health check failed for {self.plugin_name}: {e}")
+            return False
+
     @abstractmethod
     async def fetch_locations(
         self, session: aiohttp.ClientSession
@@ -381,11 +520,11 @@ class BaseGPSPlugin(ABC):
 
         try:
             # Import here to avoid circular imports
-            from services.cot_service import EnhancedCOTService, cot_service
+            from services.cot_service import get_cot_service
 
             # Ensure persistent worker is running for this TAK server
             if hasattr(stream, "tak_server_id") and stream.tak_server_id:
-                await cot_service.ensure_worker_running(stream.tak_server_id)
+                await get_cot_service().ensure_worker_running(stream.tak_server_id)
 
             # Temporarily set stream reference for helper method access
             original_stream = getattr(self, "stream", None)
@@ -396,7 +535,7 @@ class BaseGPSPlugin(ABC):
             stale_time = self.get_stream_config_value("cot_stale_time", 300)
 
             # Create COT events from locations
-            cot_events = await EnhancedCOTService().create_cot_events(
+            cot_events = await get_cot_service().create_cot_events(
                 locations,
                 cot_type=cot_type,
                 stale_time=stale_time,
@@ -409,7 +548,7 @@ class BaseGPSPlugin(ABC):
             enqueued_count = 0
             for event in cot_events:
                 if hasattr(stream, "tak_server_id") and stream.tak_server_id:
-                    cot_service.enqueue_event(event, stream.tak_server_id)
+                    await get_cot_service().enqueue_event(event, stream.tak_server_id)
                     enqueued_count += 1
                 else:
                     get_logger().warning(

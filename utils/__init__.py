@@ -2,7 +2,7 @@
 Utils package for TrakBridge application.
 
 This package provides utility functions and classes for the TrakBridge application,
-including JSON validation, security helpers, and application helpers.
+including JSON validation, security helpers, application helpers, and test utilities.
 """
 
 # Import key utilities to make them available at package level

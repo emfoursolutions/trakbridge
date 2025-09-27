@@ -5,8 +5,8 @@
 # Server binding
 bind = "0.0.0.0:5000"
 
-# Worker configuration
-workers = 4
+# Worker configuration - single worker optimal for TrakBridge
+workers = 1
 worker_class = "asyncio"
 
 # Connection settings
@@ -40,13 +40,13 @@ application_path = "app:app"
 
 # Environment-specific overrides
 [production]
-workers = 8
+workers = 1
 max_requests = 2000
 timeout = 60
 log_level = "warning"
 
 [staging]
-workers = 4
+workers = 1
 max_requests = 1000
 timeout = 30
 log_level = "info"
