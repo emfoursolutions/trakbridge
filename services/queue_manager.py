@@ -171,7 +171,7 @@ class QueueManager:
                     existing_queue = self.queues[queue_id]
                     # Try to access the queue to see if it's bound to current loop
                     existing_queue.qsize()
-                    logger.warning(f"Queue {queue_id} already exists")
+                    logger.debug(f"Queue {queue_id} already exists")
                     return True
                 except RuntimeError:
                     # Queue is bound to a different event loop, recreate it

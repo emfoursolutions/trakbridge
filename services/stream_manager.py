@@ -538,7 +538,7 @@ class StreamManager:
                         )
                     else:
                         unhealthy_count += 1
-                        logger.warning(
+                        logger.debug(
                             f"Stream {result['stream_id']} ({result['stream_name']}) has health issues"
                         )
 
