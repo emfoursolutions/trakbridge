@@ -1457,7 +1457,7 @@ CORE FEATURES IMPLEMENTED:
 
 CUSTOMISATION POINTS:
 1. Replace API endpoints in fetch_locations() with your service URLs
-2. Update _transform_api_data() to match your API response format  
+2. Update _transform_api_data() to match your API response format
 3. Modify get_available_fields() for your tracker's identifier fields
 4. Adjust plugin metadata (name, description, help text)
 5. Add/remove configuration fields as needed for your service

@@ -2,9 +2,9 @@
 File: plugins/deepstate_plugin.py
 
 Description:
-    Simplified plugin implementation for fetching and processing location data from 
-    the Deepstate OSINT platform. Connects to the Deepstate API to retrieve the 
-    latest battlefield positions and events from Ukraine. The plugin fetches data 
+    Simplified plugin implementation for fetching and processing location data from
+    the Deepstate OSINT platform. Connects to the Deepstate API to retrieve the
+    latest battlefield positions and events from Ukraine. The plugin fetches data
     from the public API endpoint and processes only Point-type GeoJSON features.
 
     Key features:

@@ -116,15 +116,17 @@ x-environment: &staging-environment
   PASSWORD_REQUIRE_SPECIAL: "true"
   PASSWORD_MAX_AGE_DAYS: "90"
   
+  # Container Management & Startup Optimization
+  CONTAINER_MANAGED: "true"
+  SCHEMA_VALIDATION_MODE: "fast"
+  MIGRATION_TIMEOUT: "30"
+  
   # Session Configuration (Staging)
   SESSION_LIFETIME_HOURS: "8"
   SESSION_CLEANUP_INTERVAL: "60"
   SESSION_SECURE_COOKIES: "true"  # Production-like security
   SESSION_COOKIE_DOMAIN: "staging.trakbridge.local"  # Update for your staging domain
   SESSION_COOKIE_PATH: "/"
-
-  # Worker coordination removed for single worker deployment
-  # ENABLE_WORKER_COORDINATION and REDIS_URL removed - no longer needed
   
   # Secret file paths (if secrets are in /app/secrets instead of /run/secrets)
   DB_PASSWORD_FILE: "/app/secrets/db_password"
@@ -132,7 +134,6 @@ x-environment: &staging-environment
   TB_MASTER_KEY_FILE: "/app/secrets/tb_master_key"
   LDAP_BIND_PASSWORD_FILE: "/app/secrets/ldap_bind_password"
   OIDC_CLIENT_SECRET_FILE: "/app/secrets/oidc_client_secret"
-  # REDIS_PASSWORD_FILE: "/app/secrets/redis_password" - removed for single worker deployment
 
 # Secrets are now configured directly in environment variables above
 
@@ -154,7 +155,6 @@ services:
       - tb_master_key
       - ldap_bind_password
       - oidc_client_secret
-      # - redis_password  # removed for single worker deployment
     
     ports:
       - "${APP_PORT:-5000}:5000"
@@ -179,7 +179,6 @@ services:
       mysql:
         condition: service_healthy
         required: false
-      # redis dependency removed for single worker deployment
 
     networks:
       - trakbridge-staging
@@ -303,7 +302,7 @@ services:
     
     healthcheck:
       test: |
-        mysqladmin ping -h localhost -u root -p$$(cat /run/secrets/db_password) &&
+        mariadb-admin ping -h localhost -u root -p$$(cat /run/secrets/db_password) &&
         mariadb -u root -p$$(cat /run/secrets/db_password) -e "SELECT 1" > /dev/null 2>&1
       interval: 20s
       timeout: 8s
@@ -321,14 +320,6 @@ services:
           memory: 768M
         reservations:
           memory: 384M
-
-  # =============================================================================
-  # Redis (Optional - for worker coordination in multi-worker deployments)
-  # =============================================================================
-  # Redis Service - REMOVED for single worker deployment
-  # =============================================================================
-  # Redis worker coordination has been removed in favor of single worker deployment.
-  # This reduces resource usage and eliminates coordination complexity.
 
   # =============================================================================
   # Nginx Reverse Proxy - Staging Configuration
@@ -382,8 +373,6 @@ volumes:
     driver: local
     name: trakbridge-mysql-staging-data
 
-  # redis_data volume removed for single worker deployment
-
 # =============================================================================
 # Secrets - Staging Environment (using standard secrets directory)
 # =============================================================================
@@ -402,5 +391,3 @@ secrets:
   
   oidc_client_secret:
     file: ${OIDC_CLIENT_SECRET_FILE:-./secrets/oidc_client_secret}
-
-  # redis_password secret removed for single worker deployment

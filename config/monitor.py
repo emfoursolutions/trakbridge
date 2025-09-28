@@ -27,16 +27,11 @@ logger = get_module_logger(__name__)
 
 
 class ConfigFileHandler(FileSystemEventHandler):
-    """Handle configuration file changes with Redis event publishing."""
+    """Handle configuration file changes"""
 
     def __init__(self, config_monitor):
         self.config_monitor = config_monitor
         self.last_modified: Dict[str, float] = {}
-        # Redis coordination removed for single worker deployment
-
-    # Redis coordination setup removed for single worker deployment
-
-    # File change publishing removed for single worker deployment
 
     def on_modified(self, event):
         """Handle file modification events."""

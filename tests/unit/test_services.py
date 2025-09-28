@@ -1113,7 +1113,7 @@ class TestStreamWorkerConfiguration:
                 worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
 
                 # Mock the start method to avoid actual worker startup and timeouts
-                with patch.object(worker, 'start', return_value=True) as mock_start:
+                with patch.object(worker, "start", return_value=True) as mock_start:
                     # Manually set up the plugin like start() would do
                     worker.plugin = created_plugin
                     worker.plugin.stream = stream
@@ -1206,9 +1206,11 @@ class TestStreamWorkerConfiguration:
                 worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
 
                 # Mock the start method to avoid actual worker startup and timeouts
-                with patch.object(worker, 'start', return_value=True) as mock_start:
+                with patch.object(worker, "start", return_value=True) as mock_start:
                     # Manually set up the plugin like start() would do
-                    worker.plugin = mock_get_plugin("garmin", {"url": "https://test.com"})
+                    worker.plugin = mock_get_plugin(
+                        "garmin", {"url": "https://test.com"}
+                    )
                     worker.plugin.stream = stream
                     result = await worker.start()
 
@@ -1312,7 +1314,7 @@ class TestStreamWorkerConfiguration:
                 worker = StreamWorker(stream, mock_session_manager, mock_db_manager)
 
                 # Mock the start method to avoid actual worker startup and timeouts
-                with patch.object(worker, 'start', return_value=True) as mock_start:
+                with patch.object(worker, "start", return_value=True) as mock_start:
                     # Manually set up the plugin like start() would do, using the actual stream config
                     actual_config = stream.get_plugin_config()
                     worker.plugin = mock_get_plugin("traccar", actual_config)
@@ -1449,10 +1451,12 @@ class TestStreamWorkerCotTypeModeIntegration:
                         mock_plugin.get_decrypted_config.return_value = {
                             "cot_type_mode": case["expected_mode"],
                             "cot_type": case["cot_type"],
-                            "api_url": "https://deepstatemap.live/api/history/last"
+                            "api_url": "https://deepstatemap.live/api/history/last",
                         }
 
-                        with patch.object(worker, 'start', return_value=True) as mock_start:
+                        with patch.object(
+                            worker, "start", return_value=True
+                        ) as mock_start:
                             # Manually set up the plugin like start() would do
                             worker.plugin = mock_plugin
                             worker.plugin.stream = stream

@@ -95,8 +95,8 @@ class DockerSecretProvider(SecretProvider):
 
     SECRETS_PATH = Path("/run/secrets")
 
-    #print(f"Secrets path: {SECRETS_PATH}")
-    #print(f"Path exists: {SECRETS_PATH.exists()}")
+    # print(f"Secrets path: {SECRETS_PATH}")
+    # print(f"Path exists: {SECRETS_PATH.exists()}")
 
     @property
     def name(self) -> str:
@@ -130,13 +130,12 @@ class DockerSecretProvider(SecretProvider):
 
 
 class DotEnvSecretProvider(SecretProvider):
-    """Retrieve secrets from .env files (development only) with Redis event support."""
+    """Retrieve secrets from .env files (development only)."""
 
     def __init__(self, env_file: Optional[str] = None):
         self.env_file = env_file or ".env"
         self._secrets: Dict[str, str] = {}
         self._last_modified: Optional[float] = None
-        # Redis coordination removed for single worker deployment
         self._file_change_subscription_active = False
         self._load_env_file()
 
@@ -153,10 +152,6 @@ class DotEnvSecretProvider(SecretProvider):
         if os.environ.get("SKIP_DOTENV_FILE") == "true":
             return False
         return Path(self.env_file).exists()
-
-    # Redis coordination setup removed for single worker deployment
-
-    # File change event handling removed for single worker deployment
 
     def _should_reload(self) -> bool:
         """Check if the .env file has been modified."""

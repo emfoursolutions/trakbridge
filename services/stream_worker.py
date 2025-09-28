@@ -379,7 +379,7 @@ class StreamWorker:
 
     def _is_container_shutdown(self) -> bool:
         """Check if we're in a container-managed shutdown scenario"""
-        return os.getenv('CONTAINER_MANAGED', '').lower() == 'true'
+        return os.getenv("CONTAINER_MANAGED", "").lower() == "true"
 
     async def _ensure_persistent_tak_worker(self) -> bool:
         """Ensure persistent PyTAK worker exists for TAK server connection"""

@@ -44,15 +44,6 @@ from utils.database_helpers import create_record, find_by_field
 
 logger = get_module_logger(__name__)
 
-# Import worker coordination service for Redis distributed locking
-try:
-    from services.worker_coordination_service import worker_coordination
-
-    REDIS_COORDINATION_AVAILABLE = True
-except ImportError:
-    worker_coordination = None
-    REDIS_COORDINATION_AVAILABLE = False
-
 
 class BootstrapService:
     """
@@ -101,8 +92,7 @@ class BootstrapService:
 
     def _acquire_bootstrap_lock(self, timeout_seconds: int = 30) -> bool:
         """
-        Acquire exclusive lock for bootstrap process coordination
-        Uses Redis distributed locking when available, falls back to file locking
+        Acquire exclusive lock for bootstrap process coordination using file-based locking
 
         Args:
             timeout_seconds: Maximum time to wait for lock
@@ -111,32 +101,16 @@ class BootstrapService:
             True if lock acquired successfully, False if timeout
         """
         try:
-            # Try Redis distributed locking first if available
-            if REDIS_COORDINATION_AVAILABLE and worker_coordination.enabled:
-                logger.debug(
-                    "Attempting Redis distributed lock for bootstrap coordination"
-                )
-                return worker_coordination.acquire_bootstrap_lock(
-                    "admin_creation", ttl=timeout_seconds
-                )
-
-            # Fall back to file-based locking
             logger.debug("Using file-based locking for bootstrap coordination")
             return self._acquire_file_lock(timeout_seconds)
 
         except Exception as e:
             logger.error(f"Error acquiring bootstrap lock: {e}")
-            # Try file-based fallback even if Redis coordination failed
-            try:
-                return self._acquire_file_lock(timeout_seconds)
-            except Exception as fallback_error:
-                logger.error(f"Fallback file lock also failed: {fallback_error}")
-                return False
+            return False
 
     def _acquire_file_lock(self, timeout_seconds: int = 30) -> bool:
         """
         Acquire file-based exclusive lock for bootstrap process coordination
-        Fallback mechanism when Redis is unavailable
 
         Args:
             timeout_seconds: Maximum time to wait for lock
@@ -191,34 +165,16 @@ class BootstrapService:
 
     def _release_bootstrap_lock(self) -> None:
         """
-        Release bootstrap lock
-        Uses Redis distributed locking when available, falls back to file locking
+        Release bootstrap lock using file-based locking
         """
         try:
-            # Try Redis distributed lock release first if available
-            if REDIS_COORDINATION_AVAILABLE and worker_coordination.enabled:
-                logger.debug(
-                    "Releasing Redis distributed lock for bootstrap coordination"
-                )
-                worker_coordination.release_bootstrap_lock("admin_creation")
-
-            # Also release file lock if it was acquired
             self._release_file_lock()
-
         except Exception as e:
             logger.debug(f"Error releasing bootstrap lock: {e}")
-            # Try file-based fallback
-            try:
-                self._release_file_lock()
-            except Exception as fallback_error:
-                logger.debug(
-                    f"Fallback file lock release also failed: {fallback_error}"
-                )
 
     def _release_file_lock(self) -> None:
         """
         Release file-based bootstrap lock
-        Fallback mechanism when Redis is unavailable
         """
         try:
             if self._lock_file:
@@ -309,8 +265,10 @@ class BootstrapService:
         """
         try:
             # If running in a container, trust that the entrypoint already validated migrations
-            if os.getenv('CONTAINER_MANAGED', '').lower() == 'true':
-                logger.debug("Container-managed deployment detected, skipping heavy migration checks")
+            if os.getenv("CONTAINER_MANAGED", "").lower() == "true":
+                logger.debug(
+                    "Container-managed deployment detected, skipping heavy migration checks"
+                )
                 return True
             # First check if this is SQLite and if the database file actually exists
             database_url = str(db.engine.url)

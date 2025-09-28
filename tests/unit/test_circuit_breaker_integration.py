@@ -113,7 +113,9 @@ class TestCircuitBreakerIntegration:
             mock_session = MagicMock()
 
             # Test that circuit breaker protection exists
-            assert hasattr(plugin, 'fetch_locations_with_protection'), "Plugin should have circuit breaker protection method"
+            assert hasattr(
+                plugin, "fetch_locations_with_protection"
+            ), "Plugin should have circuit breaker protection method"
 
             # First call should fail and raise exception (normal behavior)
             with pytest.raises(Exception, match="Plugin failure"):
@@ -141,7 +143,9 @@ class TestCircuitBreakerIntegration:
         from models.tak_server import TakServer
 
         # Mock TAK server
-        mock_tak_server = MagicMock()  # Don't use spec=TakServer to avoid SQLAlchemy context issues
+        mock_tak_server = (
+            MagicMock()
+        )  # Don't use spec=TakServer to avoid SQLAlchemy context issues
         mock_tak_server.id = 1
         mock_tak_server.name = "test_tak"
         mock_tak_server.host = "localhost"
@@ -261,7 +265,9 @@ class TestCircuitBreakerIntegration:
 
         # Check backoff increased again
         second_delay = circuit_breaker.backoff_delay
-        expected_second = expected_first * config.exponential_backoff_base  # 2.0 * 2.0 = 4.0
+        expected_second = (
+            expected_first * config.exponential_backoff_base
+        )  # 2.0 * 2.0 = 4.0
         assert second_delay == expected_second
         assert circuit_breaker.state == CircuitBreakerState.OPEN  # Now open
         assert circuit_breaker.backoff_delay <= config.max_backoff_delay

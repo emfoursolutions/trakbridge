@@ -22,7 +22,6 @@
 #
 # Single Worker Deployment:
 #   TrakBridge now operates as a single worker deployment optimized for Hypercorn.
-#   Redis coordination has been removed for simplified deployment and reduced resource usage.
 #   All configuration changes apply immediately without coordination delays.
 #
 # =============================================================================
@@ -126,10 +125,7 @@ x-environment: &common-environment
   SESSION_SECURE_COOKIES: "true"
   SESSION_COOKIE_DOMAIN: ""  # Leave blank for auto-detection
   SESSION_COOKIE_PATH: "/"
-
-  # Worker coordination removed for single worker deployment
-  # ENABLE_WORKER_COORDINATION and REDIS_URL removed - no longer needed
-  
+ 
 # Secret file paths - customize if needed
 x-secrets: &common-secrets
   DB_PASSWORD_FILE: "./secrets/db_password"
@@ -137,7 +133,6 @@ x-secrets: &common-secrets
   TB_MASTER_KEY_FILE: "./secrets/tb_master_key"
   LDAP_BIND_PASSWORD_FILE: "./secrets/ldap_bind_password"
   OIDC_CLIENT_SECRET_FILE: "./secrets/oidc_client_secret"
-  # REDIS_PASSWORD_FILE: "./secrets/redis_password" - removed for single worker deployment
 
 services:
   # =============================================================================
@@ -161,7 +156,6 @@ services:
       - tb_master_key
       - ldap_bind_password
       - oidc_client_secret
-      # - redis_password  # removed for single worker deployment
 
     ports:
       - "5000:5000"  # Change first port if you need external access on different port
@@ -188,7 +182,6 @@ services:
       mysql:
         condition: service_healthy
         required: false
-      # redis dependency removed for single worker deployment
 
     networks:
       - trakbridge
@@ -219,11 +212,6 @@ services:
       -c shared_preload_libraries='pg_stat_statements'
       -c track_activity_query_size=2048
       -c log_line_prefix='%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
-      -c log_checkpoints=on
-      -c log_connections=on
-      -c log_disconnections=on
-      -c log_lock_waits=on
-      -c log_min_duration_statement=1000
       -c log_statement=none
       -c log_temp_files=0
 
@@ -269,22 +257,31 @@ services:
     restart: unless-stopped
     profiles: ["mysql"]
     
-    command: |
-      --max-connections=200
-      --wait-timeout=300
-      --interactive-timeout=300
-      --net-read-timeout=60
-      --net-write-timeout=60
-      --max-allowed-packet=256M
-      --innodb-buffer-pool-load-at-startup=ON
-      --innodb-buffer-pool-dump-at-shutdown=ON
-      --innodb-log-file-size=256M
-      --innodb-flush-log-at-trx-commit=1
-      --bind-address=0.0.0.0
-      --character-set-server=utf8mb4
-      --collation-server=utf8mb4_unicode_ci
-      --skip-name-resolve
-      --innodb-buffer-pool-size=512M
+    command:
+      - --max-connections=200
+      - --wait-timeout=600
+      - --interactive-timeout=600
+      - --net-read-timeout=120
+      - --net-write-timeout=120
+      - --max-allowed-packet=64M
+      - --innodb-buffer-pool-load-at-startup=ON
+      - --innodb-buffer-pool-dump-at-shutdown=ON
+      - --innodb-log-file-size=256M
+      - --innodb-flush-log-at-trx-commit=1
+      - --bind-address=0.0.0.0
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-name-resolve
+      - --innodb-buffer-pool-size=512M
+      - --connect-timeout=60
+      - --slave-net-timeout=120
+      - --thread-cache-size=50
+      - --query-cache-type=1
+      - --query-cache-size=64M
+      - --tmp-table-size=64M
+      - --max-heap-table-size=64M
+      - --innodb-lock-wait-timeout=50
+      - --log-warnings=2
 
     environment:
       MARIADB_DATABASE: trakbridge
@@ -303,7 +300,7 @@ services:
 
     healthcheck:
       test: |
-        mysqladmin ping -h localhost -u root -p$$(cat /run/secrets/db_password) &&
+        mariadb-admin ping -h localhost -u root -p$$(cat /run/secrets/db_password) &&
         mariadb -u root -p$$(cat /run/secrets/db_password) -e "SELECT 1" > /dev/null 2>&1
       interval: 30s
       timeout: 10s
@@ -319,13 +316,6 @@ services:
           memory: 1G
         reservations:
           memory: 512M
-
-  # =============================================================================
-  # Redis Service - REMOVED for single worker deployment
-  # =============================================================================
-  # Redis worker coordination has been removed in favor of single worker deployment.
-  # This reduces resource usage and eliminates coordination complexity.
-  # For scaling, use container-level horizontal scaling instead of worker coordination.
 
   # =============================================================================
   # Nginx Reverse Proxy (Optional)
@@ -364,7 +354,6 @@ volumes:
     driver: local
   mysql_data:
     driver: local
-  # redis_data volume removed for single worker deployment
 
 # =============================================================================
 # Secrets
@@ -380,4 +369,3 @@ secrets:
     file: ./secrets/ldap_bind_password
   oidc_client_secret:
     file: ./secrets/oidc_client_secret
-  # redis_password secret removed for single worker deployment

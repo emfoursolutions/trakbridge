@@ -283,7 +283,7 @@ def _should_log_ready_banner() -> bool:
 
 def _is_container_shutdown() -> bool:
     """Check if we're in a container-managed shutdown scenario"""
-    return os.getenv('CONTAINER_MANAGED', '').lower() == 'true'
+    return os.getenv("CONTAINER_MANAGED", "").lower() == "true"
 
 
 def create_app(config_name=None):

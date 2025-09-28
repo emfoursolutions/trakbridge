@@ -85,8 +85,12 @@ def load_performance_config() -> Dict[str, Any]:
 
     # Boolean environment variable for enabled flag
     if "REGRESSION_DETECTION_ENABLED" in os.environ:
-        regression_config["enabled"] = os.environ["REGRESSION_DETECTION_ENABLED"].lower() == "true"
-        logger.debug(f"Applied env override: REGRESSION_DETECTION_ENABLED={os.environ['REGRESSION_DETECTION_ENABLED']}")
+        regression_config["enabled"] = (
+            os.environ["REGRESSION_DETECTION_ENABLED"].lower() == "true"
+        )
+        logger.debug(
+            f"Applied env override: REGRESSION_DETECTION_ENABLED={os.environ['REGRESSION_DETECTION_ENABLED']}"
+        )
 
     return config
 
@@ -159,9 +163,13 @@ class QueuePerformanceOptimizer:
         perf_config = load_performance_config()
         regression_config = perf_config.get("regression_detection", {})
 
-        self.memory_regression_threshold = regression_config.get("memory_threshold", 0.40)
+        self.memory_regression_threshold = regression_config.get(
+            "memory_threshold", 0.40
+        )
         self.cpu_regression_threshold = regression_config.get("cpu_threshold", 0.40)
-        self.throughput_regression_threshold = regression_config.get("throughput_threshold", 0.40)
+        self.throughput_regression_threshold = regression_config.get(
+            "throughput_threshold", 0.40
+        )
         self.regression_detection_enabled = regression_config.get("enabled", True)
         self.baseline_samples_count = regression_config.get("baseline_samples", 10)
 
@@ -528,9 +536,7 @@ class QueuePerformanceOptimizer:
             cpu_increase = (
                 metrics.cpu_usage_percent - self.baseline_metrics.cpu_usage_percent
             )
-            if (
-                cpu_increase > self.cpu_regression_threshold * 100
-            ):
+            if cpu_increase > self.cpu_regression_threshold * 100:
                 regression_detected = True
                 logger.warning(
                     f"CPU usage regression detected: {cpu_increase:.1f}% increase"

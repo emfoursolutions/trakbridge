@@ -40,7 +40,6 @@ pytak
 python-dateutil
 python-dotenv
 PyYAML
-# redis - removed for single worker deployment
 setuptools
 setuptools-scm
 six

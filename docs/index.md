@@ -78,7 +78,6 @@ Welcome to the comprehensive documentation for TrakBridge, a professional GPS tr
 ### System Requirements
 - Python 3.12+ with Flask framework
 - PostgreSQL, MySQL or SQLite database support
-- Redis for session management (optional)
 - Docker and Docker Compose for containerized deployment
 - TAK server for data destination
 

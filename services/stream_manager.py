@@ -230,7 +230,7 @@ class StreamManager:
 
     def _is_container_shutdown(self) -> bool:
         """Check if we're in a container-managed shutdown scenario"""
-        return os.getenv('CONTAINER_MANAGED', '').lower() == 'true'
+        return os.getenv("CONTAINER_MANAGED", "").lower() == "true"
 
     async def _preload_configurations(self):
         """Preload stream configurations into cache for faster startup"""
@@ -1195,7 +1195,9 @@ class StreamManager:
         """Ensure stream is marked as stopped in database with robust error handling"""
         # Skip database update if in container shutdown to preserve active state
         if self._is_container_shutdown():
-            logger.debug(f"Skipping database update for stream {stream_id} (container shutdown)")
+            logger.debug(
+                f"Skipping database update for stream {stream_id} (container shutdown)"
+            )
             return
 
         try:
@@ -1225,7 +1227,9 @@ class StreamManager:
         """Force cleanup of stream status in database with error message"""
         # Skip database update if in container shutdown to preserve active state
         if self._is_container_shutdown():
-            logger.debug(f"Skipping force cleanup for stream {stream_id} (container shutdown)")
+            logger.debug(
+                f"Skipping force cleanup for stream {stream_id} (container shutdown)"
+            )
             return
 
         try:
