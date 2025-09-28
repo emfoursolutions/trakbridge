@@ -281,6 +281,11 @@ def _should_log_ready_banner() -> bool:
 # Coordination functions removed for single worker deployment
 
 
+def _is_container_shutdown() -> bool:
+    """Check if we're in a container-managed shutdown scenario"""
+    return os.getenv('CONTAINER_MANAGED', '').lower() == 'true'
+
+
 def create_app(config_name=None):
     global _stream_manager_ref
 
@@ -745,14 +750,20 @@ def start_active_streams():
                     try:
                         fresh_stream = Stream.query.get(stream.id)
                         if fresh_stream:
-                            fresh_stream.is_active = False
-                            fresh_stream.last_error = (
-                                "Failed to start during app startup"
-                            )
-                            db.session.commit()
-                            logger.info(
-                                f"Marked stream {stream.id} as inactive due to startup failure"
-                            )
+                            # Only mark inactive if NOT in container environment
+                            if not _is_container_shutdown():
+                                fresh_stream.is_active = False
+                                fresh_stream.last_error = (
+                                    "Failed to start during app startup"
+                                )
+                                db.session.commit()
+                                logger.info(
+                                    f"Marked stream {stream.id} as inactive due to startup failure"
+                                )
+                            else:
+                                logger.info(
+                                    f"Container environment detected - preserving active state for stream {stream.id}"
+                                )
                     except Exception as db_e:
                         logger.error(
                             f"Failed to update stream {stream.id} status: {db_e}"
