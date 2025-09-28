@@ -23,6 +23,7 @@ Created: 18-Jul-2025
 # Standard library imports
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
@@ -311,10 +312,11 @@ class StreamWorker:
                 )
                 self.running = False
                 self._startup_complete = False
-                # Update database with error
-                await self._update_stream_status_async(
-                    is_active=False, last_error=str(e)
-                )
+                # Update database with error (only if not container shutdown)
+                if not self._is_container_shutdown():
+                    await self._update_stream_status_async(
+                        is_active=False, last_error=str(e)
+                    )
                 return False
 
     async def stop(self, skip_db_update=False):
@@ -350,8 +352,8 @@ class StreamWorker:
             # The QueuedCOTService manages worker lifecycle automatically
             self._tak_worker_ensured = False
 
-            # Update database only if not during shutdown
-            if not skip_db_update:
+            # Update database only if not during shutdown and not container managed
+            if not skip_db_update and not self._is_container_shutdown():
                 await self._update_stream_status_async(is_active=False)
 
             self.logger.info(f"Stream '{self.stream.name}' stopped successfully")
@@ -374,6 +376,10 @@ class StreamWorker:
         except Exception as e:
             self.logger.error(f"Failed to update stream status asynchronously: {e}")
             return False
+
+    def _is_container_shutdown(self) -> bool:
+        """Check if we're in a container-managed shutdown scenario"""
+        return os.getenv('CONTAINER_MANAGED', '').lower() == 'true'
 
     async def _ensure_persistent_tak_worker(self) -> bool:
         """Ensure persistent PyTAK worker exists for TAK server connection"""
@@ -616,10 +622,12 @@ class StreamWorker:
                     self.logger.error(
                         f"Too many consecutive errors ({self._consecutive_errors}), stopping stream"
                     )
-                    await self._update_stream_status_async(
-                        is_active=False,
-                        last_error=f"Stopped due to {self._consecutive_errors} consecutive errors",
-                    )
+                    # Only mark inactive if not container shutdown
+                    if not self._is_container_shutdown():
+                        await self._update_stream_status_async(
+                            is_active=False,
+                            last_error=f"Stopped due to {self._consecutive_errors} consecutive errors",
+                        )
                     self.running = False
                     break
 

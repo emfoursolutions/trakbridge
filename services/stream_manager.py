@@ -38,6 +38,7 @@ Created: 18-Jul-2025
 # Standard library imports
 import asyncio
 import logging
+import os
 import threading
 import time
 from datetime import datetime, timezone
@@ -226,6 +227,10 @@ class StreamManager:
     # Coordination listener removed for single worker deployment
 
     # Configuration version tracking and coordination restart methods removed for single worker deployment
+
+    def _is_container_shutdown(self) -> bool:
+        """Check if we're in a container-managed shutdown scenario"""
+        return os.getenv('CONTAINER_MANAGED', '').lower() == 'true'
 
     async def _preload_configurations(self):
         """Preload stream configurations into cache for faster startup"""
@@ -1188,6 +1193,11 @@ class StreamManager:
 
     async def _ensure_stream_stopped_in_db(self, stream_id: int):
         """Ensure stream is marked as stopped in database with robust error handling"""
+        # Skip database update if in container shutdown to preserve active state
+        if self._is_container_shutdown():
+            logger.debug(f"Skipping database update for stream {stream_id} (container shutdown)")
+            return
+
         try:
             success = await asyncio.get_event_loop().run_in_executor(
                 None,
@@ -1213,6 +1223,11 @@ class StreamManager:
 
     async def _force_stream_cleanup_in_db(self, stream_id: int, error_message: str):
         """Force cleanup of stream status in database with error message"""
+        # Skip database update if in container shutdown to preserve active state
+        if self._is_container_shutdown():
+            logger.debug(f"Skipping force cleanup for stream {stream_id} (container shutdown)")
+            return
+
         try:
             success = await asyncio.get_event_loop().run_in_executor(
                 None,
@@ -1583,15 +1598,17 @@ class StreamManager:
                     logger.warning(
                         f"Failed to start stream {stream_id}, marking inactive in DB"
                     )
-                    await asyncio.get_event_loop().run_in_executor(
-                        None,
-                        self.db_manager.update_stream_status,
-                        stream_id,
-                        False,  # is_active = False
-                        "Failed to start during health check",  # last_error
-                        None,  # messages_sent
-                        datetime.now(timezone.utc),  # last_poll_time
-                    )
+                    # Only mark inactive if not container shutdown
+                    if not self._is_container_shutdown():
+                        await asyncio.get_event_loop().run_in_executor(
+                            None,
+                            self.db_manager.update_stream_status,
+                            stream_id,
+                            False,  # is_active = False
+                            "Failed to start during health check",  # last_error
+                            None,  # messages_sent
+                            datetime.now(timezone.utc),  # last_poll_time
+                        )
             except Exception as e:
                 logger.error(
                     f"Error handling database sync issue for stream {stream_id}: {e}"
