@@ -507,6 +507,18 @@ class StreamWorker:
                     # Apply callsign mapping if enabled
                     await self._apply_callsign_mapping(locations)
 
+                    # Check if all locations were filtered out due to disabled trackers
+                    if not locations:
+                        self.logger.info(
+                            "All trackers are disabled"
+                        )
+                        # Update stream status with success and continue
+                        await self._update_stream_status_async(
+                            last_error=None, last_poll_time=datetime.now(timezone.utc)
+                        )
+                        self._consecutive_errors = 0
+                        continue
+
                     # Send to persistent TAK server(s) if configured
                     if self._tak_worker_ensured:
                         success = await self._send_locations_to_persistent_tak(
