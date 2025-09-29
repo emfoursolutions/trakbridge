@@ -126,8 +126,12 @@ class StreamManager:
         # Check multi-server configuration
         if hasattr(stream, "tak_servers"):
             try:
-                # Use the model's get_tak_server_count method which handles both legacy and new relationships
-                count = stream.get_tak_server_count()
+                # Check if it's a Stream model with get_tak_server_count method
+                if hasattr(stream, 'get_tak_server_count'):
+                    count = stream.get_tak_server_count()
+                else:
+                    # Fallback for StreamDTO objects - count the tak_servers list
+                    count = len(stream.tak_servers) if stream.tak_servers else 0
                 logger.debug(f"Stream {stream.id} tak_servers count: {count}")
                 return count > 0
             except Exception as e:
@@ -186,8 +190,13 @@ class StreamManager:
             # Check multi-server configuration
             if hasattr(stream, "tak_servers"):
                 try:
-                    # Use the model's get_tak_server_count method
-                    server_count = stream.get_tak_server_count()
+                    # Check if it's a Stream model with get_tak_server_count method
+                    if hasattr(stream, 'get_tak_server_count'):
+                        server_count = stream.get_tak_server_count()
+                    else:
+                        # Fallback for StreamDTO objects - count the tak_servers list
+                        server_count = len(stream.tak_servers) if stream.tak_servers else 0
+
                     if server_count > 0:
                         if server_count == 1:
                             # Get the single server name for cleaner display
