@@ -1760,8 +1760,18 @@ class QueuedCOTService:
         Args:
             tak_server_id: TAK server identifier
         """
+        # Get TAK server name for better logging
+        from models.tak_server import TakServer
+        tak_server_name = "Unknown"
+        try:
+            tak_server = TakServer.query.get(tak_server_id)
+            if tak_server:
+                tak_server_name = tak_server.name or f"TAK Server {tak_server_id}"
+        except Exception:
+            tak_server_name = f"TAK Server {tak_server_id}"
+
         logger.debug(
-            f"Comprehensive worker cleanup for TAK server {tak_server_id} at {datetime.now()}"
+            f"Comprehensive worker cleanup for TAK server {tak_server_id} ({tak_server_name}) at {datetime.now()}"
         )
         logger.debug(
             f"Pre-comprehensive-cleanup worker registry: {list(self.workers.keys())}"
@@ -1775,7 +1785,7 @@ class QueuedCOTService:
 
         if tasks_to_cancel:
             logger.warning(
-                f"Found {len(tasks_to_cancel)} workers to force-stop for TAK server {tak_server_id}"
+                f"Found {len(tasks_to_cancel)} workers to force-stop for TAK server '{tak_server_name}'"
             )
             logger.debug(
                 f"Force-stopping tasks: {[id(task) for task in tasks_to_cancel]}"
@@ -1786,7 +1796,7 @@ class QueuedCOTService:
             # Wait for all cancellations
             await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
             logger.debug(
-                f"Force-cancelled worker mappings for TAK server {tak_server_id}"
+                f"Force-cancelled worker mappings for TAK server '{tak_server_name}'"
             )
 
         # Ensure cleanup

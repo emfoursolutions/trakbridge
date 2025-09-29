@@ -126,8 +126,8 @@ class StreamManager:
         # Check multi-server configuration
         if hasattr(stream, "tak_servers"):
             try:
-                # Use count() for dynamic relationships - more efficient
-                count = stream.tak_servers.count()
+                # Use the model's get_tak_server_count method which handles both legacy and new relationships
+                count = stream.get_tak_server_count()
                 logger.debug(f"Stream {stream.id} tak_servers count: {count}")
                 return count > 0
             except Exception as e:
@@ -186,7 +186,8 @@ class StreamManager:
             # Check multi-server configuration
             if hasattr(stream, "tak_servers"):
                 try:
-                    server_count = stream.tak_servers.count()
+                    # Use the model's get_tak_server_count method
+                    server_count = stream.get_tak_server_count()
                     if server_count > 0:
                         if server_count == 1:
                             # Get the single server name for cleaner display
