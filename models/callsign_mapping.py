@@ -44,6 +44,15 @@ class CallsignMapping(db.Model, TimestampMixin):
     enabled = db.Column(
         db.Boolean, nullable=False, default=True
     )  # Enable/disable tracker
+    cot_type_override = db.Column(
+        db.String(50), nullable=True
+    )  # Override for team member CoT type
+    team_role = db.Column(
+        db.String(50), nullable=True
+    )  # Team member role selection
+    team_color = db.Column(
+        db.String(50), nullable=True
+    )  # Team member color selection
 
     # Relationships
     stream = db.relationship("Stream", back_populates="callsign_mappings")
@@ -65,6 +74,9 @@ class CallsignMapping(db.Model, TimestampMixin):
         custom_callsign: str,
         cot_type: str = None,
         enabled: bool = True,
+        cot_type_override: str = None,
+        team_role: str = None,
+        team_color: str = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -73,9 +85,38 @@ class CallsignMapping(db.Model, TimestampMixin):
         self.custom_callsign = custom_callsign
         self.cot_type = cot_type
         self.enabled = enabled
+        self.cot_type_override = cot_type_override
+        self.team_role = team_role
+        self.team_color = team_color
 
     def __repr__(self):
         return f"<CallsignMapping {self.identifier_value} -> {self.custom_callsign}>"
+
+    def validate_team_member_fields(self):
+        """Validate team member configuration fields"""
+        valid_roles = [
+            "Team Member", "Team Lead", "HQ", "Sniper", "Medic",
+            "Forward Observer", "RTO", "K9"
+        ]
+
+        valid_colors = [
+            "Teal", "Green", "Dark Green", "Brown", "White", "Yellow",
+            "Orange", "Magenta", "Red", "Maroon", "Purple", "Dark Blue",
+            "Blue", "Cyan"
+        ]
+
+        # If cot_type_override is "team_member", both role and color are required
+        if self.cot_type_override == "team_member":
+            if not self.team_role or not self.team_color:
+                raise ValueError("Team member configuration requires both role and color")
+
+            if self.team_role not in valid_roles:
+                raise ValueError(f"Invalid team role: {self.team_role}. Must be one of: {', '.join(valid_roles)}")
+
+            if self.team_color not in valid_colors:
+                raise ValueError(f"Invalid team color: {self.team_color}. Must be one of: {', '.join(valid_colors)}")
+
+        # If not team_member, role and color can be null - no validation needed
 
     def to_dict(self):
         """Convert callsign mapping to dictionary for JSON serialization"""
@@ -86,6 +127,9 @@ class CallsignMapping(db.Model, TimestampMixin):
             "custom_callsign": self.custom_callsign,
             "cot_type": self.cot_type,
             "enabled": self.enabled,
-            "created_at": self.created_at.isoformat(),
-            "updated_at": self.updated_at.isoformat(),
+            "cot_type_override": self.cot_type_override,
+            "team_role": self.team_role,
+            "team_color": self.team_color,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
