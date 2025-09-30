@@ -49,6 +49,42 @@ from services.health_service import health_service
 
 # Module-level logger
 from services.logging_service import get_module_logger
+
+# Team member configuration constants
+TEAM_MEMBER_ROLES = [
+    "Team Member", "Team Lead", "HQ", "Sniper", "Medic",
+    "Forward Observer", "RTO", "K9"
+]
+
+TEAM_MEMBER_COLORS = [
+    "Teal", "Green", "Dark Green", "Brown", "White", "Yellow",
+    "Orange", "Magenta", "Red", "Maroon", "Purple", "Dark Blue",
+    "Blue", "Cyan"
+]
+
+COT_TYPE_OPTIONS = ["Default", "Standard Point", "Team Member"]
+
+
+def validate_team_member_configuration(cot_type_override, team_role, team_color):
+    """
+    Validate team member configuration and return error message if invalid.
+
+    Returns:
+        None if valid, error message string if invalid
+    """
+    if cot_type_override == "team_member":
+        if not team_role or not team_color:
+            return "Team member configuration requires both role and color"
+
+        if team_role not in TEAM_MEMBER_ROLES:
+            return f"Invalid team role: {team_role}. Must be one of: {', '.join(TEAM_MEMBER_ROLES)}"
+
+        if team_color not in TEAM_MEMBER_COLORS:
+            return f"Invalid team color: {team_color}. Must be one of: {', '.join(TEAM_MEMBER_COLORS)}"
+
+    return None
+
+
 from services.plugin_category_service import get_category_service
 from services.stream_config_service import StreamConfigService
 from services.stream_display_service import StreamDisplayService
@@ -1172,12 +1208,16 @@ def discover_trackers():
                     f"Error getting available fields from {plugin_type}: {e}"
                 )
 
+        # Add team member options for UI dropdowns
         return jsonify(
             {
                 "success": True,
                 "tracker_count": len(tracker_data),
                 "trackers": tracker_data,
                 "available_fields": available_fields,
+                "cot_type_options": COT_TYPE_OPTIONS,
+                "team_role_options": TEAM_MEMBER_ROLES,
+                "team_color_options": TEAM_MEMBER_COLORS,
             }
         )
 
@@ -1257,13 +1297,35 @@ def update_callsign_mappings(stream_id):
                 ):
                     continue
 
+                # Extract team member fields
+                cot_type_override = mapping_data.get("cot_type_override")
+                team_role = mapping_data.get("team_role")
+                team_color = mapping_data.get("team_color")
+
+                # Validate team member configuration
+                validation_error = validate_team_member_configuration(
+                    cot_type_override, team_role, team_color
+                )
+                if validation_error:
+                    return jsonify({"error": validation_error}), 400
+
                 mapping = CallsignMapping(
                     stream_id=stream_id,
                     identifier_value=mapping_data["identifier_value"],
                     custom_callsign=mapping_data["custom_callsign"],
                     cot_type=mapping_data.get("cot_type"),
-                    enabled=mapping_data.get("enabled", True),  # Include enabled field
+                    enabled=mapping_data.get("enabled", True),
+                    cot_type_override=cot_type_override,
+                    team_role=team_role,
+                    team_color=team_color,
                 )
+
+                # Validate using model method
+                try:
+                    mapping.validate_team_member_fields()
+                except ValueError as e:
+                    return jsonify({"error": str(e)}), 400
+
                 db.session.add(mapping)
 
         db.session.commit()
@@ -1326,6 +1388,35 @@ def get_plugin_available_fields(plugin_type):
     except Exception as e:
         logger.error(f"Error getting available fields for {plugin_type}: {e}")
         return jsonify({"error": "Failed to get available fields"}), 500
+
+
+# =============================================================================
+# Team Member API Routes
+# =============================================================================
+
+
+@bp.route("/team-member/role-options", methods=["GET"])
+@require_permission("api", "read")
+def get_team_member_role_options():
+    """Get available team member role options"""
+    try:
+        return jsonify({"roles": TEAM_MEMBER_ROLES})
+
+    except Exception as e:
+        logger.error(f"Error getting team member role options: {e}")
+        return jsonify({"error": "Failed to get team member role options"}), 500
+
+
+@bp.route("/team-member/color-options", methods=["GET"])
+@require_permission("api", "read")
+def get_team_member_color_options():
+    """Get available team member color options"""
+    try:
+        return jsonify({"colors": TEAM_MEMBER_COLORS})
+
+    except Exception as e:
+        logger.error(f"Error getting team member color options: {e}")
+        return jsonify({"error": "Failed to get team member color options"}), 500
 
 
 @bp.route("/version")
