@@ -230,10 +230,10 @@
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" id="enable_per_callsign_cot_types" name="enable_per_callsign_cot_types" onchange="togglePerCallsignCotTypes()">
                                 <label class="form-check-label" for="enable_per_callsign_cot_types">
-                                    Enable per-tracker CoT type overrides
+                                    Enable individual tracker CoT type configuration
                                 </label>
                             </div>
-                            <div class="form-text">Allow different CoT types for individual trackers</div>
+                            <div class="form-text">Allow individual tracker configuration with custom CoT types or team member settings</div>
                         </div>
 
                         <!-- Tracker discovery and mapping -->
@@ -294,6 +294,9 @@
                                                 <th>Current Name</th>
                                                 <th>Assigned Callsign</th>
                                                 <th id="cot-type-header" style="display: none;">CoT Type</th>
+                                                <th id="cot-type-override-header" style="display: none;">CoT Type Override</th>
+                                                <th id="team-role-header" style="display: none;">Team Role</th>
+                                                <th id="team-color-header" style="display: none;">Team Color</th>
                                             </tr>
                                         </thead>
                                         <tbody id="tracker-mapping-tbody">
@@ -817,6 +820,11 @@ function getCategoryMapping(pluginCategory) {
 // Callsign mapping functionality
 let currentTrackerData = [];
 let availableFields = [];
+let teamMemberOptions = {
+    cotTypes: [],
+    roles: [],
+    colors: []
+};
 
 async function loadAvailableFields(pluginType) {
     try {
@@ -868,15 +876,41 @@ function toggleCallsignMapping() {
 
 function togglePerCallsignCotTypes() {
     const enabled = document.getElementById('enable_per_callsign_cot_types').checked;
-    const header = document.getElementById('cot-type-header');
-    const cells = document.querySelectorAll('.cot-type-cell');
-    
+    const cotTypeHeader = document.getElementById('cot-type-header');
+    const cotTypeOverrideHeader = document.getElementById('cot-type-override-header');
+    const teamRoleHeader = document.getElementById('team-role-header');
+    const teamColorHeader = document.getElementById('team-color-header');
+
+    const cotTypeOverrideCells = document.querySelectorAll('.cot-type-override-cell');
+
     if (enabled) {
-        header.style.display = 'table-cell';
-        cells.forEach(cell => cell.style.display = 'table-cell');
+        // Show the primary CoT type override column and conditional headers
+        if (cotTypeOverrideHeader) cotTypeOverrideHeader.style.display = 'table-cell';
+        if (cotTypeHeader) cotTypeHeader.style.display = 'table-cell';
+        if (teamRoleHeader) teamRoleHeader.style.display = 'table-cell';
+        if (teamColorHeader) teamColorHeader.style.display = 'table-cell';
+
+        // Show CoT type override dropdowns
+        cotTypeOverrideCells.forEach(cell => cell.style.display = 'table-cell');
+
+        // Apply current state to each row based on existing selections
+        document.querySelectorAll('[id^="cot_type_override_"]').forEach((select, index) => {
+            if (select.value) {
+                toggleTeamMemberFields(index);
+            }
+        });
     } else {
-        header.style.display = 'none';
-        cells.forEach(cell => cell.style.display = 'none');
+        // Hide all advanced configuration columns
+        if (cotTypeHeader) cotTypeHeader.style.display = 'none';
+        if (cotTypeOverrideHeader) cotTypeOverrideHeader.style.display = 'none';
+        if (teamRoleHeader) teamRoleHeader.style.display = 'none';
+        if (teamColorHeader) teamColorHeader.style.display = 'none';
+
+        // Hide all related cells
+        document.querySelectorAll('.cot-type-cell').forEach(cell => cell.style.display = 'none');
+        cotTypeOverrideCells.forEach(cell => cell.style.display = 'none');
+        document.querySelectorAll('.team-role-cell').forEach(cell => cell.style.display = 'none');
+        document.querySelectorAll('.team-color-cell').forEach(cell => cell.style.display = 'none');
     }
 }
 
@@ -936,6 +970,14 @@ async function refreshTrackerDiscovery() {
         
         if (data.success) {
             currentTrackerData = data.trackers || [];
+
+            // Store team member options for use in dropdowns
+            teamMemberOptions = {
+                cotTypes: data.cot_type_options || [],
+                roles: data.team_role_options || [],
+                colors: data.team_color_options || []
+            };
+
             populateTrackerMappingTable(identifierField);
         } else {
             showAlert('Failed to discover trackers: ' + (data.error || 'Unknown error'), 'warning');
@@ -1011,13 +1053,39 @@ function populateTrackerMappingTable(identifierField) {
                 <input type="hidden" name="callsign_mapping_${index}_identifier" value="${identifierValue}">
             </td>
             <td class="cot-type-cell" style="display: ${perCallsignCotEnabled ? 'table-cell' : 'none'}">
-                <select class="form-select form-select-sm" 
+                <select class="form-select form-select-sm"
                         id="cot_type_${index}"
                         name="callsign_mapping_${index}_cot_type">
                     <option value="">Use stream default</option>
                     {% for cot_type in cot_types %}
                     <option value="{{ cot_type.value }}">{{ cot_type.label }}</option>
                     {% endfor %}
+                </select>
+            </td>
+            <td class="cot-type-override-cell" style="display: ${perCallsignCotEnabled ? 'table-cell' : 'none'}">
+                <select class="form-select form-select-sm"
+                        id="cot_type_override_${index}"
+                        name="callsign_mapping_${index}_cot_type_override"
+                        onchange="toggleTeamMemberFields(${index})">
+                    <option value="">Default</option>
+                    <option value="standard_point">Standard Point</option>
+                    <option value="team_member">Team Member</option>
+                </select>
+            </td>
+            <td class="team-role-cell" style="display: none;">
+                <select class="form-select form-select-sm"
+                        id="team_role_${index}"
+                        name="callsign_mapping_${index}_team_role">
+                    <option value="">Select Role</option>
+                    <!-- Dynamic options from API -->
+                </select>
+            </td>
+            <td class="team-color-cell" style="display: none;">
+                <select class="form-select form-select-sm"
+                        id="team_color_${index}"
+                        name="callsign_mapping_${index}_team_color">
+                    <option value="">Select Color</option>
+                    <!-- Dynamic options from API -->
                 </select>
             </td>
         `;
@@ -1063,6 +1131,101 @@ function generateCleanCallsign(identifier) {
     }
     
     return callsign;
+}
+
+function toggleTeamMemberFields(index) {
+    const cotTypeOverrideSelect = document.getElementById(`cot_type_override_${index}`);
+    const cotTypeCell = document.querySelector(`#cot_type_${index}`).closest('td');
+    const roleCell = document.querySelector(`#team_role_${index}`).closest('td');
+    const colorCell = document.querySelector(`#team_color_${index}`).closest('td');
+
+    const overrideValue = cotTypeOverrideSelect.value;
+
+    // Hide all optional fields first
+    cotTypeCell.style.display = 'none';
+    roleCell.style.display = 'none';
+    colorCell.style.display = 'none';
+
+    // Show appropriate fields based on selection
+    if (overrideValue === 'standard_point') {
+        // Show regular CoT type dropdown
+        cotTypeCell.style.display = 'table-cell';
+    } else if (overrideValue === 'team_member') {
+        // Show team member fields
+        roleCell.style.display = 'table-cell';
+        colorCell.style.display = 'table-cell';
+        populateTeamMemberDropdowns(index);
+    }
+    // If "Default" is selected, nothing additional is shown
+}
+
+function populateTeamMemberDropdowns(index) {
+    const roleSelect = document.getElementById(`team_role_${index}`);
+    const colorSelect = document.getElementById(`team_color_${index}`);
+
+    if (!roleSelect || !colorSelect) {
+        console.error(`Team member dropdowns not found for index ${index}`);
+        return;
+    }
+
+    if (!teamMemberOptions.roles || !teamMemberOptions.colors) {
+        console.error('Team member options not available:', teamMemberOptions);
+        return;
+    }
+
+    // Populate role dropdown - API returns simple string arrays
+    roleSelect.innerHTML = '<option value="">Select Role</option>';
+    teamMemberOptions.roles.forEach(role => {
+        const option = document.createElement('option');
+        option.value = role;
+        option.textContent = role;
+        roleSelect.appendChild(option);
+    });
+
+    // Populate color dropdown - API returns simple string arrays
+    colorSelect.innerHTML = '<option value="">Select Color</option>';
+    teamMemberOptions.colors.forEach(color => {
+        const option = document.createElement('option');
+        option.value = color;
+        option.textContent = color;
+        colorSelect.appendChild(option);
+    });
+
+    console.log(`Populated team member dropdowns for tracker ${index}:`, {
+        roles: teamMemberOptions.roles.length,
+        colors: teamMemberOptions.colors.length
+    });
+}
+
+function validateTeamMemberConfiguration() {
+    const errors = [];
+
+    document.querySelectorAll('[name*="_cot_type_override"]').forEach((select) => {
+        if (select.value === 'team_member') {
+            // Extract the index from the select's name attribute
+            const nameMatch = select.name.match(/callsign_mapping_(\d+)_cot_type_override/);
+            if (nameMatch) {
+                const index = nameMatch[1];
+                const roleSelect = document.querySelector(`[name="callsign_mapping_${index}_team_role"]`);
+                const colorSelect = document.querySelector(`[name="callsign_mapping_${index}_team_color"]`);
+
+                if (!roleSelect || !roleSelect.value) {
+                    errors.push(`Team member role required for tracker ${parseInt(index) + 1}`);
+                }
+
+                if (!colorSelect || !colorSelect.value) {
+                    errors.push(`Team member color required for tracker ${parseInt(index) + 1}`);
+                }
+            }
+        }
+    });
+
+    if (errors.length > 0) {
+        showAlert(errors.join(', '), 'danger');
+        return false;
+    }
+
+    return true;
 }
 
 function clearTrackerMappingTable() {
@@ -1159,6 +1322,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (form) {
         form.addEventListener('submit', function(e) {
             if (!validateServerSelection()) {
+                e.preventDefault();
+                return false;
+            }
+
+            if (!validateTeamMemberConfiguration()) {
                 e.preventDefault();
                 return false;
             }
@@ -1300,26 +1468,35 @@ function bulkEnableTrackers(enabled) {
 function getTrackerFormData() {
     const trackerMappings = [];
     const enabledCheckboxes = document.querySelectorAll('input[name*="_enabled"]');
-    
+
     enabledCheckboxes.forEach((checkbox, index) => {
         const identifierInput = document.querySelector(`input[name="callsign_mapping_${index}_identifier"]`);
         const callsignInput = document.querySelector(`input[name="callsign_mapping_${index}_callsign"]`);
         const cotTypeSelect = document.querySelector(`select[name="callsign_mapping_${index}_cot_type"]`);
-        
+        const cotTypeOverrideSelect = document.querySelector(`select[name="callsign_mapping_${index}_cot_type_override"]`);
+        const teamRoleSelect = document.querySelector(`select[name="callsign_mapping_${index}_team_role"]`);
+        const teamColorSelect = document.querySelector(`select[name="callsign_mapping_${index}_team_color"]`);
+
         if (identifierInput && callsignInput) {
-            trackerMappings.push({
+            const mapping = {
                 identifier: identifierInput.value,
                 callsign: callsignInput.value,
                 enabled: checkbox.checked,
-                cot_type: cotTypeSelect ? cotTypeSelect.value : ''
-            });
+                cot_type: cotTypeSelect ? cotTypeSelect.value : '',
+                cot_type_override: cotTypeOverrideSelect ? cotTypeOverrideSelect.value : null,
+                team_role: teamRoleSelect ? teamRoleSelect.value : null,
+                team_color: teamColorSelect ? teamColorSelect.value : null
+            };
+
+            trackerMappings.push(mapping);
         }
     });
-    
+
     return {
         tracker_mappings: trackerMappings,
         total_trackers: trackerMappings.length,
-        enabled_trackers: trackerMappings.filter(t => t.enabled).length
+        enabled_trackers: trackerMappings.filter(t => t.enabled).length,
+        team_members: trackerMappings.filter(t => t.cot_type_override === 'team_member').length
     };
 }
 
