@@ -293,8 +293,8 @@
                                                 <th>Identifier</th>
                                                 <th>Current Name</th>
                                                 <th>Assigned Callsign</th>
-                                                <th id="cot-type-header" style="display: none;">CoT Type</th>
                                                 <th id="cot-type-override-header" style="display: none;">CoT Type Override</th>
+                                                <th id="cot-type-header" style="display: none;">CoT Type</th>
                                                 <th id="team-role-header" style="display: none;">Team Role</th>
                                                 <th id="team-color-header" style="display: none;">Team Color</th>
                                             </tr>
@@ -884,11 +884,8 @@ function togglePerCallsignCotTypes() {
     const cotTypeOverrideCells = document.querySelectorAll('.cot-type-override-cell');
 
     if (enabled) {
-        // Show the primary CoT type override column and conditional headers
+        // Show the primary CoT type override column
         if (cotTypeOverrideHeader) cotTypeOverrideHeader.style.display = 'table-cell';
-        if (cotTypeHeader) cotTypeHeader.style.display = 'table-cell';
-        if (teamRoleHeader) teamRoleHeader.style.display = 'table-cell';
-        if (teamColorHeader) teamColorHeader.style.display = 'table-cell';
 
         // Show CoT type override dropdowns
         cotTypeOverrideCells.forEach(cell => cell.style.display = 'table-cell');
@@ -897,8 +894,17 @@ function togglePerCallsignCotTypes() {
         document.querySelectorAll('[id^="cot_type_override_"]').forEach((select, index) => {
             if (select.value) {
                 toggleTeamMemberFields(index);
+            } else {
+                // Default behavior: show CoT type cell for rows with no override selection
+                const cotTypeCell = document.querySelector(`#cot_type_${index}`).closest('td');
+                if (cotTypeCell) {
+                    cotTypeCell.style.display = 'table-cell';
+                }
             }
         });
+
+        // Update header visibility based on current selections
+        updateHeaderVisibility();
     } else {
         // Hide all advanced configuration columns
         if (cotTypeHeader) cotTypeHeader.style.display = 'none';
@@ -1052,16 +1058,6 @@ function populateTrackerMappingTable(identifierField) {
                        placeholder="Enter callsign">
                 <input type="hidden" name="callsign_mapping_${index}_identifier" value="${identifierValue}">
             </td>
-            <td class="cot-type-cell" style="display: ${perCallsignCotEnabled ? 'table-cell' : 'none'}">
-                <select class="form-select form-select-sm"
-                        id="cot_type_${index}"
-                        name="callsign_mapping_${index}_cot_type">
-                    <option value="">Use stream default</option>
-                    {% for cot_type in cot_types %}
-                    <option value="{{ cot_type.value }}">{{ cot_type.label }}</option>
-                    {% endfor %}
-                </select>
-            </td>
             <td class="cot-type-override-cell" style="display: ${perCallsignCotEnabled ? 'table-cell' : 'none'}">
                 <select class="form-select form-select-sm"
                         id="cot_type_override_${index}"
@@ -1070,6 +1066,16 @@ function populateTrackerMappingTable(identifierField) {
                     <option value="">Default</option>
                     <option value="standard_point">Standard Point</option>
                     <option value="team_member">Team Member</option>
+                </select>
+            </td>
+            <td class="cot-type-cell" style="display: none;">
+                <select class="form-select form-select-sm"
+                        id="cot_type_${index}"
+                        name="callsign_mapping_${index}_cot_type">
+                    <option value="">Use stream default</option>
+                    {% for cot_type in cot_types %}
+                    <option value="{{ cot_type.value }}">{{ cot_type.label }}</option>
+                    {% endfor %}
                 </select>
             </td>
             <td class="team-role-cell" style="display: none;">
@@ -1133,6 +1139,50 @@ function generateCleanCallsign(identifier) {
     return callsign;
 }
 
+function updateHeaderVisibility() {
+    const cotTypeHeader = document.getElementById('cot-type-header');
+    const cotTypeOverrideHeader = document.getElementById('cot-type-override-header');
+    const teamRoleHeader = document.getElementById('team-role-header');
+    const teamColorHeader = document.getElementById('team-color-header');
+
+    // Check if per-callsign CoT types are enabled
+    const perCallsignEnabled = document.getElementById('enable_per_callsign_cot_types').checked;
+
+    if (!perCallsignEnabled) {
+        // If per-callsign is disabled, hide all headers
+        if (cotTypeHeader) cotTypeHeader.style.display = 'none';
+        if (cotTypeOverrideHeader) cotTypeOverrideHeader.style.display = 'none';
+        if (teamRoleHeader) teamRoleHeader.style.display = 'none';
+        if (teamColorHeader) teamColorHeader.style.display = 'none';
+        return;
+    }
+
+    // CoT Type Override header should ALWAYS be visible when per-callsign is enabled
+    if (cotTypeOverrideHeader) {
+        cotTypeOverrideHeader.style.display = 'table-cell';
+    }
+
+    // Check if any row has standard_point selected
+    const hasStandardPoint = Array.from(document.querySelectorAll('[id^="cot_type_override_"]'))
+        .some(select => select.value === 'standard_point');
+
+    // Check if any row has team_member selected
+    const hasTeamMember = Array.from(document.querySelectorAll('[id^="cot_type_override_"]'))
+        .some(select => select.value === 'team_member');
+
+    // Show/hide headers based on current selections
+    // CoT Type header should be visible if per-callsign is enabled AND any standard_point is selected
+    if (cotTypeHeader) {
+        cotTypeHeader.style.display = hasStandardPoint ? 'table-cell' : 'none';
+    }
+    if (teamRoleHeader) {
+        teamRoleHeader.style.display = hasTeamMember ? 'table-cell' : 'none';
+    }
+    if (teamColorHeader) {
+        teamColorHeader.style.display = hasTeamMember ? 'table-cell' : 'none';
+    }
+}
+
 function toggleTeamMemberFields(index) {
     const cotTypeOverrideSelect = document.getElementById(`cot_type_override_${index}`);
     const cotTypeCell = document.querySelector(`#cot_type_${index}`).closest('td');
@@ -1157,6 +1207,9 @@ function toggleTeamMemberFields(index) {
         populateTeamMemberDropdowns(index);
     }
     // If "Default" is selected, nothing additional is shown
+
+    // Update header visibility after changes
+    updateHeaderVisibility();
 }
 
 function populateTeamMemberDropdowns(index) {
@@ -1570,6 +1623,16 @@ function populateTrackerMappingTableWithState(identifierField) {
 
 .server-card .server-name {
     font-weight: 600;
+}
+
+/* Fix for table header background when columns are dynamically shown/hidden */
+.table thead th {
+    background-color: var(--bs-gray-100) !important;
+    border-bottom: 2px solid var(--bs-gray-300) !important;
+}
+
+.table thead th:not([style*="display: none"]) {
+    background-color: var(--bs-gray-100) !important;
 }
 
 .server-card .server-details {

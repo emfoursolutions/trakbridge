@@ -1254,6 +1254,25 @@ def get_callsign_mappings(stream_id):
         return jsonify({"error": "Failed to get callsign mappings"}), 500
 
 
+@bp.route("/team-member-options")
+@require_permission("streams", "read")
+def get_team_member_options():
+    """Get team member configuration options for UI dropdowns"""
+    try:
+        return jsonify(
+            {
+                "success": True,
+                "cot_type_options": COT_TYPE_OPTIONS,
+                "team_role_options": TEAM_MEMBER_ROLES,
+                "team_color_options": TEAM_MEMBER_COLORS,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting team member options: {e}")
+        return jsonify({"error": "Failed to get team member options"}), 500
+
+
 @bp.route("/streams/<int:stream_id>/callsign-mappings", methods=["POST", "PUT"])
 @require_permission("streams", "write")
 def update_callsign_mappings(stream_id):

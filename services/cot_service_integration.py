@@ -776,8 +776,9 @@ class QueuedCOTService:
 
                     # Add team member metadata to event_data
                     event_data["team_member_enabled"] = True
-                    event_data["team_role"] = additional_data.get("team_role", "")
-                    event_data["team_color"] = additional_data.get("team_color", "")
+                    # Handle None values - convert to empty string
+                    event_data["team_role"] = additional_data.get("team_role") or ""
+                    event_data["team_color"] = additional_data.get("team_color") or ""
 
                 # Add optional fields
                 if "speed" in cleaned_location:
