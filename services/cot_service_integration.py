@@ -767,6 +767,19 @@ class QueuedCOTService:
                     "callsign": callsign_value,
                 }
 
+                # Check for team member configuration in additional_data
+                additional_data = cleaned_location.get("additional_data", {})
+                if additional_data.get("team_member_enabled"):
+                    # Override COT type for team members
+                    event_data["type"] = "a-f-G-U-C"
+                    event_data["how"] = "h-e"  # Team member how attribute
+
+                    # Add team member metadata to event_data
+                    event_data["team_member_enabled"] = True
+                    # Handle None values - convert to empty string
+                    event_data["team_role"] = additional_data.get("team_role") or ""
+                    event_data["team_color"] = additional_data.get("team_color") or ""
+
                 # Add optional fields
                 if "speed" in cleaned_location:
                     try:
@@ -2149,18 +2162,55 @@ class QueuedCOTService:
             # Add detail element
             detail = etree.SubElement(cot_event, "detail")
 
+            # Add platform info (takv element)
+            takv = etree.SubElement(detail, "takv")
+            takv.set("os", "34")
+            takv.set("version", "TrakBridge")
+            takv.set("device", "TrakBridge")
+            takv.set("platform", "TrakBridge")
+
+            # Check if this is a team member and add appropriate elements
+            is_team_member = event_data.get("team_member_enabled", False)
+
             # Add contact info with endpoint (important for TAK Server)
             contact = etree.SubElement(detail, "contact")
             contact.set("callsign", event_data["callsign"])
-            # contact.set("endpoint", "*:-1:stcp")  # Standard endpoint format
 
-            # Add track information if available
-            if "speed" in event_data or "course" in event_data:
+            if is_team_member:
+                # Team member specific contact format
+                contact.set("endpoint", "*:-1:stcp")
+                # Note: Team members do NOT have xmppUsername attribute
+
+                # Add uid element for team members (Droid attribute)
+                uid = etree.SubElement(detail, "uid")
+                uid.set("Droid", event_data["callsign"])
+
+                # Add precisionlocation element
+                precision = etree.SubElement(detail, "precisionlocation")
+                precision.set("altsrc", "DTED0")
+                precision.set("geopointsrc", "USER")
+
+                # Add __group element with role and color
+                group = etree.SubElement(detail, "__group")
+                group.set("role", event_data.get("team_role", ""))
+                group.set("name", event_data.get("team_color", ""))
+
+                # Add status element (battery)
+                status = etree.SubElement(detail, "status")
+                status.set("battery", "49")  # Static battery value as per spec
+
+            # Add track information if available or for team members
+            if "speed" in event_data or "course" in event_data or is_team_member:
                 track = etree.SubElement(detail, "track")
                 if "speed" in event_data:
                     track.set("speed", f"{event_data['speed']:.2f}")
+                elif is_team_member:
+                    track.set("speed", "0.0")  # Default speed for team members
+
                 if "course" in event_data:
                     track.set("course", f"{event_data['course']:.2f}")
+                elif is_team_member:
+                    track.set("course", "335.92489054527624")  # Default course as per spec
 
             # Add remarks if available
             if "remarks" in event_data:

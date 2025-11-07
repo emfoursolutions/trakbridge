@@ -347,6 +347,52 @@ class BaseGPSPlugin(ABC):
                 return False
         return False
 
+    def _apply_mapping_and_team_member_data(
+        self, location: dict, identifier_value: str, mapping_data, plugin_name: str = None
+    ) -> None:
+        """
+        Common helper method to apply callsign mapping and team member data to a location.
+
+        Args:
+            location: Location dictionary to modify
+            identifier_value: The identifier value used for mapping
+            mapping_data: Either a string (old format) or dict (new format with team member data)
+            plugin_name: Optional plugin name for logging
+        """
+        if plugin_name is None:
+            plugin_name = self.plugin_name
+
+        # Handle both old format (string) and new format (dict with team member data)
+        if isinstance(mapping_data, str):
+            # Old format: just the callsign string
+            custom_callsign = mapping_data
+            location["name"] = custom_callsign
+            get_logger().debug(
+                f"[{plugin_name}] Applied callsign mapping: {identifier_value} -> {custom_callsign}"
+            )
+        elif isinstance(mapping_data, dict):
+            # New format: dict with callsign and optional team member data
+            custom_callsign = mapping_data.get("custom_callsign")
+            if custom_callsign:
+                location["name"] = custom_callsign
+                get_logger().debug(
+                    f"[{plugin_name}] Applied callsign mapping: {identifier_value} -> {custom_callsign}"
+                )
+
+            # Add team member metadata to location's additional_data if configured
+            if mapping_data.get("team_member_enabled"):
+                if "additional_data" not in location:
+                    location["additional_data"] = {}
+
+                location["additional_data"]["team_member_enabled"] = True
+                location["additional_data"]["team_role"] = mapping_data.get("team_role")
+                location["additional_data"]["team_color"] = mapping_data.get("team_color")
+
+                get_logger().debug(
+                    f"[{plugin_name}] Added team member metadata: {identifier_value} -> "
+                    f"role={mapping_data.get('team_role')}, color={mapping_data.get('team_color')}"
+                )
+
     def _get_circuit_breaker(self):
         """Get or create circuit breaker for this plugin instance"""
         if not self._circuit_breaker_initialized:

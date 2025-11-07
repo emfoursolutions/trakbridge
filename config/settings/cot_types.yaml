@@ -82,6 +82,12 @@ cot_types:
     description: "Friendly rotary wing (helicopter)"
     category: "friendly"
 
+  - value: "a-u-A"
+    sidc: "SUA---------.svg"
+    label: "Unknown Air Unit"
+    description: "Unknown Air Unit"
+    category: "unknown"
+
   - value: "a-f-S"
     sidc: "SFSP-------.svg"
     label: "Friendly Maritime Unit"

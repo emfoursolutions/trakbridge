@@ -754,10 +754,16 @@ class StreamOperationsService:
             callsign_key = f"callsign_mapping_{mapping_index}_callsign"
             cot_type_key = f"callsign_mapping_{mapping_index}_cot_type"
             enabled_key = f"callsign_mapping_{mapping_index}_enabled"
+            cot_type_override_key = f"callsign_mapping_{mapping_index}_cot_type_override"
+            team_role_key = f"callsign_mapping_{mapping_index}_team_role"
+            team_color_key = f"callsign_mapping_{mapping_index}_team_color"
 
             identifier_value = data.get(identifier_key)
             custom_callsign = data.get(callsign_key)
             cot_type = data.get(cot_type_key) or None  # Empty string becomes None
+            cot_type_override = data.get(cot_type_override_key) or None  # Empty string becomes None
+            team_role = data.get(team_role_key) or None  # Empty string becomes None
+            team_color = data.get(team_color_key) or None  # Empty string becomes None
 
             # Handle enabled field - checkbox data comes as 'on' or not present
             enabled_value = data.get(enabled_key)
@@ -783,6 +789,9 @@ class StreamOperationsService:
                     or "",  # Form data should include callsign
                     cot_type=cot_type,
                     enabled=enabled,
+                    cot_type_override=cot_type_override,
+                    team_role=team_role,
+                    team_color=team_color,
                 )
                 self._get_session().add(mapping)
 

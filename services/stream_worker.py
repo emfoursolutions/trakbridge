@@ -717,13 +717,15 @@ class StreamWorker:
 
             if cot_type_mode == "per_point" or bool(enable_per_cot_types):
                 cot_type_mode = "per_point"
+                mode = fresh_stream_config.get('cot_type_mode', 'stream')
                 self.logger.debug(
-                    f"Using per_point mode (fresh config mode: {fresh_stream_config.get('cot_type_mode', 'stream')}, "
+                    f"Using per_point mode (fresh config mode: {mode}, "
                     f"per-callsign CoT types enabled: {bool(enable_per_cot_types)})"
                 )
             else:
+                mode = fresh_stream_config.get('cot_type_mode', 'stream')
                 self.logger.debug(
-                    f"Using stream mode (fresh config mode: {fresh_stream_config.get('cot_type_mode', 'stream')}, "
+                    f"Using stream mode (fresh config mode: {mode}, "
                     f"per-callsign CoT types enabled: {bool(enable_per_cot_types)})"
                 )
 
@@ -876,10 +878,12 @@ class StreamWorker:
                 )
                 return
 
+        identifier_field = fresh_stream_config.get('callsign_identifier_field')
+        error_handling = fresh_stream_config.get('callsign_error_handling', 'fallback')
         self.logger.info(
-            f"Applying {len(callsign_mappings)} callsign mappings for {len(locations)} locations "
-            f"using identifier field '{fresh_stream_config.get('callsign_identifier_field')}' "
-            f"(error handling: {fresh_stream_config.get('callsign_error_handling', 'fallback')})"
+            f"Applying {len(callsign_mappings)} callsign mappings for "
+            f"{len(locations)} locations using identifier field '{identifier_field}' "
+            f"(error handling: {error_handling})"
         )
 
         # First, filter out disabled trackers before applying mappings
@@ -933,12 +937,43 @@ class StreamWorker:
                         )
                         location["name"] = mapping.custom_callsign
 
-                    # Apply per-callsign CoT type if enabled and configured
-                    if bool(enable_per_cot_types) and mapping.cot_type:
-                        location["cot_type"] = mapping.cot_type
-                        self.logger.info(
-                            f"Applied per-callsign CoT type '{mapping.cot_type}' for identifier '{identifier}'"
-                        )
+                    # Apply per-callsign CoT type or team member configuration if enabled
+                    if bool(enable_per_cot_types):
+                        # Check for team member override configuration
+                        has_override = hasattr(mapping, 'cot_type_override')
+                        is_team_member = has_override and mapping.cot_type_override == "team_member"
+                        if is_team_member:
+                            # Team member configuration - add team member metadata
+                            if not location.get("additional_data"):
+                                location["additional_data"] = {}
+
+                            # Add team member metadata to event_data
+                            location["additional_data"]["team_member_enabled"] = True
+                            team_role = getattr(mapping, "team_role", "")
+                            team_color = getattr(mapping, "team_color", "")
+                            location["additional_data"]["team_role"] = team_role
+                            location["additional_data"]["team_color"] = team_color
+
+                            role = getattr(mapping, 'team_role', '')
+                            color = getattr(mapping, 'team_color', '')
+                            self.logger.info(
+                                f"Applied team member configuration for identifier "
+                                f"'{identifier}': role='{role}', color='{color}'"
+                            )
+                        elif (has_override and
+                              mapping.cot_type_override == "standard_point"):
+                            # Standard point with custom CoT type
+                            if mapping.cot_type:
+                                location["cot_type"] = mapping.cot_type
+                                self.logger.info(
+                                    f"Applied standard point CoT type '{mapping.cot_type}' for identifier '{identifier}'"
+                                )
+                        elif mapping.cot_type:
+                            # Legacy per-callsign CoT type (fallback for existing configurations)
+                            location["cot_type"] = mapping.cot_type
+                            self.logger.info(
+                                f"Applied legacy per-callsign CoT type '{mapping.cot_type}' for identifier '{identifier}'"
+                            )
 
                     self.logger.debug(
                         f"Applied callsign mapping: '{identifier}' → '{original_name}' → '{mapping.custom_callsign}'"

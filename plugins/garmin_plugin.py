@@ -173,10 +173,9 @@ class GarminPlugin(BaseGPSPlugin, CallsignMappable):
 
             # Apply mapping if identifier found and mapping exists
             if identifier_value and identifier_value in callsign_map:
-                custom_callsign = callsign_map[identifier_value]
-                location["name"] = custom_callsign
-                logger.debug(
-                    f"[Garmin] Applied callsign mapping: {identifier_value} -> {custom_callsign}"
+                mapping_data = callsign_map[identifier_value]
+                self._apply_mapping_and_team_member_data(
+                    location, identifier_value, mapping_data, "Garmin"
                 )
 
     async def fetch_locations(
