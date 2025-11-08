@@ -156,6 +156,764 @@ _category_mapping = {
 }
 ```
 
+## PluginConfigField Reference
+
+### Overview
+
+`PluginConfigField` is the primary class for defining plugin configuration options. Each field represents a user-configurable setting that appears in the TrakBridge UI and is validated by the plugin framework.
+
+### Constructor Parameters
+
+```python
+PluginConfigField(
+    name: str,                              # Required - Internal field identifier
+    label: str,                             # Required - User-facing label
+    field_type: str = "text",              # Field type (see types below)
+    required: bool = False,                 # Whether field is mandatory
+    placeholder: str = "",                  # Placeholder text for input
+    help_text: str = "",                   # Help text displayed to user
+    default_value: Any = None,              # Default value for field
+    options: Optional[List[Dict[str, str]]] = None,  # For select fields
+    min_value: Optional[int] = None,        # Minimum value for number fields
+    max_value: Optional[int] = None,        # Maximum value for number fields
+    sensitive: bool = False                 # Marks field for encryption
+)
+```
+
+### Available Field Types
+
+#### 1. Text Field (`"text"`)
+
+**Purpose**: Standard text input for usernames, identifiers, filters, etc.
+
+**Validation**: None by default (plugins can implement custom validation)
+
+**Example - Username Field**:
+```python
+PluginConfigField(
+    name="username",
+    label="Garmin Username",
+    field_type="text",
+    required=True,
+    help_text="Your Garmin Connect account username"
+)
+```
+
+**Example - Optional Text with Placeholder**:
+```python
+PluginConfigField(
+    name="device_filter",
+    label="Device Name Filter",
+    field_type="text",
+    required=False,
+    placeholder="vehicle,tracker",
+    help_text="Comma-separated list of device names to include (leave empty for all devices)"
+)
+```
+
+**Example - Text with Default Value**:
+```python
+PluginConfigField(
+    name="feed_id",
+    label="SPOT Feed ID",
+    field_type="text",
+    required=True,
+    placeholder="0abcdef1234567890abcdef123456789",
+    help_text="Your SPOT device feed ID from your SPOT account shared page"
+)
+```
+
+#### 2. Password Field (`"password"`)
+
+**Purpose**: Masked input for passwords, API keys, and sensitive credentials
+
+**Validation**: None by default
+
+**Security**: MUST be combined with `sensitive=True` for automatic encryption
+
+**Example - Password with Encryption**:
+```python
+PluginConfigField(
+    name="password",
+    label="Garmin Password",
+    field_type="password",
+    required=True,
+    sensitive=True,  # CRITICAL: Enables automatic encryption
+    help_text="Your Garmin Connect account password"
+)
+```
+
+**Example - Optional Password**:
+```python
+PluginConfigField(
+    name="feed_password",
+    label="Feed Password",
+    field_type="password",
+    required=False,
+    sensitive=True,
+    help_text="Password if your SPOT feed is password protected (leave blank if not protected)"
+)
+```
+
+#### 3. URL Field (`"url"`)
+
+**Purpose**: Input for API endpoints, server URLs, feed URLs
+
+**Validation**: Automatically validates that value starts with `http://` or `https://`
+
+**Example - Required URL**:
+```python
+PluginConfigField(
+    name="url",
+    label="Garmin InReach KML Feed URL",
+    field_type="url",
+    required=True,
+    placeholder="https://share.garmin.com/Feed/Share/...",
+    help_text="Complete URL to your Garmin InReach KML feed from MapShare"
+)
+```
+
+**Example - URL with Default**:
+```python
+PluginConfigField(
+    name="api_url",
+    label="Deepstate API URL",
+    field_type="url",
+    required=True,
+    default_value="https://deepstatemap.live/api/history/last",
+    placeholder="https://deepstatemap.live/api/history/last",
+    help_text="URL to the Deepstate API endpoint (default is latest history)"
+)
+```
+
+**Example - Server URL**:
+```python
+PluginConfigField(
+    name="server_url",
+    label="Traccar Server URL",
+    field_type="url",
+    required=True,
+    placeholder="http://localhost:8082",
+    help_text="Complete URL to your Traccar server (including port if needed)"
+)
+```
+
+#### 4. Number Field (`"number"`)
+
+**Purpose**: Numeric input with optional min/max constraints
+
+**Validation**:
+- Validates that value is a valid number
+- Validates min_value constraint if specified
+- Validates max_value constraint if specified
+
+**Example - Number with Min/Max Constraints**:
+```python
+PluginConfigField(
+    name="retry_delay",
+    label="Retry Delay (seconds)",
+    field_type="number",
+    required=False,
+    default_value=60,
+    min_value=30,
+    max_value=300,
+    help_text="Delay between retry attempts on connection failure"
+)
+```
+
+**Example - Timeout Field**:
+```python
+PluginConfigField(
+    name="timeout",
+    label="Request Timeout (seconds)",
+    field_type="number",
+    required=False,
+    default_value=30,
+    min_value=5,
+    max_value=120,
+    help_text="HTTP request timeout in seconds"
+)
+```
+
+**Example - Count Field**:
+```python
+PluginConfigField(
+    name="max_results",
+    label="Maximum Results",
+    field_type="number",
+    required=False,
+    default_value=50,
+    min_value=1,
+    max_value=200,
+    help_text="Maximum number of location points to fetch per request"
+)
+```
+
+#### 5. Select Field (`"select"`)
+
+**Purpose**: Dropdown selection from predefined options
+
+**Validation**: Validates that selected value exists in options list
+
+**Required Parameter**: `options` - List of dictionaries with `"value"` and `"label"` keys
+
+**Example - Mode Selection**:
+```python
+PluginConfigField(
+    name="cot_type_mode",
+    label="COT Type Mode",
+    field_type="select",
+    required=False,
+    default_value="per_point",
+    options=[
+        {
+            "value": "stream",
+            "label": "Use stream COT type for all points"
+        },
+        {
+            "value": "per_point",
+            "label": "Determine COT type per point"
+        }
+    ],
+    help_text="Choose whether to use the stream's COT type for all points or determine COT type individually for each point"
+)
+```
+
+**Example - API Version Selection**:
+```python
+PluginConfigField(
+    name="api_version",
+    label="API Version",
+    field_type="select",
+    required=True,
+    default_value="v2",
+    options=[
+        {"value": "v1", "label": "API v1 (Legacy)"},
+        {"value": "v2", "label": "API v2 (Current)"},
+        {"value": "v3", "label": "API v3 (Beta)"}
+    ],
+    help_text="Select the API version to use for requests"
+)
+```
+
+#### 6. Email Field (`"email"`)
+
+**Purpose**: Email address input
+
+**Validation**: Validates that value contains `@` character
+
+**Note**: Not currently used in built-in plugins, but available for custom plugins
+
+**Example - Email Contact**:
+```python
+PluginConfigField(
+    name="contact_email",
+    label="Contact Email",
+    field_type="email",
+    required=False,
+    placeholder="admin@example.com",
+    help_text="Email address for emergency notifications"
+)
+```
+
+#### 7. Checkbox Field (`"checkbox"`)
+
+**Purpose**: Boolean true/false selection
+
+**Validation**: None (coerced to boolean)
+
+**Example - Feature Toggle**:
+```python
+PluginConfigField(
+    name="hide_inactive_devices",
+    label="Hide Inactive Devices",
+    field_type="checkbox",
+    required=False,
+    default_value=True,
+    help_text="Hide devices that have tracking turned off"
+)
+```
+
+**Example - Optional Feature**:
+```python
+PluginConfigField(
+    name="enable_debug_logging",
+    label="Enable Debug Logging",
+    field_type="checkbox",
+    required=False,
+    default_value=False,
+    help_text="Log detailed debugging information for troubleshooting"
+)
+```
+
+### Parameter Details
+
+#### `name` (Required)
+
+**Type**: `str`
+
+**Purpose**: Internal identifier for the configuration field. Used as the key in config dictionaries.
+
+**Best Practices**:
+- Use lowercase with underscores (snake_case)
+- Be descriptive and specific
+- Avoid conflicts with reserved Python keywords
+- Keep consistent across plugin versions
+
+**Examples**:
+```python
+name="api_key"          # Good
+name="server_url"       # Good
+name="max_results"      # Good
+name="key"              # Too vague
+name="URL"              # Don't use uppercase
+```
+
+#### `label` (Required)
+
+**Type**: `str`
+
+**Purpose**: User-facing display name shown in the UI
+
+**Best Practices**:
+- Use title case
+- Be clear and concise
+- Include units in parentheses if applicable
+- Avoid technical jargon when possible
+
+**Examples**:
+```python
+label="API Key"                          # Good
+label="Request Timeout (seconds)"        # Good - includes units
+label="Maximum Results"                  # Good
+label="srv_url"                          # Too technical
+label="THE API KEY FOR THE SERVICE"      # Too verbose
+```
+
+#### `field_type`
+
+**Type**: `str`
+
+**Default**: `"text"`
+
+**Valid Values**: `"text"`, `"password"`, `"url"`, `"number"`, `"select"`, `"email"`, `"checkbox"`
+
+**Purpose**: Determines input type and validation behavior
+
+#### `required`
+
+**Type**: `bool`
+
+**Default**: `False`
+
+**Purpose**: Whether field must have a value before plugin can be saved/used
+
+**Validation**: Checked during `validate_config()` - returns `False` if required field is missing or empty
+
+**Examples**:
+```python
+required=True   # User must provide a value
+required=False  # Field is optional
+```
+
+#### `placeholder`
+
+**Type**: `str`
+
+**Default**: `""`
+
+**Purpose**: Placeholder text displayed in empty input fields
+
+**Best Practices**:
+- Show example format or value
+- Don't duplicate the label
+- Keep it concise
+
+**Examples**:
+```python
+placeholder="https://api.example.com/v1"        # Good - shows format
+placeholder="device1,device2,device3"           # Good - shows format
+placeholder="Enter your API key here"           # Redundant with label
+```
+
+#### `help_text`
+
+**Type**: `str`
+
+**Default**: `""`
+
+**Purpose**: Additional context and instructions for users
+
+**Best Practices**:
+- Explain where to find the value
+- Clarify purpose or impact
+- Include warnings or important notes
+- Keep to 1-2 sentences
+
+**Examples**:
+```python
+help_text="Your Garmin Connect account username"
+help_text="Complete URL to your Traccar server (including port if needed)"
+help_text="Delay between retry attempts on connection failure"
+```
+
+#### `default_value`
+
+**Type**: `Any`
+
+**Default**: `None`
+
+**Purpose**: Pre-populated value when field is first displayed
+
+**Best Practices**:
+- Use sensible defaults for optional fields
+- Match type to field_type (bool for checkbox, int for number, etc.)
+- Don't set defaults for required sensitive fields
+
+**Examples**:
+```python
+default_value=30                                          # Number field
+default_value=True                                        # Checkbox field
+default_value="https://api.example.com/v1"               # URL field
+default_value="per_point"                                # Select field
+```
+
+#### `options`
+
+**Type**: `Optional[List[Dict[str, str]]]`
+
+**Default**: `None`
+
+**Purpose**: List of selectable options for `select` field type
+
+**Required For**: `select` field types only
+
+**Format**: Each option must be a dictionary with `"value"` and `"label"` keys
+- `"value"`: Internal value stored in config
+- `"label"`: User-facing display text
+
+**Example**:
+```python
+options=[
+    {"value": "v1", "label": "API v1 (Legacy)"},
+    {"value": "v2", "label": "API v2 (Current)"},
+    {"value": "v3", "label": "API v3 (Beta)"}
+]
+```
+
+#### `min_value`
+
+**Type**: `Optional[int]`
+
+**Default**: `None`
+
+**Purpose**: Minimum allowed value for `number` field type
+
+**Validation**: Checked during `validate_config()` - returns `False` if value is below minimum
+
+**Example**:
+```python
+min_value=5     # Value must be >= 5
+min_value=1     # Value must be >= 1
+```
+
+#### `max_value`
+
+**Type**: `Optional[int]`
+
+**Default**: `None`
+
+**Purpose**: Maximum allowed value for `number` field type
+
+**Validation**: Checked during `validate_config()` - returns `False` if value exceeds maximum
+
+**Example**:
+```python
+max_value=120   # Value must be <= 120
+max_value=3600  # Value must be <= 3600
+```
+
+#### `sensitive`
+
+**Type**: `bool`
+
+**Default**: `False`
+
+**Purpose**: Marks field for automatic encryption in database
+
+**Security Implications**:
+- Fields marked `sensitive=True` are automatically encrypted before storage
+- Decrypted automatically when plugin config is loaded
+- CRITICAL for passwords, API keys, tokens, and secrets
+
+**Best Practices**:
+- ALWAYS set `sensitive=True` for `password` field types
+- Set `sensitive=True` for API keys, tokens, secrets
+- Don't set for non-sensitive data (wastes processing)
+
+**Examples**:
+```python
+# Password field - MUST be sensitive
+PluginConfigField(
+    name="password",
+    field_type="password",
+    sensitive=True      # CRITICAL
+)
+
+# API key - Should be sensitive
+PluginConfigField(
+    name="api_key",
+    field_type="password",
+    sensitive=True
+)
+
+# Username - Not sensitive
+PluginConfigField(
+    name="username",
+    field_type="text",
+    sensitive=False     # Default, not needed
+)
+```
+
+### Complete Real-World Examples
+
+#### Example 1: Traccar Plugin Configuration
+
+```python
+"config_fields": [
+    # URL field with placeholder
+    PluginConfigField(
+        name="server_url",
+        label="Traccar Server URL",
+        field_type="url",
+        required=True,
+        placeholder="http://localhost:8082",
+        help_text="Complete URL to your Traccar server (including port if needed)"
+    ),
+    # Required text field
+    PluginConfigField(
+        name="username",
+        label="Username",
+        field_type="text",
+        required=True,
+        help_text="Traccar username with device access permissions"
+    ),
+    # Sensitive password field
+    PluginConfigField(
+        name="password",
+        label="Password",
+        field_type="password",
+        required=True,
+        sensitive=True,
+        help_text="Traccar user password"
+    ),
+    # Number field with constraints
+    PluginConfigField(
+        name="timeout",
+        label="Request Timeout (seconds)",
+        field_type="number",
+        required=False,
+        default_value=30,
+        min_value=5,
+        max_value=120,
+        help_text="HTTP request timeout in seconds"
+    ),
+    # Optional text field with placeholder
+    PluginConfigField(
+        name="device_filter",
+        label="Device Name Filter",
+        field_type="text",
+        required=False,
+        placeholder="vehicle,tracker",
+        help_text="Comma-separated list of device names to include (leave empty for all devices)"
+    )
+]
+```
+
+#### Example 2: Deepstate Plugin Configuration
+
+```python
+"config_fields": [
+    # URL with default value
+    PluginConfigField(
+        name="api_url",
+        label="Deepstate API URL",
+        field_type="url",
+        required=True,
+        default_value="https://deepstatemap.live/api/history/last",
+        placeholder="https://deepstatemap.live/api/history/last",
+        help_text="URL to the Deepstate API endpoint (default is latest history)"
+    ),
+    # Select field with options
+    PluginConfigField(
+        name="cot_type_mode",
+        label="COT Type Mode",
+        field_type="select",
+        required=False,
+        default_value="per_point",
+        options=[
+            {
+                "value": "stream",
+                "label": "Use stream COT type for all points"
+            },
+            {
+                "value": "per_point",
+                "label": "Determine COT type per point"
+            }
+        ],
+        help_text="Choose whether to use the stream's COT type for all points or determine COT type individually for each point"
+    ),
+    # Number with range
+    PluginConfigField(
+        name="timeout",
+        label="Request Timeout (seconds)",
+        field_type="number",
+        required=False,
+        default_value=30,
+        min_value=5,
+        max_value=120,
+        help_text="HTTP request timeout in seconds"
+    ),
+    # Number with different range
+    PluginConfigField(
+        name="max_events",
+        label="Maximum Events",
+        field_type="number",
+        required=False,
+        default_value=100,
+        min_value=1,
+        max_value=1000,
+        help_text="Maximum number of events to fetch and process"
+    )
+]
+```
+
+#### Example 3: Garmin Plugin Configuration
+
+```python
+"config_fields": [
+    # Required URL
+    PluginConfigField(
+        name="url",
+        label="Garmin InReach KML Feed URL",
+        field_type="url",
+        required=True,
+        placeholder="https://share.garmin.com/Feed/Share/...",
+        help_text="Complete URL to your Garmin InReach KML feed from MapShare"
+    ),
+    # Required text
+    PluginConfigField(
+        name="username",
+        label="Garmin Username",
+        field_type="text",
+        required=True,
+        help_text="Your Garmin Connect account username"
+    ),
+    # Required sensitive password
+    PluginConfigField(
+        name="password",
+        label="Garmin Password",
+        field_type="password",
+        required=True,
+        sensitive=True,
+        help_text="Your Garmin Connect account password"
+    ),
+    # Checkbox with default
+    PluginConfigField(
+        name="hide_inactive_devices",
+        label="Hide Inactive Devices",
+        field_type="checkbox",
+        required=False,
+        default_value=True,
+        help_text="Hide devices that have tracking turned off"
+    ),
+    # Number with range
+    PluginConfigField(
+        name="retry_delay",
+        label="Retry Delay (seconds)",
+        field_type="number",
+        required=False,
+        default_value=60,
+        min_value=30,
+        max_value=300,
+        help_text="Delay between retry attempts on connection failure"
+    )
+]
+```
+
+### Validation Behavior
+
+The `BaseGPSPlugin.validate_config()` method automatically validates all fields:
+
+#### Required Field Validation
+```python
+# Checks if required fields have values
+if field.required and (field_value is None or field_value == ""):
+    logger.error(f"Missing required configuration field: {field_name}")
+    return False
+```
+
+#### Type-Specific Validation
+
+**URL Fields**:
+```python
+# Must start with http:// or https://
+if field.field_type in ["url"] and not str(field_value).startswith(("http://", "https://")):
+    logger.error(f"Field '{field_name}' must be a valid URL")
+    return False
+```
+
+**Number Fields**:
+```python
+# Must be valid number within min/max range
+if field.field_type == "number":
+    try:
+        num_value = float(field_value)
+        if field.min_value is not None and num_value < field.min_value:
+            logger.error(f"Field '{field_name}' must be at least {field.min_value}")
+            return False
+        if field.max_value is not None and num_value > field.max_value:
+            logger.error(f"Field '{field_name}' must be at most {field.max_value}")
+            return False
+    except (ValueError, TypeError):
+        logger.error(f"Field '{field_name}' must be a valid number")
+        return False
+```
+
+**Email Fields**:
+```python
+# Must contain @ symbol
+if field.field_type == "email" and "@" not in str(field_value):
+    logger.error(f"Field '{field_name}' must be a valid email address")
+    return False
+```
+
+### Best Practices
+
+#### Security
+1. **ALWAYS** set `sensitive=True` for passwords, API keys, tokens, and secrets
+2. Use `password` field type for any sensitive credential
+3. Never log or display sensitive field values
+4. Avoid storing unnecessary sensitive data
+
+#### User Experience
+1. Provide clear, concise labels
+2. Include helpful `help_text` for complex fields
+3. Use appropriate placeholders to show expected format
+4. Set sensible defaults for optional fields
+5. Use constraints (min/max) to guide users
+
+#### Validation
+1. Mark critical fields as `required=True`
+2. Use appropriate field types for automatic validation
+3. Add custom validation in plugin's `validate_config()` if needed
+4. Provide clear error messages for validation failures
+
+#### Performance
+1. Don't mark non-sensitive fields as `sensitive` (wastes encryption cycles)
+2. Use appropriate ranges for number fields to prevent abuse
+3. Provide defaults to reduce configuration burden
+
 ## Plugin Development Process
 
 ### Development Environment Setup
