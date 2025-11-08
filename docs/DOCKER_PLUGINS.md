@@ -61,30 +61,27 @@ Custom GPS Tracker Plugin for TrakBridge
 """
 
 from typing import List, Dict, Any
+import logging
 import aiohttp
 from plugins.base_plugin import BaseGPSPlugin, PluginConfigField
+
+logger = logging.getLogger(__name__)
 
 
 class MyCustomTrackerPlugin(BaseGPSPlugin):
     """Custom GPS tracker integration"""
-    
-    PLUGIN_NAME = "my_custom_tracker"
-    
-    @classmethod
-    def get_plugin_name(cls) -> str:
-        return cls.PLUGIN_NAME
-    
+
     @property
     def plugin_name(self) -> str:
-        return self.PLUGIN_NAME
-    
+        return "my_custom_tracker"
+
     @property
     def plugin_metadata(self) -> Dict[str, Any]:
         return {
             "display_name": "My Custom Tracker",
             "description": "Integration with custom GPS tracking service",
             "icon": "fas fa-map-marker-alt",
-            "category": "custom",
+            "category": "tracker",
             "config_fields": [
                 PluginConfigField(
                     name="api_key",
@@ -104,41 +101,63 @@ class MyCustomTrackerPlugin(BaseGPSPlugin):
                 )
             ]
         }
-    
+
     async def fetch_locations(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
-        """Fetch locations from custom tracker API"""
+        """
+        Fetch and transform locations from custom tracker API.
+
+        Returns location dictionaries in TrakBridge standard format with
+        required fields: uid, name, lat, lon
+        """
+        # Get decrypted configuration
         config = self.get_decrypted_config()
-        
-        # Your custom implementation here
+
         try:
             headers = {"Authorization": f"Bearer {config['api_key']}"}
-            async with session.get(f"{config['server_url']}/locations", headers=headers) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return self._transform_locations(data)
-                else:
-                    self.logger.error(f"API returned status {response.status}")
-                    return []
+            url = f"{config['server_url']}/locations"
+
+            async with session.get(url, headers=headers) as response:
+                response.raise_for_status()
+                api_data = await response.json()
+
+            # Transform API data to TrakBridge format
+            locations = []
+            for item in api_data.get('devices', []):
+                device_id = item.get('device_id')
+                if not device_id:
+                    continue
+
+                location = {
+                    # Required fields
+                    'uid': f"CUSTOM-{device_id}",
+                    'name': item.get('name', f'Device {device_id}'),
+                    'lat': float(item.get('latitude', 0)),
+                    'lon': float(item.get('longitude', 0)),
+
+                    # Optional fields
+                    'timestamp': item.get('timestamp'),
+
+                    # Additional metadata
+                    'additional_data': {
+                        'status': item.get('status', ''),
+                        'device_id': device_id
+                    }
+                }
+
+                # Add speed/course as top-level fields if available
+                if item.get('speed') is not None:
+                    location['speed'] = float(item['speed'])
+                if item.get('heading') is not None:
+                    location['course'] = float(item['heading'])
+
+                locations.append(location)
+
+            logger.info(f"Fetched {len(locations)} locations from custom tracker")
+            return locations
+
         except Exception as e:
-            self.logger.error(f"Error fetching locations: {e}")
+            logger.error(f"Error fetching locations: {e}")
             return []
-    
-    def _transform_locations(self, api_data: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Transform API data to TrakBridge format"""
-        locations = []
-        
-        # Transform your API data format to TrakBridge format
-        for item in api_data.get('devices', []):
-            locations.append({
-                'name': item.get('name', 'Unknown'),
-                'lat': float(item.get('latitude', 0)),
-                'lon': float(item.get('longitude', 0)),
-                'timestamp': item.get('timestamp'),
-                'description': item.get('status', ''),
-                'uid': f"custom-{item.get('device_id', 'unknown')}"
-            })
-        
-        return locations
 ```
 
 ## Security Features
@@ -149,8 +168,9 @@ class MyCustomTrackerPlugin(BaseGPSPlugin):
 - Only files in mounted directory are accessible
 
 ### Safe Loading
-- Plugins are loaded in `external_plugins.*` namespace
-- No conflicts with built-in plugins
+- External plugins are loaded in `external_plugins.*` namespace
+- Built-in plugins use `plugins.*` namespace
+- No conflicts between external and built-in plugins
 - Proper error handling and logging
 
 ### Docker Security

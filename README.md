@@ -4,8 +4,12 @@ A web application for bridging tracking devices and services to TAK (Team Awaren
 
 ## Features
 
+- **Team Member COT Support** (NEW in v1.1.0): Display GPS trackers as ATAK team members with role and color customization
+- **Custom CoT Attributes** (NEW in v1.1.0): Plugin-extensible system for adding military symbols, custom icons, and arbitrary XML to CoT messages
+- **Enhanced Tracker Data** (NEW in v1.1.0): Speed/course extraction from Garmin InReach and Traccar, dynamic battery state mapping for SPOT trackers
 - **Multi-Source Integration**: Support for GPS trackers, OSINT platforms, and emergency management systems
 - **Plugin Categorisation**: Organised plugin system with OSINT, Tracker, and EMS categories
+- **Callsign Mapping**: Custom callsign assignment with per-tracker COT type overrides and team member configuration
 - **Authentication System**: Multi-provider authentication (Local, LDAP, OIDC) with role-based access control
 - **TAK Server Management**: Configure multiple TAK server connections with certificate support
 - **Real-Time Streaming**: Continuous data forwarding with health monitoring and circuit breaker protection
@@ -173,4 +177,4 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 
 ---
 
-**TrakBridge v1.0.0** - Production-ready GPS tracking data bridge for TAK servers with enterprise performance, monitoring, and reliability features.
+**TrakBridge v1.1.0** - Production-ready GPS tracking data bridge for TAK servers with ATAK team member support, enterprise performance, monitoring, and reliability features.

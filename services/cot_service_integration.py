@@ -810,6 +810,10 @@ class QueuedCOTService:
                 if "description" in cleaned_location:
                     event_data["remarks"] = str(cleaned_location["description"])
 
+                # Extract custom CoT attributes if provided by plugin
+                if "custom_cot_attrib" in cleaned_location:
+                    event_data["custom_cot_attrib"] = cleaned_location["custom_cot_attrib"]
+
                 # Generate complete COT XML using old logic
                 event_xml = QueuedCOTService._generate_cot_xml(event_data)
                 events.append(event_xml)
@@ -2227,11 +2231,141 @@ class QueuedCOTService:
                 remarks = etree.SubElement(detail, "remarks")
                 remarks.text = event_data["remarks"]
 
+            # Apply custom CoT attributes if provided by plugin
+            if "custom_cot_attrib" in event_data:
+                QueuedCOTService._apply_custom_cot_attributes(
+                    cot_event, detail, event_data["custom_cot_attrib"]
+                )
+
             return etree.tostring(cot_event, pretty_print=False, xml_declaration=False)
 
         except Exception as e:
             logger.error(f"Error generating COT XML: {e}")
             raise
+
+    @staticmethod
+    def _apply_custom_cot_attributes(
+        event_element: etree.Element,
+        detail_element: etree.Element,
+        custom_attribs: Dict[str, Any],
+    ) -> None:
+        """
+        Apply custom CoT XML attributes from plugin data.
+
+        Allows plugins to add custom XML elements and attributes to CoT messages.
+        Supports nested elements, text content, and XML attributes.
+
+        Args:
+            event_element: The main <event> XML element
+            detail_element: The <detail> XML subelement
+            custom_attribs: Dictionary of custom attributes to apply
+
+        Format:
+            {
+                "event": {  # Attributes for <event> element
+                    "_attributes": {"access": "Unclassified"}
+                },
+                "detail": {  # Elements under <detail>
+                    "__milsym": {"_text": "SFGPUCI-------"},
+                    "usericon": {"iconsetpath": "path/to/icon.png"}
+                }
+            }
+
+        Special keys:
+            - "_attributes": Dict of XML attributes to set on element
+            - "_text": Text content for the element
+        """
+        # Protected element names that cannot be overridden
+        PROTECTED_ELEMENTS = {
+            "event": {"version", "uid", "type", "time", "start", "stale", "how"},
+            "detail": {"contact", "uid", "precisionlocation", "__group", 
+                       "status", "track", "speed", "course", "remarks"},
+        }
+
+        try:
+            # Apply event-level attributes
+            if "event" in custom_attribs:
+                event_attribs = custom_attribs["event"]
+                if isinstance(event_attribs, dict):
+                    # Handle XML attributes
+                    if "_attributes" in event_attribs:
+                        for attr_name, attr_value in event_attribs["_attributes"].items():
+                            if attr_name not in PROTECTED_ELEMENTS["event"]:
+                                event_element.set(attr_name, str(attr_value))
+                            else:
+                                logger.warning(
+                                    f"Skipping protected event attribute: {attr_name}"
+                                )
+
+            # Apply detail-level elements
+            if "detail" in custom_attribs:
+                detail_attribs = custom_attribs["detail"]
+                if isinstance(detail_attribs, dict):
+                    for elem_name, elem_data in detail_attribs.items():
+                        # Check if element name is protected
+                        if elem_name in PROTECTED_ELEMENTS["detail"]:
+                            logger.warning(
+                                f"Skipping protected detail element: {elem_name}"
+                            )
+                            continue
+
+                        # Sanitize element name (basic XML name validation)
+                        if not QueuedCOTService._is_valid_xml_name(elem_name):
+                            logger.warning(f"Invalid XML element name: {elem_name}")
+                            continue
+
+                        # Create the element under detail
+                        custom_elem = etree.SubElement(detail_element, elem_name)
+
+                        # Apply element data
+                        if isinstance(elem_data, dict):
+                            # Handle text content
+                            if "_text" in elem_data:
+                                custom_elem.text = str(elem_data["_text"])
+
+                            # Handle XML attributes
+                            if "_attributes" in elem_data:
+                                for attr_name, attr_value in elem_data["_attributes"].items():
+                                    if QueuedCOTService._is_valid_xml_name(attr_name):
+                                        custom_elem.set(attr_name, str(attr_value))
+
+                            # Handle subelements (any key that's not special)
+                            for sub_name, sub_value in elem_data.items():
+                                if sub_name not in ("_text", "_attributes"):
+                                    if QueuedCOTService._is_valid_xml_name(sub_name):
+                                        sub_elem = etree.SubElement(custom_elem, sub_name)
+                                        if isinstance(sub_value, str):
+                                            sub_elem.text = sub_value
+                                        elif isinstance(sub_value, dict) and "_text" in sub_value:
+                                            sub_elem.text = str(sub_value["_text"])
+                        elif isinstance(elem_data, str):
+                            # Simple string value becomes text content
+                            custom_elem.text = elem_data
+
+        except Exception as e:
+            logger.error(f"Error applying custom CoT attributes: {e}")
+            # Don't raise - custom attributes are optional, shouldn't break CoT generation
+
+    @staticmethod
+    def _is_valid_xml_name(name: str) -> bool:
+        """
+        Validate XML element/attribute name to prevent injection.
+
+        Args:
+            name: Element or attribute name to validate
+
+        Returns:
+            True if name is valid XML name
+        """
+        import re
+
+        if not name or not isinstance(name, str):
+            return False
+
+        # XML name rules: start with letter/underscore, followed by letters/digits/hyphens/periods/underscores
+        # Allow double underscores for CoT convention (e.g., __milsym, __group)
+        pattern = r"^[a-zA-Z_][\w\-\.]*$"
+        return bool(re.match(pattern, name))
 
     @staticmethod
     def _validate_location_data(location: Dict[str, Any]) -> Dict[str, Any]:

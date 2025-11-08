@@ -1,5 +1,190 @@
 # TrakBridge Release Notes
 
+## Version 1.1.0 - Team Member COT Enhancement Release
+**Release Date:** November 7, 2025
+**Major Feature: ATAK Team Member Support**
+
+---
+
+## NEW FEATURES & ENHANCEMENTS
+
+### Team Member COT Support
+**Display Trackers as ATAK Team Members**
+
+Transform individual GPS trackers into ATAK team members with full role and color customization through the existing callsign mapping interface.
+
+**Core Capabilities:**
+- **Team member CoT format** - Individual trackers displayed as team members in ATAK instead of standard mil2525 points
+- **Role assignment** - Choose from 8 tactical roles: Team Member, Team Lead, HQ, Sniper, Medic, Forward Observer, RTO, K9
+- **Color customization** - Select from 14 team colors: Teal, Green, Dark Green, Brown, White, Yellow, Orange, Magenta, Red, Maroon, Purple, Dark Blue, Blue, Cyan
+- **Seamless integration** - Uses existing callsign mapping UI workflow with new CoT type option
+- **Custom callsigns** - Team member names use your configured custom callsigns
+- **Mixed configurations** - Configure some trackers as team members and others as standard points in the same stream
+
+**Technical Implementation:**
+- **CoT type "a-f-G-U-C"** with "h-e" how attribute for proper ATAK team member display
+- **Static endpoint** "*:-1:stcp" for team member contact format
+- **Enhanced XML structure** - Includes `<contact>`, `<uid>`, `<__group>`, `<precisionlocation>`, and `<status>` elements
+- **Zero performance impact** - Reuses existing COT generation pipeline with minimal overhead
+- **Complete test coverage** - Comprehensive TDD approach with end-to-end workflow validation
+
+**Key Benefits:**
+- **Enhanced situational awareness** - Team members display with roles and colors in ATAK
+- **Operational flexibility** - Quickly identify team roles and assignments on the map
+- **Tactical coordination** - Color-coded teams improve coordination and communication
+- **Simple configuration** - Integrated into existing callsign mapping workflow
+- **Backward compatible** - Existing streams and configurations work unchanged
+
+**Usage Example:**
+1. Create or edit a GPS tracker stream (Garmin, SPOT, Traccar)
+2. Enable "Custom callsign mapping" and discover trackers
+3. For each tracker, select CoT Type: "Team Member"
+4. Choose team role (e.g., "Sniper") and color (e.g., "Green")
+5. Enter custom callsign (e.g., "Alpha-1")
+6. Tracker now displays as a team member in ATAK with role icon and color
+
+### Unknown Air Unit COT Type
+**Enhanced Aircraft Tracking**
+
+- **New CoT type** for unidentified aircraft contacts
+- **Improved air domain** situational awareness
+- **Enhanced COT type system** supporting unknown air contacts
+
+---
+
+## TECHNICAL IMPROVEMENTS
+
+### Database Schema Enhancement
+**Team Member Configuration Storage**
+
+- **Extended CallsignMapping model** with team member fields:
+  - `cot_type_override` - Stores "team_member" when team member CoT selected
+  - `team_role` - Stores selected role (Team Member, Team Lead, HQ, Sniper, etc.)
+  - `team_color` - Stores selected color (Red, Blue, Green, etc.)
+- **Safe migration** with comprehensive existence checks and rollback capability
+- **Backward compatibility** - Existing callsign mappings work unchanged (fields default to null)
+- **Data integrity** - Validation ensures only valid roles and colors can be stored
+
+### COT Generation Pipeline Enhancement
+**Intelligent Team Member Detection**
+
+- **Enhanced _create_pytak_events** - Detects team member configuration in location additional_data
+- **Modified _generate_cot_xml** - Generates proper team member XML structure with all required elements
+- **Code reuse** - Leverages existing COT pipeline completely, no duplication
+- **Minimal changes** - Surgical enhancements to existing methods maintain stability
+- **Performance optimized** - No additional database queries, data loaded with existing mappings
+
+### Plugin Integration
+**Seamless Data Flow**
+
+- **Enhanced apply_callsign_mapping** - Adds team member metadata to location's additional_data
+- **Consistent interface** - Uses existing BaseGPSPlugin callsign mapping infrastructure
+- **Universal support** - Works with all GPS tracker plugins (Garmin, SPOT, Traccar)
+- **No plugin changes** - Existing plugin processing logic unchanged
+
+### API Extensions
+**Team Member Configuration Endpoints**
+
+- **Extended callsign mapping APIs** - Handle team_role, team_color, and cot_type_override fields
+- **Input validation** - Ensures only valid roles and colors accepted
+- **Metadata endpoints** - Provide role and color options for UI dropdowns
+- **Backward compatible** - Existing API clients continue working unchanged
+
+---
+
+## COMPREHENSIVE TESTING
+
+### End-to-End Testing Framework
+**Production-Ready Quality Assurance**
+
+- **Complete workflow tests** - Stream creation → tracker discovery → team member configuration → CoT generation → TAK transmission
+- **XML structure validation** - Verifies team member CoT format matches ATAK specification
+- **Mixed configuration tests** - Validates streams with both team members and standard points
+- **Edge case handling** - Tests with missing fields, invalid roles/colors, and migration scenarios
+- **Performance validation** - Confirms zero performance impact on existing functionality
+- **Backward compatibility tests** - Ensures existing streams operate unchanged
+
+### Test-Driven Development
+**Quality Through TDD**
+
+- **Comprehensive test coverage** - Unit, integration, and end-to-end tests for all features
+- **Regression prevention** - Tests ensure future changes don't break team member functionality
+- **Clear requirements** - Tests document exact team member feature behavior
+- **Refactoring safety** - Can improve code structure while tests ensure behavior unchanged
+
+---
+
+## MIGRATION & COMPATIBILITY
+
+### Automatic Database Migration
+**Zero-Downtime Upgrade**
+
+- **Automatic schema updates** - New columns added to callsign_mappings table on startup
+- **Data preservation** - All existing streams, callsign mappings, and configurations maintained
+- **Safe migration** - Comprehensive existence checks prevent duplicate columns
+- **Rollback capability** - Complete downgrade path available if needed
+
+### Backward Compatibility Guarantee
+**Seamless Upgrade Experience**
+
+- **Existing functionality preserved** - All current features work exactly as before
+- **Configuration compatibility** - Existing callsign mappings continue operating unchanged
+- **API compatibility** - All existing API endpoints maintain backward compatibility
+- **Performance baseline** - No degradation for existing configurations
+- **Opt-in feature** - Team member support only active when explicitly configured
+
+---
+
+## OPERATIONAL BENEFITS
+
+### For Operators and Users
+- **Enhanced tactical display** - Team members show with roles and colors in ATAK
+- **Improved coordination** - Quickly identify team roles and assignments on the map
+- **Operational flexibility** - Configure trackers as team members or standard points per mission needs
+- **Simple workflow** - Integrated into existing callsign mapping interface
+- **No training required** - Uses familiar callsign mapping workflow with new options
+
+### For System Administrators
+- **Zero performance impact** - No overhead on existing functionality
+- **Backward compatible** - Safe upgrade with no configuration changes required
+- **Comprehensive testing** - Production-ready with extensive test coverage
+- **Simple deployment** - Automatic migration handles all database changes
+- **Flexible configuration** - Per-tracker team member configuration allows mixed deployments
+
+### For Organizations
+- **Enhanced situational awareness** - Better tactical picture with team member roles and colors
+- **Operational efficiency** - Faster identification of team assets on the map
+- **Cost effective** - Leverages existing GPS tracker infrastructure
+- **Future proof** - Architecture designed for continued enhancement
+- **Standards compliant** - Proper ATAK team member CoT format
+
+---
+
+## UPGRADE INSTRUCTIONS
+
+### For New Installations
+1. **Deploy normally** - Team member support available immediately
+2. **Configure streams** - Create GPS tracker streams as usual
+3. **Enable team members** - Select "Team Member" CoT type in callsign mapping
+4. **Choose role and color** - Pick appropriate role and color for each tracker
+5. **Verify in ATAK** - Confirm team members display correctly with roles and colors
+
+### For Existing Deployments
+1. **Automatic migration** - Database schema updates applied automatically on startup
+2. **Zero configuration changes** - Existing streams continue operating unchanged
+3. **Feature activation** - Team member support available when editing streams or creating new ones
+4. **Test configuration** - Create test stream to validate team member functionality
+5. **Gradual rollout** - Configure team members on new streams or edit existing as needed
+
+### Validation Steps
+1. **Verify existing streams** - Confirm current streams operate normally after upgrade
+2. **Test team member feature** - Create test stream with team member configuration
+3. **Check ATAK display** - Verify team members show correctly with roles and colors
+4. **Performance monitoring** - Confirm no performance degradation
+5. **Configuration backup** - Standard backup procedures protect against any issues
+
+---
+
 ## Version 1.0.0-rc.5 - Scaling Enhancement & Tracker Control Release
 **Release Date:** September 18, 2025  
 **Major Features: Multi-Server Distribution & Individual Tracker Control**

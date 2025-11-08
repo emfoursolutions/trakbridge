@@ -1,3 +1,67 @@
+## [v1.1.0] - 2025-11-07
+
+### Added
+- **Team Member COT Support**
+  - Extended callsign mapping system to support ATAK team member CoT format
+  - Individual trackers can now be displayed as team members instead of standard mil2525 points
+  - Database schema extensions with team_role, team_color, and cot_type_override fields
+  - Enhanced COT generation pipeline to produce team member XML structure with contact, uid, and __group elements
+  - API extensions for team member configuration through existing callsign mapping UI
+  - Role options: Team Member, Team Lead, HQ, Sniper, Medic, Forward Observer, RTO, K9
+  - Color options: Teal, Green, Dark Green, Brown, White, Yellow, Orange, Magenta, Red, Maroon, Purple, Dark Blue, Blue, Cyan
+  - Team member CoT type "a-f-G-U-C" with "h-e" how attribute and static endpoint "*:-1:stcp"
+  - Comprehensive integration testing with end-to-end workflow validation
+  - Zero performance impact on existing functionality
+  - Backward compatible - existing streams and callsign mappings work unchanged
+
+- **Unknown Air Unit COT Type**
+  - Added new COT type for unidentified aircraft
+  - Enhanced COT type configuration system to support unknown air contacts
+
+- **Dynamic Battery State Implementation**
+  - SPOT plugin battery state mapping (GOOD→100, LOW→20) for accurate battery reporting
+  - Default battery value of 100 when no battery data available
+  - Case-insensitive battery state string handling
+  - Battery state extraction from additional_data in CoT generation pipeline
+  - Comprehensive battery testing across plugin and CoT integration layers
+
+- **Garmin InReach Velocity and Course Extraction**
+  - Parse velocity from Garmin KML ExtendedData format ("32.6 km/h") with automatic unit conversion to m/s
+  - Support for multiple velocity units: km/h, kph, mph, m/s with intelligent default handling
+  - Parse course/heading from Garmin KML format ("315.00 ° True") with degree normalization (0-360 range)
+  - Top-level speed and course field placement for proper CoT integration
+  - Automatic inclusion in team member `<track>` element and `<remarks>` for standard CoT types
+
+- **Traccar Plugin Speed and Course Enhancement**
+  - Moved speed and course from additional_data to top-level fields for CoT processing
+  - Consistent data flow pattern matching Garmin implementation
+  - None checking to prevent invalid data from being added
+  - Proper handling of zero values (stationary devices)
+
+- **Custom CoT XML Attributes System**
+  - Plugin-extensible system for adding custom XML elements and attributes to CoT messages
+  - Support for military symbols (`<__milsym>`), custom icons (`<usericon><iconsetpath/>`), link elements, and arbitrary XML
+  - Protected element system preventing override of critical CoT structure (contact, uid, __group, status, track)
+  - XML injection prevention with regex validation of element names
+  - Special keys: `_text` for element text content, `_attributes` for XML attributes
+  - Nested element support with flexible dict-based configuration
+  - Event-level and detail-level attribute application
+  - Simple string value support for element text content
+  - Backward compatible - existing plugins work unchanged without custom attributes
+
+### Changed
+- **COT Generation Pipeline Enhancement**
+  - Enhanced _create_pytak_events method to detect team member metadata in location additional_data
+  - Modified _generate_cot_xml to generate appropriate XML structure for team members
+  - Reuses existing COT pipeline completely with minimal code changes for maximum efficiency
+
+### Technical Implementation
+- **TDD Approach**: Complete test-driven development with comprehensive test coverage
+- **Code Reuse**: Leverages existing COT pipeline, callsign mapping infrastructure, and UI patterns
+- **Data Flow**: Configuration → Plugin Processing → COT Generation → Transmission (no changes to queuing or workers)
+- **Compatibility**: Existing callsign mappings continue working unchanged (cot_type_override defaults to null)
+- **Performance**: No additional database queries - team member data loaded with existing callsign mappings
+
 ## [v1.0.0] - 2025-09-27
 
 ### Added
