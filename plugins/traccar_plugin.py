@@ -341,14 +341,19 @@ class TraccarPlugin(BaseGPSPlugin, CallsignMappable):
                     "source": "traccar",
                     "device_id": position.get("deviceId"),
                     "position_id": position.get("id"),
-                    "speed": position.get("speed"),
-                    "course": position.get("course"),
                     "altitude": position.get("altitude"),
                     "accuracy": position.get("accuracy"),
                     "attributes": position.get("attributes", {}),
                     "device_info": device_info,
                 },
             }
+
+            # Add speed and course as top-level fields for CoT processing
+            if position.get("speed") is not None:
+                location["speed"] = float(position.get("speed"))
+            if position.get("course") is not None:
+                location["course"] = float(position.get("course"))
+
             locations.append(location)
 
         logger.info(f"Successfully fetched {len(locations)} positions from Traccar")

@@ -227,6 +227,13 @@ class GarminPlugin(BaseGPSPlugin, CallsignMappable):
         actual_time = placemark.get("timestamp")
         cot_timestamp = datetime.now(timezone.utc)
 
+        # Extract extended data for velocity and course
+        extended_data = placemark.get("extended_data", {})
+
+        # Parse velocity and course from extended data
+        speed = self._parse_velocity(extended_data.get("Velocity"))
+        course = self._parse_course(extended_data.get("Course"))
+
         # Build description with reporting time
         base_description = placemark.get("description", "")
         if actual_time:
@@ -237,7 +244,7 @@ class GarminPlugin(BaseGPSPlugin, CallsignMappable):
 
         final_description = f"{base_description}{remarks_addition}".strip()
 
-        return {
+        location_dict = {
             "name": placemark["name"],
             "lat": float(placemark["lat"]),
             "lon": float(placemark["lon"]),
@@ -251,6 +258,14 @@ class GarminPlugin(BaseGPSPlugin, CallsignMappable):
                 "raw_placemark": placemark,
             },
         }
+
+        # Add speed and course as top-level fields if available
+        if speed is not None:
+            location_dict["speed"] = speed
+        if course is not None:
+            location_dict["course"] = course
+
+        return location_dict
 
     async def _fetch_kml_feed(
         self, session: aiohttp.ClientSession, config: Dict[str, Any]
@@ -345,6 +360,93 @@ class GarminPlugin(BaseGPSPlugin, CallsignMappable):
         except Exception as e:
             logger.debug(f"Error checking device activity status: {e}")
             return False
+
+    @staticmethod
+    def _parse_velocity(velocity_str: str) -> Optional[float]:
+        """
+        Parse velocity from Garmin ExtendedData format to m/s.
+
+        Garmin provides velocity in formats like:
+        - "32.6 km/h"
+        - "15.2 mph"
+        - "8.5 m/s"
+
+        Args:
+            velocity_str: Velocity string from Garmin KML ExtendedData
+
+        Returns:
+            Float velocity in meters per second, or None if parsing fails
+        """
+        import re
+
+        if not velocity_str:
+            return None
+
+        try:
+            # Extract numeric value
+            match = re.search(r"([\d.]+)", velocity_str)
+            if not match:
+                return None
+
+            value = float(match.group(1))
+
+            # Convert to m/s based on unit
+            velocity_lower = velocity_str.lower()
+            if "km/h" in velocity_lower or "kph" in velocity_lower:
+                return value / 3.6  # km/h to m/s
+            elif "mph" in velocity_lower:
+                return value * 0.44704  # mph to m/s
+            elif "m/s" in velocity_lower:
+                return value
+            else:
+                # Default to km/h if no unit specified
+                logger.debug(
+                    f"No velocity unit found in '{velocity_str}', "
+                    "assuming km/h"
+                )
+                return value / 3.6
+
+        except (ValueError, AttributeError) as e:
+            logger.debug(f"Error parsing velocity '{velocity_str}': {e}")
+            return None
+
+    @staticmethod
+    def _parse_course(course_str: str) -> Optional[float]:
+        """
+        Parse course/heading from Garmin ExtendedData format.
+
+        Garmin provides course in formats like:
+        - "315.00 ° True"
+        - "45.5°"
+        - "180 degrees"
+
+        Args:
+            course_str: Course string from Garmin KML ExtendedData
+
+        Returns:
+            Float course in degrees (0-360), or None if parsing fails
+        """
+        import re
+
+        if not course_str:
+            return None
+
+        try:
+            # Extract numeric value (first number found)
+            match = re.search(r"([\d.]+)", course_str)
+            if not match:
+                return None
+
+            course = float(match.group(1))
+
+            # Normalize to 0-360 range
+            course = course % 360.0
+
+            return course
+
+        except (ValueError, AttributeError) as e:
+            logger.debug(f"Error parsing course '{course_str}': {e}")
+            return None
 
     @staticmethod
     def _to_bool(val, default=False) -> bool:

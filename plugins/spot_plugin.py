@@ -291,7 +291,9 @@ class SpotPlugin(BaseGPSPlugin, CallsignMappable):
                         "additional_data": {
                             "source": "spot",
                             "message_type": newest_message.get("messageType"),
-                            "battery_state": newest_message.get("batteryState"),
+                            "battery_state": self._map_battery_state(
+                                newest_message.get("batteryState")
+                            ),
                             "raw_message": newest_message,
                         },
                     }
@@ -417,6 +419,28 @@ class SpotPlugin(BaseGPSPlugin, CallsignMappable):
         except Exception as e:
             logger.error(f"Error parsing SPOT response: {e}")
             return []
+
+    @staticmethod
+    def _map_battery_state(battery_state: str) -> int:
+        """
+        Map SPOT battery state string to numeric percentage value.
+
+        Args:
+            battery_state: Battery state string from SPOT API ("GOOD", "LOW", etc.)
+
+        Returns:
+            Integer battery percentage (0-100)
+        """
+        if not battery_state:
+            return 100  # Default to full when no data
+
+        battery_upper = str(battery_state).upper()
+        if battery_upper == "GOOD":
+            return 100
+        elif battery_upper == "LOW":
+            return 20
+        else:
+            return 100  # Default for unknown states
 
     @staticmethod
     def _build_description(message: Dict[str, Any]) -> str:

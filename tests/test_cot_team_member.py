@@ -96,10 +96,10 @@ class TestTeamMemberCOTGeneration:
         assert precision.get("altsrc") == "DTED0"
         assert precision.get("geopointsrc") == "USER"
 
-        # Verify status element (battery)
+        # Verify status element (battery) - default is 100 when no battery data
         status = detail.find("status")
         assert status is not None
-        assert status.get("battery") == "49"
+        assert status.get("battery") == "100"
 
         # Verify track element if present
         track = detail.find("track")

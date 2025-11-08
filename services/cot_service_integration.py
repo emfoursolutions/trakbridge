@@ -780,6 +780,16 @@ class QueuedCOTService:
                     event_data["team_role"] = additional_data.get("team_role") or ""
                     event_data["team_color"] = additional_data.get("team_color") or ""
 
+                # Extract battery state if available from plugin data (numeric value)
+                battery_state = additional_data.get("battery_state")
+                if battery_state is not None:
+                    try:
+                        event_data["battery"] = int(battery_state)
+                    except (ValueError, TypeError):
+                        event_data["battery"] = 100  # Default on conversion error
+                else:
+                    event_data["battery"] = 100  # Default when no battery data
+
                 # Add optional fields
                 if "speed" in cleaned_location:
                     try:
@@ -2197,7 +2207,7 @@ class QueuedCOTService:
 
                 # Add status element (battery)
                 status = etree.SubElement(detail, "status")
-                status.set("battery", "49")  # Static battery value as per spec
+                status.set("battery", str(event_data.get("battery", 100)))
 
             # Add track information if available or for team members
             if "speed" in event_data or "course" in event_data or is_team_member:
