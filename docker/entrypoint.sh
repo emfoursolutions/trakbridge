@@ -454,33 +454,37 @@ try:
     with app.app_context():
         # Single connection for all migration and validation checks
         with db.engine.connect() as connection:
-            # Get database type for query optimization
-            dialect_name = db.engine.dialect.name.lower()
-
-            # Check 1: Basic table existence (database-specific optimized queries)
-            if dialect_name == 'sqlite':
-                from sqlalchemy import text
-                result = connection.execute(text(\"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('streams', 'tak_servers', 'users')\"))
-                table_count = result.scalar()
-            else:
-                # PostgreSQL/MySQL using information_schema
-                from sqlalchemy import text
-                result = connection.execute(text(\"SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ('streams', 'tak_servers', 'users')\"))
-                table_count = result.scalar()
-
-            if table_count < 3:
-                print('TABLES_MISSING', flush=True)
-                sys.exit(2)
-
-            # Check 2: Get current migration revision
+            # Check 1: Get current migration revision (check this FIRST for fresh databases)
             migration_ctx = MigrationContext.configure(connection)
             current_rev = migration_ctx.get_current_revision()
 
-            # Check 3: Get latest revision (no DB connection needed)
+            # Check 2: Get latest revision (no DB connection needed)
             alembic_cfg = Config()
             alembic_cfg.set_main_option('script_location', 'migrations')
             script_dir = ScriptDirectory.from_config(alembic_cfg)
             latest_rev = script_dir.get_current_head()
+
+            # Check 3: Table existence validation (only for databases with migrations)
+            # NOTE: Check current_rev first - fresh databases have no tables AND no revision,
+            # and we want to return NEEDS_INIT, not TABLES_MISSING
+            if current_rev is not None:
+                # Get database type for query optimization
+                dialect_name = db.engine.dialect.name.lower()
+
+                # Validate core tables exist (database-specific optimized queries)
+                if dialect_name == 'sqlite':
+                    from sqlalchemy import text
+                    result = connection.execute(text(\"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('streams', 'tak_servers', 'users')\"))
+                    table_count = result.scalar()
+                else:
+                    # PostgreSQL/MySQL using information_schema
+                    from sqlalchemy import text
+                    result = connection.execute(text(\"SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ('streams', 'tak_servers', 'users')\"))
+                    table_count = result.scalar()
+
+                if table_count < 3:
+                    print('TABLES_MISSING', flush=True)
+                    sys.exit(2)
 
             # Output results for shell processing (use flush=True to ensure clean output)
             if current_rev is None:
