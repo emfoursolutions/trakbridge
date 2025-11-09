@@ -97,10 +97,10 @@ RUN groupadd -g 1000 appuser && \
 RUN chown -R appuser:appuser /app/logs /app/data /app/tmp /app/external_config /app/entrypoint.sh
 
 # Ensure all users can read application files and appuser group has access
-# Set group ownership and readable permissions for Python modules (exclude writable external_config)
-RUN chown -R root:appuser /app/utils /app/plugins /app/services /app/models /app/routes /app/config /app/external_plugins && \
-    chmod -R 644 /app/utils /app/plugins /app/services /app/models /app/routes /app/config /app/external_plugins && \
-    find /app/utils /app/plugins /app/services /app/models /app/routes /app/config /app/external_plugins -type d -exec chmod 755 {} \;
+# Set group ownership and readable permissions for Python modules and static assets (exclude writable external_config)
+RUN chown -R root:appuser /app/utils /app/plugins /app/services /app/models /app/routes /app/config /app/external_plugins /app/static /app/templates /app/migrations && \
+    chmod -R 644 /app/utils /app/plugins /app/services /app/models /app/routes /app/config /app/external_plugins /app/static /app/templates /app/migrations && \
+    find /app/utils /app/plugins /app/services /app/models /app/routes /app/config /app/external_plugins /app/static /app/templates /app/migrations -type d -exec chmod 755 {} \;
 
 # Make core application files group-readable for dynamic users
 RUN chown root:appuser /app/app.py /app/database.py /app/_version.py /app/pyproject.toml && \
