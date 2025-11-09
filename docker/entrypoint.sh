@@ -431,7 +431,9 @@ run_migrations() {
     local migration_check_start=$(date +%s)
 
     # Capture stdout only (migration status), let stderr go to terminal for warnings
-    local migration_status=$(python -c "
+    # NOTE: Split declaration and assignment to properly capture exit code with set -e
+    local migration_status
+    migration_status=$(python -c "
 import sys
 import os
 sys.path.insert(0, '/app')
