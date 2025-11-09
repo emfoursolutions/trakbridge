@@ -430,6 +430,7 @@ run_migrations() {
     log_info "Performing optimized migration state check..."
     local migration_check_start=$(date +%s)
 
+    # Capture stdout only (migration status), let stderr go to terminal for warnings
     local migration_status=$(python -c "
 import sys
 import os
@@ -466,7 +467,7 @@ try:
                 table_count = result.scalar()
 
             if table_count < 3:
-                print('TABLES_MISSING')
+                print('TABLES_MISSING', flush=True)
                 sys.exit(2)
 
             # Check 2: Get current migration revision
@@ -479,21 +480,21 @@ try:
             script_dir = ScriptDirectory.from_config(alembic_cfg)
             latest_rev = script_dir.get_current_head()
 
-            # Output results for shell processing
+            # Output results for shell processing (use flush=True to ensure clean output)
             if current_rev is None:
-                print(f'NEEDS_INIT|{latest_rev}')
+                print(f'NEEDS_INIT|{latest_rev}', flush=True)
                 sys.exit(1)
             elif current_rev == latest_rev:
-                print(f'CURRENT|{current_rev}')
+                print(f'CURRENT|{current_rev}', flush=True)
                 sys.exit(0)
             else:
-                print(f'NEEDS_UPGRADE|{current_rev}|{latest_rev}')
+                print(f'NEEDS_UPGRADE|{current_rev}|{latest_rev}', flush=True)
                 sys.exit(1)
 
 except Exception as e:
-    print(f'ERROR: {str(e)}')
+    print(f'ERROR: {str(e)}', flush=True)
     sys.exit(2)
-" 2>&1)
+" 2>&2)
 
     local migration_exit_code=$?
     local migration_check_end=$(date +%s)
