@@ -1096,6 +1096,10 @@ def setup_startup_routes(app):
         """Check if startup is complete before processing requests"""
         from flask import request
 
+        # Debug logging for static file requests
+        if request.path.startswith("/static/"):
+            logger.error(f"Static file request: path={request.path}, endpoint={request.endpoint}")
+
         # Allow startup-related routes and static files
         if request.endpoint in ["startup_page", "startup_status", "static"]:
             return None
