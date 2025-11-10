@@ -1001,12 +1001,26 @@ def setup_error_handlers(app):
 
     @app.errorhandler(500)
     def internal_error(error):
-        db.session.rollback()
-        return render_template("errors/500.html"), 500
+        logger.error(f"500 error handler called with error: {error}", exc_info=True)
+        try:
+            db.session.rollback()
+        except Exception as e:
+            logger.warning(f"Failed to rollback session in 500 handler: {e}")
+        try:
+            response = render_template("errors/500.html"), 500
+            logger.debug(f"500 handler returning response: {response}")
+            return response
+        except Exception as template_error:
+            logger.error(f"Failed to render 500 template: {template_error}", exc_info=True)
+            # Return a plain text response as fallback
+            return "Internal Server Error", 500
 
     @app.errorhandler(503)
     def service_unavailable_error(error):
-        db.session.rollback()
+        try:
+            db.session.rollback()
+        except Exception as e:
+            logger.warning(f"Failed to rollback session in 503 handler: {e}")
         return render_template("errors/503.html"), 503
 
     @app.errorhandler(Exception)
@@ -1054,9 +1068,9 @@ def setup_error_handlers(app):
 
         try:
             db.session.rollback()
-        except Exception as e:
+        except Exception as rollback_error:
             # Database session may not be available
-            logger.warning(f"Failed to rollback database session: {e}")
+            logger.warning(f"Failed to rollback database session: {rollback_error}")
 
         if app.debug:
             raise e
