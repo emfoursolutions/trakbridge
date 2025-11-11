@@ -1096,26 +1096,6 @@ def setup_startup_routes(app):
         """Check if startup is complete before processing requests"""
         from flask import request
 
-        # Debug logging for static file requests
-        if request.path.startswith("/static/"):
-            try:
-                logger.error(f"[1] Static file request: path={request.path}, endpoint={request.endpoint}")
-                logger.error(f"[2] About to access app.static_folder...")
-                logger.error(f"[3] Static file - Flask static_folder: {app.static_folder}")
-                logger.error(f"[4] Static file - Flask static_url_path: {app.static_url_path}")
-
-                # Test if file exists
-                logger.error(f"[5] About to compute file path...")
-                import os
-                file_path = os.path.join(app.root_path, 'static', request.path.replace('/static/', ''))
-                logger.error(f"[6] Static file - Computed file path: {file_path}")
-                logger.error(f"[7] Static file - File exists: {os.path.exists(file_path)}")
-                if os.path.exists(file_path):
-                    logger.error(f"[8] Static file - File readable: {os.access(file_path, os.R_OK)}")
-                logger.error(f"[9] Debug logging complete")
-            except Exception as debug_error:
-                logger.error(f"[ERROR] Error in static file debug logging: {debug_error}", exc_info=True)
-
         # Allow startup-related routes and static files
         if request.endpoint in ["startup_page", "startup_status", "static"]:
             return None
@@ -1148,18 +1128,6 @@ def setup_startup_routes(app):
                 return render_template("startup.html")
 
         return None
-
-    @app.after_request
-    def debug_static_response(response):
-        """Debug static file responses"""
-        from flask import request
-
-        if request.path.startswith("/static/"):
-            logger.error(f"Static file response: path={request.path}, status={response.status_code}")
-            logger.error(f"Static file response: headers={dict(response.headers)}")
-            logger.error(f"Static file response: has_content={response.direct_passthrough or bool(response.get_data(as_text=False))}")
-
-        return response
 
 
 # Create the application instance
