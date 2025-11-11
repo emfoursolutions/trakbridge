@@ -1008,7 +1008,6 @@ def setup_error_handlers(app):
             logger.warning(f"Failed to rollback session in 500 handler: {e}")
         try:
             response = render_template("errors/500.html"), 500
-            logger.debug(f"500 handler returning response: {response}")
             return response
         except Exception as template_error:
             logger.error(f"Failed to render 500 template: {template_error}", exc_info=True)
