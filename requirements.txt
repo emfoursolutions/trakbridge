@@ -40,6 +40,7 @@ pytak
 python-dateutil
 python-dotenv
 PyYAML
+requests
 setuptools
 setuptools-scm
 six
