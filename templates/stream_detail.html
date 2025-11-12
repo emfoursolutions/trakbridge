@@ -218,7 +218,7 @@
                 </h5>
             </div>
             <div class="card-body">
-                {% set config = stream.get_plugin_config() %}
+                {% set config = stream.to_dict(include_sensitive=False).get('plugin_config', {}) %}
                 {% if config %}
                     <div class="row">
                         {% for key, value in config.items() %}
@@ -226,11 +226,7 @@
                             <div class="info-group">
                                 <label class="info-label">{{ key|title|replace('_', ' ') }}</label>
                                 <div class="info-value">
-                                    {% if key in ['password', 'feed_password'] %}
-                                        <span class="text-mono text-muted">••••••••</span>
-                                    {% else %}
-                                        <span class="text-mono">{{ value }}</span>
-                                    {% endif %}
+                                    <span class="text-mono">{{ value }}</span>
                                 </div>
                             </div>
                         </div>
