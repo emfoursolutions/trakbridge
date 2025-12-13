@@ -42,9 +42,9 @@ build-dev:
     - git describe --tags --long --dirty || echo "No git describe available"
   script:
     - echo "Building development container image..."
-    - echo "Branch: $CI_COMMIT_BRANCH"
-    - echo "Commit SHA: $CI_COMMIT_SHORT_SHA"
-    - echo "Image tags: dev-$CI_COMMIT_SHORT_SHA, dev-latest"
+    - echo "Branch - $CI_COMMIT_BRANCH"
+    - echo "Commit SHA - $CI_COMMIT_SHORT_SHA"
+    - echo "Image tags - dev-$CI_COMMIT_SHORT_SHA, dev-latest"
     - |
       # Set version for setuptools_scm
       export SETUPTOOLS_SCM_PRETEND_VERSION="0.1.0.dev0+g$CI_COMMIT_SHORT_SHA"
@@ -69,7 +69,7 @@ build-dev:
     - echo "Pushing development images to GitLab Container Registry..."
     - docker push "$CI_REGISTRY_IMAGE:dev-$CI_COMMIT_SHORT_SHA"
     - docker push "$CI_REGISTRY_IMAGE:dev-latest"
-    - echo "✅ Development build completed"
+    - echo "Development build completed"
     - echo "   - $CI_REGISTRY_IMAGE:dev-$CI_COMMIT_SHORT_SHA"
     - echo "   - $CI_REGISTRY_IMAGE:dev-latest"
   rules:
@@ -104,9 +104,9 @@ build-staging:
     - git describe --tags --long --dirty || echo "No git describe available"
   script:
     - echo "Building staging container image..."
-    - echo "Branch: $CI_COMMIT_BRANCH"
-    - echo "Commit SHA: $CI_COMMIT_SHORT_SHA"
-    - echo "Image tags: staging-$CI_COMMIT_SHORT_SHA, staging-latest"
+    - echo "Branch - $CI_COMMIT_BRANCH"
+    - echo "Commit SHA - $CI_COMMIT_SHORT_SHA"
+    - echo "Image tags - staging-$CI_COMMIT_SHORT_SHA, staging-latest"
     - |
       # Set version for setuptools_scm
       export SETUPTOOLS_SCM_PRETEND_VERSION="0.1.0.dev0+staging.$CI_COMMIT_SHORT_SHA"
@@ -131,7 +131,7 @@ build-staging:
     - echo "Pushing staging images to GitLab Container Registry..."
     - docker push "$CI_REGISTRY_IMAGE:staging-$CI_COMMIT_SHORT_SHA"
     - docker push "$CI_REGISTRY_IMAGE:staging-latest"
-    - echo "✅ Staging build completed"
+    - echo "Staging build completed"
     - echo "   - $CI_REGISTRY_IMAGE:staging-$CI_COMMIT_SHORT_SHA"
     - echo "   - $CI_REGISTRY_IMAGE:staging-latest"
   rules:
@@ -175,8 +175,8 @@ build-prod:
       if [ -n "$CI_COMMIT_TAG" ]; then
         # Tagged release - multi-platform build
         echo "🔨 Building multiplatform production image for release..."
-        echo "Tag: $CI_COMMIT_TAG"
-        echo "Platforms: linux/amd64, linux/arm64"
+        echo "Tag - $CI_COMMIT_TAG"
+        echo "Platforms - linux/amd64, linux/arm64"
 
         export SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG"
         echo "Using tag version: $CI_COMMIT_TAG"
@@ -200,17 +200,17 @@ build-prod:
           exit 1
         fi
 
-        echo "✅ Multiplatform production build completed"
+        echo "Multiplatform production build completed"
         echo "   - $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
         echo "   - $CI_REGISTRY_IMAGE:latest"
         echo ""
-        echo "📋 Platforms: linux/amd64, linux/arm64"
+        echo "Platforms - linux/amd64, linux/arm64"
       else
         # Main branch - single platform build
         echo "Building production container image for main branch..."
-        echo "Branch: $CI_COMMIT_BRANCH"
-        echo "Commit SHA: $CI_COMMIT_SHORT_SHA"
-        echo "Image tags: prod-$CI_COMMIT_SHORT_SHA, prod-latest"
+        echo "Branch - $CI_COMMIT_BRANCH"
+        echo "Commit SHA - $CI_COMMIT_SHORT_SHA"
+        echo "Image tags - prod-$CI_COMMIT_SHORT_SHA, prod-latest"
 
         export SETUPTOOLS_SCM_PRETEND_VERSION="0.1.0.dev0+prod.$CI_COMMIT_SHORT_SHA"
         echo "Using prod version: $SETUPTOOLS_SCM_PRETEND_VERSION"
@@ -236,7 +236,7 @@ build-prod:
         docker push "$CI_REGISTRY_IMAGE:prod-$CI_COMMIT_SHORT_SHA"
         docker push "$CI_REGISTRY_IMAGE:prod-latest"
 
-        echo "✅ Production build completed"
+        echo "Production build completed"
         echo "   - $CI_REGISTRY_IMAGE:prod-$CI_COMMIT_SHORT_SHA"
         echo "   - $CI_REGISTRY_IMAGE:prod-latest"
       fi
