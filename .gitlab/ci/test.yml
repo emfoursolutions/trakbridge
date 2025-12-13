@@ -1,0 +1,484 @@
+# ABOUTME: GitLab CI/CD Test Stage Jobs
+# ABOUTME: Contains all unit and integration test jobs for comprehensive testing coverage
+
+# Database service definitions for multi-database integration testing
+# PostgreSQL service for integration tests
+.postgres_service: &postgres_service
+  services:
+    - name: postgres:17-alpine
+      alias: postgres
+      variables:
+        POSTGRES_DB: test_db
+        POSTGRES_USER: test_user
+        POSTGRES_PASSWORD: test_password
+        POSTGRES_HOST_AUTH_METHOD: trust
+  variables:
+    DB_TYPE: "postgresql"
+    DATABASE_URL: "postgresql://test_user:test_password@postgres:5432/test_db"
+
+# SQLite service for integration tests
+.sqlite_service: &sqlite_service
+  # No services needed - file-based
+  variables:
+    DB_TYPE: "sqlite"
+
+# MySQL/MariaDB service for integration tests
+.mysql_service: &mysql_service
+  services:
+    - name: mariadb:11.8
+      alias: mariadb
+      variables:
+        MYSQL_ROOT_PASSWORD: test_password
+        MYSQL_DATABASE: test_db
+        MYSQL_USER: test_user
+        MYSQL_PASSWORD: test_password
+  variables:
+    DB_TYPE: "mysql"
+    DATABASE_URL: "mysql+pymysql://test_user:test_password@mariadb:3306/test_db"
+
+# Reusable script for cross-platform package installation
+.install_packages: &install_packages |
+  install_packages() {
+    # Detect package manager and install packages
+    if command -v apt-get >/dev/null 2>&1; then
+      echo "Using apt-get (Debian/Ubuntu)"
+      apt-get update -qq && apt-get install -y -qq "$@"
+    elif command -v dnf >/dev/null 2>&1; then
+      echo "Using dnf (Rocky Linux/Fedora)"
+      dnf install -y "$@"
+    elif command -v yum >/dev/null 2>&1; then
+      echo "Using yum (RHEL/CentOS)"
+      yum install -y "$@"
+    else
+      echo "ERROR: No supported package manager found (apt-get, dnf, yum)"
+      exit 1
+    fi
+  }
+
+# Code quality checks (Black, Flake8, isort)
+code-quality:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  tags:
+    - trakbridge-ci
+  timeout: 15m
+  before_script:
+    - *install_packages
+    - install_packages git jq
+    - pip install --upgrade pip
+    - pip install --no-cache-dir black flake8 isort
+  script: |
+    set +e  # Disable exit on error to ensure script always completes
+    echo "Running code quality checks with GitLab reporting..."
+
+    # Initialize Code Quality report
+    echo '[]' > gl-code-quality-report.json
+
+    # Run Black and generate report
+    echo "Checking code formatting with Black..."
+    if ! black --check --diff . > black-output.txt 2>&1 || true; then
+      echo "Black formatting issues found"
+
+      # Parse Black output and convert to GitLab Code Quality format
+      while IFS= read -r line; do
+        if [[ $line == *"would reformat"* ]]; then
+          file=$(echo "$line" | grep -o '[^[:space:]]*\.py')
+          if [[ -n "$file" ]]; then
+            jq --null-input \
+              --arg file "$file" \
+              --arg description "Code formatting issue: file would be reformatted by Black" \
+              --arg fingerprint "black-$file" \
+              '{
+                description: $description,
+                check_name: "black",
+                fingerprint: $fingerprint,
+                severity: "minor",
+                location: {
+                  path: $file,
+                  lines: {
+                    begin: 1
+                  }
+                }
+              }' >> black-issues.json
+          fi
+        fi
+      done < black-output.txt
+
+      if [[ -f black-issues.json ]]; then
+        jq -s '.' black-issues.json > black-report.json
+        jq '. + input' gl-code-quality-report.json black-report.json > temp.json && mv temp.json gl-code-quality-report.json
+      fi
+    fi
+
+    # Run Flake8 and generate report
+    echo "Checking code style with Flake8..."
+    if ! flake8 . --max-line-length=100 --extend-ignore=E203,W503 \
+      --exclude=.git,__pycache__,build,dist,.venv \
+      --format='%(path)s:%(row)d:%(col)d: %(code)s %(text)s' > flake8-output.txt 2>&1 || true; then
+      echo "Flake8 issues found"
+
+      # Convert Flake8 output to GitLab Code Quality format
+      while IFS= read -r line; do
+        if [[ $line == *":"* ]]; then
+          file=$(echo "$line" | cut -d: -f1)
+          line_num=$(echo "$line" | cut -d: -f2)
+          col_num=$(echo "$line" | cut -d: -f3)
+          error_code=$(echo "$line" | cut -d: -f4 | awk '{print $1}')
+          message=$(echo "$line" | cut -d: -f4 | cut -d' ' -f2-)
+
+          jq --null-input \
+            --arg file "$file" \
+            --arg line "$line_num" \
+            --arg description "Flake8 $error_code: $message" \
+            --arg fingerprint "flake8-$file-$line_num-$error_code" \
+            '{
+              description: $description,
+              check_name: "flake8",
+              fingerprint: $fingerprint,
+              severity: "minor",
+              location: {
+                path: $file,
+                lines: {
+                  begin: ($line | tonumber)
+                }
+              }
+            }' >> flake8-issues.json
+        fi
+      done < flake8-output.txt
+
+      if [[ -f flake8-issues.json ]]; then
+        jq -s '.' flake8-issues.json > flake8-report.json
+        jq '. + input' gl-code-quality-report.json flake8-report.json > temp.json && mv temp.json gl-code-quality-report.json
+      fi
+    fi
+
+    # Run isort and generate report
+    echo "Checking import sorting with isort..."
+    if ! isort --check-only --diff . > isort-output.txt 2>&1 || true; then
+      echo "Import sorting issues found"
+
+      # Parse isort output and convert to GitLab Code Quality format
+      while IFS= read -r line; do
+        if [[ $line == *"Fixing"* ]] || [[ $line == *"Skipped"* ]]; then
+          file=$(echo "$line" | grep -o '[^[:space:]]*\.py')
+          if [[ -n "$file" ]]; then
+            jq --null-input \
+              --arg file "$file" \
+              --arg description "Import sorting issue: imports not sorted according to isort configuration" \
+              --arg fingerprint "isort-$file" \
+              '{
+                description: $description,
+                check_name: "isort",
+                fingerprint: $fingerprint,
+                severity: "minor",
+                location: {
+                  path: $file,
+                  lines: {
+                    begin: 1
+                  }
+                }
+              }' >> isort-issues.json
+          fi
+        fi
+      done < isort-output.txt
+
+      if [[ -f isort-issues.json ]]; then
+        jq -s '.' isort-issues.json > isort-report.json
+        jq '. + input' gl-code-quality-report.json isort-report.json > temp.json && mv temp.json gl-code-quality-report.json
+      fi
+    fi
+
+    # Show summary
+    issue_count=$(jq 'length' gl-code-quality-report.json)
+    echo "Code quality check completed: $issue_count issues found"
+
+    if [[ $issue_count -gt 0 ]]; then
+      echo "Code quality issues detected - see GitLab Code Quality report"
+    else
+      echo "All code quality checks passed"
+    fi
+
+    # Always exit successfully regardless of quality issues
+    exit 0
+
+  artifacts:
+    reports:
+      codequality: gl-code-quality-report.json
+    paths:
+      - gl-code-quality-report.json
+      - black-output.txt
+      - flake8-output.txt
+      - isort-output.txt
+    expire_in: 1 week
+    when: always
+
+  allow_failure: false
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+
+# Unit tests with coverage
+unit-tests:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  tags:
+    - trakbridge-ci
+  timeout: 20m
+  coverage: '/TOTAL.+?(\d+\%)$/'
+
+  variables:
+    # Use SQLite for fast unit tests
+    DB_TYPE: "sqlite"
+    FLASK_ENV: "testing"
+    SECRET_KEY: "test-secret-key-for-gitlab-ci"
+    TRAKBRIDGE_ENCRYPTION_KEY: "test-encryption-key-for-gitlab-ci-12345"
+    COVERAGE_THRESHOLD: "20"
+    # Ensure Python can find the project modules
+    PYTHONPATH: "${CI_PROJECT_DIR}:${PYTHONPATH:-}"
+
+  before_script:
+    - *install_packages
+    - install_packages git curl build-essential
+    - pip install --upgrade pip
+    - pip install -e ".[dev]"
+
+  script: |
+    echo "Running comprehensive unit test suite..."
+
+    # Run tests with comprehensive coverage reporting
+    pytest tests/unit/ -v \
+      --cov=. \
+      --cov-report=xml \
+      --cov-report=html \
+      --cov-report=term-missing \
+      --cov-fail-under=$COVERAGE_THRESHOLD \
+      --cov-branch \
+      --tb=short \
+      --maxfail=10 \
+      --durations=10 \
+      --junitxml=unit-test-results.xml
+
+    echo "Unit tests completed"
+
+  artifacts:
+    reports:
+      junit: unit-test-results.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - htmlcov/
+      - coverage.xml
+      - unit-test-results.xml
+      - tests/unit/
+    expire_in: 14 days
+
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+
+# Integration tests - SQLite (fast execution for quick feedback)
+integration-tests-sqlite:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  <<: *sqlite_service
+  tags:
+    - trakbridge-ci
+  timeout: 10m
+
+  variables:
+    FLASK_ENV: "testing"
+    SECRET_KEY: "test-secret-key-for-gitlab-ci"
+    TRAKBRIDGE_ENCRYPTION_KEY: "test-encryption-key-for-gitlab-ci-12345"
+    # Ensure Python can find the project modules
+    PYTHONPATH: "${CI_PROJECT_DIR}:${PYTHONPATH:-}"
+
+  before_script:
+    - *install_packages
+    - install_packages git curl build-essential
+    - pip install --upgrade pip
+    - pip install -e ".[dev]"
+
+  script: |
+    echo "Running integration tests against SQLite..."
+
+    # Run integration tests with fast SQLite backend, excluding database compatibility and MySQL/MariaDB specific tests
+    pytest tests/integration/ -v --tb=short --maxfail=5 --durations=10 --junitxml=integration-sqlite-results.xml -m "not slow and not mysql" --ignore=tests/integration/test_database_compatibility.py
+
+    echo "SQLite integration tests completed"
+
+  artifacts:
+    reports:
+      junit: integration-sqlite-results.xml
+    paths:
+      - integration-sqlite-results.xml
+      - tests/integration/
+    expire_in: 14 days
+
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+
+# Integration tests - PostgreSQL (production-like testing)
+integration-tests-postgresql:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  <<: *postgres_service
+  tags:
+    - trakbridge-ci
+  timeout: 15m
+
+  variables:
+    FLASK_ENV: "testing"
+    SECRET_KEY: "test-secret-key-for-gitlab-ci"
+    TRAKBRIDGE_ENCRYPTION_KEY: "test-encryption-key-for-gitlab-ci-12345"
+    # Ensure Python can find the project modules
+    PYTHONPATH: "${CI_PROJECT_DIR}:${PYTHONPATH:-}"
+
+  before_script:
+    - *install_packages
+    - install_packages git curl build-essential
+    - pip install --upgrade pip
+    - pip install -e ".[dev]"
+
+  script: |
+    echo "Running integration tests against PostgreSQL..."
+
+    # Run integration tests with PostgreSQL backend, excluding database compatibility and MySQL/MariaDB specific tests
+    pytest tests/integration/ -v --tb=short --maxfail=5 --durations=10 --junitxml=integration-postgresql-results.xml -m "not mysql" --ignore=tests/integration/test_database_compatibility.py
+
+    echo "PostgreSQL integration tests completed"
+
+  artifacts:
+    reports:
+      junit: integration-postgresql-results.xml
+    paths:
+      - integration-postgresql-results.xml
+      - tests/integration/
+    expire_in: 14 days
+
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+
+# Integration tests - MySQL/MariaDB (comprehensive database compatibility)
+integration-tests-mysql:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  <<: *mysql_service
+  tags:
+    - trakbridge-ci
+  timeout: 15m
+
+  variables:
+    FLASK_ENV: "testing"
+    SECRET_KEY: "test-secret-key-for-gitlab-ci"
+    TRAKBRIDGE_ENCRYPTION_KEY: "test-encryption-key-for-gitlab-ci-12345"
+    # Force MySQL/MariaDB usage even in testing environment
+    DB_TYPE: "mysql"
+    DB_HOST: "mariadb"
+    DB_PORT: "3306"
+    DB_USER: "test_user"
+    DB_PASSWORD: "test_password"
+    DB_NAME: "test_db"
+    # Ensure Python can find the project modules
+    PYTHONPATH: "${CI_PROJECT_DIR}:${PYTHONPATH:-}"
+
+  before_script:
+    - *install_packages
+    - install_packages git curl build-essential
+    - pip install --upgrade pip
+    - pip install -e ".[dev]"
+
+  script: |
+    echo "Running integration tests against MySQL/MariaDB..."
+
+    # Wait for MariaDB service to be ready
+    echo "Waiting for MariaDB to be ready..."
+    for i in {1..30}; do
+      if python -c "import pymysql; pymysql.connect(host='mariadb', user='test_user', password='test_password', database='test_db')" 2>/dev/null; then
+        echo "MariaDB is ready!"
+        break
+      fi
+      echo "Waiting for MariaDB... ($i/30)"
+      sleep 2
+    done
+
+    # Verify database environment variables
+    echo "Database configuration:"
+    echo "DB_TYPE: $DB_TYPE"
+    echo "DATABASE_URL: $DATABASE_URL"
+    echo "FLASK_ENV: $FLASK_ENV"
+
+    # Run integration tests with MySQL backend, excluding database compatibility tests
+    pytest tests/integration/ -v --tb=short --maxfail=5 --durations=10 --junitxml=integration-mysql-results.xml --ignore=tests/integration/test_database_compatibility.py
+
+    echo "MySQL integration tests completed"
+
+  artifacts:
+    reports:
+      junit: integration-mysql-results.xml
+    paths:
+      - integration-mysql-results.xml
+      - tests/integration/
+    expire_in: 14 days
+
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+
+# Database compatibility tests - No database environment variables set
+# This job tests dynamic database configuration switching within the same test run
+database-compatibility-tests:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  tags:
+    - trakbridge-ci
+  timeout: 15m
+
+  variables:
+    FLASK_ENV: "testing"
+    SECRET_KEY: "test-secret-key-for-gitlab-ci"
+    TRAKBRIDGE_ENCRYPTION_KEY: "test-encryption-key-for-gitlab-ci-12345"
+    # Ensure Python can find the project modules
+    PYTHONPATH: "${CI_PROJECT_DIR}:${PYTHONPATH:-}"
+    # Critical: No DB_TYPE or DATABASE_URL set - tests control database configuration
+
+  before_script:
+    - *install_packages
+    - install_packages git curl build-essential
+    - pip install --upgrade pip
+    - pip install -e ".[dev]"
+
+  script: |
+    echo "Running database compatibility tests..."
+    echo "These tests verify database configuration precedence and dynamic switching"
+
+    # Run only the database compatibility tests with no database environment constraints
+    pytest tests/integration/test_database_compatibility.py -v --tb=short --maxfail=5 --durations=10 --junitxml=database-compatibility-results.xml
+
+    echo "Database compatibility tests completed"
+
+  artifacts:
+    reports:
+      junit: database-compatibility-results.xml
+    paths:
+      - database-compatibility-results.xml
+      - tests/integration/test_database_compatibility.py
+    expire_in: 14 days
+
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH

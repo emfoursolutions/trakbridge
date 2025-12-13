@@ -157,8 +157,19 @@ services:
       - ldap_bind_password
       - oidc_client_secret
 
-    ports:
-      - "5000:5000"  # Change first port if you need external access on different port
+    # Traefik labels for reverse proxy integration
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=frontend"
+      - "traefik.http.routers.tb-prod.rule=Host(`tb.emfour.net`)"
+      - "traefik.http.routers.tb-prod.entrypoints=websecure"
+      - "traefik.http.routers.tb-prod.tls=true"
+      - "traefik.http.routers.tb-prod.tls.certresolver=letsencrypt"
+      - "traefik.http.services.tb-prod.loadbalancer.server.port=5000"
+
+    # Ports - removed for Traefik-only access
+    # ports:
+    #   - "5000:5000"  # Change first port if you need external access on different port
 
     volumes:
       - ./logs:/app/logs
@@ -184,7 +195,8 @@ services:
         required: false
 
     networks:
-      - trakbridge
+      - trakbridge  # Internal for DB communication
+      - frontend    # External for Traefik
 
   # =============================================================================
   # PostgreSQL Database (Optional)
@@ -317,30 +329,7 @@ services:
         reservations:
           memory: 512M
 
-  # =============================================================================
-  # Nginx Reverse Proxy (Optional)
-  # =============================================================================
-  nginx:
-    image: nginx:alpine
-    container_name: trakbridge-nginx
-    restart: unless-stopped
-    profiles: ["nginx"]
-
-    ports:
-      - "80:80"
-      - "443:443"
-
-    volumes:
-      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
-      - ./logs/nginx:/var/log/nginx
-
-    depends_on:
-      trakbridge:
-        condition: service_healthy
-
-    networks:
-      - trakbridge
+  # Nginx reverse proxy removed - Traefik handles reverse proxy
 
 # =============================================================================
 # Networks & Volumes
@@ -348,6 +337,10 @@ services:
 networks:
   trakbridge:
     driver: bridge
+
+  frontend:
+    external: true
+    name: frontend
 
 volumes:
   postgres_data:
