@@ -153,6 +153,12 @@ class QueueMonitoringService:
                 await self.monitoring_task
             except asyncio.CancelledError:
                 pass
+            except RuntimeError as e:
+                # Handle case where task is attached to different loop
+                if "attached to a different loop" in str(e):
+                    logger.debug("Monitoring task cancelled in different loop context")
+                else:
+                    raise
             self.monitoring_task = None
 
         logger.info("Queue monitoring service stopped")
