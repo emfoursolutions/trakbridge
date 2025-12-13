@@ -5,6 +5,25 @@
 # VALIDATE STAGE
 # =============================================================================
 
+# Reusable script for cross-platform package installation
+.install_packages: &install_packages |
+  install_packages() {
+    # Detect package manager and install packages
+    if command -v apt-get >/dev/null 2>&1; then
+      echo "Using apt-get (Debian/Ubuntu)"
+      apt-get update -qq && apt-get install -y -qq "$@"
+    elif command -v dnf >/dev/null 2>&1; then
+      echo "Using dnf (Rocky Linux/Fedora)"
+      dnf install -y "$@"
+    elif command -v yum >/dev/null 2>&1; then
+      echo "Using yum (RHEL/CentOS)"
+      yum install -y "$@"
+    else
+      echo "ERROR: No supported package manager found (apt-get, dnf, yum)"
+      exit 1
+    fi
+  }
+
 validate-yaml:
   stage: validate
   image: python:${PYTHON_VERSION}-slim
