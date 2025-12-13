@@ -59,9 +59,9 @@ deploy-dev-postgres:
     DOMAIN: tb-dev.emfour.net
   script:
     - echo "🚀 Deploying to development environment (PostgreSQL)..."
-    - echo "Environment: tb-dev.emfour.net"
-    - echo "Image: $CI_REGISTRY_IMAGE:$IMAGE_TAG"
-    - echo "Database: PostgreSQL"
+    - echo "Environment - tb-dev.emfour.net"
+    - echo "Image - $CI_REGISTRY_IMAGE:$IMAGE_TAG"
+    - echo "Database - PostgreSQL"
     - |
       # Create deployment directory structure
       echo "Creating deployment directories..."
@@ -86,7 +86,7 @@ deploy-dev-postgres:
       curl -f --retry 5 --retry-delay 10 https://$DOMAIN/api/health
 
       echo "✅ Development (PostgreSQL) deployment completed successfully"
-      echo "🌐 Application available at: https://$DOMAIN"
+      echo "🌐 Application available at - https://$DOMAIN"
   environment:
     name: development-postgres
     url: https://tb-dev.emfour.net
@@ -109,9 +109,9 @@ deploy-dev-mysql:
     DOMAIN: tb-dev-mysql.emfour.net
   script:
     - echo "🚀 Deploying to development environment (MySQL)..."
-    - echo "Environment: tb-dev-mysql.emfour.net"
-    - echo "Image: $CI_REGISTRY_IMAGE:$IMAGE_TAG"
-    - echo "Database: MySQL/MariaDB"
+    - echo "Environment - tb-dev-mysql.emfour.net"
+    - echo "Image - $CI_REGISTRY_IMAGE:$IMAGE_TAG"
+    - echo "Database - MySQL/MariaDB"
     - echo "⚠️  This is a manual deployment for migration testing"
     - |
       # Create deployment directory structure
@@ -137,7 +137,7 @@ deploy-dev-mysql:
       curl -f --retry 5 --retry-delay 10 https://$DOMAIN/api/health
 
       echo "✅ Development (MySQL) deployment completed successfully"
-      echo "🌐 Application available at: https://$DOMAIN"
+      echo "🌐 Application available at - https://$DOMAIN"
       echo "💡 Remember to test database migrations"
       echo "💡 Use 'stop-dev-mysql' job to clean up when done"
   environment:
@@ -164,9 +164,9 @@ deploy-dev-sqlite:
     DOMAIN: tb-dev-sqlite.emfour.net
   script:
     - echo "🚀 Deploying to development environment (SQLite)..."
-    - echo "Environment: tb-dev-sqlite.emfour.net"
-    - echo "Image: $CI_REGISTRY_IMAGE:$IMAGE_TAG"
-    - echo "Database: SQLite (file-based)"
+    - echo "Environment - tb-dev-sqlite.emfour.net"
+    - echo "Image - $CI_REGISTRY_IMAGE:$IMAGE_TAG"
+    - echo "Database - SQLite (file-based)"
     - echo "⚠️  This is a manual deployment for migration testing"
     - |
       # Create deployment directory structure
@@ -193,7 +193,7 @@ deploy-dev-sqlite:
       curl -f --retry 5 --retry-delay 10 https://$DOMAIN/api/health
 
       echo "✅ Development (SQLite) deployment completed successfully"
-      echo "🌐 Application available at: https://$DOMAIN"
+      echo "🌐 Application available at - https://$DOMAIN"
       echo "💡 Remember to test database migrations"
       echo "💡 Use 'stop-dev-sqlite' job to clean up when done"
   environment:
@@ -253,9 +253,9 @@ deploy-staging:
     DOMAIN: tb-staging.emfour.net
   script:
     - echo "🚀 Deploying to staging environment..."
-    - echo "Environment: tb-staging.emfour.net"
-    - echo "Image: $CI_REGISTRY_IMAGE:$IMAGE_TAG"
-    - echo "Database: PostgreSQL"
+    - echo "Environment - tb-staging.emfour.net"
+    - echo "Image - $CI_REGISTRY_IMAGE:$IMAGE_TAG"
+    - echo "Database - PostgreSQL"
     - |
       # Create deployment directory structure
       echo "Creating deployment directories..."
@@ -280,7 +280,7 @@ deploy-staging:
       curl -f --retry 5 --retry-delay 10 https://$DOMAIN/api/health
 
       echo "✅ Staging deployment completed successfully"
-      echo "🌐 Application available at: https://$DOMAIN"
+      echo "🌐 Application available at - https://$DOMAIN"
       echo "📋 Ready for UAT and final validation"
   environment:
     name: staging
@@ -304,16 +304,16 @@ deploy-prod:
   script:
     - echo "🚀 Deploying to PRODUCTION environment..."
     - echo "⚠️  PRODUCTION DEPLOYMENT - Manual approval required"
-    - echo "Environment: tb.emfour.net"
-    - echo "Database: PostgreSQL"
+    - echo "Environment - tb.emfour.net"
+    - echo "Database - PostgreSQL"
     - |
       # Determine image tag based on commit type
       if [ -n "$CI_COMMIT_TAG" ]; then
         export IMAGE_TAG="$CI_COMMIT_TAG"
-        echo "Image: $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG (tagged release)"
+        echo "Image - $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG (tagged release)"
       else
         export IMAGE_TAG="prod-latest"
-        echo "Image: $CI_REGISTRY_IMAGE:prod-latest (main branch)"
+        echo "Image - $CI_REGISTRY_IMAGE:prod-latest (main branch)"
       fi
     - |
       # Create deployment directory structure
@@ -342,7 +342,7 @@ deploy-prod:
       fi
 
       echo "✅ PRODUCTION deployment completed successfully"
-      echo "🌐 Application available at: https://$DOMAIN"
+      echo "🌐 Application available at - https://$DOMAIN"
       echo "🎉 Production deployment verified and healthy"
   environment:
     name: production
