@@ -34,11 +34,9 @@
     - echo "Configuring SSH agent..."
     - eval $(ssh-agent -s)
     - |
-      # Decode base64 SSH key, stripping any whitespace
-      echo "$DEPLOY_SSH_KEY" | tr -d '[:space:]' | base64 -d > /tmp/deploy_key
-      chmod 600 /tmp/deploy_key
-      ssh-add /tmp/deploy_key
-      rm /tmp/deploy_key
+      # Load SSH key from GitLab CI/CD file variable
+      chmod 600 "$DEPLOY_SSH_KEY"
+      ssh-add "$DEPLOY_SSH_KEY"
     - mkdir -p ~/.ssh && chmod 700 ~/.ssh
     - echo "Adding deployment host to known_hosts..."
     - ssh-keyscan $DEPLOY_HOST >> ~/.ssh/known_hosts
