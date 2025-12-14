@@ -32,27 +32,27 @@ release-dockerhub:
   variables:
     DOCKERHUB_IMAGE: emfoursolutions/trakbridge
   before_script:
-    - echo "🔐 Authenticating with container registries..."
+    - echo "Authenticating with container registries..."
     - echo "Logging in to GitLab Container Registry..."
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
     - echo "Logging in to DockerHub..."
     - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin docker.io
-    - echo "✅ Authentication successful"
+    - echo "Authentication successful"
   script:
     - |
       # Determine which image to publish
       if [ -n "$CI_COMMIT_TAG" ]; then
         export SOURCE_TAG="$CI_COMMIT_TAG"
         export PUBLISH_VERSION="$CI_COMMIT_TAG"
-        echo "📦 Publishing tagged release: $CI_COMMIT_TAG"
+        echo "Publishing tagged release: $CI_COMMIT_TAG"
       else
         export SOURCE_TAG="prod-latest"
         export PUBLISH_VERSION="main-$(date +%Y%m%d-%H%M%S)"
-        echo "📦 Publishing main branch build as: $PUBLISH_VERSION"
+        echo "Publishing main branch build as: $PUBLISH_VERSION"
       fi
 
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-      echo "🚀 DockerHub Release Configuration"
+      echo "DockerHub Release Configuration"
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       echo "  Source Registry: GitLab Container Registry"
       echo "  Source Image:    $CI_REGISTRY_IMAGE:$SOURCE_TAG"
@@ -64,56 +64,56 @@ release-dockerhub:
 
       # Pull from GitLab registry
       echo ""
-      echo "⬇️  Pulling image from GitLab Container Registry..."
+      echo " Pulling image from GitLab Container Registry..."
       if ! docker pull $CI_REGISTRY_IMAGE:$SOURCE_TAG; then
-        echo "❌ Failed to pull image from GitLab registry"
+        echo "Failed to pull image from GitLab registry"
         echo "   Image: $CI_REGISTRY_IMAGE:$SOURCE_TAG"
         echo "   Ensure the image was built successfully in the build stage"
         exit 1
       fi
-      echo "✅ Image pulled successfully"
+      echo "Image pulled successfully"
 
       # Tag for DockerHub
       echo ""
-      echo "🏷️  Tagging images for DockerHub..."
+      echo " Tagging images for DockerHub..."
       docker tag $CI_REGISTRY_IMAGE:$SOURCE_TAG $DOCKERHUB_IMAGE:$PUBLISH_VERSION
       docker tag $CI_REGISTRY_IMAGE:$SOURCE_TAG $DOCKERHUB_IMAGE:latest
-      echo "✅ Images tagged:"
+      echo "Images tagged:"
       echo "   - $DOCKERHUB_IMAGE:$PUBLISH_VERSION"
       echo "   - $DOCKERHUB_IMAGE:latest"
 
       # Push to DockerHub
       echo ""
-      echo "⬆️  Pushing images to DockerHub..."
+      echo " Pushing images to DockerHub..."
       echo "   This may take several minutes for multi-platform images..."
 
       if ! docker push $DOCKERHUB_IMAGE:$PUBLISH_VERSION; then
-        echo "❌ Failed to push version tag to DockerHub"
+        echo "Failed to push version tag to DockerHub"
         exit 1
       fi
-      echo "✅ Version tag pushed: $DOCKERHUB_IMAGE:$PUBLISH_VERSION"
+      echo "Version tag pushed: $DOCKERHUB_IMAGE:$PUBLISH_VERSION"
 
       if ! docker push $DOCKERHUB_IMAGE:latest; then
-        echo "❌ Failed to push latest tag to DockerHub"
+        echo "Failed to push latest tag to DockerHub"
         exit 1
       fi
-      echo "✅ Latest tag pushed: $DOCKERHUB_IMAGE:latest"
+      echo "Latest tag pushed: $DOCKERHUB_IMAGE:latest"
 
       # Success summary
       echo ""
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-      echo "🎉 DockerHub Publication Successful!"
+      echo "DockerHub Publication Successful!"
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       echo ""
-      echo "📋 Published Images:"
-      echo "   🔖 Version:  $DOCKERHUB_IMAGE:$PUBLISH_VERSION"
-      echo "   🔖 Latest:   $DOCKERHUB_IMAGE:latest"
+      echo "Published Images:"
+      echo "   Version:  $DOCKERHUB_IMAGE:$PUBLISH_VERSION"
+      echo "   Latest:   $DOCKERHUB_IMAGE:latest"
       echo ""
-      echo "🌐 DockerHub URLs:"
-      echo "   📦 Repository: https://hub.docker.com/r/emfoursolutions/trakbridge"
-      echo "   🏷️  Tags:       https://hub.docker.com/r/emfoursolutions/trakbridge/tags"
+      echo "DockerHub URLs:"
+      echo "   Repository: https://hub.docker.com/r/emfoursolutions/trakbridge"
+      echo "    Tags:       https://hub.docker.com/r/emfoursolutions/trakbridge/tags"
       echo ""
-      echo "💡 Pull Commands:"
+      echo "Pull Commands:"
       echo "   docker pull $DOCKERHUB_IMAGE:$PUBLISH_VERSION"
       echo "   docker pull $DOCKERHUB_IMAGE:latest"
       echo ""
@@ -121,24 +121,24 @@ release-dockerhub:
 
       # Verify images were pushed
       echo ""
-      echo "🔍 Verifying published images..."
+      echo "Verifying published images..."
       if docker manifest inspect $DOCKERHUB_IMAGE:$PUBLISH_VERSION > /dev/null 2>&1; then
-        echo "✅ Version tag verified on DockerHub"
+        echo "Version tag verified on DockerHub"
       else
-        echo "⚠️  Warning: Could not verify version tag (may take time to appear)"
+        echo " Warning: Could not verify version tag (may take time to appear)"
       fi
 
       if docker manifest inspect $DOCKERHUB_IMAGE:latest > /dev/null 2>&1; then
-        echo "✅ Latest tag verified on DockerHub"
+        echo "Latest tag verified on DockerHub"
       else
-        echo "⚠️  Warning: Could not verify latest tag (may take time to appear)"
+        echo " Warning: Could not verify latest tag (may take time to appear)"
       fi
 
   after_script:
-    - echo "🧹 Cleaning up local images..."
+    - echo " Cleaning up local images..."
     - docker rmi $DOCKERHUB_IMAGE:$PUBLISH_VERSION 2>/dev/null || true
     - docker rmi $DOCKERHUB_IMAGE:latest 2>/dev/null || true
-    - echo "✅ Cleanup complete"
+    - echo "Cleanup complete"
 
   rules:
     - if: $CI_COMMIT_TAG

@@ -40,7 +40,7 @@
     - mkdir -p ~/.ssh && chmod 700 ~/.ssh
     - echo "Adding deployment host to known_hosts..."
     - ssh-keyscan $DEPLOY_HOST >> ~/.ssh/known_hosts
-    - echo "✅ Deployment environment ready"
+    - echo "Deployment environment ready"
 
 # =============================================================================
 # Development Environment Deployments
@@ -59,7 +59,7 @@ deploy-dev-postgres:
     DB_PROFILE: postgres
     DOMAIN: tb-dev.emfour.net
   script:
-    - echo "🚀 Deploying to development environment (PostgreSQL)..."
+    - echo "Deploying to development environment (PostgreSQL)..."
     - echo "Environment - tb-dev.emfour.net"
     - echo "Image - $CI_REGISTRY_IMAGE:$IMAGE_TAG"
     - echo "Database - PostgreSQL"
@@ -77,8 +77,8 @@ deploy-dev-postgres:
       ssh $DEPLOY_USER@$DEPLOY_HOST "cd $DEPLOY_PATH && \
         echo '$CI_REGISTRY_PASSWORD' | docker login -u '$CI_REGISTRY_USER' --password-stdin $CI_REGISTRY && \
         docker pull $CI_REGISTRY_IMAGE:$IMAGE_TAG && \
-        docker-compose -f docker-compose.yml --profile $DB_PROFILE down && \
-        docker-compose -f docker-compose.yml --profile $DB_PROFILE up -d"
+        docker compose -f docker-compose.yml --profile $DB_PROFILE down && \
+        docker compose -f docker-compose.yml --profile $DB_PROFILE up -d"
 
       # Health check via Traefik domain
       echo "Waiting for application to start..."
@@ -86,8 +86,8 @@ deploy-dev-postgres:
       echo "Running health check..."
       curl -f --retry 5 --retry-delay 10 https://$DOMAIN/api/health
 
-      echo "✅ Development (PostgreSQL) deployment completed successfully"
-      echo "🌐 Application available at - https://$DOMAIN"
+      echo "Development (PostgreSQL) deployment completed successfully"
+      echo "Application available at - https://$DOMAIN"
   environment:
     name: development-postgres
     url: https://tb-dev.emfour.net
@@ -109,11 +109,11 @@ deploy-dev-mysql:
     DB_PROFILE: mysql
     DOMAIN: tb-dev-mysql.emfour.net
   script:
-    - echo "🚀 Deploying to development environment (MySQL)..."
+    - echo "Deploying to development environment (MySQL)..."
     - echo "Environment - tb-dev-mysql.emfour.net"
     - echo "Image - $CI_REGISTRY_IMAGE:$IMAGE_TAG"
     - echo "Database - MySQL/MariaDB"
-    - echo "⚠️  This is a manual deployment for migration testing"
+    - echo "This is a manual deployment for migration testing"
     - |
       # Create deployment directory structure
       echo "Creating deployment directories..."
@@ -128,8 +128,8 @@ deploy-dev-mysql:
       ssh $DEPLOY_USER@$DEPLOY_HOST "cd $DEPLOY_PATH && \
         echo '$CI_REGISTRY_PASSWORD' | docker login -u '$CI_REGISTRY_USER' --password-stdin $CI_REGISTRY && \
         docker pull $CI_REGISTRY_IMAGE:$IMAGE_TAG && \
-        docker-compose -f docker-compose.yml --profile $DB_PROFILE down && \
-        docker-compose -f docker-compose.yml --profile $DB_PROFILE up -d"
+        docker compose -f docker-compose.yml --profile $DB_PROFILE down && \
+        docker compose -f docker-compose.yml --profile $DB_PROFILE up -d"
 
       # Health check via Traefik domain
       echo "Waiting for application to start..."
@@ -137,10 +137,10 @@ deploy-dev-mysql:
       echo "Running health check..."
       curl -f --retry 5 --retry-delay 10 https://$DOMAIN/api/health
 
-      echo "✅ Development (MySQL) deployment completed successfully"
-      echo "🌐 Application available at - https://$DOMAIN"
-      echo "💡 Remember to test database migrations"
-      echo "💡 Use 'stop-dev-mysql' job to clean up when done"
+      echo " Development (MySQL) deployment completed successfully"
+      echo " Application available at - https://$DOMAIN"
+      echo " Remember to test database migrations"
+      echo " Use 'stop-dev-mysql' job to clean up when done"
   environment:
     name: development-mysql
     url: https://tb-dev-mysql.emfour.net
@@ -184,8 +184,8 @@ deploy-dev-sqlite:
         echo '$CI_REGISTRY_PASSWORD' | docker login -u '$CI_REGISTRY_USER' --password-stdin $CI_REGISTRY && \
         docker pull $CI_REGISTRY_IMAGE:$IMAGE_TAG && \
         export DB_TYPE=sqlite && \
-        docker-compose -f docker-compose.yml down && \
-        docker-compose -f docker-compose.yml up -d app"
+        docker compose -f docker-compose.yml down && \
+        docker compose -f docker-compose.yml up -d app"
 
       # Health check via Traefik domain
       echo "Waiting for application to start..."
@@ -193,10 +193,10 @@ deploy-dev-sqlite:
       echo "Running health check..."
       curl -f --retry 5 --retry-delay 10 https://$DOMAIN/api/health
 
-      echo "✅ Development (SQLite) deployment completed successfully"
-      echo "🌐 Application available at - https://$DOMAIN"
-      echo "💡 Remember to test database migrations"
-      echo "💡 Use 'stop-dev-sqlite' job to clean up when done"
+      echo "Development (SQLite) deployment completed successfully"
+      echo "Application available at - https://$DOMAIN"
+      echo "Remember to test database migrations"
+      echo "Use 'stop-dev-sqlite' job to clean up when done"
   environment:
     name: development-sqlite
     url: https://tb-dev-sqlite.emfour.net
@@ -218,9 +218,9 @@ stop-dev-mysql:
   variables:
     DEPLOY_PATH: /opt/dev/tb-dev-mysql
   script:
-    - echo "🧹 Stopping MySQL development environment..."
+    - echo "Stopping MySQL development environment..."
     - ssh $DEPLOY_USER@$DEPLOY_HOST "cd $DEPLOY_PATH && docker-compose --profile mysql down -v"
-    - echo "✅ MySQL development environment stopped and volumes removed"
+    - echo "MySQL development environment stopped and volumes removed"
   environment:
     name: development-mysql
     action: stop
@@ -232,9 +232,9 @@ stop-dev-sqlite:
   variables:
     DEPLOY_PATH: /opt/dev/tb-dev-sqlite
   script:
-    - echo "🧹 Stopping SQLite development environment..."
+    - echo "Stopping SQLite development environment..."
     - ssh $DEPLOY_USER@$DEPLOY_HOST "cd $DEPLOY_PATH && docker-compose down -v"
-    - echo "✅ SQLite development environment stopped and volumes removed"
+    - echo "SQLite development environment stopped and volumes removed"
   environment:
     name: development-sqlite
     action: stop
@@ -253,7 +253,7 @@ deploy-staging:
     DB_PROFILE: postgres
     DOMAIN: tb-staging.emfour.net
   script:
-    - echo "🚀 Deploying to staging environment..."
+    - echo "Deploying to staging environment..."
     - echo "Environment - tb-staging.emfour.net"
     - echo "Image - $CI_REGISTRY_IMAGE:$IMAGE_TAG"
     - echo "Database - PostgreSQL"
@@ -271,8 +271,8 @@ deploy-staging:
       ssh $DEPLOY_USER@$DEPLOY_HOST "cd $DEPLOY_PATH && \
         echo '$CI_REGISTRY_PASSWORD' | docker login -u '$CI_REGISTRY_USER' --password-stdin $CI_REGISTRY && \
         docker pull $CI_REGISTRY_IMAGE:$IMAGE_TAG && \
-        docker-compose -f docker-compose.yml --profile $DB_PROFILE down && \
-        docker-compose -f docker-compose.yml --profile $DB_PROFILE up -d"
+        docker compose -f docker-compose.yml --profile $DB_PROFILE down && \
+        docker compose -f docker-compose.yml --profile $DB_PROFILE up -d"
 
       # Health check via Traefik domain
       echo "Waiting for application to start..."
@@ -280,9 +280,9 @@ deploy-staging:
       echo "Running health check..."
       curl -f --retry 5 --retry-delay 10 https://$DOMAIN/api/health
 
-      echo "✅ Staging deployment completed successfully"
-      echo "🌐 Application available at - https://$DOMAIN"
-      echo "📋 Ready for UAT and final validation"
+      echo "Staging deployment completed successfully"
+      echo "Application available at - https://$DOMAIN"
+      echo "Ready for UAT and final validation"
   environment:
     name: staging
     url: https://tb-staging.emfour.net
@@ -303,8 +303,8 @@ deploy-prod:
     DB_PROFILE: postgres
     DOMAIN: tb.emfour.net
   script:
-    - echo "🚀 Deploying to PRODUCTION environment..."
-    - echo "⚠️  PRODUCTION DEPLOYMENT - Manual approval required"
+    - echo "Deploying to PRODUCTION environment..."
+    - echo "PRODUCTION DEPLOYMENT - Manual approval required"
     - echo "Environment - tb.emfour.net"
     - echo "Database - PostgreSQL"
     - |
@@ -330,21 +330,21 @@ deploy-prod:
       ssh $DEPLOY_USER@$DEPLOY_HOST "cd $DEPLOY_PATH && \
         echo '$CI_REGISTRY_PASSWORD' | docker login -u '$CI_REGISTRY_USER' --password-stdin $CI_REGISTRY && \
         docker pull $CI_REGISTRY_IMAGE:$IMAGE_TAG && \
-        docker-compose -f docker-compose.yml --profile $DB_PROFILE down && \
-        docker-compose -f docker-compose.yml --profile $DB_PROFILE up -d"
+        docker compose -f docker-compose.yml --profile $DB_PROFILE down && \
+        docker compose -f docker-compose.yml --profile $DB_PROFILE up -d"
 
       # Health check via Traefik domain (strict failure on production)
       echo "Waiting for application to start..."
       sleep 30
       echo "Running health check..."
       if ! curl -f --retry 5 --retry-delay 10 https://$DOMAIN/api/health; then
-        echo "❌ Production health check failed!"
+        echo "Production health check failed!"
         exit 1
       fi
 
-      echo "✅ PRODUCTION deployment completed successfully"
-      echo "🌐 Application available at - https://$DOMAIN"
-      echo "🎉 Production deployment verified and healthy"
+      echo "PRODUCTION deployment completed successfully"
+      echo "Application available at - https://$DOMAIN"
+      echo "Production deployment verified and healthy"
   environment:
     name: production
     url: https://tb.emfour.net
