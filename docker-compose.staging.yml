@@ -191,7 +191,6 @@ services:
         required: false
 
     networks:
-      - trakbridge-staging  # Internal for DB communication
       - frontend            # External for Traefik
     
   # =============================================================================
@@ -256,9 +255,7 @@ services:
       start_period: 45s
     
     networks:
-      trakbridge-staging:
-        aliases:
-          - postgres
+      - frontend 
 
     deploy:
       resources:
@@ -321,9 +318,7 @@ services:
       start_period: 45s
     
     networks:
-      trakbridge-staging:
-        aliases:
-          - mysql
+      - frontend 
 
     deploy:
       resources:
@@ -338,13 +333,6 @@ services:
 # Networks & Volumes
 # =============================================================================
 networks:
-  trakbridge-staging:
-    driver: bridge
-    name: trakbridge-staging-network
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-
   frontend:
     external: true
     name: frontend

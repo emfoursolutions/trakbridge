@@ -192,7 +192,6 @@ services:
 
     # Networks
     networks:
-      - app-network  # Internal for DB communication
       - frontend     # External for Traefik
 
   # PostgreSQL database (optional)
@@ -251,7 +250,7 @@ services:
       retries: 3
 
     networks:
-      - app-network
+      - frontend
 
     deploy:
       resources:
@@ -313,7 +312,7 @@ services:
       retries: 3
 
     networks:
-      - app-network
+      - frontend
 
     deploy:
       resources:
@@ -326,10 +325,6 @@ services:
 
 # Networks
 networks:
-  app-network:
-    driver: bridge
-    name: ${COMPOSE_PROJECT_NAME:-trakbridge}-network
-
   frontend:
     external: true
     name: frontend
