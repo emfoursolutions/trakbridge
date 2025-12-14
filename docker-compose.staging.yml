@@ -163,7 +163,6 @@ services:
       - "traefik.http.routers.tb-staging.rule=Host(`tb-staging.emfour.net`)"
       - "traefik.http.routers.tb-staging.entrypoints=websecure"
       - "traefik.http.routers.tb-staging.tls=true"
-      - "traefik.http.routers.tb-staging.tls.certresolver=letsencrypt"
       - "traefik.http.services.tb-staging.loadbalancer.server.port=5000"
 
     # Ports - removed for Traefik-only access

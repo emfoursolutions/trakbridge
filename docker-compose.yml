@@ -157,19 +157,9 @@ services:
       - ldap_bind_password
       - oidc_client_secret
 
-    # Traefik labels for reverse proxy integration
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=frontend"
-      - "traefik.http.routers.tb-prod.rule=Host(`tb.emfour.net`)"
-      - "traefik.http.routers.tb-prod.entrypoints=websecure"
-      - "traefik.http.routers.tb-prod.tls=true"
-      - "traefik.http.routers.tb-prod.tls.certresolver=letsencrypt"
-      - "traefik.http.services.tb-prod.loadbalancer.server.port=5000"
 
-    # Ports - removed for Traefik-only access
-    # ports:
-    #   - "5000:5000"  # Change first port if you need external access on different port
+    ports:
+      - "5000:5000"  # Change first port if you need external access on different port
 
     volumes:
       - ./logs:/app/logs

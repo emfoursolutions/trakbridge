@@ -150,7 +150,6 @@ services:
       - "traefik.http.routers.tb-dev.rule=Host(`tb-dev.emfour.net`)"
       - "traefik.http.routers.tb-dev.entrypoints=websecure"
       - "traefik.http.routers.tb-dev.tls=true"
-      - "traefik.http.routers.tb-dev.tls.certresolver=letsencrypt"
       - "traefik.http.services.tb-dev.loadbalancer.server.port=5000"
 
     # Ports - removed for Traefik-only access
