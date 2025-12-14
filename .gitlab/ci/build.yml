@@ -1,0 +1,245 @@
+# ABOUTME: GitLab CI build stage jobs for Docker image building
+# ABOUTME: Builds Docker images for development, staging, and production environments
+
+# =============================================================================
+# BUILD STAGE - Docker Image Builds
+# =============================================================================
+#
+# Image Tagging Strategy:
+#   develop branch  → dev-$CI_COMMIT_SHORT_SHA, dev-latest
+#   staging branch  → staging-$CI_COMMIT_SHORT_SHA, staging-latest
+#   main branch     → prod-$CI_COMMIT_SHORT_SHA, prod-latest
+#   Git tags (v*.*.*)  → $CI_COMMIT_TAG, latest (multi-platform)
+#
+# =============================================================================
+
+# =============================================================================
+# Build Development Images (develop branch)
+# =============================================================================
+
+build-dev:
+  stage: build
+  tags:
+    - shell
+  timeout: 45m
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+    IMAGE_TAG: dev-latest
+  before_script:
+    - echo "Using host Docker daemon..."
+    - docker --version
+    - echo "Authenticating with GitLab Container Registry..."
+    - |
+      if [ -z "${CI_REGISTRY_USER}" ] || [ -z "${CI_REGISTRY_PASSWORD}" ]; then
+        echo "Error: CI_REGISTRY_USER and CI_REGISTRY_PASSWORD must be set"
+        exit 1
+      fi
+    - echo "${CI_REGISTRY_PASSWORD}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
+    - echo "Git information:"
+    - git --version
+    - git log --oneline -5 || echo "No git log available"
+    - git describe --tags --long --dirty || echo "No git describe available"
+  script:
+    - echo "Building development container image..."
+    - echo "Branch - $CI_COMMIT_BRANCH"
+    - echo "Commit SHA - $CI_COMMIT_SHORT_SHA"
+    - echo "Image tags - dev-$CI_COMMIT_SHORT_SHA, dev-latest"
+    - |
+      # Set version for setuptools_scm
+      export SETUPTOOLS_SCM_PRETEND_VERSION="0.1.0.dev0+g$CI_COMMIT_SHORT_SHA"
+      echo "Using dev version: $SETUPTOOLS_SCM_PRETEND_VERSION"
+    - |
+      # Build development image
+      if ! DOCKER_BUILDKIT=1 docker build \
+        --target=production \
+        --tag "$CI_REGISTRY_IMAGE:dev-$CI_COMMIT_SHORT_SHA" \
+        --tag "$CI_REGISTRY_IMAGE:dev-latest" \
+        --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
+        --label "org.opencontainers.image.revision=$CI_COMMIT_SHA" \
+        --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --label "org.opencontainers.image.version=$CI_COMMIT_REF_NAME" \
+        --label "org.opencontainers.image.title=trakbridge" \
+        --build-arg SETUPTOOLS_SCM_PRETEND_VERSION="$SETUPTOOLS_SCM_PRETEND_VERSION" \
+        --file Dockerfile \
+        . ; then
+        echo "Docker build failed"
+        exit 1
+      fi
+    - echo "Pushing development images to GitLab Container Registry..."
+    - docker push "$CI_REGISTRY_IMAGE:dev-$CI_COMMIT_SHORT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE:dev-latest"
+    - echo "Development build completed"
+    - echo "   - $CI_REGISTRY_IMAGE:dev-$CI_COMMIT_SHORT_SHA"
+    - echo "   - $CI_REGISTRY_IMAGE:dev-latest"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+# =============================================================================
+# Build Staging Images (staging branch)
+# =============================================================================
+
+build-staging:
+  stage: build
+  tags:
+    - shell
+  timeout: 45m
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+    IMAGE_TAG: staging-latest
+  before_script:
+    - echo "Using host Docker daemon..."
+    - docker --version
+    - echo "Authenticating with GitLab Container Registry..."
+    - |
+      if [ -z "${CI_REGISTRY_USER}" ] || [ -z "${CI_REGISTRY_PASSWORD}" ]; then
+        echo "Error: CI_REGISTRY_USER and CI_REGISTRY_PASSWORD must be set"
+        exit 1
+      fi
+    - echo "${CI_REGISTRY_PASSWORD}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
+    - echo "Git information:"
+    - git --version
+    - git log --oneline -5 || echo "No git log available"
+    - git describe --tags --long --dirty || echo "No git describe available"
+  script:
+    - echo "Building staging container image..."
+    - echo "Branch - $CI_COMMIT_BRANCH"
+    - echo "Commit SHA - $CI_COMMIT_SHORT_SHA"
+    - echo "Image tags - staging-$CI_COMMIT_SHORT_SHA, staging-latest"
+    - |
+      # Set version for setuptools_scm
+      export SETUPTOOLS_SCM_PRETEND_VERSION="0.1.0.dev0+staging.$CI_COMMIT_SHORT_SHA"
+      echo "Using staging version: $SETUPTOOLS_SCM_PRETEND_VERSION"
+    - |
+      # Build staging image
+      if ! DOCKER_BUILDKIT=1 docker build \
+        --target=production \
+        --tag "$CI_REGISTRY_IMAGE:staging-$CI_COMMIT_SHORT_SHA" \
+        --tag "$CI_REGISTRY_IMAGE:staging-latest" \
+        --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
+        --label "org.opencontainers.image.revision=$CI_COMMIT_SHA" \
+        --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --label "org.opencontainers.image.version=$CI_COMMIT_REF_NAME" \
+        --label "org.opencontainers.image.title=trakbridge" \
+        --build-arg SETUPTOOLS_SCM_PRETEND_VERSION="$SETUPTOOLS_SCM_PRETEND_VERSION" \
+        --file Dockerfile \
+        . ; then
+        echo "Docker build failed"
+        exit 1
+      fi
+    - echo "Pushing staging images to GitLab Container Registry..."
+    - docker push "$CI_REGISTRY_IMAGE:staging-$CI_COMMIT_SHORT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE:staging-latest"
+    - echo "Staging build completed"
+    - echo "   - $CI_REGISTRY_IMAGE:staging-$CI_COMMIT_SHORT_SHA"
+    - echo "   - $CI_REGISTRY_IMAGE:staging-latest"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "staging"
+
+# =============================================================================
+# Build Production Images (main branch and tags)
+# =============================================================================
+
+build-prod:
+  stage: build
+  tags:
+    - shell
+  timeout: 120m
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - echo "Using host Docker daemon..."
+    - docker --version
+    - |
+      # Setup buildx for multiplatform builds (tags only)
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        echo "Setting up Docker Buildx for multiplatform builds..."
+        docker buildx create --use --name multiarch --driver docker-container || docker buildx use multiarch
+        docker buildx inspect --bootstrap
+      fi
+    - echo "Authenticating with GitLab Container Registry..."
+    - |
+      if [ -z "${CI_REGISTRY_USER}" ] || [ -z "${CI_REGISTRY_PASSWORD}" ]; then
+        echo "Error: CI_REGISTRY_USER and CI_REGISTRY_PASSWORD must be set"
+        exit 1
+      fi
+    - echo "${CI_REGISTRY_PASSWORD}" | docker login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
+    - echo "Git information:"
+    - git --version
+    - git log --oneline -5 || echo "No git log available"
+    - git describe --tags --long --dirty || echo "No git describe available"
+  script:
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        # Tagged release - multi-platform build
+        echo "🔨 Building multiplatform production image for release..."
+        echo "Tag - $CI_COMMIT_TAG"
+        echo "Platforms - linux/amd64, linux/arm64"
+
+        export SETUPTOOLS_SCM_PRETEND_VERSION="$CI_COMMIT_TAG"
+        echo "Using tag version: $CI_COMMIT_TAG"
+
+        # Build and push multi-platform image
+        if ! docker buildx build \
+          --platform linux/amd64,linux/arm64 \
+          --target=production \
+          --tag "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG" \
+          --tag "$CI_REGISTRY_IMAGE:latest" \
+          --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
+          --label "org.opencontainers.image.revision=$CI_COMMIT_SHA" \
+          --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          --label "org.opencontainers.image.version=$CI_COMMIT_TAG" \
+          --label "org.opencontainers.image.title=trakbridge" \
+          --build-arg SETUPTOOLS_SCM_PRETEND_VERSION="$SETUPTOOLS_SCM_PRETEND_VERSION" \
+          --file Dockerfile \
+          --push \
+          . ; then
+          echo "Multiplatform Docker build failed"
+          exit 1
+        fi
+
+        echo "Multiplatform production build completed"
+        echo "   - $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
+        echo "   - $CI_REGISTRY_IMAGE:latest"
+        echo ""
+        echo "Platforms - linux/amd64, linux/arm64"
+      else
+        # Main branch - single platform build
+        echo "Building production container image for main branch..."
+        echo "Branch - $CI_COMMIT_BRANCH"
+        echo "Commit SHA - $CI_COMMIT_SHORT_SHA"
+        echo "Image tags - prod-$CI_COMMIT_SHORT_SHA, prod-latest"
+
+        export SETUPTOOLS_SCM_PRETEND_VERSION="0.1.0.dev0+prod.$CI_COMMIT_SHORT_SHA"
+        echo "Using prod version: $SETUPTOOLS_SCM_PRETEND_VERSION"
+
+        # Build production image
+        if ! DOCKER_BUILDKIT=1 docker build \
+          --target=production \
+          --tag "$CI_REGISTRY_IMAGE:prod-$CI_COMMIT_SHORT_SHA" \
+          --tag "$CI_REGISTRY_IMAGE:prod-latest" \
+          --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
+          --label "org.opencontainers.image.revision=$CI_COMMIT_SHA" \
+          --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          --label "org.opencontainers.image.version=$CI_COMMIT_REF_NAME" \
+          --label "org.opencontainers.image.title=trakbridge" \
+          --build-arg SETUPTOOLS_SCM_PRETEND_VERSION="$SETUPTOOLS_SCM_PRETEND_VERSION" \
+          --file Dockerfile \
+          . ; then
+          echo "Docker build failed"
+          exit 1
+        fi
+
+        echo "Pushing production images to GitLab Container Registry..."
+        docker push "$CI_REGISTRY_IMAGE:prod-$CI_COMMIT_SHORT_SHA"
+        docker push "$CI_REGISTRY_IMAGE:prod-latest"
+
+        echo "Production build completed"
+        echo "   - $CI_REGISTRY_IMAGE:prod-$CI_COMMIT_SHORT_SHA"
+        echo "   - $CI_REGISTRY_IMAGE:prod-latest"
+      fi
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"

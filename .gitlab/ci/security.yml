@@ -1,0 +1,396 @@
+# ABOUTME: GitLab CI/CD Security Stage Jobs
+# ABOUTME: Contains all security scanning jobs including SAST, dependency, and license scanning
+
+# Reusable script for cross-platform package installation
+.install_packages: &install_packages |
+  install_packages() {
+    # Detect package manager and install packages
+    if command -v apt-get >/dev/null 2>&1; then
+      echo "Using apt-get (Debian/Ubuntu)"
+      apt-get update -qq && apt-get install -y -qq "$@"
+    elif command -v dnf >/dev/null 2>&1; then
+      echo "Using dnf (Rocky Linux/Fedora)"
+      dnf install -y "$@"
+    elif command -v yum >/dev/null 2>&1; then
+      echo "Using yum (RHEL/CentOS)"
+      yum install -y "$@"
+    else
+      echo "ERROR: No supported package manager found (apt-get, dnf, yum)"
+      exit 1
+    fi
+  }
+
+# Bandit SAST - Static security analysis for Python code
+bandit-sast:
+  stage: security
+  image: python:${PYTHON_VERSION}-slim
+  tags:
+    - trakbridge-ci
+  timeout: 15m
+  before_script:
+    - *install_packages
+    - install_packages git
+    - pip install --upgrade pip
+    - pip install --no-cache-dir bandit[toml]
+  script: |
+    echo "Running Bandit security scan..."
+
+    # Always create a bandit report file
+    echo '{"metrics": {"_totals": {"nosec": 0, "skipped_tests": 0}}, "results": []}' > bandit-report.json
+
+    # Run bandit on existing directories only
+    SCAN_DIRS=""
+    for dir in app.py services plugins routes models config; do
+      if [ -e "$dir" ]; then
+        SCAN_DIRS="$SCAN_DIRS $dir"
+      fi
+    done
+
+    if [ -n "$SCAN_DIRS" ]; then
+      bandit -r $SCAN_DIRS -f json -o temp-bandit.json || true
+      if [ -f "temp-bandit.json" ]; then
+        mv temp-bandit.json bandit-report.json
+      fi
+      echo "Bandit security scan completed"
+    else
+      echo "No directories found to scan"
+    fi
+  artifacts:
+    reports:
+      sast: bandit-report.json
+    paths:
+      - bandit-report.json
+    expire_in: 1 week
+    when: always
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+
+# Safety Check - Dependency vulnerability scanning
+safety-check:
+  stage: security
+  image: python:${PYTHON_VERSION}-slim
+  tags:
+    - trakbridge-ci
+  timeout: 10m
+  before_script:
+    - *install_packages
+    - install_packages git jq
+    - pip install --upgrade pip
+    - pip install --no-cache-dir safety
+  script: |
+    echo "Running Safety vulnerability check with GitLab security reporting..."
+
+    # Initialize GitLab security report
+    cat > gl-dependency-scanning-report.json << 'EOF'
+    {
+      "version": "15.0.0",
+      "vulnerabilities": [],
+      "remediations": [],
+      "scan": {
+        "analyzer": {
+          "id": "safety",
+          "name": "Safety",
+          "url": "https://pypi.org/project/safety/",
+          "vendor": {
+            "name": "PyUp.io"
+          },
+          "version": "latest"
+        },
+        "scanner": {
+          "id": "safety",
+          "name": "Safety",
+          "url": "https://pypi.org/project/safety/",
+          "vendor": {
+            "name": "PyUp.io"
+          },
+          "version": "latest"
+        },
+        "type": "dependency_scanning",
+        "start_time": "",
+        "end_time": "",
+        "status": "success"
+      }
+    }
+    EOF
+
+    # Set scan timestamps
+    START_TIME=$(date -u +"%Y-%m-%dT%H:%M:%S")
+    jq --arg start_time "$START_TIME" '.scan.start_time = $start_time' gl-dependency-scanning-report.json > temp.json && mv temp.json gl-dependency-scanning-report.json
+
+    if [ -f "requirements.txt" ]; then
+      echo "Scanning requirements.txt for vulnerabilities..."
+
+      # Run safety check and capture output
+      if [ -n "${SAFETY_API_KEY:-}" ]; then
+        safety check --json --output safety-raw.json || SAFETY_EXIT_CODE=$?
+      else
+        safety check --json --output safety-raw.json --ignore-unpinned || SAFETY_EXIT_CODE=$?
+      fi
+
+      # Convert Safety JSON to GitLab security report format
+      if [ -f "safety-raw.json" ] && [ -s "safety-raw.json" ]; then
+        echo "Converting Safety report to GitLab format..."
+
+        # Process each vulnerability from Safety report
+        jq -r '.vulnerabilities[]? | @base64' safety-raw.json 2>/dev/null | while IFS= read -r vuln_b64; do
+          if [ -n "$vuln_b64" ]; then
+            vuln=$(echo "$vuln_b64" | base64 -d)
+
+            # Extract vulnerability details
+            package=$(echo "$vuln" | jq -r '.package_name // "unknown"')
+            version=$(echo "$vuln" | jq -r '.analyzed_version // "unknown"')
+            vuln_id=$(echo "$vuln" | jq -r '.vulnerability_id // "unknown"')
+            advisory=$(echo "$vuln" | jq -r '.advisory // "No advisory available"')
+
+            # Create GitLab vulnerability entry
+            jq --null-input \
+              --arg id "$vuln_id" \
+              --arg package "$package" \
+              --arg version "$version" \
+              --arg advisory "$advisory" \
+              --arg category "dependency_scanning" \
+              --arg severity "Medium" \
+              --arg confidence "High" \
+              '{
+                id: $id,
+                category: $category,
+                name: ("Vulnerability in " + $package),
+                message: $advisory,
+                description: $advisory,
+                severity: $severity,
+                confidence: $confidence,
+                solution: "Upgrade to a fixed version",
+                scanner: {
+                  id: "safety",
+                  name: "Safety"
+                },
+                location: {
+                  file: "requirements.txt",
+                  dependency: {
+                    package: {
+                      name: $package
+                    },
+                    version: $version
+                  }
+                },
+                identifiers: [
+                  {
+                    type: "safety",
+                    name: $id,
+                    value: $id
+                  }
+                ]
+              }' >> gl-vulnerabilities.json
+          fi
+        done
+
+        # Merge vulnerabilities into main report
+        if [ -f "gl-vulnerabilities.json" ]; then
+          jq -s '.[0] as $report | .[1:] as $vulns | $report | .vulnerabilities = $vulns' gl-dependency-scanning-report.json gl-vulnerabilities.json > temp.json && mv temp.json gl-dependency-scanning-report.json
+        fi
+      fi
+
+      # Keep original safety report as artifact
+      cp safety-raw.json safety-report.json 2>/dev/null || echo '{"vulnerabilities": [], "scanned_packages": 0}' > safety-report.json
+    else
+      echo "No requirements.txt found for safety check"
+      echo '{"vulnerabilities": [], "scanned_packages": 0}' > safety-report.json
+    fi
+
+    # Set end timestamp
+    END_TIME=$(date -u +"%Y-%m-%dT%H:%M:%S")
+    jq --arg end_time "$END_TIME" '.scan.end_time = $end_time' gl-dependency-scanning-report.json > temp.json && mv temp.json gl-dependency-scanning-report.json
+
+    # Count vulnerabilities for summary
+    vuln_count=$(jq '.vulnerabilities | length' gl-dependency-scanning-report.json)
+    echo "Safety vulnerability check completed: $vuln_count vulnerabilities found"
+
+  artifacts:
+    reports:
+      dependency_scanning: gl-dependency-scanning-report.json
+    paths:
+      - gl-dependency-scanning-report.json
+      - safety-report.json
+    expire_in: 1 week
+    when: always
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+
+# License Scanning - License compliance checking
+license-scanning:
+  stage: security
+  image: python:${PYTHON_VERSION}-slim
+  tags:
+    - trakbridge-ci
+  timeout: 10m
+  before_script:
+    - *install_packages
+    - install_packages git jq
+    - pip install --upgrade pip
+    - pip install --no-cache-dir pip-licenses
+  script: |
+    echo "Running license scanning with GitLab reporting..."
+
+    # Initialize GitLab license scanning report
+    cat > gl-license-scanning-report.json << 'EOF'
+    {
+      "version": "2.1",
+      "licenses": [],
+      "dependencies": [],
+      "scan": {
+        "analyzer": {
+          "id": "pip-licenses",
+          "name": "pip-licenses",
+          "url": "https://pypi.org/project/pip-licenses/",
+          "vendor": {
+            "name": "pip-licenses"
+          },
+          "version": "latest"
+        },
+        "scanner": {
+          "id": "pip-licenses",
+          "name": "pip-licenses",
+          "url": "https://pypi.org/project/pip-licenses/",
+          "vendor": {
+            "name": "pip-licenses"
+          },
+          "version": "latest"
+        },
+        "type": "license_scanning",
+        "start_time": "",
+        "end_time": "",
+        "status": "success"
+      }
+    }
+    EOF
+
+    # Set scan timestamps
+    START_TIME=$(date -u +"%Y-%m-%dT%H:%M:%S")
+    jq --arg start_time "$START_TIME" '.scan.start_time = $start_time' gl-license-scanning-report.json > temp.json && mv temp.json gl-license-scanning-report.json
+
+    if [ -f "requirements.txt" ]; then
+      echo "Installing dependencies and scanning licenses..."
+
+      # Install dependencies from requirements.txt
+      pip install -r requirements.txt || echo "Some dependencies failed to install"
+
+      # Generate license report
+      pip-licenses --format=json --output-file=pip-licenses-raw.json || echo "License scanning completed with warnings"
+
+      # Convert pip-licenses output to GitLab format
+      if [ -f "pip-licenses-raw.json" ] && [ -s "pip-licenses-raw.json" ]; then
+        echo "Converting license report to GitLab format..."
+
+        # Process each dependency
+        jq -r '.[]? | @base64' pip-licenses-raw.json 2>/dev/null | while IFS= read -r dep_b64; do
+          if [ -n "$dep_b64" ]; then
+            dep=$(echo "$dep_b64" | base64 -d)
+
+            # Extract dependency details
+            name=$(echo "$dep" | jq -r '.Name // "unknown"')
+            version=$(echo "$dep" | jq -r '.Version // "unknown"')
+            license_name=$(echo "$dep" | jq -r '.License // "Unknown"')
+
+            # Classify license risk level
+            case "$license_name" in
+              "MIT"|"Apache 2.0"|"Apache Software License"|"BSD"|"BSD License"|"3-Clause BSD"|"2-Clause BSD")
+                classification="allowed"
+                ;;
+              "GPL"*|"AGPL"*|"LGPL"*)
+                classification="denied"
+                ;;
+              "Unknown"|"UNKNOWN"|"")
+                classification="unclassified"
+                ;;
+              *)
+                classification="unclassified"
+                ;;
+            esac
+
+            # Create license entry
+            jq --null-input \
+              --arg name "$license_name" \
+              --arg classification "$classification" \
+              '{
+                key: $name,
+                name: $name,
+                spdx_identifier: $name,
+                classification: $classification
+              }' >> gl-licenses-temp.json
+
+            # Create dependency entry
+            jq --null-input \
+              --arg name "$name" \
+              --arg version "$version" \
+              --arg license "$license_name" \
+              --arg classification "$classification" \
+              '{
+                name: $name,
+                version: $version,
+                package_manager: "pip",
+                path: "requirements.txt",
+                licenses: [
+                  {
+                    key: $license,
+                    name: $license,
+                    spdx_identifier: $license
+                  }
+                ],
+                classification: $classification
+              }' >> gl-dependencies-temp.json
+          fi
+        done
+
+        # Merge unique licenses and dependencies into main report
+        if [ -f "gl-licenses-temp.json" ]; then
+          jq -s 'unique_by(.key)' gl-licenses-temp.json > gl-licenses.json
+          jq --slurpfile licenses gl-licenses.json '.licenses = $licenses[0]' gl-license-scanning-report.json > temp.json && mv temp.json gl-license-scanning-report.json
+        fi
+
+        if [ -f "gl-dependencies-temp.json" ]; then
+          jq -s 'unique_by(.name)' gl-dependencies-temp.json > gl-dependencies.json
+          jq --slurpfile deps gl-dependencies.json '.dependencies = $deps[0]' gl-license-scanning-report.json > temp.json && mv temp.json gl-license-scanning-report.json
+        fi
+      fi
+
+      # Keep original pip-licenses report as artifact
+      cp pip-licenses-raw.json pip-licenses-report.json 2>/dev/null || echo '[]' > pip-licenses-report.json
+    else
+      echo "No requirements.txt found for license scanning"
+      echo '[]' > pip-licenses-report.json
+    fi
+
+    # Set end timestamp
+    END_TIME=$(date -u +"%Y-%m-%dT%H:%M:%S")
+    jq --arg end_time "$END_TIME" '.scan.end_time = $end_time' gl-license-scanning-report.json > temp.json && mv temp.json gl-license-scanning-report.json
+
+    # Count licenses and dependencies for summary
+    license_count=$(jq '.licenses | length' gl-license-scanning-report.json)
+    dep_count=$(jq '.dependencies | length' gl-license-scanning-report.json)
+    denied_count=$(jq '[.dependencies[] | select(.classification == "denied")] | length' gl-license-scanning-report.json)
+
+    echo "License scanning completed: $dep_count dependencies, $license_count unique licenses, $denied_count denied licenses"
+
+    if [ "$denied_count" -gt 0 ]; then
+      echo "WARNING: Found dependencies with denied licenses - review required"
+    fi
+
+  artifacts:
+    reports:
+      license_scanning: gl-license-scanning-report.json
+    paths:
+      - gl-license-scanning-report.json
+      - pip-licenses-report.json
+    expire_in: 1 week
+    when: always
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
