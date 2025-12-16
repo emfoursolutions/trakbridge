@@ -1345,36 +1345,48 @@ class QueuedCOTService:
         from plugins.plugin_manager import get_plugin_manager
         from plugins.base_plugin import BaseOutputPlugin
         from models.stream import Stream
+        import app as flask_app
 
         try:
-            # Find all streams configured for this TAK server
-            streams = Stream.query.filter_by(tak_server_id=tak_server_id).all()
+            # Ensure we're in an app context for database access
+            # Use the global app instance from app.py
+            with flask_app.app.app_context():
+                # Find all streams configured for this TAK server
+                streams = Stream.query.filter_by(tak_server_id=tak_server_id).all()
+                logger.debug(f"Found {len(streams)} streams for TAK server {tak_server_id}")
 
-            plugin_manager = get_plugin_manager()
+                plugin_manager = get_plugin_manager()
 
-            for stream in streams:
-                # Get plugin instance for this stream
-                plugin = plugin_manager.get_plugin(stream.plugin_type, stream.get_config())
+                for stream in streams:
+                    logger.debug(f"Processing stream {stream.id} ({stream.name}) with plugin {stream.plugin_type}")
 
-                if not plugin:
-                    continue
+                    # Get plugin instance for this stream
+                    plugin = plugin_manager.get_plugin(stream.plugin_type, stream.get_plugin_config())
 
-                # Check if plugin is an output plugin (inherits from BaseOutputPlugin)
-                if not isinstance(plugin, BaseOutputPlugin):
-                    continue  # Skip GPS plugins
+                    if not plugin:
+                        logger.debug(f"No plugin instance for {stream.plugin_type}")
+                        continue
 
-                # Route to plugin (with timeout)
-                try:
-                    await asyncio.wait_for(
-                        plugin.handle_cot_message(cot_xml, tak_server_id),
-                        timeout=10.0
-                    )
-                except asyncio.TimeoutError:
-                    logger.warning(
-                        f"Plugin {stream.plugin_type} timed out handling CoT"
-                    )
-                except Exception as e:
-                    logger.error(f"Plugin {stream.plugin_type} failed: {e}")
+                    # Check if plugin is an output plugin (inherits from BaseOutputPlugin)
+                    if not isinstance(plugin, BaseOutputPlugin):
+                        logger.debug(f"Plugin {stream.plugin_type} is not an output plugin, skipping")
+                        continue  # Skip GPS plugins
+
+                    logger.info(f"Routing CoT message to output plugin: {stream.plugin_type} (stream: {stream.name})")
+
+                    # Route to plugin (with timeout)
+                    try:
+                        await asyncio.wait_for(
+                            plugin.handle_cot_message(cot_xml, tak_server_id),
+                            timeout=10.0
+                        )
+                        logger.debug(f"Successfully routed CoT to {stream.plugin_type}")
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            f"Plugin {stream.plugin_type} timed out handling CoT"
+                        )
+                    except Exception as e:
+                        logger.error(f"Plugin {stream.plugin_type} failed: {e}", exc_info=True)
 
         except Exception as e:
             logger.error(f"Failed to route CoT message: {e}")

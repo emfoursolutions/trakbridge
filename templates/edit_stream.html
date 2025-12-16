@@ -841,10 +841,12 @@ function showAlert(message, type = 'info') {
 function getCategoryMapping(pluginCategory) {
     const mapping = {
         'osint': 'OSINT',
-        'satellite': 'Tracker', 
+        'satellite': 'Tracker',
         'platform': 'Tracker',
         'tracker': 'Tracker',
-        'ems': 'EMS'
+        'ems': 'EMS',
+        'output': 'Output',
+        'bidirectional': 'Bidirectional'
     };
     return mapping[pluginCategory?.toLowerCase()] || 'Other';
 }
@@ -1481,13 +1483,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (currentPluginType && pluginMetadata[currentPluginType]) {
         const pluginMeta = pluginMetadata[currentPluginType];
         const displayCategory = getCategoryMapping(pluginMeta.category);
-        
+
         // Set the category dropdown
         document.getElementById('plugin_category').value = displayCategory;
-        
+
         // Update the plugins dropdown for this category
         updatePluginsByCategory();
-        
+
         // Small delay to ensure plugin dropdown is populated before selecting
         setTimeout(() => {
             document.getElementById('plugin_type').value = currentPluginType;

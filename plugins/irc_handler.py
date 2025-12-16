@@ -193,6 +193,9 @@ class IRCHandler(BaseOutputPlugin):
 
         config = self.get_decrypted_config()
 
+        logger.info(f"IRCHandler received CoT message from TAK server {tak_server_id}, size: {len(cot_xml)} bytes")
+        logger.debug(f"CoT XML preview: {cot_xml[:200]}...")
+
         try:
             # Parse XML securely
             root = DefusedET.fromstring(cot_xml)
@@ -201,9 +204,14 @@ class IRCHandler(BaseOutputPlugin):
             cot_type = root.get("type", "")
             uid = root.get("uid", "")
 
+            logger.info(f"Parsed CoT: type={cot_type}, uid={uid}")
+
             # Apply plugin's own filters
             if not self._should_handle(cot_type, uid):
+                logger.debug(f"Filtered out: type={cot_type}, uid={uid} (does not match filters)")
                 return
+
+            logger.info(f"CoT passed filters, processing: type={cot_type}, uid={uid}")
 
             # Extract message details
             detail = root.find("detail")
@@ -222,16 +230,23 @@ class IRCHandler(BaseOutputPlugin):
             # Determine message type and send to IRC
             if cot_type.startswith("b-t-f"):
                 # Chat message
-                await self._send_to_irc(f"[CHAT] {callsign}: {message_text}")
+                msg = f"[CHAT] {callsign}: {message_text}"
+                logger.info(f"Sending chat message to IRC: {msg}")
+                await self._send_to_irc(msg)
             elif cot_type.startswith("b-a"):
                 # Emergency
-                await self._send_to_irc(f"[EMERGENCY] {callsign}")
+                msg = f"[EMERGENCY] {callsign}"
+                logger.info(f"Sending emergency to IRC: {msg}")
+                await self._send_to_irc(msg)
             elif cot_type.startswith("a-"):
                 # Position update - skip to avoid spam
+                logger.debug(f"Skipping position update: {cot_type} from {callsign}")
                 pass
             else:
                 # Unknown/custom type - log it
-                await self._send_to_irc(f"[{cot_type}] {callsign}")
+                msg = f"[{cot_type}] {callsign}"
+                logger.info(f"Sending unknown type to IRC: {msg}")
+                await self._send_to_irc(msg)
 
         except Exception as e:
             logger.error(f"IRCHandler failed to process CoT: {e}")

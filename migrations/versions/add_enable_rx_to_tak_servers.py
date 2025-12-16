@@ -1,7 +1,7 @@
 """Add enable_rx field to TAK servers for bidirectional communication control
 
 Revision ID: add_enable_rx_to_tak_servers
-Revises: team_member_cot_mapping
+Revises: add_cot_messages_table
 Create Date: 2025-12-15 10:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from migrations.migration_utils import column_exists
 
 # revision identifiers, used by Alembic.
 revision = "add_enable_rx_to_tak_servers"
-down_revision = "team_member_cot_mapping"
+down_revision = "add_cot_messages_table"
 branch_labels = None
 depends_on = None
 

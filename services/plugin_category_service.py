@@ -58,6 +58,8 @@ class PluginCategoryService:
             "platform": "Tracker",
             "tracker": "Tracker",
             "ems": "EMS",
+            "output": "Output",
+            "bidirectional": "Bidirectional",
         }
 
         # Category display information
@@ -79,6 +81,18 @@ class PluginCategoryService:
                 display_name="EMS",
                 description="Emergency Management Systems and services",
                 icon="fas fa-ambulance",
+            ),
+            "Output": CategoryInfo(
+                key="Output",
+                display_name="Output Handlers",
+                description="Receive and process CoT messages from TAK servers",
+                icon="fas fa-download",
+            ),
+            "Bidirectional": CategoryInfo(
+                key="Bidirectional",
+                display_name="Bidirectional",
+                description="Plugins that both send and receive TAK messages",
+                icon="fas fa-exchange-alt",
             ),
         }
 

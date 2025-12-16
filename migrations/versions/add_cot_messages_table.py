@@ -1,7 +1,7 @@
 """Add cot_messages table for CoT message archiving
 
 Revision ID: add_cot_messages_table
-Revises:
+Revises: team_member_cot_mapping
 Create Date: 2025-12-15 00:00:00.000000
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "add_cot_messages_table"
-down_revision = None
+down_revision = "team_member_cot_mapping"
 branch_labels = None
 depends_on = None
 

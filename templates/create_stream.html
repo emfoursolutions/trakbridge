@@ -809,10 +809,12 @@ document.addEventListener('DOMContentLoaded', async function() {
 function getCategoryMapping(pluginCategory) {
     const mapping = {
         'osint': 'OSINT',
-        'satellite': 'Tracker', 
+        'satellite': 'Tracker',
         'platform': 'Tracker',
         'tracker': 'Tracker',
-        'ems': 'EMS'
+        'ems': 'EMS',
+        'output': 'Output',
+        'bidirectional': 'Bidirectional'
     };
     return mapping[pluginCategory?.toLowerCase()] || 'Other';
 }

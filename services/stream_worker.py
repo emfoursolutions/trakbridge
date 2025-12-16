@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 # Local application imports
+from plugins.base_plugin import BaseGPSPlugin, BaseOutputPlugin
 from plugins.plugin_manager import get_plugin_manager
 from services.cot_service import get_cot_service
 
@@ -471,6 +472,22 @@ class StreamWorker:
         self.logger.debug(
             f"Starting main loop for stream '{self.stream.name}' (ID: {self.stream.id})"
         )
+
+        # Type guard: Prevent output plugins from being used in StreamWorker
+        if isinstance(self.plugin, BaseOutputPlugin):
+            self.logger.warning(
+                f"Stream {self.stream.id} ('{self.stream.name}') uses output plugin '{self.plugin.plugin_name}'. "
+                f"Output plugins should be invoked by RX Worker, not StreamWorker. "
+                f"Skipping this stream."
+            )
+            return  # Exit gracefully
+
+        if not isinstance(self.plugin, BaseGPSPlugin):
+            self.logger.error(
+                f"Stream {self.stream.id} ('{self.stream.name}') has unknown plugin type: {type(self.plugin)}. "
+                f"Expected BaseGPSPlugin. Skipping this stream."
+            )
+            return  # Exit gracefully
 
         while self.running:
             try:
