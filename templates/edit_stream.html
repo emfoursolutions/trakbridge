@@ -1595,6 +1595,81 @@ function validateTeamMemberConfiguration() {
     return true;
 }
 
+function validateIRCMessageRules() {
+    // Only validate if IRC handler is selected
+    const pluginType = document.getElementById('plugin_type');
+    if (!pluginType || pluginType.value !== 'irc_handler') {
+        return true;
+    }
+
+    const errors = [];
+
+    // Check if there's at least one rule when IRC is selected
+    if (messageRules.length === 0) {
+        errors.push('At least one message rule is required for IRC handler');
+    }
+
+    // Validate each rule
+    messageRules.forEach((rule, index) => {
+        if (rule.enabled) {
+            if (!rule.cot_type_pattern || rule.cot_type_pattern.trim() === '') {
+                errors.push(`Rule ${index + 1}: CoT type pattern is required`);
+            }
+
+            if (!rule.format_template || rule.format_template.trim() === '') {
+                errors.push(`Rule ${index + 1}: Format template is required`);
+            }
+
+            // Validate UID filter regex if provided
+            if (rule.uid_filter && rule.uid_filter.trim() !== '') {
+                try {
+                    new RegExp(rule.uid_filter);
+                } catch (e) {
+                    errors.push(`Rule ${index + 1}: Invalid UID filter regex - ${e.message}`);
+                }
+            }
+        }
+    });
+
+    // Validate global geofence bounds if enabled
+    const globalGeofenceEnabled = document.getElementById('plugin_global_geofence_enabled');
+    if (globalGeofenceEnabled && globalGeofenceEnabled.checked) {
+        const north = parseFloat(document.getElementById('plugin_global_geofence_north').value);
+        const south = parseFloat(document.getElementById('plugin_global_geofence_south').value);
+        const east = parseFloat(document.getElementById('plugin_global_geofence_east').value);
+        const west = parseFloat(document.getElementById('plugin_global_geofence_west').value);
+
+        if (isNaN(north) || isNaN(south) || isNaN(east) || isNaN(west)) {
+            errors.push('Global geofence: All coordinates (north, south, east, west) must be valid numbers');
+        } else {
+            if (north <= south) {
+                errors.push('Global geofence: North latitude must be greater than south latitude');
+            }
+            if (east <= west) {
+                errors.push('Global geofence: East longitude must be greater than west longitude');
+            }
+            if (north < -90 || north > 90 || south < -90 || south > 90) {
+                errors.push('Global geofence: Latitudes must be between -90 and 90');
+            }
+            if (east < -180 || east > 180 || west < -180 || west > 180) {
+                errors.push('Global geofence: Longitudes must be between -180 and 180');
+            }
+        }
+    }
+
+    if (errors.length > 0) {
+        showAlert(errors.join('<br>'), 'danger');
+        // Scroll to the IRC section
+        const ircSection = document.getElementById('irc-message-rules-section');
+        if (ircSection) {
+            ircSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        return false;
+    }
+
+    return true;
+}
+
 function clearTrackerMappingTable() {
     const table = document.getElementById('tracker-mapping-table');
     const noTrackersMessage = document.getElementById('no-trackers-message');
@@ -1739,6 +1814,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (!validateTeamMemberConfiguration()) {
+                e.preventDefault();
+                return false;
+            }
+
+            if (!validateIRCMessageRules()) {
                 e.preventDefault();
                 return false;
             }
