@@ -156,35 +156,38 @@
                         </div>
                     </div>
 
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="poll_interval" class="form-label">Poll Interval (seconds)</label>
-                                <input type="number" class="form-control" id="poll_interval" name="poll_interval"
-                                       value="{{ stream.poll_interval }}" min="30" max="3600">
-                                <div class="form-text text-muted">How often to check for new Stream data</div>
+                    <!-- Input plugin settings (hidden for output plugins) -->
+                    <div id="input-plugin-settings">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="poll_interval" class="form-label">Poll Interval (seconds)</label>
+                                    <input type="number" class="form-control" id="poll_interval" name="poll_interval"
+                                           value="{{ stream.poll_interval }}" min="30" max="3600">
+                                    <div class="form-text text-muted">How often to check for new Stream data</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="cot_stale_time" class="form-label">COT Stale Time (seconds)</label>
+                                    <input type="number" class="form-control" id="cot_stale_time" name="cot_stale_time"
+                                           value="{{ stream.cot_stale_time }}" min="60">
+                                    <div class="form-text text-muted">When to consider position data stale</div>
+                                </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="cot_stale_time" class="form-label">COT Stale Time (seconds)</label>
-                                <input type="number" class="form-control" id="cot_stale_time" name="cot_stale_time"
-                                       value="{{ stream.cot_stale_time }}" min="60">
-                                <div class="form-text text-muted">When to consider position data stale</div>
-                            </div>
-                        </div>
-                    </div>
 
-                    <div class="mb-3">
-                        <label for="cot_type" class="form-label">COT Type</label>
-                        <select class="form-select" id="cot_type" name="cot_type">
-                            {% for cot_type in cot_types %}
-                            <option value="{{ cot_type.value }}" {% if cot_type.value == stream.cot_type %}selected{% endif %} title="{{ cot_type.description }}">
-                                {{ cot_type.label }} ({{ cot_type.value }})
-                            </option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text text-muted">Cursor-on-Target type identifier for tracked objects</div>
+                        <div class="mb-3">
+                            <label for="cot_type" class="form-label">COT Type</label>
+                            <select class="form-select" id="cot_type" name="cot_type">
+                                {% for cot_type in cot_types %}
+                                <option value="{{ cot_type.value }}" {% if cot_type.value == stream.cot_type %}selected{% endif %} title="{{ cot_type.description }}">
+                                    {{ cot_type.label }} ({{ cot_type.value }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text text-muted">Cursor-on-Target type identifier for tracked objects</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -330,6 +333,37 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- IRC Handler Message Rules -->
+            <div id="irc-message-rules-section" class="card" style="display: none;">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-filter"></i>
+                        Message Rules
+                    </h5>
+                    <button type="button" class="btn btn-sm btn-primary" onclick="addMessageRule()">
+                        <i class="fas fa-plus"></i> Add Rule
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        Define rules to filter and format CoT messages before sending to IRC. Rules are evaluated in order, and the first matching rule is used.
+                    </div>
+
+                    <div id="message-rules-container">
+                        <!-- Rules will be rendered here by JavaScript -->
+                    </div>
+
+                    <div id="no-rules-message" class="text-center text-muted py-4">
+                        <i class="fas fa-inbox fa-3x mb-3 opacity-25"></i>
+                        <p>No message rules defined. Click "Add Rule" to create your first rule.</p>
+                    </div>
+
+                    <!-- Hidden input to store rules JSON -->
+                    <input type="hidden" id="plugin_message_rules" name="plugin_message_rules" value="[]">
                 </div>
             </div>
 
@@ -560,12 +594,14 @@ function updatePluginConfig() {
     const pluginType = document.getElementById('plugin_type').value;
     const configSection = document.getElementById('plugin-config-section');
     const callsignSection = document.getElementById('callsign-mapping-section');
+    const inputPluginSettings = document.getElementById('input-plugin-settings');
     const helpContent = document.getElementById('help-content');
     const testBtn = document.getElementById('test-btn');
 
     if (!pluginType) {
         if (configSection) configSection.style.display = 'none';
         if (callsignSection) callsignSection.style.display = 'none';
+        if (inputPluginSettings) inputPluginSettings.style.display = 'block';
         if (testBtn) testBtn.style.display = 'none';
         if (helpContent) helpContent.innerHTML = '<p class="text-muted">Select a Stream provider to see configuration instructions.</p>';
         return;
@@ -587,7 +623,11 @@ function updatePluginConfig() {
     // Show test button and config section
     if (testBtn) testBtn.style.display = 'inline-block';
     if (configSection) configSection.style.display = 'block';
-    
+
+    // Hide input-specific settings (Poll Interval, COT Type, COT Stale Time) for output plugins
+    const isOutputPlugin = pluginMeta.category?.toLowerCase() === 'output';
+    if (inputPluginSettings) inputPluginSettings.style.display = isOutputPlugin ? 'none' : 'block';
+
     // Show callsign mapping section for tracker plugins
     const trackerCategories = ['tracker', 'satellite', 'platform'];
     const isTrackerPlugin = trackerCategories.includes(pluginMeta.category?.toLowerCase());
@@ -596,6 +636,20 @@ function updatePluginConfig() {
         loadAvailableFields(pluginType);
     } else if (callsignSection) {
         callsignSection.style.display = 'none';
+    }
+
+    // Show IRC message rules section for IRC handler plugin
+    const isIRCHandler = pluginType === 'irc_handler';
+    toggleIRCMessageRulesSection(isIRCHandler);
+    if (isIRCHandler) {
+        // Load existing message rules if available
+        const existingRules = currentConfig?.message_rules;
+        if (existingRules && existingRules.length > 0) {
+            loadExistingMessageRules(existingRules);
+        } else if (messageRules.length === 0) {
+            // Add a default rule if no rules exist
+            addMessageRule();
+        }
     }
 }
 
@@ -1813,6 +1867,162 @@ function populateTrackerMappingTableWithExistingAndState(identifierField) {
             toggleTrackerEnabled(checkbox, index);
         }
     });
+}
+
+// ===== IRC Message Rules Management =====
+let messageRules = [];
+let ruleIdCounter = 1;
+
+function addMessageRule() {
+    const rule = {
+        id: `rule-${ruleIdCounter++}`,
+        cot_type_pattern: '',
+        uid_filter: '',
+        format_template: '',
+        enabled: true
+    };
+
+    messageRules.push(rule);
+    renderMessageRules();
+}
+
+function removeMessageRule(ruleId) {
+    messageRules = messageRules.filter(r => r.id !== ruleId);
+    renderMessageRules();
+}
+
+function updateRule(ruleId, field, value) {
+    const rule = messageRules.find(r => r.id === ruleId);
+    if (rule) {
+        rule[field] = value;
+        serializeMessageRules();
+    }
+}
+
+function renderMessageRules() {
+    const container = document.getElementById('message-rules-container');
+    const noRulesMessage = document.getElementById('no-rules-message');
+
+    if (messageRules.length === 0) {
+        container.innerHTML = '';
+        noRulesMessage.style.display = 'block';
+    } else {
+        noRulesMessage.style.display = 'none';
+        container.innerHTML = messageRules.map((rule, index) => `
+            <div class="card mb-3 rule-card" id="rule-${rule.id}">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-secondary">Rule ${index + 1}</span>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox"
+                                   id="rule_${rule.id}_enabled"
+                                   ${rule.enabled ? 'checked' : ''}
+                                   onchange="updateRule('${rule.id}', 'enabled', this.checked)">
+                            <label class="form-check-label" for="rule_${rule.id}_enabled">
+                                Enabled
+                            </label>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger"
+                            onclick="removeMessageRule('${rule.id}')"
+                            title="Remove Rule">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="rule_${rule.id}_pattern" class="form-label">
+                                CoT Type Pattern <span class="text-danger">*</span>
+                            </label>
+                            <input type="text"
+                                   class="form-control"
+                                   id="rule_${rule.id}_pattern"
+                                   placeholder="b-t-f or b-a-* (wildcards supported)"
+                                   value="${rule.cot_type_pattern}"
+                                   oninput="updateRule('${rule.id}', 'cot_type_pattern', this.value)">
+                            <div class="form-text">
+                                CoT type to match. Use * for wildcard (e.g., b-a-* matches b-a-o, b-a-g, etc.)
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="rule_${rule.id}_uid_filter" class="form-label">
+                                UID Filter (regex)
+                            </label>
+                            <input type="text"
+                                   class="form-control"
+                                   id="rule_${rule.id}_uid_filter"
+                                   placeholder="ANDROID-.* or leave empty for all"
+                                   value="${rule.uid_filter || ''}"
+                                   oninput="updateRule('${rule.id}', 'uid_filter', this.value)">
+                            <div class="form-text">
+                                Optional regex to filter by UID. Leave empty to match all UIDs.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-12 mb-3">
+                            <label for="rule_${rule.id}_template" class="form-label">
+                                Format Template <span class="text-danger">*</span>
+                            </label>
+                            <input type="text"
+                                   class="form-control"
+                                   id="rule_${rule.id}_template"
+                                   placeholder="[CHAT] {callsign}: {remarks}"
+                                   value="${rule.format_template}"
+                                   oninput="updateRule('${rule.id}', 'format_template', this.value)">
+                            <div class="form-text">
+                                Message format. Available variables: {type}, {uid}, {callsign}, {lat}, {lon}, {hae}, {mgrs}, {remarks}, {time}, {stale}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-secondary mb-0">
+                        <small>
+                            <strong>Examples:</strong><br>
+                            Chat: <code>[CHAT] {callsign}: {remarks}</code><br>
+                            Alert: <code>[ALERT] {callsign} at {lat},{lon}</code><br>
+                            Emergency: <code>🚨 EMERGENCY: {callsign} - {remarks}</code>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    serializeMessageRules();
+}
+
+function serializeMessageRules() {
+    const hiddenInput = document.getElementById('plugin_message_rules');
+    if (hiddenInput) {
+        hiddenInput.value = JSON.stringify(messageRules);
+    }
+}
+
+function toggleIRCMessageRulesSection(show) {
+    const section = document.getElementById('irc-message-rules-section');
+    if (section) {
+        section.style.display = show ? 'block' : 'none';
+    }
+}
+
+// Load existing message rules when editing
+function loadExistingMessageRules(rules) {
+    if (rules && rules.length > 0) {
+        messageRules = rules.map((rule, index) => {
+            if (!rule.id) {
+                rule.id = `rule-${ruleIdCounter++}`;
+            } else {
+                // Make sure ruleIdCounter is higher than existing IDs
+                const idNum = parseInt(rule.id.replace('rule-', ''));
+                if (idNum >= ruleIdCounter) {
+                    ruleIdCounter = idNum + 1;
+                }
+            }
+            return rule;
+        });
+        renderMessageRules();
+    }
 }
 </script>
 

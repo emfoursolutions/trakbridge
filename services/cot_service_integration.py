@@ -99,6 +99,9 @@ class QueuedCOTService:
         # Device state managers for queue replacement functionality
         self.device_state_managers: Dict[int, DeviceStateManager] = {}
 
+        # Cache for output plugin instances (persistent connections)
+        self._output_plugin_cache: Dict[int, Any] = {}  # stream_id -> plugin_instance
+
         # Configuration tracking for change detection
         self.last_config_hash = None
         self.config_change_count = 0
@@ -1360,17 +1363,37 @@ class QueuedCOTService:
                 for stream in streams:
                     logger.debug(f"Processing stream {stream.id} ({stream.name}) with plugin {stream.plugin_type}")
 
-                    # Get plugin instance for this stream
-                    plugin = plugin_manager.get_plugin(stream.plugin_type, stream.get_plugin_config())
+                    # Check if we have a cached plugin instance
+                    if stream.id in self._output_plugin_cache:
+                        plugin = self._output_plugin_cache[stream.id]
+                        logger.debug(f"Using cached plugin instance for stream {stream.id}")
+                    else:
+                        # Create new plugin instance
+                        plugin = plugin_manager.get_plugin(stream.plugin_type, stream.get_plugin_config())
 
-                    if not plugin:
-                        logger.debug(f"No plugin instance for {stream.plugin_type}")
-                        continue
+                        if not plugin:
+                            logger.debug(f"No plugin instance for {stream.plugin_type}")
+                            continue
 
-                    # Check if plugin is an output plugin (inherits from BaseOutputPlugin)
-                    if not isinstance(plugin, BaseOutputPlugin):
-                        logger.debug(f"Plugin {stream.plugin_type} is not an output plugin, skipping")
-                        continue  # Skip GPS plugins
+                        # Check if plugin is an output plugin (inherits from BaseOutputPlugin)
+                        if not isinstance(plugin, BaseOutputPlugin):
+                            logger.debug(f"Plugin {stream.plugin_type} is not an output plugin, skipping")
+                            continue  # Skip GPS plugins
+
+                        # Cache the plugin instance
+                        self._output_plugin_cache[stream.id] = plugin
+                        logger.debug(f"Cached new plugin instance for stream {stream.id}")
+
+                        # Call start() if the plugin has it (for persistent connections)
+                        if hasattr(plugin, 'start') and callable(getattr(plugin, 'start')):
+                            try:
+                                await plugin.start()
+                                logger.info(f"Initialized output plugin {stream.plugin_type} for stream {stream.name}")
+                            except Exception as e:
+                                logger.error(f"Failed to start plugin {stream.plugin_type}: {e}", exc_info=True)
+                                # Remove from cache if start fails
+                                del self._output_plugin_cache[stream.id]
+                                continue
 
                     logger.info(f"Routing CoT message to output plugin: {stream.plugin_type} (stream: {stream.name})")
 
@@ -2214,10 +2237,68 @@ class QueuedCOTService:
             )
             return 0
 
+    async def invalidate_plugin_cache(self, stream_id: int = None):
+        """
+        Invalidate cached plugin instances to force reload with new config.
+
+        Args:
+            stream_id: Specific stream ID to invalidate, or None to invalidate all
+        """
+        if stream_id is not None:
+            if stream_id in self._output_plugin_cache:
+                plugin = self._output_plugin_cache[stream_id]
+                try:
+                    if hasattr(plugin, 'cleanup') and callable(getattr(plugin, 'cleanup')):
+                        await plugin.cleanup()
+                        logger.debug(f"Cleaned up plugin for stream {stream_id}")
+                except Exception as e:
+                    logger.error(f"Error cleaning up plugin for stream {stream_id}: {e}")
+                del self._output_plugin_cache[stream_id]
+                logger.info(f"Invalidated plugin cache for stream {stream_id}")
+        else:
+            # Invalidate all
+            for sid, plugin in list(self._output_plugin_cache.items()):
+                try:
+                    if hasattr(plugin, 'cleanup') and callable(getattr(plugin, 'cleanup')):
+                        await plugin.cleanup()
+                except Exception as e:
+                    logger.error(f"Error cleaning up plugin for stream {sid}: {e}")
+            self._output_plugin_cache.clear()
+            logger.info("Invalidated all plugin caches")
+
+    def invalidate_plugin_cache_sync(self, stream_id: int = None):
+        """
+        Synchronous wrapper for invalidate_plugin_cache.
+        Use this from Flask routes or other sync contexts.
+
+        Args:
+            stream_id: Specific stream ID to invalidate, or None to invalidate all
+        """
+        if stream_id is not None:
+            if stream_id in self._output_plugin_cache:
+                plugin = self._output_plugin_cache[stream_id]
+                # Can't call async cleanup from sync context, just remove from cache
+                del self._output_plugin_cache[stream_id]
+                logger.info(f"Invalidated plugin cache for stream {stream_id} (sync)")
+        else:
+            self._output_plugin_cache.clear()
+            logger.info("Invalidated all plugin caches (sync)")
+
     async def shutdown(self):
         """Shutdown the COT service and all workers"""
         try:
             self._running = False
+
+            # Cleanup output plugin instances (call cleanup if available)
+            for stream_id, plugin in list(self._output_plugin_cache.items()):
+                try:
+                    if hasattr(plugin, 'cleanup') and callable(getattr(plugin, 'cleanup')):
+                        await plugin.cleanup()
+                        logger.debug(f"Cleaned up plugin for stream {stream_id}")
+                except Exception as e:
+                    logger.error(f"Error cleaning up plugin for stream {stream_id}: {e}")
+            self._output_plugin_cache.clear()
+            logger.debug("All output plugin instances cleaned up")
 
             # Stop all workers
             worker_mappings_before = [(k, id(v)) for k, v in self.workers.items()]

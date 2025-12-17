@@ -212,10 +212,21 @@ class StreamConfigService:
             if key.startswith("plugin_") and key != "plugin_type":
                 # Remove 'plugin_' prefix
                 config_key = key[7:]
-                plugin_config[config_key] = value
-                logger.debug(
-                    f"Found plugin config field: {key} -> {config_key} = {value}"
-                )
+
+                # Parse JSON fields (like message_rules)
+                if config_key == "message_rules" and isinstance(value, str):
+                    try:
+                        import json
+                        plugin_config[config_key] = json.loads(value)
+                        logger.debug(f"Parsed JSON field: {key} -> {config_key} = {plugin_config[config_key]}")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse JSON for {key}: {e}")
+                        plugin_config[config_key] = []
+                else:
+                    plugin_config[config_key] = value
+                    logger.debug(
+                        f"Found plugin config field: {key} -> {config_key} = {value}"
+                    )
 
         # Second pass: Handle missing checkbox fields
         if plugin_type:
