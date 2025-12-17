@@ -167,14 +167,9 @@ class IRCHandler(BaseOutputPlugin):
                     sensitive=True,
                     help_text="IRC server password (if required)",
                 ),
-                PluginConfigField(
-                    name="message_rules",
-                    label="Message Rules",
-                    field_type="json",
-                    required=False,
-                    default_value=[],
-                    help_text="Message filtering and formatting rules. See Help section above for template variables and examples.",
-                ),
+                # Note: global_geofence_enabled, global_geofence_bounds, and message_rules
+                # are handled by custom UI sections (irc-global-geofence-section and irc-message-rules-section)
+                # and should NOT be rendered as standard plugin config fields
                 PluginConfigField(
                     name="uid_filter",
                     label="Global UID Filter (regex)",
@@ -499,11 +494,34 @@ class IRCHandler(BaseOutputPlugin):
             logger.error(f"Template formatting error: {e}")
             return f"{template} [ERROR: {e}]"
 
+    def _is_within_geofence(self, lat: str, lon: str, bounds: dict) -> bool:
+        """Check if coordinates are within bounding box"""
+        try:
+            lat_float = float(lat)
+            lon_float = float(lon)
+
+            north = float(bounds.get("north", 90))
+            south = float(bounds.get("south", -90))
+            east = float(bounds.get("east", 180))
+            west = float(bounds.get("west", -180))
+
+            # Simple bounding box check
+            lat_ok = south <= lat_float <= north
+            lon_ok = west <= lon_float <= east
+
+            logger.debug(f"Geofence check: lat={lat_float} in [{south}, {north}]? {lat_ok}, lon={lon_float} in [{west}, {east}]? {lon_ok}")
+
+            return lat_ok and lon_ok
+
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Invalid coordinates or bounds for geofence check: {e}")
+            return True  # Fail open - don't filter if we can't validate
+
     def _should_handle(self, cot_type: str, uid: str, lat: str = "", lon: str = "") -> tuple[bool, str]:
         """Plugin-specific filtering logic - returns (should_handle, template)"""
         config = self.get_decrypted_config()
 
-        logger.debug(f"_should_handle called with cot_type={cot_type}, uid={uid}")
+        logger.debug(f"_should_handle called with cot_type={cot_type}, uid={uid}, lat={lat}, lon={lon}")
 
         # Global UID filter (optional pre-filter, for backwards compatibility)
         global_uid_filter = config.get("uid_filter", "")
@@ -517,6 +535,16 @@ class IRCHandler(BaseOutputPlugin):
             except re.error:
                 logger.error(f"Invalid global UID filter regex: {global_uid_filter}")
                 return (False, "")
+
+        # Check global geofence before matching rules
+        global_geofence_enabled = config.get("global_geofence_enabled", "false") == "true"
+        global_geofence_bounds = config.get("global_geofence_bounds", {})
+
+        if global_geofence_enabled and global_geofence_bounds and lat and lon:
+            if not self._is_within_geofence(lat, lon, global_geofence_bounds):
+                logger.debug(f"Filtered out by global geofence: lat={lat}, lon={lon}")
+                return (False, "")
+            logger.debug("Passed global geofence check")
 
         # Check message rules
         message_rules = config.get("message_rules", [])

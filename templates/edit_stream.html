@@ -336,6 +336,70 @@
                 </div>
             </div>
 
+            <!-- IRC Handler Global Geofence -->
+            <div id="irc-global-geofence-section" class="card" style="display: none;">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-map-marked-alt"></i>
+                        Global Geofence
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        Global geofence applies to ALL message rules. You can override this with per-rule geofences in Phase 4.
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="plugin_global_geofence_enabled" name="plugin_global_geofence_enabled" onchange="toggleGlobalGeofenceUI()">
+                            <label class="form-check-label" for="plugin_global_geofence_enabled">
+                                <strong>Enable Global Geofence</strong>
+                            </label>
+                        </div>
+                        <div class="form-text">
+                            When enabled, only messages from within the defined geographic bounds will be sent to IRC
+                        </div>
+                    </div>
+
+                    <!-- Global Geofence Map and Configuration -->
+                    <div id="global-geofence-config" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label">Draw Geofence on Map</label>
+                            <div id="global-geofence-map" style="height: 400px; border: 1px solid #dee2e6; border-radius: 4px;"></div>
+                            <div class="form-text">Click and drag on the map to draw a rectangular geofence boundary</div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="plugin_global_geofence_north" class="form-label">North (Latitude)</label>
+                                    <input type="number" step="any" class="form-control" id="plugin_global_geofence_north" name="plugin_global_geofence_north" placeholder="40.8">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="plugin_global_geofence_south" class="form-label">South (Latitude)</label>
+                                    <input type="number" step="any" class="form-control" id="plugin_global_geofence_south" name="plugin_global_geofence_south" placeholder="40.6">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="plugin_global_geofence_east" class="form-label">East (Longitude)</label>
+                                    <input type="number" step="any" class="form-control" id="plugin_global_geofence_east" name="plugin_global_geofence_east" placeholder="-73.9">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="plugin_global_geofence_west" class="form-label">West (Longitude)</label>
+                                    <input type="number" step="any" class="form-control" id="plugin_global_geofence_west" name="plugin_global_geofence_west" placeholder="-74.1">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- IRC Handler Message Rules -->
             <div id="irc-message-rules-section" class="card" style="display: none;">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -442,6 +506,14 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- Leaflet.js for map functionality -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
+
 <script>
 // Plugin metadata, categories, and current config - will be loaded via secure API calls
 let pluginMetadata = {};
@@ -638,9 +710,10 @@ function updatePluginConfig() {
         callsignSection.style.display = 'none';
     }
 
-    // Show IRC message rules section for IRC handler plugin
+    // Show IRC message rules and geofence sections for IRC handler plugin
     const isIRCHandler = pluginType === 'irc_handler';
     toggleIRCMessageRulesSection(isIRCHandler);
+    toggleIRCGlobalGeofenceSection(isIRCHandler);
     if (isIRCHandler) {
         // Load existing message rules if available
         const existingRules = currentConfig?.message_rules;
@@ -649,6 +722,22 @@ function updatePluginConfig() {
         } else if (messageRules.length === 0) {
             // Add a default rule if no rules exist
             addMessageRule();
+        }
+
+        // Load existing global geofence config if available
+        const geofenceEnabled = currentConfig?.global_geofence_enabled === 'true' || currentConfig?.global_geofence_enabled === true;
+        const geofenceBounds = currentConfig?.global_geofence_bounds;
+
+        if (geofenceEnabled) {
+            document.getElementById('plugin_global_geofence_enabled').checked = true;
+            toggleGlobalGeofenceUI();
+        }
+
+        if (geofenceBounds) {
+            document.getElementById('plugin_global_geofence_north').value = geofenceBounds.north || '';
+            document.getElementById('plugin_global_geofence_south').value = geofenceBounds.south || '';
+            document.getElementById('plugin_global_geofence_east').value = geofenceBounds.east || '';
+            document.getElementById('plugin_global_geofence_west').value = geofenceBounds.west || '';
         }
     }
 }
@@ -2003,6 +2092,156 @@ function toggleIRCMessageRulesSection(show) {
     const section = document.getElementById('irc-message-rules-section');
     if (section) {
         section.style.display = show ? 'block' : 'none';
+    }
+}
+
+function toggleIRCGlobalGeofenceSection(show) {
+    const section = document.getElementById('irc-global-geofence-section');
+    if (section) {
+        section.style.display = show ? 'block' : 'none';
+    }
+}
+
+// Global geofence map instance
+let globalGeofenceMap = null;
+let globalGeofenceRectangle = null;
+
+function toggleGlobalGeofenceUI() {
+    const enabled = document.getElementById('plugin_global_geofence_enabled').checked;
+    const configDiv = document.getElementById('global-geofence-config');
+
+    if (configDiv) {
+        configDiv.style.display = enabled ? 'block' : 'none';
+    }
+
+    // Initialize map when enabled for the first time
+    if (enabled && !globalGeofenceMap) {
+        // Use setTimeout to ensure the div is visible before initializing map
+        setTimeout(() => {
+            initGlobalGeofenceMap();
+        }, 100);
+    }
+}
+
+function initGlobalGeofenceMap() {
+    const mapDiv = document.getElementById('global-geofence-map');
+    if (!mapDiv) {
+        console.error('Map div not found!');
+        return;
+    }
+
+    console.log('Initializing global geofence map...');
+
+    // Check if Leaflet is loaded
+    if (typeof L === 'undefined') {
+        console.error('Leaflet library not loaded!');
+        return;
+    }
+
+    // Initialize map centered on a default location
+    globalGeofenceMap = L.map('global-geofence-map').setView([38.0, -97.0], 4);
+    console.log('Map initialized successfully');
+
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19
+    }).addTo(globalGeofenceMap);
+
+    // Load existing bounds if present
+    const north = parseFloat(document.getElementById('plugin_global_geofence_north').value);
+    const south = parseFloat(document.getElementById('plugin_global_geofence_south').value);
+    const east = parseFloat(document.getElementById('plugin_global_geofence_east').value);
+    const west = parseFloat(document.getElementById('plugin_global_geofence_west').value);
+
+    if (!isNaN(north) && !isNaN(south) && !isNaN(east) && !isNaN(west)) {
+        const bounds = [[south, west], [north, east]];
+        globalGeofenceRectangle = L.rectangle(bounds, {
+            color: '#3388ff',
+            weight: 2,
+            fillOpacity: 0.2
+        }).addTo(globalGeofenceMap);
+        globalGeofenceMap.fitBounds(bounds);
+    }
+
+    // Add click and drag to draw rectangle
+    let startLatLng = null;
+
+    globalGeofenceMap.on('mousedown', function(e) {
+        startLatLng = e.latlng;
+
+        // Remove existing rectangle
+        if (globalGeofenceRectangle) {
+            globalGeofenceMap.removeLayer(globalGeofenceRectangle);
+            globalGeofenceRectangle = null;
+        }
+    });
+
+    globalGeofenceMap.on('mouseup', function(e) {
+        if (startLatLng) {
+            const endLatLng = e.latlng;
+
+            // Calculate bounds
+            const north = Math.max(startLatLng.lat, endLatLng.lat);
+            const south = Math.min(startLatLng.lat, endLatLng.lat);
+            const east = Math.max(startLatLng.lng, endLatLng.lng);
+            const west = Math.min(startLatLng.lng, endLatLng.lng);
+
+            // Create rectangle
+            const bounds = [[south, west], [north, east]];
+            globalGeofenceRectangle = L.rectangle(bounds, {
+                color: '#3388ff',
+                weight: 2,
+                fillOpacity: 0.2
+            }).addTo(globalGeofenceMap);
+
+            // Update input fields
+            updateGlobalGeofenceBounds(north, south, east, west);
+
+            startLatLng = null;
+        }
+    });
+
+    // Update rectangle when input fields change
+    const inputIds = ['plugin_global_geofence_north', 'plugin_global_geofence_south',
+                      'plugin_global_geofence_east', 'plugin_global_geofence_west'];
+    inputIds.forEach(id => {
+        document.getElementById(id).addEventListener('input', function() {
+            updateGlobalGeofenceMapFromInputs();
+        });
+    });
+}
+
+function updateGlobalGeofenceBounds(north, south, east, west) {
+    document.getElementById('plugin_global_geofence_north').value = north.toFixed(6);
+    document.getElementById('plugin_global_geofence_south').value = south.toFixed(6);
+    document.getElementById('plugin_global_geofence_east').value = east.toFixed(6);
+    document.getElementById('plugin_global_geofence_west').value = west.toFixed(6);
+}
+
+function updateGlobalGeofenceMapFromInputs() {
+    if (!globalGeofenceMap) return;
+
+    const north = parseFloat(document.getElementById('plugin_global_geofence_north').value);
+    const south = parseFloat(document.getElementById('plugin_global_geofence_south').value);
+    const east = parseFloat(document.getElementById('plugin_global_geofence_east').value);
+    const west = parseFloat(document.getElementById('plugin_global_geofence_west').value);
+
+    if (!isNaN(north) && !isNaN(south) && !isNaN(east) && !isNaN(west)) {
+        // Remove existing rectangle
+        if (globalGeofenceRectangle) {
+            globalGeofenceMap.removeLayer(globalGeofenceRectangle);
+        }
+
+        // Create new rectangle
+        const bounds = [[south, west], [north, east]];
+        globalGeofenceRectangle = L.rectangle(bounds, {
+            color: '#3388ff',
+            weight: 2,
+            fillOpacity: 0.2
+        }).addTo(globalGeofenceMap);
+
+        globalGeofenceMap.fitBounds(bounds);
     }
 }
 

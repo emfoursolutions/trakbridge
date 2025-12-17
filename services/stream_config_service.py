@@ -213,15 +213,30 @@ class StreamConfigService:
                 # Remove 'plugin_' prefix
                 config_key = key[7:]
 
-                # Parse JSON fields (like message_rules)
-                if config_key == "message_rules" and isinstance(value, str):
+                # Parse JSON fields (like message_rules, global_geofence_bounds)
+                if config_key in ("message_rules", "global_geofence_bounds") and isinstance(value, str):
                     try:
                         import json
-                        plugin_config[config_key] = json.loads(value)
+                        plugin_config[config_key] = json.loads(value) if value else ({} if config_key == "global_geofence_bounds" else [])
                         logger.debug(f"Parsed JSON field: {key} -> {config_key} = {plugin_config[config_key]}")
                     except json.JSONDecodeError as e:
                         logger.error(f"Failed to parse JSON for {key}: {e}")
-                        plugin_config[config_key] = []
+                        plugin_config[config_key] = {} if config_key == "global_geofence_bounds" else []
+                # Handle global_geofence_bounds from individual form fields
+                elif config_key.startswith("global_geofence_") and config_key not in ("global_geofence_enabled", "global_geofence_bounds"):
+                    # These are individual coordinate fields (north, south, east, west)
+                    # Build the bounds dict
+                    if "global_geofence_bounds" not in plugin_config:
+                        plugin_config["global_geofence_bounds"] = {}
+
+                    # Extract the coordinate name (north, south, east, west)
+                    coord_name = config_key.replace("global_geofence_", "")
+                    try:
+                        plugin_config["global_geofence_bounds"][coord_name] = float(value) if value else None
+                        logger.debug(f"Added geofence coordinate: {coord_name} = {value}")
+                    except (ValueError, TypeError):
+                        plugin_config["global_geofence_bounds"][coord_name] = None
+                        logger.warning(f"Invalid coordinate value for {coord_name}: {value}")
                 else:
                     plugin_config[config_key] = value
                     logger.debug(

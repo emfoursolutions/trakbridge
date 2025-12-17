@@ -295,3 +295,156 @@ class TestIRCHandlerFiltering:
         assert variables["speed"] == "0.0"
         assert variables["course"] == "18.9555897703694"
         assert variables["xmpp_username"] == "ops_npoulter@xmpp.plexus-isr.com"
+
+    def test_is_within_geofence_inside(self):
+        """Test geofence check for coordinates inside bounds"""
+        handler = IRCHandler(self.base_config)
+        bounds = {"north": 40.8, "south": 40.6, "east": -73.9, "west": -74.1}
+
+        # Inside bounds
+        assert handler._is_within_geofence("40.7", "-74.0", bounds) is True
+        assert handler._is_within_geofence("40.75", "-73.95", bounds) is True
+        assert handler._is_within_geofence("40.65", "-74.05", bounds) is True
+
+        # On the boundary (should be inside)
+        assert handler._is_within_geofence("40.8", "-74.0", bounds) is True
+        assert handler._is_within_geofence("40.6", "-73.9", bounds) is True
+
+    def test_is_within_geofence_outside(self):
+        """Test geofence check for coordinates outside bounds"""
+        handler = IRCHandler(self.base_config)
+        bounds = {"north": 40.8, "south": 40.6, "east": -73.9, "west": -74.1}
+
+        # Outside bounds
+        assert handler._is_within_geofence("40.9", "-74.0", bounds) is False  # North
+        assert handler._is_within_geofence("40.5", "-74.0", bounds) is False  # South
+        assert handler._is_within_geofence("40.7", "-73.8", bounds) is False  # East
+        assert handler._is_within_geofence("40.7", "-74.2", bounds) is False  # West
+
+    def test_is_within_geofence_invalid_coords(self):
+        """Test geofence check with invalid coordinates (fail open)"""
+        handler = IRCHandler(self.base_config)
+        bounds = {"north": 40.8, "south": 40.6, "east": -73.9, "west": -74.1}
+
+        # Invalid coordinates should fail open (return True)
+        assert handler._is_within_geofence("invalid", "-74.0", bounds) is True
+        assert handler._is_within_geofence("40.7", "invalid", bounds) is True
+        assert handler._is_within_geofence("", "", bounds) is True
+
+    def test_is_within_geofence_invalid_bounds(self):
+        """Test geofence check with invalid bounds (fail open)"""
+        handler = IRCHandler(self.base_config)
+
+        # Invalid bounds should fail open (return True)
+        assert handler._is_within_geofence("40.7", "-74.0", {}) is True
+        assert handler._is_within_geofence("40.7", "-74.0", {"north": "invalid"}) is True
+
+    def test_should_handle_global_geofence_disabled(self):
+        """Test that geofence filtering is skipped when disabled"""
+        config = self.base_config.copy()
+        config["global_geofence_enabled"] = "false"
+        config["global_geofence_bounds"] = {"north": 40.8, "south": 40.6, "east": -73.9, "west": -74.1}
+        config["message_rules"] = [
+            {
+                "id": "rule-1",
+                "cot_type_pattern": "b-t-f",
+                "format_template": "[CHAT] {callsign}",
+                "enabled": True,
+            }
+        ]
+        handler = IRCHandler(config)
+
+        # Should pass even though outside geofence (geofence disabled)
+        should_handle, template = handler._should_handle("b-t-f", "TEST-UID", "50.0", "-100.0")
+        assert should_handle is True
+
+    def test_should_handle_global_geofence_inside(self):
+        """Test that messages inside geofence are handled"""
+        config = self.base_config.copy()
+        config["global_geofence_enabled"] = "true"
+        config["global_geofence_bounds"] = {"north": 40.8, "south": 40.6, "east": -73.9, "west": -74.1}
+        config["message_rules"] = [
+            {
+                "id": "rule-1",
+                "cot_type_pattern": "b-t-f",
+                "format_template": "[CHAT] {callsign}",
+                "enabled": True,
+            }
+        ]
+        handler = IRCHandler(config)
+
+        # Inside geofence
+        should_handle, template = handler._should_handle("b-t-f", "TEST-UID", "40.7", "-74.0")
+        assert should_handle is True
+        assert template == "[CHAT] {callsign}"
+
+    def test_should_handle_global_geofence_outside(self):
+        """Test that messages outside geofence are filtered"""
+        config = self.base_config.copy()
+        config["global_geofence_enabled"] = "true"
+        config["global_geofence_bounds"] = {"north": 40.8, "south": 40.6, "east": -73.9, "west": -74.1}
+        config["message_rules"] = [
+            {
+                "id": "rule-1",
+                "cot_type_pattern": "b-t-f",
+                "format_template": "[CHAT] {callsign}",
+                "enabled": True,
+            }
+        ]
+        handler = IRCHandler(config)
+
+        # Outside geofence
+        should_handle, template = handler._should_handle("b-t-f", "TEST-UID", "50.0", "-100.0")
+        assert should_handle is False
+        assert template == ""
+
+    def test_should_handle_global_geofence_no_coordinates(self):
+        """Test that messages without coordinates pass geofence check (fail open)"""
+        config = self.base_config.copy()
+        config["global_geofence_enabled"] = "true"
+        config["global_geofence_bounds"] = {"north": 40.8, "south": 40.6, "east": -73.9, "west": -74.1}
+        config["message_rules"] = [
+            {
+                "id": "rule-1",
+                "cot_type_pattern": "b-t-f",
+                "format_template": "[CHAT] {callsign}",
+                "enabled": True,
+            }
+        ]
+        handler = IRCHandler(config)
+
+        # No coordinates - should pass (fail open)
+        should_handle, template = handler._should_handle("b-t-f", "TEST-UID", "", "")
+        assert should_handle is True
+
+    def test_should_handle_global_geofence_combined_filters(self):
+        """Test global geofence combined with UID filter and message rules"""
+        config = self.base_config.copy()
+        config["uid_filter"] = "^ANDROID-.*"
+        config["global_geofence_enabled"] = "true"
+        config["global_geofence_bounds"] = {"north": 40.8, "south": 40.6, "east": -73.9, "west": -74.1}
+        config["message_rules"] = [
+            {
+                "id": "rule-1",
+                "cot_type_pattern": "b-t-f",
+                "format_template": "[CHAT] {callsign}",
+                "enabled": True,
+            }
+        ]
+        handler = IRCHandler(config)
+
+        # All filters pass
+        should_handle, template = handler._should_handle("b-t-f", "ANDROID-123", "40.7", "-74.0")
+        assert should_handle is True
+
+        # UID filter fails
+        should_handle, template = handler._should_handle("b-t-f", "IOS-456", "40.7", "-74.0")
+        assert should_handle is False
+
+        # Geofence filter fails
+        should_handle, template = handler._should_handle("b-t-f", "ANDROID-123", "50.0", "-100.0")
+        assert should_handle is False
+
+        # Message rule fails
+        should_handle, template = handler._should_handle("b-a-o", "ANDROID-123", "40.7", "-74.0")
+        assert should_handle is False
