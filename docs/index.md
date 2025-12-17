@@ -46,6 +46,7 @@ Welcome to the comprehensive documentation for TrakBridge, a professional GPS tr
 
 ### Plugin Development
 - [Plugin Development Guide](PLUGIN_DEVELOPMENT.md) - Creating custom plugins and extensions
+- [Handler Development Guide](HANDLER_PLUGIN_DEVELOPMENT_GUIDE.md) - Creating custom handler plugins to bridge TAK with external systems
 - [Base Plugin Documentation](PLUGIN_DEVELOPMENT.md#base-plugin-class) - Understanding the plugin architecture
 - [External Plugin Examples](example_external_plugins/README.md) - Sample external plugin implementations
 

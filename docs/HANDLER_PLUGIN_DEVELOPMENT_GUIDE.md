@@ -1088,6 +1088,388 @@ async def test_throughput(handler):
 
 ## Advanced Topics
 
+### Connection Lifecycle Management
+
+For plugins that maintain persistent connections (IRC, MQTT, WebSocket, etc.), implement proper lifecycle hooks:
+
+```python
+class PersistentConnectionHandler(BaseOutputPlugin):
+    """Handler with persistent connection management"""
+
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self._reader: Optional[asyncio.StreamReader] = None
+        self._writer: Optional[asyncio.StreamWriter] = None
+        self._connected: bool = False
+        self._connection_lock = asyncio.Lock()
+        self._reader_task: Optional[asyncio.Task] = None
+
+    async def start(self):
+        """
+        Initialize connection when stream starts.
+
+        Called by framework when stream is enabled.
+        Use this for connection setup, authentication, joining channels, etc.
+        """
+        logger.info(f"{self.plugin_name} starting - establishing connection...")
+        success = await self._ensure_connected()
+        if success:
+            logger.info(f"{self.plugin_name} started successfully")
+        else:
+            logger.error(f"{self.plugin_name} failed to start - connection failed")
+
+    async def _ensure_connected(self) -> bool:
+        """Ensure connection is established (with reconnection logic)"""
+        async with self._connection_lock:
+            if self._connected and self._writer and not self._writer.is_closing():
+                return True  # Already connected
+
+            try:
+                config = self.get_decrypted_config()
+                server = config.get("server")
+                port = int(config.get("port", 6667))
+
+                # Connect
+                self._reader, self._writer = await asyncio.open_connection(server, port)
+                logger.info(f"Connected to {server}:{port}")
+
+                # Perform handshake/authentication
+                await self._perform_handshake()
+
+                # Start background task for message handling
+                if self._reader_task is None or self._reader_task.done():
+                    self._reader_task = asyncio.create_task(self._handle_server_messages())
+
+                self._connected = True
+                return True
+
+            except Exception as e:
+                logger.error(f"Failed to connect: {e}")
+                self._connected = False
+                return False
+
+    async def _handle_server_messages(self):
+        """Background task to handle server messages (PING/PONG, etc.)"""
+        try:
+            while self._reader:
+                line = await asyncio.wait_for(self._reader.readline(), timeout=300)
+                if not line:
+                    logger.warning("Connection closed by server")
+                    self._connected = False
+                    break
+
+                message = line.decode('utf-8', errors='ignore').strip()
+
+                # Handle server messages (PING, errors, etc.)
+                if message.startswith('PING'):
+                    # Respond to keepalive
+                    self._writer.write(b"PONG\r\n")
+                    await self._writer.drain()
+
+        except Exception as e:
+            logger.error(f"Server message handler crashed: {e}")
+            self._connected = False
+
+    async def handle_cot_message(self, cot_xml: bytes, tak_server_id: int):
+        """Handle CoT with automatic reconnection"""
+        # Ensure connected before processing
+        if not await self._ensure_connected():
+            logger.error("Cannot process - connection failed")
+            return
+
+        # Process message...
+
+    async def cleanup(self):
+        """
+        Cleanup resources when stream stops.
+
+        Called by framework when stream is disabled or deleted.
+        Close connections, cancel tasks, clean up resources.
+        """
+        # Cancel background tasks
+        if self._reader_task and not self._reader_task.done():
+            self._reader_task.cancel()
+            try:
+                await self._reader_task
+            except asyncio.CancelledError:
+                pass
+
+        # Close connection gracefully
+        if self._writer and not self._writer.is_closing():
+            try:
+                self._writer.write(b"QUIT\r\n")
+                await self._writer.drain()
+                self._writer.close()
+                await self._writer.wait_closed()
+            except Exception as e:
+                logger.error(f"Error during cleanup: {e}")
+
+        self._connected = False
+```
+
+**Key Lifecycle Methods:**
+
+- `async def start()` - Called when stream starts (optional)
+- `async def handle_cot_message()` - Called for each CoT message (required)
+- `async def cleanup()` - Called when stream stops (optional)
+- `async def test_connection()` - Called by "Test Connection" button (optional)
+
+### Help Sections in Plugin Metadata
+
+Provide comprehensive help directly in your plugin metadata for better UX:
+
+```python
+@property
+def plugin_metadata(self) -> Dict[str, Any]:
+    return {
+        "display_name": "My Handler",
+        "description": "Handle CoT messages and do something useful",
+        "icon": "fa-bell",
+        "category": "output",
+        "help_sections": [
+            {
+                "title": "Template Variables",
+                "content": [
+                    "Basic: {type}, {uid}, {time}, {stale}, {callsign}, {remarks}",
+                    "Location: {lat}, {lon}, {hae}, {mgrs}",
+                    "Group: {group_name}, {group_role}",
+                    "Device: {device}, {platform}, {os}, {version}, {battery}",
+                    "Track: {speed}, {course}, {xmpp_username}",
+                ],
+            },
+            {
+                "title": "Common CoT Types & Examples",
+                "content": [
+                    "Chat (b-t-f): \"[CHAT] {callsign}: {remarks}\"",
+                    "Emergency (b-a-o-tl): \"[EMERGENCY] {callsign} at {mgrs}\"",
+                    "Friendly Position (a-f-G-E-V): \"[{group_name}] {callsign} - Battery: {battery}%\"",
+                ],
+            },
+            {
+                "title": "Important Notes",
+                "content": [
+                    "Messages are deduplicated within 5 seconds",
+                    "Use wildcards (*) in patterns for broader matching",
+                    "At least one message rule is required",
+                ],
+            },
+        ],
+        "config_fields": [
+            # ... your config fields
+        ]
+    }
+```
+
+Help sections appear in the UI sidebar when users configure your plugin.
+
+### Message Deduplication
+
+Prevent duplicate processing of messages that TAK servers may rebroadcast:
+
+```python
+class DeduplicatingHandler(BaseOutputPlugin):
+    """Handler with built-in deduplication"""
+
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        # Track recently seen messages
+        self._seen_messages: Dict[str, float] = {}
+        self._dedup_ttl_seconds: float = 5.0
+
+    async def handle_cot_message(self, cot_xml: bytes, tak_server_id: int):
+        """Handle CoT with deduplication"""
+        from defusedxml import ElementTree as DefusedET
+        import time
+
+        root = DefusedET.fromstring(cot_xml)
+
+        # Create dedup key from UID + type (not timestamp!)
+        uid = root.get('uid')
+        cot_type = root.get('type')
+        dedup_key = f"{uid}:{cot_type}"
+
+        now = time.time()
+
+        # Clean up old entries
+        self._seen_messages = {
+            k: v for k, v in self._seen_messages.items()
+            if now - v < self._dedup_ttl_seconds
+        }
+
+        # Check if we've seen this recently
+        if dedup_key in self._seen_messages:
+            time_since_last = now - self._seen_messages[dedup_key]
+            logger.debug(f"Duplicate ignored: {dedup_key} (seen {time_since_last:.2f}s ago)")
+            return
+
+        # Mark as seen
+        self._seen_messages[dedup_key] = now
+
+        # Process message...
+        logger.debug(f"New message: {dedup_key}")
+```
+
+**Why deduplication matters:**
+- TAK servers may rebroadcast messages
+- Position updates come frequently
+- Prevents spam to external services
+- Reduces API costs
+
+**Best practices:**
+- Use UID + type as key (not timestamp)
+- TTL of 5-10 seconds is usually sufficient
+- Clean up old entries to prevent memory leaks
+- Log when duplicates are filtered
+
+### MGRS Coordinate Conversion
+
+For military/tactical applications, MGRS (Military Grid Reference System) is often preferred:
+
+```python
+async def handle_cot_message(self, cot_xml: bytes, tak_server_id: int):
+    """Handle CoT with MGRS conversion"""
+    from defusedxml import ElementTree as DefusedET
+    import mgrs
+
+    root = DefusedET.fromstring(cot_xml)
+
+    # Extract coordinates
+    point = root.find('point')
+    if point is not None:
+        lat = float(point.get('lat'))
+        lon = float(point.get('lon'))
+
+        # Convert to MGRS
+        try:
+            m = mgrs.MGRS()
+            mgrs_coord = m.toMGRS(lat, lon)
+            logger.info(f"Position: {lat},{lon} = {mgrs_coord}")
+
+            # Use MGRS in your message
+            message = f"Alert at {mgrs_coord}"
+
+        except Exception as e:
+            logger.warning(f"MGRS conversion failed: {e}")
+            # Fallback to lat/lon
+            message = f"Alert at {lat},{lon}"
+```
+
+Install mgrs library: `pip install mgrs`
+
+### Template-Based Message Formatting
+
+Allow users to customize message formats with template variables:
+
+```python
+def _extract_template_variables(self, root) -> Dict[str, str]:
+    """Extract all template variables from CoT XML"""
+    variables = {
+        # Basic CoT fields
+        "type": root.get("type", ""),
+        "uid": root.get("uid", ""),
+        "time": root.get("time", ""),
+        "stale": root.get("stale", ""),
+
+        # Initialize all with defaults
+        "callsign": "Unknown",
+        "lat": "",
+        "lon": "",
+        "hae": "",
+        "mgrs": "",
+        "remarks": "",
+        "group_name": "",
+        "group_role": "",
+        "battery": "",
+        "device": "",
+        "platform": "",
+        "os": "",
+        "version": "",
+        "speed": "",
+        "course": "",
+    }
+
+    # Extract point data
+    point = root.find("point")
+    if point is not None:
+        variables["lat"] = point.get("lat", "")
+        variables["lon"] = point.get("lon", "")
+        variables["hae"] = point.get("hae", "")
+
+    # Extract detail elements
+    detail = root.find("detail")
+    if detail is not None:
+        # Contact info
+        contact = detail.find("contact")
+        if contact is not None:
+            variables["callsign"] = contact.get("callsign", "Unknown")
+
+        # Remarks (chat messages)
+        remarks = detail.find("remarks")
+        if remarks is not None and remarks.text:
+            variables["remarks"] = remarks.text
+
+        # Group data
+        group = detail.find("__group")
+        if group is not None:
+            variables["group_name"] = group.get("name", "")
+            variables["group_role"] = group.get("role", "")
+
+        # Battery status
+        status = detail.find("status")
+        if status is not None:
+            variables["battery"] = status.get("battery", "")
+
+        # Device info
+        takv = detail.find("takv")
+        if takv is not None:
+            variables["device"] = takv.get("device", "")
+            variables["platform"] = takv.get("platform", "")
+            variables["os"] = takv.get("os", "")
+            variables["version"] = takv.get("version", "")
+
+        # Track data
+        track = detail.find("track")
+        if track is not None:
+            variables["speed"] = track.get("speed", "")
+            variables["course"] = track.get("course", "")
+
+    return variables
+
+def _format_message(self, template: str, variables: Dict[str, str]) -> str:
+    """Format message using template and variables"""
+    try:
+        return template.format(**variables)
+    except KeyError as e:
+        logger.warning(f"Template variable missing: {e}")
+        return f"{template} [ERROR: missing variable {e}]"
+    except Exception as e:
+        logger.error(f"Template formatting error: {e}")
+        return f"{template} [ERROR: {e}]"
+
+# Usage:
+async def handle_cot_message(self, cot_xml: bytes, tak_server_id: int):
+    root = DefusedET.fromstring(cot_xml)
+
+    # Get user-configured template from config
+    config = self.get_decrypted_config()
+    template = config.get("message_template", "[{type}] {callsign}")
+
+    # Extract all variables
+    variables = self._extract_template_variables(root)
+
+    # Format message
+    message = self._format_message(template, variables)
+
+    # Send formatted message
+    await self._send_message(message)
+```
+
+**Template examples users can configure:**
+- `"[CHAT] {callsign}: {remarks}"` - Chat messages
+- `"[{group_name}] {callsign} ({group_role}) - Battery: {battery}%"` - Team updates
+- `"[ALERT] {callsign} at {mgrs}"` - Emergency alerts
+- `"{callsign} moving at {speed} m/s heading {course}°"` - Movement tracking
+
 ### Hybrid Plugins (Both Input and Output)
 
 ```python
