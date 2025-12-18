@@ -102,6 +102,14 @@ class QueuedCOTService:
         # Cache for output plugin instances (persistent connections)
         self._output_plugin_cache: Dict[int, Any] = {}  # stream_id -> plugin_instance
 
+        # In-memory stats tracking for output plugins (periodically flushed to DB)
+        self._output_stats: Dict[int, int] = {}  # stream_id -> message_count
+        self._stats_last_flush: Dict[int, datetime] = {}  # stream_id -> last_flush_time
+        self._stats_flush_interval = 30  # Flush stats every 30 seconds
+        self._stats_max_entries = 1000  # Prevent unbounded growth
+        self._stats_cleanup_interval = 300  # 5 minutes
+        self._last_stats_cleanup = datetime.now()
+
         # Configuration tracking for change detection
         self.last_config_hash = None
         self.config_change_count = 0
@@ -1415,16 +1423,11 @@ class QueuedCOTService:
                         )
                         logger.debug(f"Successfully routed CoT to {stream.plugin_type}")
 
-                        # Update stream statistics for successful message routing
-                        try:
-                            from database import db
+                        # Track message in memory (will be flushed periodically)
+                        self._output_stats[stream.id] = self._output_stats.get(stream.id, 0) + 1
 
-                            stream.update_stats(messages_sent=1)
-                            db.session.commit()
-                            logger.debug(f"Updated stats for stream {stream.id}")
-                        except Exception as stats_error:
-                            logger.error(f"Failed to update stream stats: {stats_error}")
-                            # Don't fail the message routing if stats update fails
+                        # Flush stats to database if interval elapsed
+                        await self._flush_output_stats_if_needed(stream.id)
 
                     except asyncio.TimeoutError:
                         logger.warning(
@@ -1435,6 +1438,94 @@ class QueuedCOTService:
 
         except Exception as e:
             logger.error(f"Failed to route CoT message: {e}")
+
+    async def _flush_output_stats_if_needed(self, stream_id: int):
+        """Flush output plugin stats to database if flush interval has elapsed and messages accumulated"""
+        count = self._output_stats.get(stream_id, 0)
+
+        # Skip if no messages to flush
+        if count == 0:
+            return
+
+        now = datetime.now()
+        last_flush = self._stats_last_flush.get(stream_id)
+
+        # Flush if interval elapsed or never flushed
+        if last_flush is None or (now - last_flush).total_seconds() >= self._stats_flush_interval:
+            await self._flush_output_stats(stream_id)
+            self._stats_last_flush[stream_id] = now
+
+        # Periodic cleanup (non-blocking)
+        if (now - self._last_stats_cleanup).total_seconds() >= self._stats_cleanup_interval:
+            self._cleanup_stale_output_stats()
+            self._last_stats_cleanup = now
+
+    async def _flush_output_stats(self, stream_id: int = None):
+        """Flush output plugin stats to database
+
+        Args:
+            stream_id: Specific stream to flush, or None to flush all
+        """
+        from database import db
+        from models.stream import Stream
+
+        try:
+            # Determine which streams to flush
+            stream_ids = [stream_id] if stream_id else list(self._output_stats.keys())
+
+            if not stream_ids:
+                return
+
+            # Batch update all streams in a single transaction
+            for sid in stream_ids:
+                count = self._output_stats.get(sid, 0)
+                if count > 0:
+                    stream = db.session.get(Stream, sid)
+                    if stream:
+                        stream.update_stats(messages_sent=count)
+                        logger.debug(f"Flushing {count} messages for stream {sid}")
+
+                    # Reset counter and update flush time
+                    self._output_stats[sid] = 0
+                    self._stats_last_flush[sid] = datetime.now()
+
+            # Commit once for all updates
+            db.session.commit()
+            logger.debug(f"Flushed output stats for {len(stream_ids)} streams")
+
+        except Exception as e:
+            logger.error(f"Failed to flush output stats: {e}")
+            db.session.rollback()
+
+    def _cleanup_stale_output_stats(self):
+        """Remove entries for deleted/disabled streams to prevent memory leaks"""
+        from models.stream import Stream
+        from database import db
+
+        try:
+            # Quick check: if under limit, skip cleanup
+            if len(self._output_stats) < self._stats_max_entries:
+                return
+
+            # Get active stream IDs
+            active_stream_ids = {
+                s[0] for s in db.session.query(Stream.id)
+                .filter(Stream.is_active == True)
+                .all()
+            }
+
+            # Remove stale entries
+            stale_ids = set(self._output_stats.keys()) - active_stream_ids
+            for sid in stale_ids:
+                del self._output_stats[sid]
+                self._stats_last_flush.pop(sid, None)
+
+            if stale_ids:
+                logger.info(f"Cleaned up {len(stale_ids)} stale stream stat entries")
+
+        except Exception as e:
+            # Non-critical, just log
+            logger.error(f"Error cleaning up stale stats: {e}")
 
     def _get_tak_circuit_breaker(self, tak_server_id: int):
         """Get or create circuit breaker for TAK server connection"""
@@ -2322,6 +2413,10 @@ class QueuedCOTService:
         """Shutdown the COT service and all workers"""
         try:
             self._running = False
+
+            # Flush any pending output stats before shutdown
+            logger.info("Flushing pending output stats before shutdown...")
+            await self._flush_output_stats()
 
             # Cleanup output plugin instances (call cleanup if available)
             for stream_id, plugin in list(self._output_plugin_cache.items()):
