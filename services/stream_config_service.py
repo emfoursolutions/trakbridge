@@ -500,6 +500,17 @@ class StreamConfigService:
             if "help_sections" in metadata:
                 serialized["help_sections"] = metadata["help_sections"]
 
+            # Serialize custom components
+            if "custom_components" in metadata:
+                serialized["custom_components"] = []
+                for component in metadata["custom_components"]:
+                    if hasattr(component, "to_dict"):
+                        serialized["custom_components"].append(component.to_dict())
+                    elif isinstance(component, dict):
+                        serialized["custom_components"].append(component)
+                    else:
+                        logger.warning(f"Unexpected component type: {type(component)}")
+
             return serialized
 
         except Exception as e:

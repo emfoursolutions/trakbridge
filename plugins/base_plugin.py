@@ -138,6 +138,38 @@ class PluginConfigField:
         }
 
 
+@dataclass
+class PluginCustomComponent:
+    """
+    Metadata for custom UI components that plugins can declare.
+
+    Allows plugins to define complex UI elements (message rules builder,
+    geofence map, etc.) via metadata instead of hardcoded template code.
+    """
+    type: str  # Component type: "message_rules", "geofence", etc.
+    field_name: str  # Form field name for backend
+    title: str  # Display title in UI
+    icon: str  # FontAwesome icon class (e.g., "fa-filter")
+    help_text: str = ""  # Optional help text
+    config: Dict[str, Any] = None  # Component-specific configuration
+
+    def __post_init__(self):
+        """Initialize config as empty dict if not provided"""
+        if self.config is None:
+            self.config = {}
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization"""
+        return {
+            "type": self.type,
+            "field_name": self.field_name,
+            "title": self.title,
+            "icon": self.icon,
+            "help_text": self.help_text,
+            "config": self.config,
+        }
+
+
 class BaseGPSPlugin(ABC):
     """Enhanced base class for GPS tracking plugins with persistent COT support and circuit breaker protection"""
 
@@ -174,6 +206,7 @@ class BaseGPSPlugin(ABC):
             - category: Plugin category
             - help_sections: List of help content sections
             - config_fields: List of PluginConfigField objects
+            - custom_components: List of PluginCustomComponent objects (optional)
         """
         pass
 
@@ -886,6 +919,7 @@ class BaseOutputPlugin(ABC):
             - icon: FontAwesome icon class
             - category: "output" (or "bidirectional" if also does input)
             - config_fields: List of PluginConfigField objects
+            - custom_components: List of PluginCustomComponent objects (optional)
         """
         pass
 

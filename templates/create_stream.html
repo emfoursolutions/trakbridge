@@ -312,100 +312,11 @@
                 </div>
             </div>
 
-            <!-- IRC Handler Geofence -->
-            <div id="irc-global-geofence-section" class="card" style="display: none;">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-map-marked-alt"></i>
-                        Geofence
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle"></i>
-                        The geofence applies to ALL message rules. You can override this with per-rule geofences in Phase 4.
-                    </div>
-
-                    <div class="mb-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="plugin_global_geofence_enabled" name="plugin_global_geofence_enabled" onchange="toggleGlobalGeofenceUI()">
-                            <label class="form-check-label" for="plugin_global_geofence_enabled">
-                                <strong>Enable Geofence Filtering</strong>
-                            </label>
-                        </div>
-                        <div class="form-text">
-                            When enabled, only messages from within the defined geographic bounds will be sent to IRC
-                        </div>
-                    </div>
-
-                    <!-- Geofence Map and Configuration -->
-                    <div id="global-geofence-config" style="display: none;">
-                        <div class="mb-3">
-                            <label class="form-label">Draw Geofence on Map</label>
-                            <div id="global-geofence-map" style="height: 400px; border: 1px solid #dee2e6; border-radius: 4px;"></div>
-                            <div class="form-text">Hold Shift and then Click and drag on the map to draw a rectangular geofence boundary</div>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="plugin_global_geofence_north" class="form-label">North (Latitude)</label>
-                                    <input type="number" step="any" class="form-control" id="plugin_global_geofence_north" name="plugin_global_geofence_north" placeholder="40.8">
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="plugin_global_geofence_south" class="form-label">South (Latitude)</label>
-                                    <input type="number" step="any" class="form-control" id="plugin_global_geofence_south" name="plugin_global_geofence_south" placeholder="40.6">
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="plugin_global_geofence_east" class="form-label">East (Longitude)</label>
-                                    <input type="number" step="any" class="form-control" id="plugin_global_geofence_east" name="plugin_global_geofence_east" placeholder="-73.9">
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="plugin_global_geofence_west" class="form-label">West (Longitude)</label>
-                                    <input type="number" step="any" class="form-control" id="plugin_global_geofence_west" name="plugin_global_geofence_west" placeholder="-74.1">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <!-- Dynamic Plugin Custom Components Container -->
+            <div id="plugin-custom-components">
+                <!-- Components will be dynamically rendered here based on plugin metadata -->
             </div>
 
-            <!-- IRC Handler Message Rules -->
-            <div id="irc-message-rules-section" class="card" style="display: none;">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">
-                        <i class="fas fa-filter"></i>
-                        Message Rules
-                    </h5>
-                    <button type="button" class="btn btn-sm btn-primary" onclick="addMessageRule()">
-                        <i class="fas fa-plus"></i> Add Rule
-                    </button>
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle"></i>
-                        Define rules to filter and format CoT messages before sending to IRC. Rules are evaluated in order, and the first matching rule is used.
-                    </div>
-
-                    <div id="message-rules-container">
-                        <!-- Rules will be rendered here by JavaScript -->
-                    </div>
-
-                    <div id="no-rules-message" class="text-center text-muted py-4">
-                        <i class="fas fa-inbox fa-3x mb-3 opacity-25"></i>
-                        <p>No message rules defined. Click "Add Rule" to create your first rule.</p>
-                    </div>
-
-                    <!-- Hidden input to store rules JSON -->
-                    <input type="hidden" id="plugin_message_rules" name="plugin_message_rules" value="[]">
-                </div>
-            </div>
 
             <div class="card">
                 <div class="card-body">
@@ -470,6 +381,541 @@
 let pluginMetadata = {};
 let categoryData = {};
 let categorizedPlugins = {};
+
+// Component registry for custom UI components
+const componentRenderers = {};
+const componentValidators = {};
+const componentState = {};  // Stores component state per plugin instance
+
+// Main function to render custom components for a plugin
+function renderCustomComponents(pluginType, components) {
+    const container = document.getElementById('plugin-custom-components');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (!components || components.length === 0) {
+        return;
+    }
+
+    // Initialize component state for this plugin if not exists
+    if (!componentState[pluginType]) {
+        componentState[pluginType] = {};
+    }
+
+    components.forEach(component => {
+        console.log('Rendering component:', component.type, 'field:', component.field_name);
+        const renderer = componentRenderers[component.type];
+        if (renderer) {
+            const componentHTML = renderer(pluginType, component);
+            console.log('Component HTML generated, length:', componentHTML.length);
+            container.insertAdjacentHTML('beforeend', componentHTML);
+
+            // Initialize component state if needed
+            if (!componentState[pluginType][component.field_name]) {
+                componentState[pluginType][component.field_name] = [];
+            }
+        } else {
+            console.warn(`No renderer found for component type: ${component.type}`);
+        }
+    });
+
+    console.log('Component rendering complete, container HTML length:', container.innerHTML.length);
+}
+
+// Validate all custom components for a plugin
+function validateCustomComponents(pluginType) {
+    const metadata = pluginMetadata[pluginType];
+    if (!metadata || !metadata.custom_components) {
+        return true;
+    }
+
+    for (const component of metadata.custom_components) {
+        const validator = componentValidators[component.type];
+        if (validator && !validator(pluginType, component)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// ========== MESSAGE RULES COMPONENT ==========
+
+// Render message rules component
+componentRenderers['message_rules'] = function(pluginType, component) {
+    const {field_name, title, icon, help_text, config} = component;
+    const containerId = `${pluginType}-${field_name}-container`;
+    const sectionId = `${pluginType}-${field_name}-section`;
+    const noRulesId = `${pluginType}-${field_name}-no-rules`;
+    const hiddenInputId = `${pluginType}_plugin_${field_name}`;
+
+    return `
+        <div id="${sectionId}" class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas ${icon}"></i>
+                    ${title}
+                </h5>
+                <button type="button" class="btn btn-sm btn-primary"
+                        onclick="addComponentRule('${pluginType}', '${field_name}')">
+                    <i class="fas fa-plus"></i> Add Rule
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    ${help_text}
+                </div>
+                <div id="${containerId}"></div>
+                <div id="${noRulesId}" class="text-center text-muted py-4">
+                    <i class="fas fa-inbox fa-3x mb-3 opacity-25"></i>
+                    <p>No rules defined. Click "Add Rule" to create your first rule.</p>
+                </div>
+                <input type="hidden" id="${hiddenInputId}" name="plugin_${field_name}" value="[]">
+            </div>
+        </div>
+    `;
+};
+
+// Add a new message rule
+function addComponentRule(pluginType, fieldName) {
+    const component = findComponent(pluginType, fieldName);
+    if (!component) return;
+
+    const rule = {
+        id: `rule_${Date.now()}`,
+        enabled: true
+    };
+
+    // Initialize fields from schema
+    component.config.rule_fields.forEach(field => {
+        rule[field.name] = field.default || '';
+    });
+
+    if (!componentState[pluginType][fieldName]) {
+        componentState[pluginType][fieldName] = [];
+    }
+    componentState[pluginType][fieldName].push(rule);
+    renderComponentRules(pluginType, fieldName);
+}
+
+// Remove a message rule
+function removeComponentRule(pluginType, fieldName, ruleId) {
+    if (!componentState[pluginType] || !componentState[pluginType][fieldName]) return;
+
+    componentState[pluginType][fieldName] = componentState[pluginType][fieldName].filter(
+        rule => rule.id !== ruleId
+    );
+    renderComponentRules(pluginType, fieldName);
+}
+
+// Update a rule field
+function updateComponentRule(pluginType, fieldName, ruleId, field, value) {
+    if (!componentState[pluginType] || !componentState[pluginType][fieldName]) return;
+
+    const rule = componentState[pluginType][fieldName].find(r => r.id === ruleId);
+    if (rule) {
+        rule[field] = value;
+        serializeComponentRules(pluginType, fieldName);
+    }
+}
+
+// Render all rules for a component
+function renderComponentRules(pluginType, fieldName) {
+    const component = findComponent(pluginType, fieldName);
+    if (!component) return;
+
+    const containerId = `${pluginType}-${fieldName}-container`;
+    const noRulesId = `${pluginType}-${fieldName}-no-rules`;
+    const container = document.getElementById(containerId);
+    const noRulesMsg = document.getElementById(noRulesId);
+
+    if (!container) return;
+
+    const rules = componentState[pluginType][fieldName] || [];
+
+    if (rules.length === 0) {
+        container.innerHTML = '';
+        if (noRulesMsg) noRulesMsg.style.display = 'block';
+        serializeComponentRules(pluginType, fieldName);
+        return;
+    }
+
+    if (noRulesMsg) noRulesMsg.style.display = 'none';
+
+    container.innerHTML = rules.map((rule, index) => `
+        <div class="card mb-3" id="${pluginType}-${fieldName}-rule-${rule.id}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox"
+                           id="${pluginType}-${fieldName}-enabled-${rule.id}"
+                           ${rule.enabled ? 'checked' : ''}
+                           onchange="updateComponentRule('${pluginType}', '${fieldName}', '${rule.id}', 'enabled', this.checked)">
+                    <label class="form-check-label fw-bold">
+                        Rule ${index + 1}
+                    </label>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger"
+                        onclick="removeComponentRule('${pluginType}', '${fieldName}', '${rule.id}')">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                ${component.config.rule_fields.map(field => `
+                    <div class="mb-3">
+                        <label class="form-label">
+                            ${field.label}
+                            ${field.required ? '<span class="text-danger">*</span>' : ''}
+                        </label>
+                        ${field.type === 'textarea' ? `
+                            <textarea class="form-control"
+                                      placeholder="${field.placeholder || ''}"
+                                      onchange="updateComponentRule('${pluginType}', '${fieldName}', '${rule.id}', '${field.name}', this.value)"
+                                      rows="3">${rule[field.name] || ''}</textarea>
+                        ` : `
+                            <input type="text" class="form-control"
+                                   placeholder="${field.placeholder || ''}"
+                                   value="${rule[field.name] || ''}"
+                                   onchange="updateComponentRule('${pluginType}', '${fieldName}', '${rule.id}', '${field.name}', this.value)">
+                        `}
+                        ${field.help ? `<small class="form-text text-muted">${field.help}</small>` : ''}
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+
+    serializeComponentRules(pluginType, fieldName);
+}
+
+// Serialize rules to hidden input
+function serializeComponentRules(pluginType, fieldName) {
+    const hiddenInputId = `${pluginType}_plugin_${fieldName}`;
+    const hiddenInput = document.getElementById(hiddenInputId);
+    if (!hiddenInput) return;
+
+    const rules = componentState[pluginType][fieldName] || [];
+    hiddenInput.value = JSON.stringify(rules);
+}
+
+// Find a component in plugin metadata
+function findComponent(pluginType, fieldName) {
+    const metadata = pluginMetadata[pluginType];
+    if (!metadata || !metadata.custom_components) return null;
+
+    return metadata.custom_components.find(c => c.field_name === fieldName);
+}
+
+// Validate message rules component
+componentValidators['message_rules'] = function(pluginType, component) {
+    const rules = componentState[pluginType][component.field_name] || [];
+
+    if (rules.length === 0) {
+        alert(`${component.title}: At least one rule is required.`);
+        return false;
+    }
+
+    for (let i = 0; i < rules.length; i++) {
+        const rule = rules[i];
+
+        // Check required fields
+        for (const field of component.config.rule_fields) {
+            if (field.required && (!rule[field.name] || rule[field.name].trim() === '')) {
+                alert(`${component.title} - Rule ${i + 1}: ${field.label} is required.`);
+                return false;
+            }
+        }
+
+        // Validate regex patterns (uid_filter field)
+        if (rule.uid_filter && rule.uid_filter.trim() !== '') {
+            try {
+                new RegExp(rule.uid_filter);
+            } catch (e) {
+                alert(`${component.title} - Rule ${i + 1}: Invalid regex pattern in UID Filter: ${e.message}`);
+                return false;
+            }
+        }
+    }
+
+    return true;
+};
+
+// ========== GEOFENCE COMPONENT ==========
+
+// Render geofence component
+componentRenderers['geofence'] = function(pluginType, component) {
+    const {field_name, title, icon, help_text, config} = component;
+    const sectionId = `${pluginType}-${field_name}-section`;
+    const mapId = `${pluginType}-${field_name}-map`;
+    const configDivId = `${pluginType}-${field_name}-config`;
+
+    return `
+        <div id="${sectionId}" class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas ${icon}"></i>
+                    ${title}
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info mb-3">
+                    <i class="fas fa-info-circle"></i>
+                    ${help_text}
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox"
+                           id="plugin_${field_name}_enabled"
+                           name="plugin_${field_name}_enabled"
+                           onchange="toggleGeofence('${pluginType}', '${field_name}', this.checked)">
+                    <label class="form-check-label">
+                        ${config.enable_checkbox_label}
+                    </label>
+                </div>
+                <div id="${configDivId}" style="display: none;">
+                    <div class="mb-3">
+                        <div id="${mapId}" style="height: 400px; border: 1px solid #dee2e6; border-radius: 0.375rem;"></div>
+                        <small class="form-text text-muted">
+                            <i class="fas fa-info-circle"></i>
+                            Draw a rectangle on the map or enter coordinates manually
+                        </small>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-md-3">
+                            <label class="form-label">North</label>
+                            <input type="number" step="any" class="form-control"
+                                   id="plugin_${field_name}_north"
+                                   name="plugin_${field_name}_north"
+                                   placeholder="90.0"
+                                   onchange="updateGeofenceOnMap('${pluginType}', '${field_name}')">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">South</label>
+                            <input type="number" step="any" class="form-control"
+                                   id="plugin_${field_name}_south"
+                                   name="plugin_${field_name}_south"
+                                   placeholder="-90.0"
+                                   onchange="updateGeofenceOnMap('${pluginType}', '${field_name}')">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">East</label>
+                            <input type="number" step="any" class="form-control"
+                                   id="plugin_${field_name}_east"
+                                   name="plugin_${field_name}_east"
+                                   placeholder="180.0"
+                                   onchange="updateGeofenceOnMap('${pluginType}', '${field_name}')">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">West</label>
+                            <input type="number" step="any" class="form-control"
+                                   id="plugin_${field_name}_west"
+                                   name="plugin_${field_name}_west"
+                                   placeholder="-180.0"
+                                   onchange="updateGeofenceOnMap('${pluginType}', '${field_name}')">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+// Toggle geofence visibility
+function toggleGeofence(pluginType, fieldName, enabled) {
+    const component = findComponent(pluginType, fieldName);
+    if (!component) return;
+
+    const configDivId = `${pluginType}-${fieldName}-config`;
+    const configDiv = document.getElementById(configDivId);
+
+    if (!configDiv) return;
+
+    if (enabled) {
+        configDiv.style.display = 'block';
+        // Initialize map if not already done
+        initGeofenceMap(pluginType, fieldName, component.config);
+    } else {
+        configDiv.style.display = 'none';
+    }
+}
+
+// Initialize Leaflet map for geofence
+function initGeofenceMap(pluginType, fieldName, config) {
+    const mapId = `${pluginType}-${fieldName}-map`;
+    const mapKey = `${pluginType}_${fieldName}_map`;
+
+    // Check if map already exists
+    if (componentState[mapKey]) {
+        return;
+    }
+
+    // Create map with world bounds restriction
+    const map = L.map(mapId, {
+        maxBounds: [[-90, -180], [90, 180]],
+        maxBoundsViscosity: 1.0
+    }).setView(config.default_center, config.default_zoom);
+
+    // Add tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        noWrap: true
+    }).addTo(map);
+
+    // Store map reference
+    componentState[mapKey] = {
+        map: map,
+        rectangle: null
+    };
+
+    // Enable shift+drag rectangle drawing
+    let isDrawing = false;
+    let startLatLng = null;
+
+    map.on('mousedown', function(e) {
+        if (e.originalEvent.shiftKey) {
+            isDrawing = true;
+            startLatLng = e.latlng;
+
+            // Remove existing rectangle if any
+            if (componentState[mapKey].rectangle) {
+                map.removeLayer(componentState[mapKey].rectangle);
+                componentState[mapKey].rectangle = null;
+            }
+        }
+    });
+
+    map.on('mousemove', function(e) {
+        if (isDrawing && startLatLng) {
+            // Remove temporary rectangle
+            if (componentState[mapKey].rectangle) {
+                map.removeLayer(componentState[mapKey].rectangle);
+            }
+
+            // Draw new temporary rectangle
+            const bounds = L.latLngBounds(startLatLng, e.latlng);
+            componentState[mapKey].rectangle = L.rectangle(bounds, {
+                color: '#3388ff',
+                weight: 2,
+                fillOpacity: 0.2
+            }).addTo(map);
+        }
+    });
+
+    map.on('mouseup', function(e) {
+        if (isDrawing && startLatLng) {
+            isDrawing = false;
+
+            // Finalize rectangle
+            const bounds = L.latLngBounds(startLatLng, e.latlng);
+
+            // Update input fields with final bounds
+            updateGeofenceFromMap(pluginType, fieldName, bounds);
+
+            startLatLng = null;
+        }
+    });
+
+    // Invalidate size after a short delay to ensure proper rendering
+    setTimeout(() => {
+        map.invalidateSize();
+    }, 100);
+}
+
+// Update input fields from map rectangle
+function updateGeofenceFromMap(pluginType, fieldName, bounds) {
+    // Normalize coordinates
+    let north = bounds.getNorth();
+    let south = bounds.getSouth();
+    let east = bounds.getEast();
+    let west = bounds.getWest();
+
+    // Clamp latitude to valid range (-90 to 90)
+    north = Math.max(-90, Math.min(90, north));
+    south = Math.max(-90, Math.min(90, south));
+
+    // Wrap longitude to valid range (-180 to 180)
+    const wrapLongitude = (lon) => {
+        while (lon > 180) lon -= 360;
+        while (lon < -180) lon += 360;
+        return lon;
+    };
+
+    east = wrapLongitude(east);
+    west = wrapLongitude(west);
+
+    document.getElementById(`plugin_${fieldName}_north`).value = north.toFixed(6);
+    document.getElementById(`plugin_${fieldName}_south`).value = south.toFixed(6);
+    document.getElementById(`plugin_${fieldName}_east`).value = east.toFixed(6);
+    document.getElementById(`plugin_${fieldName}_west`).value = west.toFixed(6);
+}
+
+// Update map rectangle from input fields
+function updateGeofenceOnMap(pluginType, fieldName) {
+    const mapKey = `${pluginType}_${fieldName}_map`;
+    const mapState = componentState[mapKey];
+
+    if (!mapState || !mapState.map) return;
+
+    const north = parseFloat(document.getElementById(`plugin_${fieldName}_north`).value);
+    const south = parseFloat(document.getElementById(`plugin_${fieldName}_south`).value);
+    const east = parseFloat(document.getElementById(`plugin_${fieldName}_east`).value);
+    const west = parseFloat(document.getElementById(`plugin_${fieldName}_west`).value);
+
+    if (isNaN(north) || isNaN(south) || isNaN(east) || isNaN(west)) {
+        return;
+    }
+
+    // Remove existing rectangle
+    if (mapState.rectangle) {
+        mapState.map.removeLayer(mapState.rectangle);
+    }
+
+    // Create new rectangle
+    const bounds = [[south, west], [north, east]];
+    mapState.rectangle = L.rectangle(bounds, {
+        color: '#3388ff',
+        weight: 2,
+        fillOpacity: 0.2
+    }).addTo(mapState.map);
+
+    // Fit map to bounds
+    mapState.map.fitBounds(bounds);
+}
+
+// Validate geofence component
+componentValidators['geofence'] = function(pluginType, component) {
+    const enabled = document.getElementById(`plugin_${component.field_name}_enabled`);
+
+    if (!enabled || !enabled.checked) {
+        return true;  // Not enabled, no validation needed
+    }
+
+    const north = parseFloat(document.getElementById(`plugin_${component.field_name}_north`).value);
+    const south = parseFloat(document.getElementById(`plugin_${component.field_name}_south`).value);
+    const east = parseFloat(document.getElementById(`plugin_${component.field_name}_east`).value);
+    const west = parseFloat(document.getElementById(`plugin_${component.field_name}_west`).value);
+
+    if (isNaN(north) || isNaN(south) || isNaN(east) || isNaN(west)) {
+        alert(`${component.title}: All coordinate fields are required when geofence is enabled.`);
+        return false;
+    }
+
+    if (north < -90 || north > 90 || south < -90 || south > 90) {
+        alert(`${component.title}: Latitude values must be between -90 and 90.`);
+        return false;
+    }
+
+    if (east < -180 || east > 180 || west < -180 || west > 180) {
+        alert(`${component.title}: Longitude values must be between -180 and 180.`);
+        return false;
+    }
+
+    if (north <= south) {
+        alert(`${component.title}: North latitude must be greater than South latitude.`);
+        return false;
+    }
+
+    return true;
+};
 
 // Load plugin metadata securely from API
 async function loadPluginMetadata() {
@@ -610,6 +1056,9 @@ function updatePluginConfig() {
         return;
     }
 
+    console.log('Plugin metadata for', pluginType, ':', pluginMeta);
+    console.log('Has custom_components?', !!pluginMeta.custom_components, 'Count:', pluginMeta.custom_components?.length);
+
     // Update config section
     renderPluginConfig(pluginMeta);
 
@@ -633,13 +1082,32 @@ function updatePluginConfig() {
         callsignSection.style.display = 'none';
     }
 
-    // Show IRC message rules and geofence sections for IRC handler plugin
-    const isIRCHandler = pluginType === 'irc_handler';
-    toggleIRCMessageRulesSection(isIRCHandler);
-    toggleIRCGlobalGeofenceSection(isIRCHandler);
-    if (isIRCHandler && messageRules.length === 0) {
-        // Add a default rule for new IRC handler configurations
-        addMessageRule();
+    // Render custom components if plugin has any
+    if (pluginMeta.custom_components && pluginMeta.custom_components.length > 0) {
+        renderCustomComponents(pluginType, pluginMeta.custom_components);
+
+        // Show component sections
+        pluginMeta.custom_components.forEach(component => {
+            const sectionId = `${pluginType}-${component.field_name}-section`;
+            const section = document.getElementById(sectionId);
+            if (section) {
+                section.style.display = 'block';
+            }
+
+            // Add default rule for message_rules components if empty
+            if (component.type === 'message_rules') {
+                if (!componentState[pluginType][component.field_name] ||
+                    componentState[pluginType][component.field_name].length === 0) {
+                    addComponentRule(pluginType, component.field_name);
+                }
+            }
+        });
+    } else {
+        // No custom components, clear the container
+        const container = document.getElementById('plugin-custom-components');
+        if (container) {
+            container.innerHTML = '';
+        }
     }
 }
 
@@ -782,8 +1250,6 @@ function renderHelpContent(pluginMeta) {
 
     let html = `
         <div class="mb-3">
-            <div class="d-flex align-items-center mb-2">
-                <i class="${pluginMeta.icon} me-2"></i>
                 <h6 class="mb-0">${pluginMeta.display_name}</h6>
             </div>
             <p class="text-muted">${pluginMeta.description}</p>
@@ -1443,80 +1909,6 @@ function validateTeamMemberConfiguration() {
     return true;
 }
 
-function validateIRCMessageRules() {
-    // Only validate if IRC handler is selected
-    const pluginType = document.getElementById('plugin_type');
-    if (!pluginType || pluginType.value !== 'irc_handler') {
-        return true;
-    }
-
-    const errors = [];
-
-    // Check if there's at least one rule when IRC is selected
-    if (messageRules.length === 0) {
-        errors.push('At least one message rule is required for IRC handler');
-    }
-
-    // Validate each rule
-    messageRules.forEach((rule, index) => {
-        if (rule.enabled) {
-            if (!rule.cot_type_pattern || rule.cot_type_pattern.trim() === '') {
-                errors.push(`Rule ${index + 1}: CoT type pattern is required`);
-            }
-
-            if (!rule.format_template || rule.format_template.trim() === '') {
-                errors.push(`Rule ${index + 1}: Format template is required`);
-            }
-
-            // Validate UID filter regex if provided
-            if (rule.uid_filter && rule.uid_filter.trim() !== '') {
-                try {
-                    new RegExp(rule.uid_filter);
-                } catch (e) {
-                    errors.push(`Rule ${index + 1}: Invalid UID filter regex - ${e.message}`);
-                }
-            }
-        }
-    });
-
-    // Validate global geofence bounds if enabled
-    const globalGeofenceEnabled = document.getElementById('plugin_global_geofence_enabled');
-    if (globalGeofenceEnabled && globalGeofenceEnabled.checked) {
-        const north = parseFloat(document.getElementById('plugin_global_geofence_north').value);
-        const south = parseFloat(document.getElementById('plugin_global_geofence_south').value);
-        const east = parseFloat(document.getElementById('plugin_global_geofence_east').value);
-        const west = parseFloat(document.getElementById('plugin_global_geofence_west').value);
-
-        if (isNaN(north) || isNaN(south) || isNaN(east) || isNaN(west)) {
-            errors.push('Global geofence: All coordinates (north, south, east, west) must be valid numbers');
-        } else {
-            if (north <= south) {
-                errors.push('Global geofence: North latitude must be greater than south latitude');
-            }
-            if (east <= west) {
-                errors.push('Global geofence: East longitude must be greater than west longitude');
-            }
-            if (north < -90 || north > 90 || south < -90 || south > 90) {
-                errors.push('Global geofence: Latitudes must be between -90 and 90');
-            }
-            if (east < -180 || east > 180 || west < -180 || west > 180) {
-                errors.push('Global geofence: Longitudes must be between -180 and 180');
-            }
-        }
-    }
-
-    if (errors.length > 0) {
-        showAlert(errors.join('<br>'), 'danger');
-        // Scroll to the IRC section
-        const ircSection = document.getElementById('irc-message-rules-section');
-        if (ircSection) {
-            ircSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-        return false;
-    }
-
-    return true;
-}
 
 function clearTrackerMappingTable() {
     const table = document.getElementById('tracker-mapping-table');
@@ -1647,7 +2039,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
             }
 
-            if (!validateIRCMessageRules()) {
+            // Validate custom components
+            const pluginType = document.getElementById('plugin_type').value;
+            if (!validateCustomComponents(pluginType)) {
                 e.preventDefault();
                 return false;
             }
@@ -1867,311 +2261,7 @@ function populateTrackerMappingTableWithState(identifierField) {
     });
 }
 
-// ===== IRC Message Rules Management =====
-let messageRules = [];
-let ruleIdCounter = 1;
 
-function addMessageRule() {
-    const rule = {
-        id: `rule-${ruleIdCounter++}`,
-        cot_type_pattern: '',
-        uid_filter: '',
-        format_template: '',
-        enabled: true
-    };
-
-    messageRules.push(rule);
-    renderMessageRules();
-}
-
-function removeMessageRule(ruleId) {
-    messageRules = messageRules.filter(r => r.id !== ruleId);
-    renderMessageRules();
-}
-
-function updateRule(ruleId, field, value) {
-    const rule = messageRules.find(r => r.id === ruleId);
-    if (rule) {
-        rule[field] = value;
-        serializeMessageRules();
-    }
-}
-
-function renderMessageRules() {
-    const container = document.getElementById('message-rules-container');
-    const noRulesMessage = document.getElementById('no-rules-message');
-
-    if (messageRules.length === 0) {
-        container.innerHTML = '';
-        noRulesMessage.style.display = 'block';
-    } else {
-        noRulesMessage.style.display = 'none';
-        container.innerHTML = messageRules.map((rule, index) => `
-            <div class="card mb-3 rule-card" id="rule-${rule.id}">
-                <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="badge bg-secondary">Rule ${index + 1}</span>
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input" type="checkbox"
-                                   id="rule_${rule.id}_enabled"
-                                   ${rule.enabled ? 'checked' : ''}
-                                   onchange="updateRule('${rule.id}', 'enabled', this.checked)">
-                            <label class="form-check-label" for="rule_${rule.id}_enabled">
-                                Enabled
-                            </label>
-                        </div>
-                    </div>
-                    <button type="button" class="btn btn-sm btn-outline-danger"
-                            onclick="removeMessageRule('${rule.id}')"
-                            title="Remove Rule">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="rule_${rule.id}_pattern" class="form-label">
-                                CoT Type Pattern <span class="text-danger">*</span>
-                            </label>
-                            <input type="text"
-                                   class="form-control"
-                                   id="rule_${rule.id}_pattern"
-                                   placeholder="b-t-f or b-a-* (wildcards supported)"
-                                   value="${rule.cot_type_pattern}"
-                                   oninput="updateRule('${rule.id}', 'cot_type_pattern', this.value)">
-                            <div class="form-text">
-                                CoT type to match. Use * for wildcard (e.g., b-a-* matches b-a-o, b-a-g, etc.)
-                            </div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="rule_${rule.id}_uid_filter" class="form-label">
-                                UID Filter (regex)
-                            </label>
-                            <input type="text"
-                                   class="form-control"
-                                   id="rule_${rule.id}_uid_filter"
-                                   placeholder="ANDROID-.* or leave empty for all"
-                                   value="${rule.uid_filter || ''}"
-                                   oninput="updateRule('${rule.id}', 'uid_filter', this.value)">
-                            <div class="form-text">
-                                Optional regex to filter by UID. Leave empty to match all UIDs.
-                            </div>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-12 mb-3">
-                            <label for="rule_${rule.id}_template" class="form-label">
-                                Format Template <span class="text-danger">*</span>
-                            </label>
-                            <input type="text"
-                                   class="form-control"
-                                   id="rule_${rule.id}_template"
-                                   placeholder="[CHAT] {callsign}: {remarks}"
-                                   value="${rule.format_template}"
-                                   oninput="updateRule('${rule.id}', 'format_template', this.value)">
-                            <div class="form-text">
-                                Message format. Available variables: {type}, {uid}, {callsign}, {lat}, {lon}, {hae}, {mgrs}, {remarks}, {time}, {stale}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="alert alert-secondary mb-0">
-                        <small>
-                            <strong>Examples:</strong><br>
-                            Chat: <code>[CHAT] {callsign}: {remarks}</code><br>
-                            Alert: <code>[ALERT] {callsign} at {lat},{lon}</code><br>
-                            Emergency: <code>🚨 EMERGENCY: {callsign} - {remarks}</code>
-                        </small>
-                    </div>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    serializeMessageRules();
-}
-
-function serializeMessageRules() {
-    const hiddenInput = document.getElementById('plugin_message_rules');
-    if (hiddenInput) {
-        hiddenInput.value = JSON.stringify(messageRules);
-    }
-}
-
-function toggleIRCMessageRulesSection(show) {
-    const section = document.getElementById('irc-message-rules-section');
-    if (section) {
-        section.style.display = show ? 'block' : 'none';
-    }
-}
-
-function toggleIRCGlobalGeofenceSection(show) {
-    const section = document.getElementById('irc-global-geofence-section');
-    if (section) {
-        section.style.display = show ? 'block' : 'none';
-    }
-}
-
-// Global geofence map instance
-let globalGeofenceMap = null;
-let globalGeofenceRectangle = null;
-
-function toggleGlobalGeofenceUI() {
-    const enabled = document.getElementById('plugin_global_geofence_enabled').checked;
-    const configDiv = document.getElementById('global-geofence-config');
-
-    if (configDiv) {
-        configDiv.style.display = enabled ? 'block' : 'none';
-    }
-
-    // Initialize map when enabled for the first time
-    if (enabled && !globalGeofenceMap) {
-        // Use setTimeout to ensure the div is visible before initializing map
-        setTimeout(() => {
-            initGlobalGeofenceMap();
-        }, 100);
-    }
-}
-
-function initGlobalGeofenceMap() {
-    const mapDiv = document.getElementById('global-geofence-map');
-    if (!mapDiv) {
-        console.error('Map div not found!');
-        return;
-    }
-
-    console.log('Initializing global geofence map...');
-
-    // Check if Leaflet is loaded
-    if (typeof L === 'undefined') {
-        console.error('Leaflet library not loaded!');
-        return;
-    }
-
-    // Initialize map centered on a default location
-    globalGeofenceMap = L.map('global-geofence-map', {
-        maxBounds: [[-90, -180], [90, 180]],
-        maxBoundsViscosity: 1.0  // Makes bounds "hard" - prevents panning beyond valid coordinates
-    }).setView([38.0, -97.0], 4);
-    console.log('Map initialized successfully');
-
-    // Add OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19
-    }).addTo(globalGeofenceMap);
-
-    // Load existing bounds if present
-    const north = parseFloat(document.getElementById('plugin_global_geofence_north').value);
-    const south = parseFloat(document.getElementById('plugin_global_geofence_south').value);
-    const east = parseFloat(document.getElementById('plugin_global_geofence_east').value);
-    const west = parseFloat(document.getElementById('plugin_global_geofence_west').value);
-
-    if (!isNaN(north) && !isNaN(south) && !isNaN(east) && !isNaN(west)) {
-        const bounds = [[south, west], [north, east]];
-        globalGeofenceRectangle = L.rectangle(bounds, {
-            color: '#3388ff',
-            weight: 2,
-            fillOpacity: 0.2
-        }).addTo(globalGeofenceMap);
-        globalGeofenceMap.fitBounds(bounds);
-    }
-
-    // Add click and drag to draw rectangle
-    let startLatLng = null;
-
-    globalGeofenceMap.on('mousedown', function(e) {
-        startLatLng = e.latlng;
-
-        // Remove existing rectangle
-        if (globalGeofenceRectangle) {
-            globalGeofenceMap.removeLayer(globalGeofenceRectangle);
-            globalGeofenceRectangle = null;
-        }
-    });
-
-    globalGeofenceMap.on('mouseup', function(e) {
-        if (startLatLng) {
-            const endLatLng = e.latlng;
-
-            // Normalize coordinates to valid ranges
-            const startNorm = normalizeCoordinates(startLatLng.lat, startLatLng.lng);
-            const endNorm = normalizeCoordinates(endLatLng.lat, endLatLng.lng);
-
-            // Calculate bounds using normalized coordinates
-            const north = Math.max(startNorm.lat, endNorm.lat);
-            const south = Math.min(startNorm.lat, endNorm.lat);
-            const east = Math.max(startNorm.lng, endNorm.lng);
-            const west = Math.min(startNorm.lng, endNorm.lng);
-
-            // Create rectangle
-            const bounds = [[south, west], [north, east]];
-            globalGeofenceRectangle = L.rectangle(bounds, {
-                color: '#3388ff',
-                weight: 2,
-                fillOpacity: 0.2
-            }).addTo(globalGeofenceMap);
-
-            // Update input fields
-            updateGlobalGeofenceBounds(north, south, east, west);
-
-            startLatLng = null;
-        }
-    });
-
-    // Update rectangle when input fields change
-    const inputIds = ['plugin_global_geofence_north', 'plugin_global_geofence_south',
-                      'plugin_global_geofence_east', 'plugin_global_geofence_west'];
-    inputIds.forEach(id => {
-        document.getElementById(id).addEventListener('input', function() {
-            updateGlobalGeofenceMapFromInputs();
-        });
-    });
-}
-
-function updateGlobalGeofenceBounds(north, south, east, west) {
-    document.getElementById('plugin_global_geofence_north').value = north.toFixed(6);
-    document.getElementById('plugin_global_geofence_south').value = south.toFixed(6);
-    document.getElementById('plugin_global_geofence_east').value = east.toFixed(6);
-    document.getElementById('plugin_global_geofence_west').value = west.toFixed(6);
-}
-
-function normalizeCoordinates(lat, lng) {
-    // Normalize latitude to -90 to 90
-    let normLat = Math.max(-90, Math.min(90, lat));
-
-    // Normalize longitude to -180 to 180 (wrap around)
-    let normLng = lng;
-    while (normLng > 180) normLng -= 360;
-    while (normLng < -180) normLng += 360;
-
-    return { lat: normLat, lng: normLng };
-}
-
-function updateGlobalGeofenceMapFromInputs() {
-    if (!globalGeofenceMap) return;
-
-    const north = parseFloat(document.getElementById('plugin_global_geofence_north').value);
-    const south = parseFloat(document.getElementById('plugin_global_geofence_south').value);
-    const east = parseFloat(document.getElementById('plugin_global_geofence_east').value);
-    const west = parseFloat(document.getElementById('plugin_global_geofence_west').value);
-
-    if (!isNaN(north) && !isNaN(south) && !isNaN(east) && !isNaN(west)) {
-        // Remove existing rectangle
-        if (globalGeofenceRectangle) {
-            globalGeofenceMap.removeLayer(globalGeofenceRectangle);
-        }
-
-        // Create new rectangle
-        const bounds = [[south, west], [north, east]];
-        globalGeofenceRectangle = L.rectangle(bounds, {
-            color: '#3388ff',
-            weight: 2,
-            fillOpacity: 0.2
-        }).addTo(globalGeofenceMap);
-
-        globalGeofenceMap.fitBounds(bounds);
-    }
-}
 </script>
 
 <style>

@@ -1,7 +1,11 @@
 # ABOUTME: IRCHandler plugin for receiving CoT messages from TAK and posting to IRC
 # ABOUTME: Implements BaseOutputPlugin to handle chat messages and route them to IRC channels
 
-from plugins.base_plugin import BaseOutputPlugin, PluginConfigField
+from plugins.base_plugin import (
+    BaseOutputPlugin,
+    PluginConfigField,
+    PluginCustomComponent,
+)
 from defusedxml import ElementTree as DefusedET
 import asyncio
 import time
@@ -189,6 +193,62 @@ class IRCHandler(BaseOutputPlugin):
                     placeholder="^ANDROID-.*",
                     help_text="Global pre-filter applied before message rules (optional). See Help section for details and examples.",
                 ),
+            ],
+            "custom_components": [
+                PluginCustomComponent(
+                    type="message_rules",
+                    field_name="message_rules",
+                    title="Message Rules",
+                    icon="fa-filter",
+                    help_text="Define rules to filter and format CoT messages before sending to IRC. Rules are evaluated in order; first matching rule wins.",
+                    config={
+                        "template_variables": [
+                            "{type}", "{uid}", "{time}", "{stale}", "{callsign}", "{remarks}",
+                            "{lat}", "{lon}", "{hae}", "{mgrs}",
+                            "{group_name}", "{group_role}",
+                            "{device}", "{platform}", "{os}", "{version}", "{battery}",
+                            "{speed}", "{course}", "{xmpp_username}"
+                        ],
+                        "rule_fields": [
+                            {
+                                "name": "cot_type_pattern",
+                                "label": "CoT Type Pattern",
+                                "type": "text",
+                                "required": True,
+                                "placeholder": "b-t-f or a-f-* (wildcards supported)",
+                                "help": "Pattern to match CoT types (e.g., b-t-f for chat, a-f-* for all friendly)"
+                            },
+                            {
+                                "name": "uid_filter",
+                                "label": "UID Filter (regex)",
+                                "type": "text",
+                                "required": False,
+                                "placeholder": "^ANDROID-.*",
+                                "help": "Optional regex to filter by UID (e.g., ^ANDROID-.* for Android devices)"
+                            },
+                            {
+                                "name": "format_template",
+                                "label": "Format Template",
+                                "type": "textarea",
+                                "required": True,
+                                "placeholder": "[CHAT] {callsign}: {remarks}",
+                                "help": "Message format using template variables above"
+                            }
+                        ]
+                    }
+                ),
+                PluginCustomComponent(
+                    type="geofence",
+                    field_name="global_geofence",
+                    title="Geofence",
+                    icon="fa-map-marked-alt",
+                    help_text="Filter messages by geographic bounds. Only messages within the defined area will be sent to IRC.",
+                    config={
+                        "default_center": [40.7, -74.0],
+                        "default_zoom": 10,
+                        "enable_checkbox_label": "Enable Geofence Filtering"
+                    }
+                )
             ],
         }
 
