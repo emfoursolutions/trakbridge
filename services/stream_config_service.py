@@ -222,6 +222,12 @@ class StreamConfigService:
                     except json.JSONDecodeError as e:
                         logger.error(f"Failed to parse JSON for {key}: {e}")
                         plugin_config[config_key] = {} if config_key == "global_geofence_bounds" else []
+                # Normalize checkbox values (convert HTML "on"/"off" to "true"/"false")
+                elif config_key == "global_geofence_enabled":
+                    # HTML checkboxes send "on" when checked, nothing when unchecked
+                    # Normalize to "true"/"false" for consistent backend handling
+                    plugin_config[config_key] = "true" if value in ("on", "true", "1", True) else "false"
+                    logger.debug(f"Normalized checkbox {config_key}: {value} -> {plugin_config[config_key]}")
                 # Handle global_geofence_bounds from individual form fields
                 elif config_key.startswith("global_geofence_") and config_key not in ("global_geofence_enabled", "global_geofence_bounds"):
                     # These are individual coordinate fields (north, south, east, west)

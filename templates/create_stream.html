@@ -1567,11 +1567,37 @@ function validateServerSelection() {
     return true;
 }
 
+// Normalize checkbox values before submission
+function normalizeCheckboxValues() {
+    const globalGeofenceCheckbox = document.getElementById('plugin_global_geofence_enabled');
+    if (globalGeofenceCheckbox) {
+        // Set value attribute based on checked state
+        globalGeofenceCheckbox.value = globalGeofenceCheckbox.checked ? 'true' : 'false';
+
+        // Ensure unchecked checkboxes still send a value
+        if (!globalGeofenceCheckbox.checked) {
+            // Create hidden input for unchecked state
+            const existingHidden = document.querySelector('input[type="hidden"][name="plugin_global_geofence_enabled"]');
+            if (existingHidden) {
+                existingHidden.remove();
+            }
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = 'plugin_global_geofence_enabled';
+            hiddenInput.value = 'false';
+            document.getElementById('streamForm').appendChild(hiddenInput);
+        }
+    }
+}
+
 // Initialize server selection validation and display
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('streamForm');
     if (form) {
         form.addEventListener('submit', function(e) {
+            // Normalize checkbox values before validation
+            normalizeCheckboxValues();
+
             if (!validateServerSelection()) {
                 e.preventDefault();
                 return false;

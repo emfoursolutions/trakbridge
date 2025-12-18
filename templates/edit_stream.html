@@ -725,7 +725,9 @@ function updatePluginConfig() {
         }
 
         // Load existing global geofence config if available
-        const geofenceEnabled = currentConfig?.global_geofence_enabled === 'true' || currentConfig?.global_geofence_enabled === true;
+        // Handle various boolean representations (true, "true", "on", "1")
+        const geofenceValue = currentConfig?.global_geofence_enabled;
+        const geofenceEnabled = geofenceValue === 'true' || geofenceValue === true || geofenceValue === 'on' || geofenceValue === '1';
         const geofenceBounds = currentConfig?.global_geofence_bounds;
 
         if (geofenceEnabled) {
@@ -1803,11 +1805,37 @@ function collectFormDataForTest() {
     };
 }
 
+// Normalize checkbox values before submission
+function normalizeCheckboxValues() {
+    const globalGeofenceCheckbox = document.getElementById('plugin_global_geofence_enabled');
+    if (globalGeofenceCheckbox) {
+        // Set value attribute based on checked state
+        globalGeofenceCheckbox.value = globalGeofenceCheckbox.checked ? 'true' : 'false';
+
+        // Ensure unchecked checkboxes still send a value
+        if (!globalGeofenceCheckbox.checked) {
+            // Create hidden input for unchecked state
+            const existingHidden = document.querySelector('input[type="hidden"][name="plugin_global_geofence_enabled"]');
+            if (existingHidden) {
+                existingHidden.remove();
+            }
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = 'plugin_global_geofence_enabled';
+            hiddenInput.value = 'false';
+            document.getElementById('streamForm').appendChild(hiddenInput);
+        }
+    }
+}
+
 // Initialize edit mode with proper server selection display (simplified approach)
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('streamForm');
     if (form) {
         form.addEventListener('submit', function(e) {
+            // Normalize checkbox values before validation
+            normalizeCheckboxValues();
+
             if (!validateServerSelection()) {
                 e.preventDefault();
                 return false;
