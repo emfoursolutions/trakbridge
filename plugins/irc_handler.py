@@ -536,15 +536,15 @@ class IRCHandler(BaseOutputPlugin):
                 logger.error(f"Invalid global UID filter regex: {global_uid_filter}")
                 return (False, "")
 
-        # Check global geofence before matching rules
+        # Check geofence before matching rules
         global_geofence_enabled = config.get("global_geofence_enabled", "false") == "true"
         global_geofence_bounds = config.get("global_geofence_bounds", {})
 
         if global_geofence_enabled and global_geofence_bounds and lat and lon:
             if not self._is_within_geofence(lat, lon, global_geofence_bounds):
-                logger.debug(f"Filtered out by global geofence: lat={lat}, lon={lon}")
+                logger.debug(f"Filtered out by geofence: lat={lat}, lon={lon}")
                 return (False, "")
-            logger.debug("Passed global geofence check")
+            logger.debug("Passed geofence check")
 
         # Check message rules
         message_rules = config.get("message_rules", [])

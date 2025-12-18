@@ -2,6 +2,16 @@
 
 {% block title %}{{ stream.name }} - Stream Details{% endblock %}
 
+{% block extra_head %}
+<!-- Leaflet.js for map functionality -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+{% endblock %}
+
 {% block content %}
 <!-- Page Header -->
 <div class="page-header">
@@ -133,6 +143,7 @@
                         </div>
                     </div>
                     <div class="col-md-6">
+                        {% if stream.plugin_type not in ['irc_handler', 'slack_handler', 'cot_archiver'] %}
                         <div class="info-group mb-3">
                             <label class="info-label">COT Type</label>
                             <div class="info-value">
@@ -151,6 +162,7 @@
                                 </div>
                             </div>
                         </div>
+                        {% endif %}
 
                         <div class="info-group mb-3">
                             <label class="info-label">Last Poll</label>
@@ -360,7 +372,8 @@
     </div>
 
     <div class="col-lg-4">
-        <!-- COT Type Information Card -->
+        <!-- COT Type Information Card (hidden for output plugins) -->
+        {% if stream.plugin_type not in ['irc_handler', 'slack_handler', 'cot_archiver'] %}
         <div class="card mb-4">
             <div class="card-header">
                 <h5 class="mb-0">
@@ -397,6 +410,50 @@
                 {% endif %}
             </div>
         </div>
+        {% endif %}
+
+        <!-- Geofence Map Card (for output plugins) -->
+        {% if stream.plugin_type in ['irc_handler', 'slack_handler', 'cot_archiver'] %}
+        {% set config = stream.get_plugin_config() %}
+        {% if config and config.get('global_geofence_enabled') == 'true' and config.get('global_geofence_bounds') %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-map-marked-alt"></i> Geofence Filter
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="geofence-map" style="width: 100%; height: 300px; border-radius: 8px; overflow: hidden;"></div>
+                <div class="mt-3">
+                    <div class="row text-center">
+                        <div class="col-6 mb-2">
+                            <small class="text-muted d-block">North</small>
+                            <strong class="text-mono">{{ config.global_geofence_bounds.north }}°</strong>
+                        </div>
+                        <div class="col-6 mb-2">
+                            <small class="text-muted d-block">South</small>
+                            <strong class="text-mono">{{ config.global_geofence_bounds.south }}°</strong>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">East</small>
+                            <strong class="text-mono">{{ config.global_geofence_bounds.east }}°</strong>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">West</small>
+                            <strong class="text-mono">{{ config.global_geofence_bounds.west }}°</strong>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle"></i>
+                        Messages outside this geofence are filtered out
+                    </small>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% endif %}
 
         <!-- Quick Actions Card -->
         <div class="card mb-4">
@@ -739,11 +796,71 @@ function displayCallsignMappings(mappings) {
     container.innerHTML = tableHtml;
 }
 
+// Initialize geofence map for output plugins
+function initializeGeofenceMap() {
+    const mapContainer = document.getElementById('geofence-map');
+    if (!mapContainer) return;
+
+    {% if stream.plugin_type in ['irc_handler', 'slack_handler', 'cot_archiver'] %}
+    {% set config = stream.get_plugin_config() %}
+    {% if config and config.get('global_geofence_enabled') == 'true' and config.get('global_geofence_bounds') %}
+    const bounds = {
+        north: {{ config.global_geofence_bounds.north }},
+        south: {{ config.global_geofence_bounds.south }},
+        east: {{ config.global_geofence_bounds.east }},
+        west: {{ config.global_geofence_bounds.west }}
+    };
+
+    // Calculate center point
+    const centerLat = (bounds.north + bounds.south) / 2;
+    const centerLon = (bounds.east + bounds.west) / 2;
+
+    // Initialize map
+    const map = L.map('geofence-map', {
+        zoomControl: true,
+        attributionControl: true
+    }).setView([centerLat, centerLon], 10);
+
+    // Add OpenStreetMap tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+    }).addTo(map);
+
+    // Create rectangle for geofence bounds
+    const rectangle = L.rectangle([
+        [bounds.south, bounds.west],
+        [bounds.north, bounds.east]
+    ], {
+        color: '#3388ff',
+        weight: 2,
+        fillColor: '#3388ff',
+        fillOpacity: 0.2
+    }).addTo(map);
+
+    // Add popup to rectangle
+    rectangle.bindPopup(`
+        <strong>Geofence</strong><br>
+        North: ${bounds.north}°<br>
+        South: ${bounds.south}°<br>
+        East: ${bounds.east}°<br>
+        West: ${bounds.west}°
+    `);
+
+    // Fit map to bounds
+    map.fitBounds(rectangle.getBounds(), { padding: [20, 20] });
+    {% endif %}
+    {% endif %}
+}
+
 // Load callsign mappings on page load
 document.addEventListener('DOMContentLoaded', function() {
     {% if stream.enable_callsign_mapping %}
     refreshCallsignMappings();
     {% endif %}
+
+    // Initialize geofence map if present
+    initializeGeofenceMap();
 });
 
 // Auto-refresh every 30 seconds if stream is active
