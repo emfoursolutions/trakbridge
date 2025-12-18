@@ -144,6 +144,18 @@ class IRCHandler(BaseOutputPlugin):
                     help_text="Enable SSL/TLS encryption",
                 ),
                 PluginConfigField(
+                    name="verify_ssl",
+                    label="Verify SSL Certificate",
+                    field_type="select",
+                    required=True,
+                    default_value="true",
+                    options=[
+                        {"value": "true", "label": "Yes (Recommended)"},
+                        {"value": "false", "label": "No (Allow Self-Signed)"},
+                    ],
+                    help_text="Disable only for self-signed certificates in trusted environments",
+                ),
+                PluginConfigField(
                     name="nickname",
                     label="Nickname",
                     field_type="text",
@@ -204,6 +216,17 @@ class IRCHandler(BaseOutputPlugin):
                     import ssl
 
                     ssl_context = ssl.create_default_context()
+
+                    # Allow disabling certificate verification for self-signed certs
+                    verify_ssl = config.get("verify_ssl", "true").lower() == "true"
+                    if not verify_ssl:
+                        logger.warning(
+                            f"SSL certificate verification DISABLED for {server}:{port} - "
+                            f"use only with trusted servers"
+                        )
+                        ssl_context.check_hostname = False
+                        ssl_context.verify_mode = ssl.CERT_NONE
+
                     self._reader, self._writer = await asyncio.open_connection(
                         server, port, ssl=ssl_context
                     )

@@ -326,6 +326,13 @@ class StreamOperationsService:
             self._get_session().commit()
             logger.info(f"Disabled stream {stream_id} ({stream.name})")
 
+            # Invalidate plugin cache before stopping (cleanup connections)
+            from services.cot_service import get_cot_service
+            cot_service = get_cot_service()
+            if cot_service:
+                cot_service.invalidate_plugin_cache_sync(stream_id)
+                logger.debug(f"Invalidated plugin cache for stream {stream_id}")
+
             # Stop the stream through StreamManager using the sync wrapper
             success = self.stream_manager.stop_stream_sync(stream_id)
 
@@ -343,6 +350,13 @@ class StreamOperationsService:
     def restart_stream(self, stream_id: int) -> Dict[str, Any]:
         """Restart a stream"""
         try:
+            # Invalidate plugin cache before restart (cleanup old connections)
+            from services.cot_service import get_cot_service
+            cot_service = get_cot_service()
+            if cot_service:
+                cot_service.invalidate_plugin_cache_sync(stream_id)
+                logger.debug(f"Invalidated plugin cache for stream {stream_id} before restart")
+
             # Use the stream manager's sync wrapper for restart
             success = self.stream_manager.restart_stream_sync(stream_id)
 
@@ -365,6 +379,13 @@ class StreamOperationsService:
             # Stop the stream if it's running
             if stream.is_active:
                 try:
+                    # Invalidate cache before stopping (cleanup connections)
+                    from services.cot_service import get_cot_service
+                    cot_service = get_cot_service()
+                    if cot_service:
+                        cot_service.invalidate_plugin_cache_sync(stream_id)
+                        logger.debug(f"Invalidated plugin cache for stream {stream_id} before deletion")
+
                     self.stream_manager.stop_stream_sync(stream_id)
                 except Exception as e:
                     logger.warning(f"Error stopping stream before deletion: {e}")

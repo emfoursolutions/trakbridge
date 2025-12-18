@@ -1018,6 +1018,11 @@ class QueuedCOTService:
                 return True
 
         try:
+            # Capture the event loop for sync cleanup operations
+            if self.loop is None:
+                self.loop = asyncio.get_running_loop()
+                logger.debug("Captured event loop for sync cleanup operations")
+
             logger.debug(
                 f"Starting worker for TAK server {tak_server.name} (ID: {tak_server_id}) at {datetime.now()}"
             )
@@ -1361,6 +1366,11 @@ class QueuedCOTService:
                 plugin_manager = get_plugin_manager()
 
                 for stream in streams:
+                    # Skip disabled streams
+                    if not stream.is_active:
+                        logger.debug(f"Skipping disabled stream {stream.id} ({stream.name})")
+                        continue
+
                     logger.debug(f"Processing stream {stream.id} ({stream.name}) with plugin {stream.plugin_type}")
 
                     # Check if we have a cached plugin instance
@@ -2274,15 +2284,27 @@ class QueuedCOTService:
         Args:
             stream_id: Specific stream ID to invalidate, or None to invalidate all
         """
-        if stream_id is not None:
-            if stream_id in self._output_plugin_cache:
-                plugin = self._output_plugin_cache[stream_id]
-                # Can't call async cleanup from sync context, just remove from cache
-                del self._output_plugin_cache[stream_id]
-                logger.info(f"Invalidated plugin cache for stream {stream_id} (sync)")
+        # Run the async invalidate_plugin_cache in the event loop
+        if self.loop and self.loop.is_running():
+            # Event loop is running, use run_coroutine_threadsafe
+            future = asyncio.run_coroutine_threadsafe(
+                self.invalidate_plugin_cache(stream_id),
+                self.loop
+            )
+            # Wait for completion with timeout
+            try:
+                future.result(timeout=10.0)
+            except Exception as e:
+                logger.error(f"Error invalidating plugin cache: {e}")
         else:
-            self._output_plugin_cache.clear()
-            logger.info("Invalidated all plugin caches (sync)")
+            # Fallback: Just remove from cache without cleanup (shouldn't happen in normal operation)
+            if stream_id is not None:
+                if stream_id in self._output_plugin_cache:
+                    del self._output_plugin_cache[stream_id]
+                    logger.warning(f"Invalidated plugin cache for stream {stream_id} without cleanup (no event loop)")
+            else:
+                self._output_plugin_cache.clear()
+                logger.warning("Invalidated all plugin caches without cleanup (no event loop)")
 
     async def shutdown(self):
         """Shutdown the COT service and all workers"""
