@@ -2009,7 +2009,10 @@ function initGlobalGeofenceMap() {
     }
 
     // Initialize map centered on a default location
-    globalGeofenceMap = L.map('global-geofence-map').setView([38.0, -97.0], 4);
+    globalGeofenceMap = L.map('global-geofence-map', {
+        maxBounds: [[-90, -180], [90, 180]],
+        maxBoundsViscosity: 1.0  // Makes bounds "hard" - prevents panning beyond valid coordinates
+    }).setView([38.0, -97.0], 4);
     console.log('Map initialized successfully');
 
     // Add OpenStreetMap tiles
@@ -2051,11 +2054,15 @@ function initGlobalGeofenceMap() {
         if (startLatLng) {
             const endLatLng = e.latlng;
 
-            // Calculate bounds
-            const north = Math.max(startLatLng.lat, endLatLng.lat);
-            const south = Math.min(startLatLng.lat, endLatLng.lat);
-            const east = Math.max(startLatLng.lng, endLatLng.lng);
-            const west = Math.min(startLatLng.lng, endLatLng.lng);
+            // Normalize coordinates to valid ranges
+            const startNorm = normalizeCoordinates(startLatLng.lat, startLatLng.lng);
+            const endNorm = normalizeCoordinates(endLatLng.lat, endLatLng.lng);
+
+            // Calculate bounds using normalized coordinates
+            const north = Math.max(startNorm.lat, endNorm.lat);
+            const south = Math.min(startNorm.lat, endNorm.lat);
+            const east = Math.max(startNorm.lng, endNorm.lng);
+            const west = Math.min(startNorm.lng, endNorm.lng);
 
             // Create rectangle
             const bounds = [[south, west], [north, east]];
@@ -2087,6 +2094,18 @@ function updateGlobalGeofenceBounds(north, south, east, west) {
     document.getElementById('plugin_global_geofence_south').value = south.toFixed(6);
     document.getElementById('plugin_global_geofence_east').value = east.toFixed(6);
     document.getElementById('plugin_global_geofence_west').value = west.toFixed(6);
+}
+
+function normalizeCoordinates(lat, lng) {
+    // Normalize latitude to -90 to 90
+    let normLat = Math.max(-90, Math.min(90, lat));
+
+    // Normalize longitude to -180 to 180 (wrap around)
+    let normLng = lng;
+    while (normLng > 180) normLng -= 360;
+    while (normLng < -180) normLng += 360;
+
+    return { lat: normLat, lng: normLng };
 }
 
 function updateGlobalGeofenceMapFromInputs() {
