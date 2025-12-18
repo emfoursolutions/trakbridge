@@ -754,18 +754,57 @@ function renderPluginConfig(pluginMeta) {
     configIcon.className = pluginMeta.icon || 'fas fa-cog';
     configName.textContent = `${pluginMeta.display_name} Configuration`;
 
-    // Generate form fields with current values
+    // Generate form fields with current values and layout grouping for IRC handler
     const fields = pluginMeta.config_fields || [];
-    configBody.innerHTML = fields.map(field => generateFormField(field, currentConfig)).join('');
+
+    // Define field pairs for two-column layout (IRC handler specific)
+    const fieldPairs = {
+        'server': 'port',
+        'use_ssl': 'verify_ssl',
+        'nickname': 'channel',
+        'password': 'uid_filter'
+    };
+
+    let html = '';
+    const processedFields = new Set();
+
+    for (let i = 0; i < fields.length; i++) {
+        const field = fields[i];
+
+        if (processedFields.has(field.name)) {
+            continue;
+        }
+
+        // Check if this field has a pair
+        const pairFieldName = fieldPairs[field.name];
+        const pairField = pairFieldName ? fields.find(f => f.name === pairFieldName) : null;
+
+        if (pairField) {
+            // Render as two-column row
+            html += `<div class="row">
+                <div class="col-md-6">${generateFormField(field, currentConfig, true)}</div>
+                <div class="col-md-6">${generateFormField(pairField, currentConfig, true)}</div>
+            </div>`;
+            processedFields.add(field.name);
+            processedFields.add(pairField.name);
+        } else {
+            // Render as full-width field
+            html += generateFormField(field, currentConfig, false);
+            processedFields.add(field.name);
+        }
+    }
+
+    configBody.innerHTML = html;
 }
 
-function generateFormField(field, currentConfig) {
+function generateFormField(field, currentConfig, inRow = false) {
     const pluginType = document.getElementById('plugin_type').value;
     const fieldId = `plugin_${field.name}`;
     const isRequired = field.required ? 'required' : '';
     const placeholder = field.placeholder ? `placeholder="${field.placeholder}"` : '';
     const dataPluginAttr = `data-plugin="${pluginType}"`;
-    
+    const mbClass = inRow ? 'mb-2' : 'mb-3'; // Smaller margin when in row
+
     // Use strict undefined/null check so false is respected
     const currentValue = (currentConfig && currentConfig[field.name] !== undefined && currentConfig[field.name] !== null)
         ? currentConfig[field.name]
@@ -834,7 +873,7 @@ function generateFormField(field, currentConfig) {
     // For checkbox fields, don't show the label again since it's already in the input HTML
     if (fieldType === 'checkbox') {
         return `
-            <div class="mb-3">
+            <div class="${mbClass}">
                 ${inputHtml}
                 ${helpText}
             </div>
@@ -842,7 +881,7 @@ function generateFormField(field, currentConfig) {
     }
 
     return `
-        <div class="mb-3">
+        <div class="${mbClass}">
             <label for="${fieldId}" class="form-label">
                 ${field.label}${requiredBadge}
             </label>

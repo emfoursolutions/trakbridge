@@ -1414,6 +1414,18 @@ class QueuedCOTService:
                             timeout=10.0
                         )
                         logger.debug(f"Successfully routed CoT to {stream.plugin_type}")
+
+                        # Update stream statistics for successful message routing
+                        try:
+                            from database import db
+
+                            stream.update_stats(messages_sent=1)
+                            db.session.commit()
+                            logger.debug(f"Updated stats for stream {stream.id}")
+                        except Exception as stats_error:
+                            logger.error(f"Failed to update stream stats: {stats_error}")
+                            # Don't fail the message routing if stats update fails
+
                     except asyncio.TimeoutError:
                         logger.warning(
                             f"Plugin {stream.plugin_type} timed out handling CoT"

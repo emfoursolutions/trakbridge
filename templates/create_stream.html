@@ -653,17 +653,56 @@ function renderPluginConfig(pluginMeta) {
     configIcon.className = pluginMeta.icon || 'fas fa-cog';
     configName.textContent = `${pluginMeta.display_name} Configuration`;
 
-    // Generate form fields
+    // Generate form fields with layout grouping for IRC handler
     const fields = pluginMeta.config_fields || [];
-    configBody.innerHTML = fields.map(field => generateFormField(field)).join('');
+
+    // Define field pairs for two-column layout (IRC handler specific)
+    const fieldPairs = {
+        'server': 'port',
+        'use_ssl': 'verify_ssl',
+        'nickname': 'channel',
+        'password': 'uid_filter'
+    };
+
+    let html = '';
+    const processedFields = new Set();
+
+    for (let i = 0; i < fields.length; i++) {
+        const field = fields[i];
+
+        if (processedFields.has(field.name)) {
+            continue;
+        }
+
+        // Check if this field has a pair
+        const pairFieldName = fieldPairs[field.name];
+        const pairField = pairFieldName ? fields.find(f => f.name === pairFieldName) : null;
+
+        if (pairField) {
+            // Render as two-column row
+            html += `<div class="row">
+                <div class="col-md-6">${generateFormField(field, true)}</div>
+                <div class="col-md-6">${generateFormField(pairField, true)}</div>
+            </div>`;
+            processedFields.add(field.name);
+            processedFields.add(pairField.name);
+        } else {
+            // Render as full-width field
+            html += generateFormField(field, false);
+            processedFields.add(field.name);
+        }
+    }
+
+    configBody.innerHTML = html;
 }
 
-function generateFormField(field) {
+function generateFormField(field, inRow = false) {
     const pluginType = document.getElementById('plugin_type').value;
     const fieldId = `plugin_${field.name}`;
     const isRequired = field.required ? 'required' : '';
     const placeholder = field.placeholder ? `placeholder="${field.placeholder}"` : '';
     const dataPluginAttr = `data-plugin="${pluginType}"`;
+    const mbClass = inRow ? 'mb-2' : 'mb-3'; // Smaller margin when in row
 
     let inputHtml = '';
     // Use field.field_type instead of field.type (common in Python objects)
@@ -700,7 +739,7 @@ function generateFormField(field) {
             const checkboxHelpText = field.help ? `<div class="form-text">${field.help}</div>` : '';
 
             return `
-                <div class="mb-3">
+                <div class="${mbClass}">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="${fieldId}" name="${fieldId}" ${isChecked} ${isRequired} ${dataPluginAttr}>
                         <label class="form-check-label" for="${fieldId}">
@@ -728,7 +767,7 @@ function generateFormField(field) {
     const helpText = field.help_text ? `<div class="form-text">${field.help_text}</div>` : '';
 
     return `
-        <div class="mb-3">
+        <div class="${mbClass}">
             <label for="${fieldId}" class="form-label">
                 ${field.label}${requiredBadge}
             </label>
