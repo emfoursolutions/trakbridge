@@ -577,6 +577,13 @@ class StreamOperationsService:
                     f"Stream {stream_id} updated successfully on {db_type} (attempt {attempt + 1})"
                 )
 
+                # Invalidate plugin cache so it reloads with new config
+                from services.cot_service import get_cot_service
+                cot_service = get_cot_service()
+                if cot_service:
+                    cot_service.invalidate_plugin_cache_sync(stream_id)
+                    logger.debug(f"Invalidated plugin cache for stream {stream_id}")
+
                 # Refresh TAK workers to match new configuration
                 worker_refresh_success = self.stream_manager.refresh_stream_tak_workers(
                     stream_id

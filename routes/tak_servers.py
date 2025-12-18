@@ -198,6 +198,15 @@ def create_tak_server():
         else:
             verify_ssl = True  # Default to True
 
+        # Handle enable_rx for both form data (string) and JSON data (boolean)
+        enable_rx_value = data.get("enable_rx", True)
+        if isinstance(enable_rx_value, str):
+            enable_rx = enable_rx_value.lower() in ["true", "on", "1"]
+        elif isinstance(enable_rx_value, bool):
+            enable_rx = enable_rx_value
+        else:
+            enable_rx = True  # Default to True for backward compatibility
+
         # Validate server data using service
         validation_result = TakServerService.validate_server_data(data)
         if not validation_result["success"]:
@@ -234,6 +243,7 @@ def create_tak_server():
             cert_p12_filename=cert_filename,
             verify_ssl=verify_ssl,
             tls_version=data.get("tls_version", "1.3"),
+            enable_rx=enable_rx,
         )
 
         # Set the certificate password using the encrypted method
@@ -346,6 +356,15 @@ def edit_tak_server(server_id):
         else:
             verify_ssl = True  # Default to True
 
+        # Handle enable_rx for both form data (string) and JSON data (boolean)
+        enable_rx_value = data.get("enable_rx", True)
+        if isinstance(enable_rx_value, str):
+            enable_rx = enable_rx_value.lower() in ["true", "on", "1"]
+        elif isinstance(enable_rx_value, bool):
+            enable_rx = enable_rx_value
+        else:
+            enable_rx = True  # Default to True for backward compatibility
+
         # Validate server data using service
         validation_result = TakServerService.validate_server_data(data)
         if not validation_result["success"]:
@@ -372,6 +391,7 @@ def edit_tak_server(server_id):
         server.cert_p12_filename = cert_filename
         server.verify_ssl = verify_ssl
         server.tls_version = data.get("tls_version", "1.3")
+        server.enable_rx = enable_rx
 
         # Set the certificate password using the encrypted method
         server.set_cert_password(data.get("cert_password", ""))

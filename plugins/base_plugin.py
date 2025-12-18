@@ -850,3 +850,230 @@ class BaseGPSPlugin(ABC):
                 "error": f"{str(e)}",
                 "message": "Connection test failed",
             }
+
+
+class BaseOutputPlugin(ABC):
+    """
+    Base class for output plugins that handle received CoT messages.
+
+    Mirrors BaseGPSPlugin architecture but for CoT reception instead of GPS fetching.
+    Reuses all existing infrastructure: encryption, validation, health checks, etc.
+    """
+
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        from services.encryption_service import EncryptionService
+
+        self.encryption_service = EncryptionService()
+        self.stream = None  # Set by framework
+
+    @property
+    @abstractmethod
+    def plugin_name(self) -> str:
+        """Return the name of this plugin"""
+        pass
+
+    @property
+    @abstractmethod
+    def plugin_metadata(self) -> Dict[str, Any]:
+        """
+        Return plugin metadata for UI generation
+
+        Returns:
+            Dictionary containing:
+            - display_name: Human-readable plugin name
+            - description: Plugin description
+            - icon: FontAwesome icon class
+            - category: "output" (or "bidirectional" if also does input)
+            - config_fields: List of PluginConfigField objects
+        """
+        pass
+
+    @abstractmethod
+    async def handle_cot_message(self, cot_xml: bytes, tak_server_id: int) -> None:
+        """
+        Handle received CoT message from TAK server.
+
+        Args:
+            cot_xml: Raw CoT XML bytes from TAK server
+            tak_server_id: ID of TAK server that sent this message
+
+        Plugin responsibilities:
+        - Parse XML (use defusedxml for security)
+        - Filter messages (by type, UID, content, etc.)
+        - Take action (send to Slack, log, store, etc.)
+        - Handle errors gracefully
+        """
+        pass
+
+    def get_decrypted_config(self) -> Dict[str, Any]:
+        """Get plugin configuration with sensitive fields decrypted for use"""
+        sensitive_fields = self.get_sensitive_fields()
+        if not sensitive_fields:
+            return self.config.copy()
+
+        decrypted_config = self.config.copy()
+
+        for field_name in sensitive_fields:
+            if field_name in decrypted_config:
+                value = decrypted_config[field_name]
+                if value:
+                    try:
+                        decrypted_config[field_name] = (
+                            self.encryption_service.decrypt_value(str(value))
+                        )
+                    except Exception as e:
+                        get_logger().error(
+                            f"Failed to decrypt field '{field_name}': {e}"
+                        )
+                        # Keep original value if decryption fails
+
+        return decrypted_config
+
+    def get_config_fields(self) -> List[PluginConfigField]:
+        """Get configuration fields from plugin metadata"""
+        metadata = self.plugin_metadata
+        fields = []
+
+        for field_data in metadata.get("config_fields", []):
+            if isinstance(field_data, PluginConfigField):
+                fields.append(field_data)
+            elif isinstance(field_data, dict):
+                # Convert dict to PluginConfigField
+                fields.append(PluginConfigField(**field_data))
+
+        return fields
+
+    def get_sensitive_fields(self) -> List[str]:
+        """Get list of sensitive field names from plugin metadata"""
+        sensitive_fields = []
+        config_fields = self.get_config_fields()
+
+        for field in config_fields:
+            if field.sensitive:
+                sensitive_fields.append(field.name)
+
+        return sensitive_fields
+
+    @staticmethod
+    def encrypt_config_for_storage(
+        plugin_type: str, config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Encrypt sensitive fields in configuration before storing in database
+
+        Args:
+            plugin_type: The plugin type name
+            config: Configuration dictionary
+
+        Returns:
+            Configuration with sensitive fields encrypted
+        """
+        from plugins.plugin_manager import get_plugin_manager
+        from services.encryption_service import EncryptionService
+
+        plugin_manager = get_plugin_manager()
+        metadata = plugin_manager.get_plugin_metadata(plugin_type)
+        if not metadata:
+            return config
+
+        sensitive_fields = []
+        for field_data in metadata.get("config_fields", []):
+            if isinstance(field_data, dict) and field_data.get("sensitive"):
+                sensitive_fields.append(field_data["name"])
+            elif hasattr(field_data, "sensitive") and field_data.sensitive:
+                sensitive_fields.append(field_data.name)
+
+        if sensitive_fields:
+            encryption_service = EncryptionService()
+            return encryption_service.encrypt_config(config, sensitive_fields)
+
+        return config
+
+    @staticmethod
+    def decrypt_config_from_storage(
+        plugin_type: str, config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Decrypt sensitive fields in configuration after loading from database
+
+        Args:
+            plugin_type: The plugin type name
+            config: Configuration dictionary with encrypted fields
+
+        Returns:
+            Configuration with sensitive fields decrypted
+        """
+        from plugins.plugin_manager import get_plugin_manager
+        from services.encryption_service import EncryptionService
+
+        plugin_manager = get_plugin_manager()
+        metadata = plugin_manager.get_plugin_metadata(plugin_type)
+        if not metadata:
+            return config
+
+        sensitive_fields = []
+        for field_data in metadata.get("config_fields", []):
+            if isinstance(field_data, dict) and field_data.get("sensitive"):
+                sensitive_fields.append(field_data["name"])
+            elif hasattr(field_data, "sensitive") and field_data.sensitive:
+                sensitive_fields.append(field_data.name)
+
+        if sensitive_fields:
+            encryption_service = EncryptionService()
+            return encryption_service.decrypt_config(config, sensitive_fields)
+
+        return config
+
+    def validate_config(self) -> bool:
+        """Enhanced validation using plugin metadata"""
+        config_fields = self.get_config_fields()
+
+        # Use decrypted config for validation
+        config_to_validate = self.get_decrypted_config()
+
+        for field in config_fields:
+            field_name = field.name
+            field_value = config_to_validate.get(field_name)
+
+            # Check required fields
+            if field.required and (field_value is None or field_value == ""):
+                get_logger().error(
+                    f"Missing required configuration field: {field_name}"
+                )
+                return False
+
+            # Type-specific validation
+            if field_value is not None and field_value != "":
+                if field.field_type in ["url"] and not str(field_value).startswith(
+                    ("http://", "https://")
+                ):
+                    get_logger().error(f"Field '{field_name}' must be a valid URL")
+                    return False
+
+                if field.field_type == "number":
+                    try:
+                        num_value = float(field_value)
+                        if field.min_value is not None and num_value < field.min_value:
+                            get_logger().error(
+                                f"Field '{field_name}' must be at least {field.min_value}"
+                            )
+                            return False
+                        if field.max_value is not None and num_value > field.max_value:
+                            get_logger().error(
+                                f"Field '{field_name}' must be at most {field.max_value}"
+                            )
+                            return False
+                    except (ValueError, TypeError):
+                        get_logger().error(
+                            f"Field '{field_name}' must be a valid number"
+                        )
+                        return False
+
+                if field.field_type == "email" and "@" not in str(field_value):
+                    get_logger().error(
+                        f"Field '{field_name}' must be a valid email address"
+                    )
+                    return False
+
+        return True

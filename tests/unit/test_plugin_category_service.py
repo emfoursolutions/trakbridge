@@ -125,6 +125,8 @@ class TestPluginCategoryService:
             "platform": "Tracker",
             "tracker": "Tracker",
             "ems": "EMS",
+            "output": "Output",
+            "bidirectional": "Bidirectional",
         }
 
         assert mapping == expected_mapping

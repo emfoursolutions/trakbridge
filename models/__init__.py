@@ -11,6 +11,7 @@ Created: 2025-07-05
 from database import TimestampMixin, db
 
 from .callsign_mapping import CallsignMapping
+from .cot_message import CotMessage
 from .stream import Stream
 
 # Local application imports
@@ -21,6 +22,7 @@ __all__ = [
     "db",
     "TimestampMixin",
     "CallsignMapping",
+    "CotMessage",
     "TakServer",
     "Stream",
     "User",

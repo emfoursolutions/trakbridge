@@ -33,6 +33,11 @@ class TakServer(db.Model, TimestampMixin):
         db.String(10), default="1.3", nullable=False
     )  # TLS version: 1.3, 1.2, 1.1, auto
 
+    # Bidirectional communication control
+    enable_rx = db.Column(
+        db.Boolean, default=True, nullable=False
+    )  # Enable receiving CoT from TAK server
+
     # Legacy single-server relationship (maintained for backward compatibility)
     streams = db.relationship(
         "Stream", back_populates="tak_server", lazy=True, cascade="all, delete-orphan"
@@ -98,6 +103,7 @@ class TakServer(db.Model, TimestampMixin):
             "port": self.port,
             "protocol": self.protocol,
             "verify_ssl": self.verify_ssl,
+            "enable_rx": self.enable_rx,
             "has_certificate": bool(self.cert_p12),
             "cert_filename": self.cert_p12_filename,
             "created_at": self.created_at.isoformat(),

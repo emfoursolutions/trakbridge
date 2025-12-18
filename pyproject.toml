@@ -39,6 +39,7 @@ dependencies = [
     "lxml",
     "Mako",
     "MarkupSafe",
+    "mgrs",
     "multidict",
     "paho-mqtt",
     "propcache",

@@ -27,6 +27,7 @@ itsdangerous
 Jinja2
 lxml
 Mako
+mgrs
 MarkupSafe
 multidict
 paho-mqtt

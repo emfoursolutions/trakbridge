@@ -32,7 +32,7 @@ from utils.json_validator import JSONValidationError, safe_json_loads
 
 # Local application imports
 if TYPE_CHECKING:
-    from plugins.base_plugin import BaseGPSPlugin
+    from plugins.base_plugin import BaseGPSPlugin, BaseOutputPlugin
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -52,7 +52,8 @@ class PluginManager:
     }
 
     def __init__(self):
-        self.plugins: Dict[str, Type["BaseGPSPlugin"]] = {}
+        # Support both GPS input plugins and output plugins
+        self.plugins: Dict[str, Type[Union["BaseGPSPlugin", "BaseOutputPlugin"]]] = {}
         self._allowed_modules = self.BUILTIN_PLUGIN_MODULES.copy()
         self._load_allowed_plugins_config()
 
@@ -186,8 +187,9 @@ class PluginManager:
         """
         Load plugins from external directory (e.g., Docker volume mount).
         Uses file-based loading instead of package imports to avoid namespace conflicts.
+        Supports both GPS input plugins (BaseGPSPlugin) and output plugins (BaseOutputPlugin).
         """
-        from plugins.base_plugin import BaseGPSPlugin
+        from plugins.base_plugin import BaseGPSPlugin, BaseOutputPlugin
 
         try:
             # Get all Python files in the external directory
@@ -227,14 +229,24 @@ class PluginManager:
                         sys.modules[external_module_name] = module
                         spec.loader.exec_module(module)
 
-                        # Look for plugin classes
+                        # Look for plugin classes (both GPS and output plugins)
                         for name, obj in inspect.getmembers(module, inspect.isclass):
+                            # Check if it's a GPS plugin
                             if (
                                 issubclass(obj, BaseGPSPlugin)
                                 and obj is not BaseGPSPlugin
                             ):
                                 logger.info(
-                                    f"Loading external plugin: {name} from {filename}"
+                                    f"Loading external GPS plugin: {name} from {filename}"
+                                )
+                                self.register_plugin(obj)
+                            # Check if it's an output plugin
+                            elif (
+                                issubclass(obj, BaseOutputPlugin)
+                                and obj is not BaseOutputPlugin
+                            ):
+                                logger.info(
+                                    f"Loading external output plugin: {name} from {filename}"
                                 )
                                 self.register_plugin(obj)
 
@@ -328,8 +340,10 @@ class PluginManager:
         logger.warning(f"Attempted to load unauthorized plugin module: {module_name}")
         return False
 
-    def register_plugin(self, plugin_class: Type["BaseGPSPlugin"]):
-        """Register a plugin class"""
+    def register_plugin(
+        self, plugin_class: Type[Union["BaseGPSPlugin", "BaseOutputPlugin"]]
+    ):
+        """Register a plugin class (GPS input or output plugin)"""
 
         plugin_name = None
 
@@ -407,7 +421,7 @@ class PluginManager:
 
     def get_plugin(
         self, plugin_name: str, config: Union[Dict, str, None] = None
-    ) -> Optional["BaseGPSPlugin"]:
+    ) -> Optional[Union["BaseGPSPlugin", "BaseOutputPlugin"]]:
         """
         Create an instance of a plugin with the given configuration
 
@@ -416,7 +430,7 @@ class PluginManager:
             config: Configuration (can be dict, string, or None)
 
         Returns:
-            Plugin instance or None if creation fails
+            Plugin instance (GPS or output plugin) or None if creation fails
         """
         if plugin_name not in self.plugins:
             logger.error(f"Plugin not found: {plugin_name}")
@@ -675,10 +689,11 @@ class PluginManager:
 
     def load_plugins_from_directory(self, directory: str = "plugins"):
         """
-        Automatically load plugins from a directory with security validation
+        Automatically load plugins from a directory with security validation.
+        Supports both GPS input plugins (BaseGPSPlugin) and output plugins (BaseOutputPlugin).
         """
 
-        from plugins.base_plugin import BaseGPSPlugin
+        from plugins.base_plugin import BaseGPSPlugin, BaseOutputPlugin
 
         try:
             # Validate directory name for security (prevent path traversal)
@@ -753,10 +768,16 @@ class PluginManager:
                         )
                         continue
 
-                    # Look for classes that inherit from BaseGPSPlugin
+                    # Look for classes that inherit from BaseGPSPlugin or BaseOutputPlugin
                     for name, obj in inspect.getmembers(module, inspect.isclass):
-                        # Check if it's a subclass of BaseGPSPlugin but not BaseGPSPlugin itself
+                        # Check if it's a GPS plugin
                         if issubclass(obj, BaseGPSPlugin) and obj is not BaseGPSPlugin:
+                            self.register_plugin(obj)
+                        # Check if it's an output plugin
+                        elif (
+                            issubclass(obj, BaseOutputPlugin)
+                            and obj is not BaseOutputPlugin
+                        ):
                             self.register_plugin(obj)
 
                 except Exception as e:
@@ -767,10 +788,11 @@ class PluginManager:
 
     def auto_discover_and_load_plugins(self, directory: str = "plugins"):
         """
-        Alternative method that discovers Python files and loads them
+        Alternative method that discovers Python files and loads them.
+        Supports both GPS input plugins and output plugins.
         """
 
-        from plugins.base_plugin import BaseGPSPlugin
+        from plugins.base_plugin import BaseGPSPlugin, BaseOutputPlugin
 
         try:
             plugins_path = os.path.abspath(directory)
@@ -796,11 +818,16 @@ class PluginManager:
                         module = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(module)
 
-                        # Look for plugin classes
+                        # Look for plugin classes (GPS and output plugins)
                         for name, obj in inspect.getmembers(module, inspect.isclass):
                             if (
                                 issubclass(obj, BaseGPSPlugin)
                                 and obj is not BaseGPSPlugin
+                            ):
+                                self.register_plugin(obj)
+                            elif (
+                                issubclass(obj, BaseOutputPlugin)
+                                and obj is not BaseOutputPlugin
                             ):
                                 self.register_plugin(obj)
 
@@ -812,7 +839,7 @@ class PluginManager:
 
     def reload_plugin(self, plugin_name: str) -> bool:
         """Reload a specific plugin (useful for development)"""
-        from plugins.base_plugin import BaseGPSPlugin
+        from plugins.base_plugin import BaseGPSPlugin, BaseOutputPlugin
 
         if plugin_name not in self.plugins:
             logger.error(f"Cannot reload plugin '{plugin_name}': not found")
@@ -824,9 +851,17 @@ class PluginManager:
 
             if module:
                 importlib.reload(module)
-                # Re-register the plugin
+                # Re-register the plugin (GPS or output plugin)
                 for name, obj in inspect.getmembers(module, inspect.isclass):
-                    if issubclass(obj, BaseGPSPlugin) and obj is not BaseGPSPlugin:
+                    is_gps_plugin = (
+                        issubclass(obj, BaseGPSPlugin) and obj is not BaseGPSPlugin
+                    )
+                    is_output_plugin = (
+                        issubclass(obj, BaseOutputPlugin)
+                        and obj is not BaseOutputPlugin
+                    )
+
+                    if is_gps_plugin or is_output_plugin:
                         # Check if this is the plugin we want to reload
                         try:
                             temp_instance = obj({})
@@ -870,7 +905,7 @@ class PluginManager:
         plugin_name: str,
         config: Union[Dict, str, None] = None,
         default_config: Optional[Dict] = None,
-    ) -> Optional["BaseGPSPlugin"]:
+    ) -> Optional[Union["BaseGPSPlugin", "BaseOutputPlugin"]]:
         """
         Safely get a plugin with fallback configuration
 

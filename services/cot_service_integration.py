@@ -99,6 +99,9 @@ class QueuedCOTService:
         # Device state managers for queue replacement functionality
         self.device_state_managers: Dict[int, DeviceStateManager] = {}
 
+        # Cache for output plugin instances (persistent connections)
+        self._output_plugin_cache: Dict[int, Any] = {}  # stream_id -> plugin_instance
+
         # Configuration tracking for change detection
         self.last_config_hash = None
         self.config_change_count = 0
@@ -1061,7 +1064,14 @@ class QueuedCOTService:
 
     async def _enhanced_transmission_worker(self, tak_server_id: int, tak_server):
         """
-        Enhanced transmission worker using queue manager for batch processing.
+        Enhanced worker - runs TX always, RX conditionally based on tak_server.enable_rx.
+
+        TAK server connections can be bidirectional:
+        - TX: Send CoT events from input plugins (existing, always runs)
+        - RX: Receive ALL CoT traffic from TAK server (new, controlled by enable_rx flag)
+
+        RX worker does minimal filtering - only validates XML structure.
+        Plugins decide what messages they care about.
 
         Args:
             tak_server_id: TAK server identifier
@@ -1088,64 +1098,34 @@ class QueuedCOTService:
                 f"Connection mapping established: TAK_server_{tak_server_id} -> connection_{id(connection)}"
             )
 
-            # Main transmission loop
-            batch_count = 0
-            while self._running:
-                try:
-                    # Get batch of events from queue manager
-                    batch = await self.queue_manager.get_batch(tak_server_id)
+            # Extract reader and writer from connection
+            reader, writer = connection
 
-                    if not batch:
-                        # No events to process, longer sleep to reduce CPU usage
-                        # Use the configured queue_check_interval from performance.yaml
-                        check_interval_ms = self.parallel_config.get(
-                            "transmission", {}
-                        ).get("queue_check_interval_ms", 1000)
-                        await asyncio.sleep(check_interval_ms / 1000.0)
-                        # Log periodic status every 10 iterations with no events (reduced frequency)
-                        batch_count += 1
-                        if batch_count % 10 == 0:
-                            queue_size = (
-                                self.queue_manager.get_queue_status(tak_server_id).get(
-                                    "size", 0
-                                )
-                                if self.queue_manager.get_queue_status(tak_server_id)
-                                else 0
-                            )
-                            logger.debug(
-                                f"Worker {tak_server_id} idle: checked {batch_count} times, queue_size={queue_size}"
-                            )
-                        continue  # Skip transmission when no events
+            # TX always runs
+            tx_task = asyncio.create_task(
+                self._tx_loop(tak_server_id, writer, tak_server)
+            )
 
-                    # We have events to process
-                    batch_count = 0  # Reset counter when we have events
-                    logger.debug(
-                        f"Worker {tak_server_id} processing batch of {len(batch)} events"
-                    )
+            # RX only runs if enabled for this TAK server
+            tasks = [tx_task]
+            if getattr(tak_server, 'enable_rx', True):  # Default True
+                rx_task = asyncio.create_task(
+                    self._rx_worker(tak_server_id, reader)
+                )
+                tasks.append(rx_task)
+                logger.info(f"RX worker enabled for TAK server {tak_server_id}")
+            else:
+                logger.info(f"RX worker disabled for TAK server {tak_server_id}")
 
-                    # Transmit batch
-                    success = await self._transmit_batch(batch, connection, tak_server)
+            # Wait for any task to complete (connection failure)
+            done, pending = await asyncio.wait(
+                tasks,
+                return_when=asyncio.FIRST_COMPLETED
+            )
 
-                    if success:
-                        if len(batch) > 0:  # Only log when actually transmitted events
-                            logger.debug(
-                                f"Successfully transmitted {len(batch)} events to {tak_server.name}"
-                            )
-                    else:
-                        logger.warning(
-                            f"Failed to transmit batch of {len(batch)} events to {tak_server.name}"
-                        )
-
-                        # On failure, could implement retry logic here
-                        # For now, events are lost (already dequeued)
-
-                except asyncio.CancelledError:
-                    break
-                except Exception as e:
-                    logger.error(
-                        f"Error in transmission worker for {tak_server.name}: {e}"
-                    )
-                    await asyncio.sleep(1)  # Brief pause before retry
+            # Cancel remaining tasks
+            for task in pending:
+                task.cancel()
 
         except Exception as e:
             logger.error(
@@ -1170,6 +1150,269 @@ class QueuedCOTService:
                 logger.debug(
                     f"Connection mapping removed: TAK_server_{tak_server_id} connection deleted"
                 )
+
+    async def _tx_loop(self, tak_server_id: int, writer, tak_server):
+        """
+        TX loop - send CoT events from queue to TAK server.
+
+        Args:
+            tak_server_id: TAK server identifier
+            writer: StreamWriter for sending data
+            tak_server: TAK server configuration object
+        """
+        batch_count = 0
+        while self._running:
+            try:
+                # Get batch of events from queue manager
+                batch = await self.queue_manager.get_batch(tak_server_id)
+
+                if not batch:
+                    # No events to process, longer sleep to reduce CPU usage
+                    # Use the configured queue_check_interval from performance.yaml
+                    check_interval_ms = self.parallel_config.get(
+                        "transmission", {}
+                    ).get("queue_check_interval_ms", 1000)
+                    await asyncio.sleep(check_interval_ms / 1000.0)
+                    # Log periodic status every 10 iterations with no events (reduced frequency)
+                    batch_count += 1
+                    if batch_count % 10 == 0:
+                        queue_size = (
+                            self.queue_manager.get_queue_status(tak_server_id).get(
+                                "size", 0
+                            )
+                            if self.queue_manager.get_queue_status(tak_server_id)
+                            else 0
+                        )
+                        logger.debug(
+                            f"Worker {tak_server_id} idle: checked {batch_count} times, queue_size={queue_size}"
+                        )
+                    continue  # Skip transmission when no events
+
+                # We have events to process
+                batch_count = 0  # Reset counter when we have events
+                logger.debug(
+                    f"Worker {tak_server_id} processing batch of {len(batch)} events"
+                )
+
+                # Transmit batch (need to create connection tuple for _transmit_batch)
+                connection = (None, writer)  # Reader not needed for TX
+                success = await self._transmit_batch(batch, connection, tak_server)
+
+                if success:
+                    if len(batch) > 0:  # Only log when actually transmitted events
+                        logger.debug(
+                            f"Successfully transmitted {len(batch)} events to {tak_server.name}"
+                        )
+                else:
+                    logger.warning(
+                        f"Failed to transmit batch of {len(batch)} events to {tak_server.name}"
+                    )
+
+                    # On failure, could implement retry logic here
+                    # For now, events are lost (already dequeued)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(
+                    f"Error in TX loop for {tak_server.name}: {e}"
+                )
+                await asyncio.sleep(1)  # Brief pause before retry
+
+        logger.info(f"TX loop stopped for TAK server {tak_server_id}")
+
+    async def _rx_worker(self, tak_server_id: int, reader):
+        """
+        Receive ALL CoT messages from TAK server and route to output plugins.
+
+        Core principles:
+        1. Receive EVERYTHING the TAK server sends
+        2. Only filter for malicious/malformed XML
+        3. Pass raw CoT XML to ALL output plugins
+        4. Plugins decide what they care about
+
+        No interpretation, no filtering by type/content.
+
+        Args:
+            tak_server_id: TAK server identifier
+            reader: StreamReader for receiving data
+        """
+        logger.info(f"RX worker started for TAK server {tak_server_id}")
+
+        buffer = b""
+        MAX_BUFFER_SIZE = 1024 * 1024  # 1MB limit
+
+        while self._running:
+            try:
+                # Read chunk
+                chunk = await asyncio.wait_for(reader.read(8192), timeout=30.0)
+
+                if not chunk:
+                    logger.warning(f"Connection closed by TAK server {tak_server_id}")
+                    break
+
+                buffer += chunk
+
+                # Prevent memory exhaustion (basic security)
+                if len(buffer) > MAX_BUFFER_SIZE:
+                    logger.warning("RX buffer exceeded limit, discarding")
+                    buffer = b""
+                    continue
+
+                # Extract complete CoT messages (minimal parsing)
+                messages, buffer = self._extract_cot_messages(buffer)
+
+                # Route EVERY message to ALL output plugins for this TAK server
+                for cot_xml in messages:
+                    # Basic malicious content check
+                    if self._is_malicious_xml(cot_xml):
+                        logger.warning("Dropped malicious-looking CoT message")
+                        continue
+
+                    # Fire and forget - don't block reading
+                    asyncio.create_task(
+                        self._route_cot_to_plugins(cot_xml, tak_server_id)
+                    )
+
+            except asyncio.TimeoutError:
+                continue  # Keep alive
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in RX worker: {e}")
+                await asyncio.sleep(1)
+
+        logger.info(f"RX worker stopped for TAK server {tak_server_id}")
+
+    def _extract_cot_messages(self, buffer: bytes) -> Tuple[List[bytes], bytes]:
+        """
+        Extract complete CoT XML messages from buffer.
+
+        Only extracts <event>...</event> blocks. NO interpretation or filtering.
+
+        Args:
+            buffer: Buffer containing partial/complete CoT messages
+
+        Returns:
+            (complete_messages, remaining_buffer)
+        """
+        import re
+
+        messages = []
+        pattern = rb'<event\b[^>]*>.*?</event>'
+
+        for match in re.finditer(pattern, buffer, re.DOTALL):
+            messages.append(match.group(0))
+
+        if messages:
+            # Find position after last complete message
+            last_match_end = list(re.finditer(pattern, buffer, re.DOTALL))[-1].end()
+            remaining = buffer[last_match_end:]
+        else:
+            remaining = buffer
+
+        return messages, remaining
+
+    def _is_malicious_xml(self, cot_xml: bytes) -> bool:
+        """
+        Basic security check for obviously malicious XML.
+
+        Only filters extreme cases like XXE attacks, billion laughs, etc.
+        Does NOT filter based on content or CoT type.
+
+        Args:
+            cot_xml: Raw CoT XML bytes
+
+        Returns:
+            True if message should be dropped
+        """
+        # Check for XML entity attacks
+        if b'<!ENTITY' in cot_xml or b'<!DOCTYPE' in cot_xml:
+            return True
+
+        # Check for suspicious nested depth (billion laughs attack)
+        open_tags = cot_xml.count(b'<')
+        if open_tags > 1000:  # Reasonable limit
+            return True
+
+        return False
+
+    async def _route_cot_to_plugins(self, cot_xml: bytes, tak_server_id: int):
+        """
+        Route CoT message to all output plugins for this TAK server.
+
+        Args:
+            cot_xml: Raw CoT XML bytes
+            tak_server_id: TAK server identifier
+        """
+        from plugins.plugin_manager import get_plugin_manager
+        from plugins.base_plugin import BaseOutputPlugin
+        from models.stream import Stream
+        import app as flask_app
+
+        try:
+            # Ensure we're in an app context for database access
+            # Use the global app instance from app.py
+            with flask_app.app.app_context():
+                # Find all streams configured for this TAK server
+                streams = Stream.query.filter_by(tak_server_id=tak_server_id).all()
+                logger.debug(f"Found {len(streams)} streams for TAK server {tak_server_id}")
+
+                plugin_manager = get_plugin_manager()
+
+                for stream in streams:
+                    logger.debug(f"Processing stream {stream.id} ({stream.name}) with plugin {stream.plugin_type}")
+
+                    # Check if we have a cached plugin instance
+                    if stream.id in self._output_plugin_cache:
+                        plugin = self._output_plugin_cache[stream.id]
+                        logger.debug(f"Using cached plugin instance for stream {stream.id}")
+                    else:
+                        # Create new plugin instance
+                        plugin = plugin_manager.get_plugin(stream.plugin_type, stream.get_plugin_config())
+
+                        if not plugin:
+                            logger.debug(f"No plugin instance for {stream.plugin_type}")
+                            continue
+
+                        # Check if plugin is an output plugin (inherits from BaseOutputPlugin)
+                        if not isinstance(plugin, BaseOutputPlugin):
+                            logger.debug(f"Plugin {stream.plugin_type} is not an output plugin, skipping")
+                            continue  # Skip GPS plugins
+
+                        # Cache the plugin instance
+                        self._output_plugin_cache[stream.id] = plugin
+                        logger.debug(f"Cached new plugin instance for stream {stream.id}")
+
+                        # Call start() if the plugin has it (for persistent connections)
+                        if hasattr(plugin, 'start') and callable(getattr(plugin, 'start')):
+                            try:
+                                await plugin.start()
+                                logger.info(f"Initialized output plugin {stream.plugin_type} for stream {stream.name}")
+                            except Exception as e:
+                                logger.error(f"Failed to start plugin {stream.plugin_type}: {e}", exc_info=True)
+                                # Remove from cache if start fails
+                                del self._output_plugin_cache[stream.id]
+                                continue
+
+                    logger.info(f"Routing CoT message to output plugin: {stream.plugin_type} (stream: {stream.name})")
+
+                    # Route to plugin (with timeout)
+                    try:
+                        await asyncio.wait_for(
+                            plugin.handle_cot_message(cot_xml, tak_server_id),
+                            timeout=10.0
+                        )
+                        logger.debug(f"Successfully routed CoT to {stream.plugin_type}")
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            f"Plugin {stream.plugin_type} timed out handling CoT"
+                        )
+                    except Exception as e:
+                        logger.error(f"Plugin {stream.plugin_type} failed: {e}", exc_info=True)
+
+        except Exception as e:
+            logger.error(f"Failed to route CoT message: {e}")
 
     def _get_tak_circuit_breaker(self, tak_server_id: int):
         """Get or create circuit breaker for TAK server connection"""
@@ -1994,10 +2237,68 @@ class QueuedCOTService:
             )
             return 0
 
+    async def invalidate_plugin_cache(self, stream_id: int = None):
+        """
+        Invalidate cached plugin instances to force reload with new config.
+
+        Args:
+            stream_id: Specific stream ID to invalidate, or None to invalidate all
+        """
+        if stream_id is not None:
+            if stream_id in self._output_plugin_cache:
+                plugin = self._output_plugin_cache[stream_id]
+                try:
+                    if hasattr(plugin, 'cleanup') and callable(getattr(plugin, 'cleanup')):
+                        await plugin.cleanup()
+                        logger.debug(f"Cleaned up plugin for stream {stream_id}")
+                except Exception as e:
+                    logger.error(f"Error cleaning up plugin for stream {stream_id}: {e}")
+                del self._output_plugin_cache[stream_id]
+                logger.info(f"Invalidated plugin cache for stream {stream_id}")
+        else:
+            # Invalidate all
+            for sid, plugin in list(self._output_plugin_cache.items()):
+                try:
+                    if hasattr(plugin, 'cleanup') and callable(getattr(plugin, 'cleanup')):
+                        await plugin.cleanup()
+                except Exception as e:
+                    logger.error(f"Error cleaning up plugin for stream {sid}: {e}")
+            self._output_plugin_cache.clear()
+            logger.info("Invalidated all plugin caches")
+
+    def invalidate_plugin_cache_sync(self, stream_id: int = None):
+        """
+        Synchronous wrapper for invalidate_plugin_cache.
+        Use this from Flask routes or other sync contexts.
+
+        Args:
+            stream_id: Specific stream ID to invalidate, or None to invalidate all
+        """
+        if stream_id is not None:
+            if stream_id in self._output_plugin_cache:
+                plugin = self._output_plugin_cache[stream_id]
+                # Can't call async cleanup from sync context, just remove from cache
+                del self._output_plugin_cache[stream_id]
+                logger.info(f"Invalidated plugin cache for stream {stream_id} (sync)")
+        else:
+            self._output_plugin_cache.clear()
+            logger.info("Invalidated all plugin caches (sync)")
+
     async def shutdown(self):
         """Shutdown the COT service and all workers"""
         try:
             self._running = False
+
+            # Cleanup output plugin instances (call cleanup if available)
+            for stream_id, plugin in list(self._output_plugin_cache.items()):
+                try:
+                    if hasattr(plugin, 'cleanup') and callable(getattr(plugin, 'cleanup')):
+                        await plugin.cleanup()
+                        logger.debug(f"Cleaned up plugin for stream {stream_id}")
+                except Exception as e:
+                    logger.error(f"Error cleaning up plugin for stream {stream_id}: {e}")
+            self._output_plugin_cache.clear()
+            logger.debug("All output plugin instances cleaned up")
 
             # Stop all workers
             worker_mappings_before = [(k, id(v)) for k, v in self.workers.items()]
