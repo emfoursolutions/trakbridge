@@ -337,13 +337,17 @@ def create_app(config_name=None):
         # Initialize CSRF protection globally
         from flask_wtf.csrf import CSRFProtect
 
+        # Configure CSRF to skip checking by default
+        # Protection will be enabled only for form submissions with tokens
+        app.config['WTF_CSRF_CHECK_DEFAULT'] = False
+
         csrf = CSRFProtect()
         csrf.init_app(app)
 
         # Store CSRF instance
         app.csrf = csrf
 
-        logger.info("CSRF protection enabled globally")
+        logger.info("CSRF protection configured (form-based validation enabled)")
 
         # Add security headers (production only)
         if config_instance.environment == 'production':
@@ -364,16 +368,18 @@ def create_app(config_name=None):
                         "'self'",
                         "'unsafe-inline'",  # Required for inline scripts
                         "https://cdn.jsdelivr.net",  # Bootstrap/Font CDN
+                        "https://unpkg.com",  # Leaflet maps CDN
                     ],
                     'style-src': [
                         "'self'",
                         "'unsafe-inline'",  # Required for inline styles
                         "https://cdn.jsdelivr.net",
                         "https://fonts.googleapis.com",
+                        "https://unpkg.com",  # Leaflet maps CDN
                     ],
                     'img-src': ["'self'", "data:", "https:"],
                     'font-src': ["'self'", "https://cdn.jsdelivr.net", "https://fonts.gstatic.com"],
-                    'connect-src': ["'self'"],
+                    'connect-src': ["'self'", "https://unpkg.com"],  # unpkg for Leaflet source maps
                     'frame-ancestors': ["'none'"],  # Prevent clickjacking
                 }
 
@@ -391,7 +397,6 @@ def create_app(config_name=None):
                     strict_transport_security=True,
                     strict_transport_security_preload=True,
                     content_security_policy=csp,
-                    content_security_policy_nonce_in=['script-src'],
                     frame_options='DENY',
                     referrer_policy='strict-origin-when-cross-origin',
                     feature_policy={
@@ -505,10 +510,6 @@ def create_app(config_name=None):
     app.register_blueprint(cot_types_bp, url_prefix="/admin")
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(auth_bp, url_prefix="/auth")
-
-    # CSRF is disabled by default (WTF_CSRF_CHECK_DEFAULT=False)
-    # Forms that need CSRF protection should use FlaskForm which enables it automatically
-    logger.debug("CSRF protection available for FlaskForm instances")
 
     # Add context processors and error handlers
     setup_template_helpers(app)
