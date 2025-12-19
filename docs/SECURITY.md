@@ -33,7 +33,9 @@ TrakBridge follows defense-in-depth principles with multiple layers of security:
 - **Comprehensive JSON Validation**: DoS protection through size, depth, and structure limits
 - **SQL Injection Prevention**: Parameterized queries and ORM usage throughout
 - **XSS Protection**: Output encoding and Content Security Policy headers
-- **CSRF Protection**: Cross-site request forgery tokens for all state-changing operations
+- **CSRF Protection**: Cross-site request forgery tokens for all state-changing operations with smart API exemption
+- **IP Spoofing Prevention**: Configurable proxy trust validation prevents rate limiting bypass
+- **Session Fixation Prevention**: Session IDs regenerated on authentication for all providers
 
 ### Container and Deployment Security
 - **Non-Root Execution**: Docker containers run as non-privileged user by default
@@ -81,9 +83,10 @@ TrakBridge follows defense-in-depth principles with multiple layers of security:
 #### Web Application
 - **Authentication**: Multi-provider with secure defaults
 - **Authorization**: Role-based with permission enforcement
-- **Session Security**: Secure cookies, timeout, and cleanup
-- **CSRF Protection**: Tokens on all state-changing operations
-- **Security Headers**: Comprehensive HTTP security headers
+- **Session Security**: Secure cookies, timeout, cleanup, and session fixation prevention
+- **CSRF Protection**: Form-based tokens with smart API exemption (WTF_CSRF_CHECK_DEFAULT=False)
+- **Security Headers**: Comprehensive HTTP security headers (HSTS, CSP, X-Frame-Options, referrer policy)
+- **Proxy Security**: Configurable X-Forwarded-For validation prevents IP spoofing attacks
 
 #### API Security
 - **Authentication**: API key and session-based authentication
