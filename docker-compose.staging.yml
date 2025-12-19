@@ -66,6 +66,9 @@ x-environment: &staging-environment
   # Security Settings
   TRAKBRIDGE_APPLICATION_URL: "https://staging.trakbridge.local"  # Update for your staging domain
   SECURE_COOKIES: "true"
+  PROXY_TRUSTED: "true"  # Set to "true" if behind reverse proxy (nginx, load balancer)
+  TRUSTED_PROXY_COUNT: "1"  # Number of proxies in chain (e.g., "1" for nginx)
+  FORCE_HTTPS: "false"  # Force HTTPS redirect (disable with "false" for internal deployments only)
   
   # Monitoring & Observability
   ENABLE_METRICS: "true"

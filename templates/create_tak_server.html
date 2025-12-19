@@ -35,6 +35,7 @@
             </div>
             <div class="card-body">
                 <form id="createServerForm" method="POST" enctype="multipart/form-data" novalidate>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <!-- Basic Configuration -->
                     <div class="row mb-3">
                         <div class="col-md-6">

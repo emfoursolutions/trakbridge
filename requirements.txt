@@ -19,6 +19,8 @@ fastkml
 Flask
 Flask-Migrate
 Flask-SQLAlchemy
+Flask-WTF
+flask-talisman
 frozenlist
 gunicorn
 gevent

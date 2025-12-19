@@ -60,18 +60,23 @@ x-environment: &common-environment
   FLASK_ENV: "production"
   USER_ID: "1000"  # Change if needed for filesystem permissions
   GROUP_ID: "1000"  # Change if needed for filesystem permissions
-  
+
   # Database Configuration (choose one)
   DB_TYPE: "postgresql"  # postgresql, mysql, or sqlite
   DB_HOST: "postgres"
   DB_NAME: "trakbridge"
   DB_USER: "trakbridge"
-  
+
+  # Security Configuration (NEW in v1.2.0)
+  PROXY_TRUSTED: "false"  # Set to "true" if behind reverse proxy (nginx, load balancer)
+  TRUSTED_PROXY_COUNT: "0"  # Number of proxies in chain (e.g., "1" for nginx)
+  FORCE_HTTPS: "true"  # Force HTTPS redirect (disable with "false" for internal deployments only)
+
   # LDAP Authentication (set LDAP_ENABLED to "true" to enable)
   LDAP_ENABLED: "false"
   LDAP_SERVER: "ldap://your-ad-server.company.com"  # Update for your LDAP server
   LDAP_BIND_DN: "CN=trakbridge,OU=Service Accounts,DC=company,DC=com"  # Update for your domain
-  
+
   # OIDC/SSO Authentication (set OIDC_ENABLED to "true" to enable)
   OIDC_ENABLED: "false"
   OIDC_ISSUER: "https://your-identity-provider.com"  # Update for your OIDC provider

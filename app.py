@@ -291,33 +291,40 @@ def create_app(config_name=None):
 
     app = Flask(__name__)
 
-    # Configure reverse proxy support for Apache, Nginx, etc.
-    # This fixes redirect issues when behind reverse proxies
-    from werkzeug.middleware.proxy_fix import ProxyFix
+    # Determine environment and get configuration FIRST
+    # (needed to check proxy settings before applying ProxyFix)
+    flask_env = config_name or os.environ.get("FLASK_ENV", "development")
+    config_instance = get_config(flask_env)
 
-    app.wsgi_app = ProxyFix(
-        app.wsgi_app,
-        x_for=1,  # Trust one proxy for X-Forwarded-For
-        x_proto=1,  # Trust one proxy for X-Forwarded-Proto
-        x_host=1,  # Trust one proxy for X-Forwarded-Host
-        x_port=1,  # Trust one proxy for X-Forwarded-Port
-        x_prefix=1,  # Trust one proxy for X-Forwarded-Prefix
-    )
+    # Configure reverse proxy support ONLY if explicitly trusted
+    # This fixes redirect issues when behind reverse proxies while maintaining security
+    proxy_trusted = getattr(config_instance, "PROXY_TRUSTED", False)
+    if proxy_trusted:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        proxy_count = getattr(config_instance, "TRUSTED_PROXY_COUNT", 1)
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app,
+            x_for=proxy_count,  # Trust N proxies for X-Forwarded-For
+            x_proto=proxy_count,  # Trust N proxies for X-Forwarded-Proto
+            x_host=proxy_count,  # Trust N proxies for X-Forwarded-Host
+            x_port=proxy_count,  # Trust N proxies for X-Forwarded-Port
+            x_prefix=proxy_count,  # Trust N proxies for X-Forwarded-Prefix
+        )
+        logger.info(f"ProxyFix enabled: trusting {proxy_count} proxy(ies)")
+    else:
+        logger.info("ProxyFix disabled: using direct connection IPs")
 
     def app_context_factory():
         return app.app_context()
 
     # Store the factory on the app for easy access
     app.app_context_factory = app_context_factory
-
-    # Determine environment and get configuration
-    flask_env = config_name or os.environ.get("FLASK_ENV", "development")
     app.config["SKIP_DB_INIT"] = (
         os.environ.get("SKIP_DB_INIT", "false").lower() == "true"
     )
 
-    # Get configuration instance using the new system
-    config_instance = get_config(flask_env)
+    # config_instance already loaded above for ProxyFix configuration
 
     # Configure Flask app with the new configuration system
     configure_flask_app(app, config_instance)
@@ -326,6 +333,90 @@ def create_app(config_name=None):
     try:
         db.init_app(app)
         migrate.init_app(app, db)
+
+        # Initialize CSRF protection globally
+        from flask_wtf.csrf import CSRFProtect
+
+        csrf = CSRFProtect()
+        csrf.init_app(app)
+
+        # Store CSRF instance
+        app.csrf = csrf
+
+        logger.info("CSRF protection enabled globally")
+
+        # Add security headers (production only)
+        if config_instance.environment == 'production':
+            try:
+                from flask_talisman import Talisman
+            except ImportError:
+                logger.warning(
+                    "flask-talisman not installed. Security headers disabled. "
+                    "Install with: pip install flask-talisman"
+                )
+                Talisman = None
+
+            if Talisman:
+                # Configure Content Security Policy
+                csp = {
+                    'default-src': ["'self'"],
+                    'script-src': [
+                        "'self'",
+                        "'unsafe-inline'",  # Required for inline scripts
+                        "https://cdn.jsdelivr.net",  # Bootstrap/Font CDN
+                    ],
+                    'style-src': [
+                        "'self'",
+                        "'unsafe-inline'",  # Required for inline styles
+                        "https://cdn.jsdelivr.net",
+                        "https://fonts.googleapis.com",
+                    ],
+                    'img-src': ["'self'", "data:", "https:"],
+                    'font-src': ["'self'", "https://cdn.jsdelivr.net", "https://fonts.gstatic.com"],
+                    'connect-src': ["'self'"],
+                    'frame-ancestors': ["'none'"],  # Prevent clickjacking
+                }
+
+                # Determine if we should force HTTPS:
+                # - If behind reverse proxy (nginx), it handles SSL termination
+                # - User can explicitly disable via FORCE_HTTPS=false
+                force_https_config = getattr(
+                    config_instance, "FORCE_HTTPS", True
+                )
+                force_https = force_https_config and not proxy_trusted
+
+                Talisman(
+                    app,
+                    force_https=force_https,
+                    strict_transport_security=True,
+                    strict_transport_security_preload=True,
+                    content_security_policy=csp,
+                    content_security_policy_nonce_in=['script-src'],
+                    frame_options='DENY',
+                    referrer_policy='strict-origin-when-cross-origin',
+                    feature_policy={
+                        'geolocation': "'none'",
+                        'microphone': "'none'",
+                        'camera': "'none'",
+                    }
+                )
+
+                if not force_https:
+                    if not force_https_config:
+                        logger.warning(
+                            "HTTPS forcing disabled by FORCE_HTTPS=false. "
+                            "This is NOT recommended for public deployments!"
+                        )
+                    elif proxy_trusted:
+                        logger.info(
+                            "HTTPS forcing disabled - reverse proxy handles SSL"
+                        )
+                logger.info(
+                    f"Security headers enabled (Talisman, force_https={force_https})"
+                )
+        else:
+            logger.info(f"Security headers disabled in {config_instance.environment} environment")
+
     except Exception as db_init_error:
         from utils.database_error_formatter import (
             create_database_exception,
@@ -414,6 +505,10 @@ def create_app(config_name=None):
     app.register_blueprint(cot_types_bp, url_prefix="/admin")
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(auth_bp, url_prefix="/auth")
+
+    # CSRF is disabled by default (WTF_CSRF_CHECK_DEFAULT=False)
+    # Forms that need CSRF protection should use FlaskForm which enables it automatically
+    logger.debug("CSRF protection available for FlaskForm instances")
 
     # Add context processors and error handlers
     setup_template_helpers(app)
@@ -549,6 +644,10 @@ def configure_flask_app(app, config_instance):
 
     # Import Version
     app.config["VERSION"] = get_version()
+
+    # Security settings
+    app.config["PROXY_TRUSTED"] = getattr(config_instance, "PROXY_TRUSTED", False)
+    app.config["TRUSTED_PROXY_COUNT"] = getattr(config_instance, "TRUSTED_PROXY_COUNT", 0)
 
     # Store the config instance for later use
     app.config_instance = config_instance

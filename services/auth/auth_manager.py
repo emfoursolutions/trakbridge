@@ -690,10 +690,23 @@ class AuthenticationManager:
             }
 
     def _get_client_ip(self) -> str:
-        """Get client IP address from request"""
+        """Get client IP with X-Forwarded-For validation"""
         try:
             if request:
-                return request.environ.get("HTTP_X_FORWARDED_FOR", request.remote_addr)
+                # Check if behind trusted proxy
+                proxy_trusted = current_app.config.get('PROXY_TRUSTED', False)
+
+                if proxy_trusted:
+                    # Get first IP from X-Forwarded-For (client IP)
+                    forwarded = request.environ.get('HTTP_X_FORWARDED_FOR')
+                    if forwarded:
+                        # Take first IP, ignore proxy chain
+                        client_ip = forwarded.split(',')[0].strip()
+                        logger.debug(f"Client IP from X-Forwarded-For: {client_ip}")
+                        return client_ip
+
+                # Direct connection or untrusted proxy
+                return request.remote_addr or "unknown"
         except RuntimeError:
             pass
         return "unknown"
