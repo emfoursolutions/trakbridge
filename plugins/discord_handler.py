@@ -85,7 +85,7 @@ class DiscordHandler(BaseOutputPlugin):
                     "content": [
                         'Chat (b-t-f): "[CHAT] {callsign}: {remarks}"',
                         (
-                            'Emergency (b-a-o-tl): '
+                            'Emergency (b-a-o-tbl): '
                             '"[EMERGENCY] {callsign} at {mgrs}"'
                         ),
                         (
