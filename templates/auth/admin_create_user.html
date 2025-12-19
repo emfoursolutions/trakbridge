@@ -54,6 +54,7 @@
                 </div>
 
                 <form method="POST" novalidate>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <div class="row">
                         <!-- Username -->
                         <div class="col-md-6 mb-3">

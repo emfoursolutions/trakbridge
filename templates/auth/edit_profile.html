@@ -34,6 +34,7 @@
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('auth.edit_profile') }}" id="profile-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <div class="row">
                         <!-- Left Column -->
                         <div class="col-md-6">

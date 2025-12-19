@@ -76,7 +76,7 @@ class SlackHandler(BaseOutputPlugin):
                     "title": "Common CoT Types & Example Templates",
                     "content": [
                         'Chat (b-t-f): "[CHAT] {callsign}: {remarks}"',
-                        'Emergency (b-a-o-tl): "[EMERGENCY] {callsign} at {mgrs}"',
+                        'Emergency (b-a-o-tbl): "[EMERGENCY] {callsign} at {mgrs}"',
                         'Geofence Alert (b-a-o-can): "[ALERT] {callsign} {remarks} at {lat},{lon}"',
                         'Friendly Position (a-f-G-E-V): "[{group_name}] {callsign} ({group_role}) - Battery: {battery}%"',
                         'Hostile (a-h-*): "[HOSTILE] {type} at {mgrs}"',

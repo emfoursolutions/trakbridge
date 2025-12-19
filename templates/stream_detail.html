@@ -143,7 +143,7 @@
                         </div>
                     </div>
                     <div class="col-md-6">
-                        {% if stream.plugin_type not in ['irc_handler', 'slack_handler', 'cot_archiver'] %}
+                        {% if stream.plugin_type not in ['irc_handler', 'slack_handler', 'discord_handler', 'cot_archiver'] %}
                         <div class="info-group mb-3">
                             <label class="info-label">COT Type</label>
                             <div class="info-value">
@@ -373,7 +373,7 @@
 
     <div class="col-lg-4">
         <!-- COT Type Information Card (hidden for output plugins) -->
-        {% if stream.plugin_type not in ['irc_handler', 'slack_handler', 'cot_archiver'] %}
+        {% if stream.plugin_type not in ['irc_handler', 'slack_handler', 'discord_handler', 'cot_archiver'] %}
         <div class="card mb-4">
             <div class="card-header">
                 <h5 class="mb-0">
@@ -413,7 +413,7 @@
         {% endif %}
 
         <!-- Geofence Map Card (for output plugins) -->
-        {% if stream.plugin_type in ['irc_handler', 'slack_handler', 'cot_archiver'] %}
+        {% if stream.plugin_type in ['irc_handler', 'slack_handler', 'discord_handler', 'cot_archiver'] %}
         {% set config = stream.get_plugin_config() %}
         {% if config and config.get('global_geofence_enabled') == 'true' and config.get('global_geofence_bounds') %}
         <div class="card mb-4">
@@ -801,7 +801,7 @@ function initializeGeofenceMap() {
     const mapContainer = document.getElementById('geofence-map');
     if (!mapContainer) return;
 
-    {% if stream.plugin_type in ['irc_handler', 'slack_handler', 'cot_archiver'] %}
+    {% if stream.plugin_type in ['irc_handler', 'slack_handler', 'discord_handler', 'cot_archiver'] %}
     {% set config = stream.get_plugin_config() %}
     {% if config and config.get('global_geofence_enabled') == 'true' and config.get('global_geofence_bounds') %}
     const bounds = {

@@ -127,6 +127,17 @@ def _handle_local_login(auth_manager: AuthenticationManager):
     response = auth_manager.authenticate(username, password)
 
     if response.success:
+        # CRITICAL: Regenerate session ID to prevent session fixation
+        # Save any data we want to preserve
+        next_url = session.get('next_url')
+
+        # Clear old session completely
+        session.clear()
+
+        # Restore preserved data
+        if next_url:
+            session['next_url'] = next_url
+
         # Check if password change is required
         from services.auth.bootstrap_service import check_password_change_required
 
@@ -142,14 +153,16 @@ def _handle_local_login(auth_manager: AuthenticationManager):
             )
             return redirect(url_for("auth.force_password_change"))
 
-        # Create session
+        # Create session with new ID
         user_session = auth_manager.create_session(
             response.user, AuthProvider.LOCAL, request_info
         )
 
-        # Store session ID in Flask session
+        # Set new session ID
         session["session_id"] = user_session.session_id
         session.permanent = True
+
+        logger.info(f"Session regenerated for {response.user.username}")
 
         flash(
             f"Welcome, {response.user.full_name or response.user.username}!", "success"
@@ -184,14 +197,27 @@ def _handle_ldap_login(auth_manager: AuthenticationManager):
     )
 
     if response.success:
-        # Create session
+        # CRITICAL: Regenerate session ID to prevent session fixation
+        # Save any data we want to preserve
+        next_url = session.get('next_url')
+
+        # Clear old session completely
+        session.clear()
+
+        # Restore preserved data
+        if next_url:
+            session['next_url'] = next_url
+
+        # Create session with new ID
         user_session = auth_manager.create_session(
             response.user, AuthProvider.LDAP, request_info
         )
 
-        # Store session ID in Flask session
+        # Set new session ID
         session["session_id"] = user_session.session_id
         session.permanent = True
+
+        logger.info(f"Session regenerated for {response.user.username}")
 
         flash(
             f"Welcome, {response.user.full_name or response.user.username}!", "success"
@@ -291,6 +317,17 @@ def oidc_callback():
         response = oidc_provider.authenticate(authorization_code=code, state=state)
 
         if response.success:
+            # CRITICAL: Regenerate session ID to prevent session fixation
+            # Save any data we want to preserve
+            next_url = session.get('next_url')
+
+            # Clear old session completely (state already popped above)
+            session.clear()
+
+            # Restore preserved data
+            if next_url:
+                session['next_url'] = next_url
+
             # Get request info for session creation
             request_info = {
                 "ip_address": request.environ.get(
@@ -300,14 +337,16 @@ def oidc_callback():
                 "provider_session_data": response.session_data,
             }
 
-            # Create session
+            # Create session with new ID
             user_session = auth_manager.create_session(
                 response.user, AuthProvider.OIDC, request_info
             )
 
-            # Store session ID in Flask session
+            # Set new session ID
             session["session_id"] = user_session.session_id
             session.permanent = True
+
+            logger.info(f"Session regenerated for {response.user.username}")
 
             flash(
                 f"Welcome, {response.user.full_name or response.user.username}!",

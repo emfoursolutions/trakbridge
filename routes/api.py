@@ -97,6 +97,8 @@ logger = get_module_logger(__name__)
 
 bp = Blueprint("api", __name__)
 
+# Exempt API blueprint from CSRF - will be applied in app.py after registration
+
 # Cache for health check results to avoid excessive checks
 _health_cache = {}
 _cache_lock = threading.Lock()

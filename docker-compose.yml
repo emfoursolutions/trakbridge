@@ -67,6 +67,11 @@ x-environment: &common-environment
   DEFAULT_POLL_INTERVAL: "120"
   HTTP_TIMEOUT: "30"
   
+  # Security Configuration
+  PROXY_TRUSTED: "false"  # Set to "true" if behind reverse proxy (nginx, load balancer)
+  TRUSTED_PROXY_COUNT: "0"  # Number of proxies in chain (e.g., "1" for nginx)
+  FORCE_HTTPS: "false"  # Force HTTPS redirect (disable with "false" for internal deployments only)
+
   # Hypercorn Settings - single worker optimal for TrakBridge architecture
   HYPERCORN_KEEP_ALIVE: "5"
   HYPERCORN_MAX_REQUESTS: "1000"

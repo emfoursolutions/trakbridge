@@ -92,6 +92,7 @@
                 {% endif %}
 
                 <form method="POST" novalidate>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <!-- Username (Read-only) -->
                     <div class="mb-3">
                         <label for="username" class="form-label">Username</label>
@@ -231,8 +232,9 @@
                     <p class="text-muted small">
                         Reset the user's password and force them to change it on next login.
                     </p>
-                    <form method="POST" action="{{ url_for('auth.admin_reset_password', user_id=user.id) }}" 
+                    <form method="POST" action="{{ url_for('auth.admin_reset_password', user_id=user.id) }}"
                           onsubmit="return confirm('Are you sure you want to reset this user\'s password? They will need to change it on next login.')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <button type="submit" class="btn btn-warning btn-sm">
                             <i class="fas fa-key"></i> Reset Password
                         </button>
@@ -249,8 +251,9 @@
                         <p class="text-muted small">
                             Disable the user account to prevent login.
                         </p>
-                        <form method="POST" action="{{ url_for('auth.admin_disable_user', user_id=user.id) }}" 
+                        <form method="POST" action="{{ url_for('auth.admin_disable_user', user_id=user.id) }}"
                               onsubmit="return confirm('Are you sure you want to disable this user? They will be logged out of all sessions.')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <button type="submit" class="btn btn-outline-warning btn-sm">
                                 <i class="fas fa-user-slash"></i> Disable User
                             </button>
@@ -259,8 +262,9 @@
                         <p class="text-muted small">
                             Enable the user account to allow login.
                         </p>
-                        <form method="POST" action="{{ url_for('auth.admin_enable_user', user_id=user.id) }}" 
+                        <form method="POST" action="{{ url_for('auth.admin_enable_user', user_id=user.id) }}"
                               onsubmit="return confirm('Are you sure you want to enable this user?')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <button type="submit" class="btn btn-outline-success btn-sm">
                                 <i class="fas fa-user-check"></i> Enable User
                             </button>

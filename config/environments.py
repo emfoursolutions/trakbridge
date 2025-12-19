@@ -129,6 +129,24 @@ class ProductionConfig(BaseConfig):
         return secret_key
 
     @property
+    def PROXY_TRUSTED(self) -> bool:
+        """Only trust X-Forwarded-For if explicitly enabled"""
+        return self.secret_manager.get_secret("PROXY_TRUSTED", "false").lower() == "true"
+
+    @property
+    def TRUSTED_PROXY_COUNT(self) -> int:
+        """Number of trusted proxies in chain (nginx, load balancer, etc.)"""
+        return int(self.secret_manager.get_secret("TRUSTED_PROXY_COUNT", "0"))
+
+    @property
+    def FORCE_HTTPS(self) -> bool:
+        """
+        Force HTTPS redirect in production.
+        Set to 'false' to disable (not recommended for public deployments).
+        """
+        return self.secret_manager.get_secret("FORCE_HTTPS", "true").lower() == "true"
+
+    @property
     def SQLALCHEMY_ENGINE_OPTIONS(self) -> Dict[str, Any]:
         """Production-optimized database engine options."""
         base_options = super().SQLALCHEMY_ENGINE_OPTIONS

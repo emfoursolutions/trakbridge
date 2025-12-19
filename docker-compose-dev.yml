@@ -59,6 +59,11 @@ services:
       # Application URL for development
       TRAKBRIDGE_APPLICATION_URL: "http://localhost:5000"
 
+      # Security Configuration
+      PROXY_TRUSTED: "true"  # Set to "true" if behind reverse proxy (nginx, load balancer)
+      TRUSTED_PROXY_COUNT: "1"  # Number of proxies in chain (e.g., "1" for nginx)
+      FORCE_HTTPS: "false"  # Force HTTPS redirect (disable with "false" for internal deployments only)
+
       # Performance settings
       MAX_WORKER_THREADS: ${MAX_WORKER_THREADS:-8}
       MAX_CONCURRENT_STREAMS: ${MAX_CONCURRENT_STREAMS:-200}

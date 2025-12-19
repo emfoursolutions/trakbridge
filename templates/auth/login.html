@@ -355,6 +355,7 @@
             {% if 'local' in available_providers %}
             <div id="local-panel" class="auth-panel {% if available_providers[0] == 'local' %}active{% endif %}">
                 <form method="POST" action="{{ url_for('auth.login') }}" id="local-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <input type="hidden" name="auth_method" value="local">
                     
                     <div class="form-group">
@@ -397,6 +398,7 @@
                 </div>
                 
                 <form method="POST" action="{{ url_for('auth.login') }}" id="ldap-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <input type="hidden" name="auth_method" value="ldap">
                     
                     <div class="form-group">
@@ -439,6 +441,7 @@
                 </div>
                 
                 <form method="POST" action="{{ url_for('auth.login') }}" id="oidc-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <input type="hidden" name="auth_method" value="oidc">
                     
                     <button type="submit" class="btn btn-primary btn-block">
