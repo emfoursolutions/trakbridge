@@ -38,6 +38,15 @@ class TakServer(db.Model, TimestampMixin):
         db.Boolean, default=True, nullable=False
     )  # Enable receiving CoT from TAK server
 
+    # TrakBridge Identity Configuration
+    identity_callsign = db.Column(db.String(100), nullable=True)
+    identity_role = db.Column(db.String(50), nullable=True)
+    identity_team_color = db.Column(db.String(50), nullable=True)
+    identity_location_mgrs = db.Column(db.String(50), nullable=True)
+    identity_uid_suffix = db.Column(
+        db.String(20), nullable=True
+    )  # Generated once, persisted
+
     # Legacy single-server relationship (maintained for backward compatibility)
     streams = db.relationship(
         "Stream", back_populates="tak_server", lazy=True, cascade="all, delete-orphan"
@@ -106,6 +115,10 @@ class TakServer(db.Model, TimestampMixin):
             "enable_rx": self.enable_rx,
             "has_certificate": bool(self.cert_p12),
             "cert_filename": self.cert_p12_filename,
+            "identity_callsign": self.identity_callsign,
+            "identity_role": self.identity_role,
+            "identity_team_color": self.identity_team_color,
+            "identity_location_mgrs": self.identity_location_mgrs,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }

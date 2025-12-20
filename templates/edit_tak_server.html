@@ -199,6 +199,82 @@
                         </div>
                     </div>
 
+                    <!-- TrakBridge Identity Configuration -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="fas fa-id-badge"></i> TrakBridge Identity
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <p class="small text-muted">
+                                Configure how TrakBridge appears to this TAK server. Leave callsign empty to disable identity announcement.
+                            </p>
+
+                            <div class="mb-3">
+                                <label for="identity_callsign" class="form-label">Callsign</label>
+                                <input type="text" class="form-control" id="identity_callsign" name="identity_callsign"
+                                       value="{{ server.identity_callsign or '' }}"
+                                       placeholder="e.g., TrakBridge-HQ">
+                                <div class="form-text">
+                                    <i class="fas fa-info-circle"></i> How TrakBridge identifies itself to this TAK server
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="identity_role" class="form-label">Role</label>
+                                    <select class="form-select" id="identity_role" name="identity_role">
+                                        <option value="" {% if not server.identity_role %}selected{% endif %}>None (Status Only)</option>
+                                        <option value="Team Member" {% if server.identity_role == "Team Member" %}selected{% endif %}>Team Member</option>
+                                        <option value="Team Lead" {% if server.identity_role == "Team Lead" %}selected{% endif %}>Team Lead</option>
+                                        <option value="HQ" {% if server.identity_role == "HQ" %}selected{% endif %}>HQ</option>
+                                        <option value="Sniper" {% if server.identity_role == "Sniper" %}selected{% endif %}>Sniper</option>
+                                        <option value="Medic" {% if server.identity_role == "Medic" %}selected{% endif %}>Medic</option>
+                                        <option value="Forward Observer" {% if server.identity_role == "Forward Observer" %}selected{% endif %}>Forward Observer</option>
+                                        <option value="RTO" {% if server.identity_role == "RTO" %}selected{% endif %}>RTO</option>
+                                        <option value="K9" {% if server.identity_role == "K9" %}selected{% endif %}>K9</option>
+                                    </select>
+                                    <div class="form-text">
+                                        <i class="fas fa-info-circle"></i> Team role (requires location to appear on map)
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="identity_team_color" class="form-label">Team Color</label>
+                                    <select class="form-select" id="identity_team_color" name="identity_team_color">
+                                        <option value="" {% if not server.identity_team_color %}selected{% endif %}>Default (Cyan)</option>
+                                        <option value="Teal" {% if server.identity_team_color == "Teal" %}selected{% endif %}>Teal</option>
+                                        <option value="Green" {% if server.identity_team_color == "Green" %}selected{% endif %}>Green</option>
+                                        <option value="Dark Green" {% if server.identity_team_color == "Dark Green" %}selected{% endif %}>Dark Green</option>
+                                        <option value="Brown" {% if server.identity_team_color == "Brown" %}selected{% endif %}>Brown</option>
+                                        <option value="White" {% if server.identity_team_color == "White" %}selected{% endif %}>White</option>
+                                        <option value="Yellow" {% if server.identity_team_color == "Yellow" %}selected{% endif %}>Yellow</option>
+                                        <option value="Orange" {% if server.identity_team_color == "Orange" %}selected{% endif %}>Orange</option>
+                                        <option value="Magenta" {% if server.identity_team_color == "Magenta" %}selected{% endif %}>Magenta</option>
+                                        <option value="Red" {% if server.identity_team_color == "Red" %}selected{% endif %}>Red</option>
+                                        <option value="Maroon" {% if server.identity_team_color == "Maroon" %}selected{% endif %}>Maroon</option>
+                                        <option value="Purple" {% if server.identity_team_color == "Purple" %}selected{% endif %}>Purple</option>
+                                        <option value="Dark Blue" {% if server.identity_team_color == "Dark Blue" %}selected{% endif %}>Dark Blue</option>
+                                        <option value="Blue" {% if server.identity_team_color == "Blue" %}selected{% endif %}>Blue</option>
+                                        <option value="Cyan" {% if server.identity_team_color == "Cyan" or not server.identity_team_color %}selected{% endif %}>Cyan</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="mb-0">
+                                <label for="identity_location_mgrs" class="form-label">Location (MGRS)
+                                    <span class="badge bg-secondary">Optional</span>
+                                </label>
+                                <input type="text" class="form-control" id="identity_location_mgrs" name="identity_location_mgrs"
+                                       value="{{ server.identity_location_mgrs or '' }}"
+                                       placeholder="e.g., 38SMB4484">
+                                <div class="form-text">
+                                    <i class="fas fa-map-marker-alt"></i> MGRS location. If empty, TrakBridge sends status only (no map marker)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Action Buttons -->
                     <div class="d-flex justify-content-between">
                         <button type="button" class="btn btn-outline-secondary" onclick="testServerConfig()" title="Test Connection">

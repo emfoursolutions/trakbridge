@@ -46,6 +46,13 @@ class TakServerDTO:
     cert_password: Optional[str] = None
     has_cert_password: bool = False
 
+    # TrakBridge Identity Configuration
+    identity_callsign: Optional[str] = None
+    identity_role: Optional[str] = None
+    identity_team_color: Optional[str] = None
+    identity_location_mgrs: Optional[str] = None
+    identity_uid_suffix: Optional[str] = None
+
     @classmethod
     def from_orm(cls, tak_server) -> "TakServerDTO":
         """Convert SQLAlchemy TAK server object to clean DTO"""
@@ -72,6 +79,11 @@ class TakServerDTO:
             cert_p12=getattr(tak_server, "cert_p12", None),
             cert_password=cert_password,
             has_cert_password=getattr(tak_server, "has_cert_password", False),
+            identity_callsign=getattr(tak_server, "identity_callsign", None),
+            identity_role=getattr(tak_server, "identity_role", None),
+            identity_team_color=getattr(tak_server, "identity_team_color", None),
+            identity_location_mgrs=getattr(tak_server, "identity_location_mgrs", None),
+            identity_uid_suffix=getattr(tak_server, "identity_uid_suffix", None),
         )
 
     def get_cert_password(self) -> Optional[str]:

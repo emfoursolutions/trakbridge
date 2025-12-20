@@ -1167,6 +1167,7 @@ class QueuedCOTService:
     async def _tx_loop(self, tak_server_id: int, writer, tak_server):
         """
         TX loop - send CoT events from queue to TAK server.
+        Plus periodic TrakBridge identity heartbeat.
 
         Args:
             tak_server_id: TAK server identifier
@@ -1174,8 +1175,39 @@ class QueuedCOTService:
             tak_server: TAK server configuration object
         """
         batch_count = 0
+        last_identity_send = datetime.now()
+        IDENTITY_INTERVAL_SECONDS = 30  # Send identity every 30 seconds
+
         while self._running:
             try:
+                # Check if we need to send identity heartbeat
+                if (
+                    datetime.now() - last_identity_send
+                ).total_seconds() >= IDENTITY_INTERVAL_SECONDS:
+                    try:
+                        identity_cot = self._generate_trakbridge_identity_cot(tak_server)
+                        if identity_cot:
+                            try:
+                                writer.write(identity_cot)
+                                await writer.drain()
+                                logger.info(
+                                    f"Sent TrakBridge identity heartbeat to {tak_server.name}"
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to send identity heartbeat to {tak_server.name}: {e}"
+                                )
+                        else:
+                            logger.debug(
+                                f"Identity heartbeat disabled for {tak_server.name} (no callsign configured)"
+                            )
+                    except Exception as e:
+                        logger.error(
+                            f"Error generating identity heartbeat for {tak_server.name}: {e}",
+                            exc_info=True
+                        )
+                    last_identity_send = datetime.now()
+
                 # Get batch of events from queue manager
                 batch = await self.queue_manager.get_batch(tak_server_id)
 
@@ -2606,10 +2638,12 @@ class QueuedCOTService:
             # Add detail element
             detail = etree.SubElement(cot_event, "detail")
 
-            # Add platform info (takv element)
+            # Add platform info (takv element) - use dynamic version
+            from services.version import get_version
+
             takv = etree.SubElement(detail, "takv")
             takv.set("os", "34")
-            takv.set("version", "TrakBridge")
+            takv.set("version", get_version())  # Dynamic version from version service
             takv.set("device", "TrakBridge")
             takv.set("platform", "TrakBridge")
 
@@ -2775,6 +2809,138 @@ class QueuedCOTService:
         except Exception as e:
             logger.error(f"Error applying custom CoT attributes: {e}")
             # Don't raise - custom attributes are optional, shouldn't break CoT generation
+
+    @staticmethod
+    def _generate_trakbridge_identity_cot(tak_server) -> Optional[bytes]:
+        """
+        Generate TrakBridge self-identity CoT message.
+
+        Creates a CoT message representing TrakBridge itself to the TAK server,
+        allowing it to appear in the roster and optionally on the map.
+
+        Args:
+            tak_server: TakServer model instance with identity configuration
+
+        Returns:
+            bytes: XML CoT message, or None if identity is disabled
+
+        Identity Types:
+            - With location: Team member (a-f-G-U-C) - appears on map
+            - Without location: Status-only (b-t-c-v) - roster presence only
+        """
+        from services.version import get_version
+        import random
+
+        # Check if identity is enabled (callsign required)
+        if not tak_server.identity_callsign:
+            return None
+
+        # Use UID suffix if exists, otherwise generate a consistent one based on server ID
+        # Note: UID suffix should be generated and persisted when TAK server is first created
+        # If not present, we generate a deterministic suffix based on server ID for consistency
+        if tak_server.identity_uid_suffix:
+            uid_suffix = tak_server.identity_uid_suffix
+        else:
+            # Generate deterministic suffix from server ID to ensure consistency across restarts
+            # This avoids needing app context for database updates in async workers
+            uid_suffix = str((tak_server.id * 123456) % 1000000).zfill(6)
+
+        # Build unique UID
+        uid = f"trakbridge-{tak_server.name}-{uid_suffix}"
+
+        # Generate timestamps
+        now = datetime.now(timezone.utc)
+        stale = now + timedelta(seconds=60)  # 60 second stale (sent every 30s)
+
+        time_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        start_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        stale_str = stale.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Determine CoT type based on location availability
+        has_location = bool(tak_server.identity_location_mgrs)
+        cot_type = "a-f-G-U-C" if has_location else "b-t-c-v"
+
+        # Create event element
+        cot_event = etree.Element("event")
+        cot_event.set("version", "2.0")
+        cot_event.set("uid", uid)
+        cot_event.set("type", cot_type)
+        cot_event.set("time", time_str)
+        cot_event.set("start", start_str)
+        cot_event.set("stale", stale_str)
+        cot_event.set("how", "m-g")  # Machine-generated
+
+        # Add point element if location is configured
+        if has_location:
+            try:
+                import mgrs
+
+                m = mgrs.MGRS()
+                lat, lon = m.toLatLon(tak_server.identity_location_mgrs)
+
+                point_attr = {
+                    "lat": f"{lat:.7f}",
+                    "lon": f"{lon:.7f}",
+                    "hae": "0.0",
+                    "ce": "10.0",
+                    "le": "10.0",
+                }
+                etree.SubElement(cot_event, "point", attrib=point_attr)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to convert MGRS location '{tak_server.identity_location_mgrs}': {e}. "
+                    f"Sending status-only identity."
+                )
+                # Fall back to status-only type if location conversion fails
+                cot_event.set("type", "b-t-c-v")
+                has_location = False
+
+        # Add detail element
+        detail = etree.SubElement(cot_event, "detail")
+
+        # Add platform info (takv element) with dynamic version
+        takv = etree.SubElement(detail, "takv")
+        takv.set("os", "34")
+        takv.set("version", get_version())
+        takv.set("device", "TrakBridge")
+        takv.set("platform", "TrakBridge")
+
+        # Add contact element
+        contact = etree.SubElement(detail, "contact")
+        contact.set("callsign", tak_server.identity_callsign)
+        if has_location:
+            # Team member contact format
+            contact.set("endpoint", "*:-1:stcp")
+
+        # Add uid element (for team members)
+        uid_elem = etree.SubElement(detail, "uid")
+        uid_elem.set("Droid", tak_server.identity_callsign)
+
+        # Add team member elements if location is set
+        if has_location and (tak_server.identity_role or tak_server.identity_team_color):
+            group = etree.SubElement(detail, "__group")
+            group.set("name", tak_server.identity_team_color or "Cyan")
+            group.set("role", tak_server.identity_role or "Team Member")
+
+        # Add status element
+        status = etree.SubElement(detail, "status")
+        status.set("battery", "100")
+
+        # Add track element for team members
+        if has_location:
+            track = etree.SubElement(detail, "track")
+            track.set("course", "0.0")
+            track.set("speed", "0.0")
+
+        # Convert to bytes
+        xml_bytes = etree.tostring(cot_event, encoding="utf-8", xml_declaration=True)
+
+        logger.debug(
+            f"Generated TrakBridge identity CoT for {tak_server.name}: "
+            f"uid={uid}, type={cot_type}, location={'yes' if has_location else 'no'}"
+        )
+
+        return xml_bytes
 
     @staticmethod
     def _is_valid_xml_name(name: str) -> bool:

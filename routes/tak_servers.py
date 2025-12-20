@@ -244,6 +244,10 @@ def create_tak_server():
             verify_ssl=verify_ssl,
             tls_version=data.get("tls_version", "1.3"),
             enable_rx=enable_rx,
+            identity_callsign=data.get("identity_callsign"),
+            identity_role=data.get("identity_role"),
+            identity_team_color=data.get("identity_team_color"),
+            identity_location_mgrs=data.get("identity_location_mgrs"),
         )
 
         # Set the certificate password using the encrypted method
@@ -392,6 +396,10 @@ def edit_tak_server(server_id):
         server.verify_ssl = verify_ssl
         server.tls_version = data.get("tls_version", "1.3")
         server.enable_rx = enable_rx
+        server.identity_callsign = data.get("identity_callsign")
+        server.identity_role = data.get("identity_role")
+        server.identity_team_color = data.get("identity_team_color")
+        server.identity_location_mgrs = data.get("identity_location_mgrs")
 
         # Set the certificate password using the encrypted method
         server.set_cert_password(data.get("cert_password", ""))

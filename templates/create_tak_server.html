@@ -175,6 +175,80 @@
                         </div>
                     </div>
 
+                    <!-- TrakBridge Identity Configuration -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="fas fa-id-badge"></i> TrakBridge Identity
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <p class="small text-muted">
+                                Configure how TrakBridge appears to this TAK server. Leave callsign empty to disable identity announcement.
+                            </p>
+
+                            <div class="mb-3">
+                                <label for="identity_callsign" class="form-label">Callsign</label>
+                                <input type="text" class="form-control" id="identity_callsign" name="identity_callsign"
+                                       placeholder="e.g., TrakBridge-HQ">
+                                <div class="form-text">
+                                    <i class="fas fa-info-circle"></i> How TrakBridge identifies itself to this TAK server
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="identity_role" class="form-label">Role</label>
+                                    <select class="form-select" id="identity_role" name="identity_role">
+                                        <option value="">None (Status Only)</option>
+                                        <option value="Team Member">Team Member</option>
+                                        <option value="Team Lead">Team Lead</option>
+                                        <option value="HQ">HQ</option>
+                                        <option value="Sniper">Sniper</option>
+                                        <option value="Medic">Medic</option>
+                                        <option value="Forward Observer">Forward Observer</option>
+                                        <option value="RTO">RTO</option>
+                                        <option value="K9">K9</option>
+                                    </select>
+                                    <div class="form-text">
+                                        <i class="fas fa-info-circle"></i> Team role (requires location to appear on map)
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="identity_team_color" class="form-label">Team Color</label>
+                                    <select class="form-select" id="identity_team_color" name="identity_team_color">
+                                        <option value="">Default (Cyan)</option>
+                                        <option value="Teal">Teal</option>
+                                        <option value="Green">Green</option>
+                                        <option value="Dark Green">Dark Green</option>
+                                        <option value="Brown">Brown</option>
+                                        <option value="White">White</option>
+                                        <option value="Yellow">Yellow</option>
+                                        <option value="Orange">Orange</option>
+                                        <option value="Magenta">Magenta</option>
+                                        <option value="Red">Red</option>
+                                        <option value="Maroon">Maroon</option>
+                                        <option value="Purple">Purple</option>
+                                        <option value="Dark Blue">Dark Blue</option>
+                                        <option value="Blue">Blue</option>
+                                        <option value="Cyan" selected>Cyan</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="mb-0">
+                                <label for="identity_location_mgrs" class="form-label">Location (MGRS)
+                                    <span class="badge bg-secondary">Optional</span>
+                                </label>
+                                <input type="text" class="form-control" id="identity_location_mgrs" name="identity_location_mgrs"
+                                       placeholder="e.g., 38SMB4484">
+                                <div class="form-text">
+                                    <i class="fas fa-map-marker-alt"></i> MGRS location. If empty, TrakBridge sends status only (no map marker)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Action Buttons -->
                     <div class="d-flex justify-content-between">
                         <button type="button" class="btn btn-outline-secondary" onclick="testServerConfig()">

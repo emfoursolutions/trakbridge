@@ -117,6 +117,70 @@ class TestTakServerModel:
             assert server.host == "localhost"
             assert server.port == 8089
 
+    def test_tak_server_identity_fields(self, app, db_session):
+        """Test TrakBridge identity fields on TakServer model"""
+        with app.app_context():
+            unique_name = f"Test Server {uuid.uuid4().hex[:8]}"
+            server = TakServer(
+                name=unique_name,
+                host="127.0.0.1",
+                port=8089,
+                protocol="tls",
+                identity_callsign="TrakBridge-Test",
+                identity_role="HQ",
+                identity_team_color="Blue",
+                identity_location_mgrs="38SMB4484",
+                identity_uid_suffix="123456",
+            )
+            db_session.add(server)
+            db_session.commit()
+
+            # Verify fields are persisted
+            retrieved = db_session.get(TakServer, server.id)
+            assert retrieved.identity_callsign == "TrakBridge-Test"
+            assert retrieved.identity_role == "HQ"
+            assert retrieved.identity_team_color == "Blue"
+            assert retrieved.identity_location_mgrs == "38SMB4484"
+            assert retrieved.identity_uid_suffix == "123456"
+
+    def test_tak_server_to_dict_includes_identity(self, app, db_session):
+        """Test that to_dict() includes identity fields"""
+        with app.app_context():
+            unique_name = f"Test Server {uuid.uuid4().hex[:8]}"
+            server = TakServer(
+                name=unique_name,
+                host="127.0.0.1",
+                port=8089,
+                protocol="tls",
+                identity_callsign="TrakBridge-Test",
+            )
+            db_session.add(server)
+            db_session.commit()
+
+            server_dict = server.to_dict()
+            assert "identity_callsign" in server_dict
+            assert server_dict["identity_callsign"] == "TrakBridge-Test"
+            assert "identity_role" in server_dict
+            assert "identity_team_color" in server_dict
+            assert "identity_location_mgrs" in server_dict
+
+    def test_tak_server_identity_fields_nullable(self, app, db_session):
+        """Test that identity fields are nullable"""
+        with app.app_context():
+            unique_name = f"Test Server {uuid.uuid4().hex[:8]}"
+            server = TakServer(
+                name=unique_name, host="127.0.0.1", port=8089, protocol="tls"
+            )
+            db_session.add(server)
+            db_session.commit()
+
+            # Verify all identity fields are None by default
+            assert server.identity_callsign is None
+            assert server.identity_role is None
+            assert server.identity_team_color is None
+            assert server.identity_location_mgrs is None
+            assert server.identity_uid_suffix is None
+
 
 class TestCallsignMappingModel:
     """Test the CallsignMapping model - integrated with existing model tests"""
