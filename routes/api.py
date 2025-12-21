@@ -1821,6 +1821,123 @@ def get_uptime_seconds():
         return 0
 
 
+@bp.route("/convert-latlon-to-mgrs", methods=["POST"])
+@optional_auth
+def convert_latlon_to_mgrs():
+    """
+    Convert latitude/longitude coordinates to MGRS format.
+
+    Request body:
+        {
+            "lat": float,  # Latitude in decimal degrees
+            "lon": float   # Longitude in decimal degrees
+        }
+
+    Returns:
+        {
+            "success": bool,
+            "mgrs": str  # MGRS coordinate string
+        }
+    """
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
+
+        lat = data.get("lat")
+        lon = data.get("lon")
+
+        if lat is None or lon is None:
+            return jsonify({"success": False, "error": "Missing lat or lon parameter"}), 400
+
+        # Convert to float
+        lat = float(lat)
+        lon = float(lon)
+
+        # Validate ranges
+        if not (-90 <= lat <= 90):
+            return jsonify({"success": False, "error": "Latitude must be between -90 and 90"}), 400
+
+        if not (-180 <= lon <= 180):
+            return jsonify({"success": False, "error": "Longitude must be between -180 and 180"}), 400
+
+        # Convert to MGRS
+        import mgrs
+        m = mgrs.MGRS()
+        mgrs_str = m.toMGRS(lat, lon)
+
+        logger.debug(f"Converted lat/lon ({lat}, {lon}) to MGRS: {mgrs_str}")
+
+        return jsonify({
+            "success": True,
+            "mgrs": mgrs_str
+        })
+
+    except ValueError as e:
+        logger.warning(f"Invalid coordinate values: {e}")
+        return jsonify({"success": False, "error": f"Invalid coordinate values: {str(e)}"}), 400
+    except Exception as e:
+        logger.error(f"MGRS conversion error: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/convert-mgrs-to-latlon", methods=["POST"])
+@optional_auth
+def convert_mgrs_to_latlon():
+    """
+    Convert MGRS coordinate to latitude/longitude.
+
+    Request body:
+        {
+            "mgrs": str  # MGRS coordinate string (e.g., "38SMB4484")
+        }
+
+    Returns:
+        {
+            "success": bool,
+            "lat": float,  # Latitude in decimal degrees
+            "lon": float   # Longitude in decimal degrees
+        }
+    """
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
+
+        mgrs_str = data.get("mgrs")
+
+        if not mgrs_str:
+            return jsonify({"success": False, "error": "Missing mgrs parameter"}), 400
+
+        # Convert to string and strip whitespace
+        mgrs_str = str(mgrs_str).strip()
+
+        if not mgrs_str:
+            return jsonify({"success": False, "error": "MGRS string cannot be empty"}), 400
+
+        # Convert to lat/lon
+        import mgrs
+        m = mgrs.MGRS()
+        lat, lon = m.toLatLon(mgrs_str)
+
+        logger.debug(f"Converted MGRS '{mgrs_str}' to lat/lon: ({lat}, {lon})")
+
+        return jsonify({
+            "success": True,
+            "lat": lat,
+            "lon": lon
+        })
+
+    except ValueError as e:
+        logger.warning(f"Invalid MGRS format: {e}")
+        return jsonify({"success": False, "error": f"Invalid MGRS format: {str(e)}"}), 400
+    except Exception as e:
+        logger.error(f"MGRS conversion error: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 # Clear health check cache periodically
 def clear_expired_cache():
     """Clear expired cache entries"""

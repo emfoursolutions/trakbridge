@@ -39,6 +39,9 @@ class TakServer(db.Model, TimestampMixin):
     )  # Enable receiving CoT from TAK server
 
     # TrakBridge Identity Configuration
+    identity_enabled = db.Column(
+        db.Boolean, default=False, nullable=False
+    )  # Enable TrakBridge identity announcement
     identity_callsign = db.Column(db.String(100), nullable=True)
     identity_role = db.Column(db.String(50), nullable=True)
     identity_team_color = db.Column(db.String(50), nullable=True)
@@ -115,6 +118,7 @@ class TakServer(db.Model, TimestampMixin):
             "enable_rx": self.enable_rx,
             "has_certificate": bool(self.cert_p12),
             "cert_filename": self.cert_p12_filename,
+            "identity_enabled": self.identity_enabled,
             "identity_callsign": self.identity_callsign,
             "identity_role": self.identity_role,
             "identity_team_color": self.identity_team_color,

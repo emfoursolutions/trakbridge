@@ -22,6 +22,12 @@ def upgrade():
 
     safe_add_column(
         "tak_servers",
+        "identity_enabled",
+        sa.Column("identity_enabled", sa.Boolean, nullable=False, server_default="0"),
+    )
+
+    safe_add_column(
+        "tak_servers",
         "identity_callsign",
         sa.Column("identity_callsign", sa.String(100), nullable=True),
     )
@@ -61,5 +67,6 @@ def downgrade():
     safe_drop_column("tak_servers", "identity_team_color")
     safe_drop_column("tak_servers", "identity_role")
     safe_drop_column("tak_servers", "identity_callsign")
+    safe_drop_column("tak_servers", "identity_enabled")
 
     print("Removed TrakBridge identity fields from tak_servers")

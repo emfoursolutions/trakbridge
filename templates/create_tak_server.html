@@ -178,17 +178,28 @@
                     <!-- TrakBridge Identity Configuration -->
                     <div class="card mb-3">
                         <div class="card-header">
-                            <h6 class="mb-0">
-                                <i class="fas fa-id-badge"></i> TrakBridge Identity
-                            </h6>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-id-badge"></i> TrakBridge Identity
+                                </h6>
+                                <div class="form-check form-switch mb-0">
+                                    <input type="hidden" name="identity_enabled" value="false">
+                                    <input class="form-check-input" type="checkbox" id="identity_enabled" name="identity_enabled" value="true">
+                                    <label class="form-check-label" for="identity_enabled">
+                                        <span class="badge" id="identity_status_badge">
+                                            <span class="bg-secondary">Disabled</span>
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
-                        <div class="card-body">
+                        <div class="card-body" id="identity_config_body" style="display: none;">
                             <p class="small text-muted">
-                                Configure how TrakBridge appears to this TAK server. Leave callsign empty to disable identity announcement.
+                                Configure how TrakBridge identifies itself to this TAK server.
                             </p>
 
                             <div class="mb-3">
-                                <label for="identity_callsign" class="form-label">Callsign</label>
+                                <label for="identity_callsign" class="form-label">Callsign <span class="text-danger">*</span></label>
                                 <input type="text" class="form-control" id="identity_callsign" name="identity_callsign"
                                        placeholder="e.g., TrakBridge-HQ">
                                 <div class="form-text">
@@ -198,7 +209,7 @@
 
                             <div class="row mb-3">
                                 <div class="col-md-6">
-                                    <label for="identity_role" class="form-label">Role</label>
+                                    <label for="identity_role" class="form-label">Role <span class="text-danger">*</span></label>
                                     <select class="form-select" id="identity_role" name="identity_role">
                                         <option value="">None (Status Only)</option>
                                         <option value="Team Member">Team Member</option>
@@ -211,13 +222,13 @@
                                         <option value="K9">K9</option>
                                     </select>
                                     <div class="form-text">
-                                        <i class="fas fa-info-circle"></i> Team role (requires location to appear on map)
+                                        <i class="fas fa-info-circle"></i> Team role displayed on the TAK server
                                     </div>
                                 </div>
                                 <div class="col-md-6">
-                                    <label for="identity_team_color" class="form-label">Team Color</label>
+                                    <label for="identity_team_color" class="form-label">Team Color <span class="text-danger">*</span></label>
                                     <select class="form-select" id="identity_team_color" name="identity_team_color">
-                                        <option value="">Default (Cyan)</option>
+                                        <option value="Cyan" selected>Cyan</option>
                                         <option value="Teal">Teal</option>
                                         <option value="Green">Green</option>
                                         <option value="Dark Green">Dark Green</option>
@@ -231,19 +242,26 @@
                                         <option value="Purple">Purple</option>
                                         <option value="Dark Blue">Dark Blue</option>
                                         <option value="Blue">Blue</option>
-                                        <option value="Cyan" selected>Cyan</option>
                                     </select>
                                 </div>
                             </div>
 
                             <div class="mb-0">
-                                <label for="identity_location_mgrs" class="form-label">Location (MGRS)
-                                    <span class="badge bg-secondary">Optional</span>
-                                </label>
+                                <label for="identity_location_mgrs" class="form-label">Location (MGRS) <span class="text-danger">*</span></label>
                                 <input type="text" class="form-control" id="identity_location_mgrs" name="identity_location_mgrs"
                                        placeholder="e.g., 38SMB4484">
                                 <div class="form-text">
-                                    <i class="fas fa-map-marker-alt"></i> MGRS location. If empty, TrakBridge sends status only (no map marker)
+                                    <i class="fas fa-map-marker-alt"></i> MGRS location where TrakBridge will appear on the TAK map
+                                </div>
+
+                                <!-- Interactive MGRS Map -->
+                                <div class="mt-3" id="mgrs-map-container">
+                                    <div class="mb-2">
+                                        <small class="text-muted">
+                                            <i class="fas fa-mouse-pointer"></i> Click on the map to select a location
+                                        </small>
+                                    </div>
+                                    <div id="mgrs-location-map" style="height: 350px; border: 1px solid #dee2e6; border-radius: 0.375rem;"></div>
                                 </div>
                             </div>
                         </div>
@@ -347,6 +365,10 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- Leaflet.js for MGRS map -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <script>
 // Improved test server function with better visual feedback
 function testServerConfig() {
@@ -492,6 +514,38 @@ document.addEventListener('DOMContentLoaded', function() {
 
     protocolSelect.addEventListener('change', toggleTlsConfig);
     toggleTlsConfig(); // Initial setup
+
+    // Show/hide Identity configuration based on toggle
+    const identityEnabledCheckbox = document.getElementById('identity_enabled');
+    const identityConfigBody = document.getElementById('identity_config_body');
+    const identityStatusBadge = document.getElementById('identity_status_badge');
+    const identityCallsign = document.getElementById('identity_callsign');
+    const identityRole = document.getElementById('identity_role');
+    const identityTeamColor = document.getElementById('identity_team_color');
+    const identityLocationMgrs = document.getElementById('identity_location_mgrs');
+
+    function toggleIdentityConfig() {
+        const isEnabled = identityEnabledCheckbox.checked;
+        identityConfigBody.style.display = isEnabled ? 'block' : 'none';
+
+        // Update badge
+        identityStatusBadge.innerHTML = isEnabled
+            ? '<span class="bg-success">Enabled</span>'
+            : '<span class="bg-secondary">Disabled</span>';
+
+        // Toggle required attributes on identity fields
+        identityCallsign.required = isEnabled;
+        identityLocationMgrs.required = isEnabled;
+
+        // Reinitialize map when shown (fixes map rendering issues)
+        if (isEnabled && mgrsLocationMap) {
+            setTimeout(() => {
+                mgrsLocationMap.invalidateSize();
+            }, 100);
+        }
+    }
+
+    identityEnabledCheckbox.addEventListener('change', toggleIdentityConfig);
 
     // Handle certificate file upload
     certFileInput.addEventListener('change', function(e) {
@@ -722,6 +776,119 @@ document.addEventListener('DOMContentLoaded', function() {
                     portInput.value = '4242';
                     break;
             }
+        }
+    });
+
+    // ========== MGRS Location Map ==========
+    let mgrsLocationMap = null;
+    let mgrsMarker = null;
+
+    function initMgrsMap() {
+        // Default center (can be customized)
+        const defaultCenter = [40.7, -74.0]; // NYC
+        const defaultZoom = 4;
+
+        // Create map
+        mgrsLocationMap = L.map('mgrs-location-map', {
+            maxBounds: [[-90, -180], [90, 180]],
+            maxBoundsViscosity: 1.0
+        }).setView(defaultCenter, defaultZoom);
+
+        // Add OpenStreetMap tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            noWrap: true
+        }).addTo(mgrsLocationMap);
+
+        // Add click handler to place marker
+        mgrsLocationMap.on('click', function(e) {
+            placeMarkerAndUpdateMgrs(e.latlng.lat, e.latlng.lng);
+        });
+    }
+
+    async function placeMarkerAndUpdateMgrs(lat, lon) {
+        // Remove existing marker if any
+        if (mgrsMarker) {
+            mgrsLocationMap.removeLayer(mgrsMarker);
+        }
+
+        // Add new marker
+        mgrsMarker = L.marker([lat, lon], {
+            icon: L.icon({
+                iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+                shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            })
+        }).addTo(mgrsLocationMap);
+
+        // Convert to MGRS using backend API
+        try {
+            const mgrsCoord = await convertLatLonToMGRS(lat, lon);
+            document.getElementById('identity_location_mgrs').value = mgrsCoord;
+        } catch (error) {
+            console.error('Failed to convert to MGRS:', error);
+            alert('Failed to convert coordinates to MGRS format: ' + error.message);
+        }
+    }
+
+    function convertLatLonToMGRS(lat, lon) {
+        return fetch('/api/convert-latlon-to-mgrs', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ lat: lat, lon: lon })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                return data.mgrs;
+            } else {
+                throw new Error(data.error || 'Conversion failed');
+            }
+        });
+    }
+
+    function loadExistingMgrsLocation(mgrsString) {
+        // Convert MGRS to lat/lon and place marker
+        if (!mgrsString || mgrsString.trim() === '') {
+            return;
+        }
+
+        // Make API call to convert MGRS to lat/lon
+        fetch('/api/convert-mgrs-to-latlon', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ mgrs: mgrsString })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                placeMarkerAndUpdateMgrs(data.lat, data.lon);
+                mgrsLocationMap.setView([data.lat, data.lon], 10);
+            } else {
+                console.warn('Failed to load MGRS location:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Failed to load existing MGRS location:', error);
+        });
+    }
+
+    // Initialize map on page load
+    initMgrsMap();
+
+    // Listen to manual text input changes to update map
+    document.getElementById('identity_location_mgrs').addEventListener('blur', function() {
+        const mgrsValue = this.value.trim();
+        if (mgrsValue) {
+            loadExistingMgrsLocation(mgrsValue);
         }
     });
 });
