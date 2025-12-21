@@ -190,22 +190,45 @@ def create_tak_server():
                     )
 
         # Handle verify_ssl for both form data (string) and JSON data (boolean)
-        verify_ssl_value = data.get("verify_ssl", True)
-        if isinstance(verify_ssl_value, str):
-            verify_ssl = verify_ssl_value.lower() in ["true", "on", "1"]
-        elif isinstance(verify_ssl_value, bool):
-            verify_ssl = verify_ssl_value
+        # For form data with hidden+checkbox pattern, use getlist to check if "true" is present
+        if hasattr(data, 'getlist'):
+            verify_ssl_values = data.getlist("verify_ssl")
+            verify_ssl = "true" in [v.lower() for v in verify_ssl_values] if verify_ssl_values else True
         else:
-            verify_ssl = True  # Default to True
+            verify_ssl_value = data.get("verify_ssl", True)
+            if isinstance(verify_ssl_value, str):
+                verify_ssl = verify_ssl_value.lower() in ["true", "on", "1"]
+            elif isinstance(verify_ssl_value, bool):
+                verify_ssl = verify_ssl_value
+            else:
+                verify_ssl = True  # Default to True
 
         # Handle enable_rx for both form data (string) and JSON data (boolean)
-        enable_rx_value = data.get("enable_rx", True)
-        if isinstance(enable_rx_value, str):
-            enable_rx = enable_rx_value.lower() in ["true", "on", "1"]
-        elif isinstance(enable_rx_value, bool):
-            enable_rx = enable_rx_value
+        # For form data with hidden+checkbox pattern, use getlist to check if "true" is present
+        if hasattr(data, 'getlist'):
+            enable_rx_values = data.getlist("enable_rx")
+            enable_rx = "true" in [v.lower() for v in enable_rx_values] if enable_rx_values else True
         else:
-            enable_rx = True  # Default to True for backward compatibility
+            enable_rx_value = data.get("enable_rx", True)
+            if isinstance(enable_rx_value, str):
+                enable_rx = enable_rx_value.lower() in ["true", "on", "1"]
+            elif isinstance(enable_rx_value, bool):
+                enable_rx = enable_rx_value
+            else:
+                enable_rx = True  # Default to True for backward compatibility
+
+        # Handle identity_enabled for both form data (string) and JSON data (boolean)
+        if hasattr(data, 'getlist'):
+            identity_enabled_values = data.getlist("identity_enabled")
+            identity_enabled = "true" in [v.lower() for v in identity_enabled_values] if identity_enabled_values else False
+        else:
+            identity_enabled_value = data.get("identity_enabled", False)
+            if isinstance(identity_enabled_value, str):
+                identity_enabled = identity_enabled_value.lower() in ["true", "on", "1"]
+            elif isinstance(identity_enabled_value, bool):
+                identity_enabled = identity_enabled_value
+            else:
+                identity_enabled = False
 
         # Validate server data using service
         validation_result = TakServerService.validate_server_data(data)
@@ -244,6 +267,11 @@ def create_tak_server():
             verify_ssl=verify_ssl,
             tls_version=data.get("tls_version", "1.3"),
             enable_rx=enable_rx,
+            identity_enabled=identity_enabled,
+            identity_callsign=data.get("identity_callsign"),
+            identity_role=data.get("identity_role"),
+            identity_team_color=data.get("identity_team_color"),
+            identity_location_mgrs=data.get("identity_location_mgrs"),
         )
 
         # Set the certificate password using the encrypted method
@@ -348,22 +376,45 @@ def edit_tak_server(server_id):
                 cert_filename = None
 
         # Handle verify_ssl for both form data (string) and JSON data (boolean)
-        verify_ssl_value = data.get("verify_ssl", True)
-        if isinstance(verify_ssl_value, str):
-            verify_ssl = verify_ssl_value.lower() in ["true", "on", "1"]
-        elif isinstance(verify_ssl_value, bool):
-            verify_ssl = verify_ssl_value
+        # For form data with hidden+checkbox pattern, use getlist to check if "true" is present
+        if hasattr(data, 'getlist'):
+            verify_ssl_values = data.getlist("verify_ssl")
+            verify_ssl = "true" in [v.lower() for v in verify_ssl_values] if verify_ssl_values else True
         else:
-            verify_ssl = True  # Default to True
+            verify_ssl_value = data.get("verify_ssl", True)
+            if isinstance(verify_ssl_value, str):
+                verify_ssl = verify_ssl_value.lower() in ["true", "on", "1"]
+            elif isinstance(verify_ssl_value, bool):
+                verify_ssl = verify_ssl_value
+            else:
+                verify_ssl = True  # Default to True
 
         # Handle enable_rx for both form data (string) and JSON data (boolean)
-        enable_rx_value = data.get("enable_rx", True)
-        if isinstance(enable_rx_value, str):
-            enable_rx = enable_rx_value.lower() in ["true", "on", "1"]
-        elif isinstance(enable_rx_value, bool):
-            enable_rx = enable_rx_value
+        # For form data with hidden+checkbox pattern, use getlist to check if "true" is present
+        if hasattr(data, 'getlist'):
+            enable_rx_values = data.getlist("enable_rx")
+            enable_rx = "true" in [v.lower() for v in enable_rx_values] if enable_rx_values else True
         else:
-            enable_rx = True  # Default to True for backward compatibility
+            enable_rx_value = data.get("enable_rx", True)
+            if isinstance(enable_rx_value, str):
+                enable_rx = enable_rx_value.lower() in ["true", "on", "1"]
+            elif isinstance(enable_rx_value, bool):
+                enable_rx = enable_rx_value
+            else:
+                enable_rx = True  # Default to True for backward compatibility
+
+        # Handle identity_enabled for both form data (string) and JSON data (boolean)
+        if hasattr(data, 'getlist'):
+            identity_enabled_values = data.getlist("identity_enabled")
+            identity_enabled = "true" in [v.lower() for v in identity_enabled_values] if identity_enabled_values else False
+        else:
+            identity_enabled_value = data.get("identity_enabled", False)
+            if isinstance(identity_enabled_value, str):
+                identity_enabled = identity_enabled_value.lower() in ["true", "on", "1"]
+            elif isinstance(identity_enabled_value, bool):
+                identity_enabled = identity_enabled_value
+            else:
+                identity_enabled = False
 
         # Validate server data using service
         validation_result = TakServerService.validate_server_data(data)
@@ -392,19 +443,49 @@ def edit_tak_server(server_id):
         server.verify_ssl = verify_ssl
         server.tls_version = data.get("tls_version", "1.3")
         server.enable_rx = enable_rx
+        server.identity_enabled = identity_enabled
+        server.identity_callsign = data.get("identity_callsign")
+        server.identity_role = data.get("identity_role")
+        server.identity_team_color = data.get("identity_team_color")
+        server.identity_location_mgrs = data.get("identity_location_mgrs")
 
-        # Set the certificate password using the encrypted method
-        server.set_cert_password(data.get("cert_password", ""))
+        # Set the certificate password only if provided (to avoid overwriting existing password)
+        cert_password = data.get("cert_password")
+        if cert_password:  # Only update if a password was actually provided
+            server.set_cert_password(cert_password)
+        elif cert_p12_data != server.cert_p12:  # New cert uploaded without password
+            # If uploading a new certificate without a password, clear the password
+            server.set_cert_password("")
 
         db.session.flush()  # Check for constraint violations
         db.session.commit()
 
         logger.info(f"Successfully updated TAK server ID: {server_id}")
 
+        # Restart the TAK worker to apply configuration changes
+        try:
+            from services.cot_service import get_cot_service
+            import asyncio
+
+            cot_service = get_cot_service()
+
+            # Run restart in the event loop
+            if cot_service.loop and cot_service.loop.is_running():
+                asyncio.run_coroutine_threadsafe(
+                    cot_service.restart_worker(server_id),
+                    cot_service.loop
+                )
+                logger.info(f"Initiated worker restart for TAK server {server_id}")
+            else:
+                logger.warning(f"Event loop not running, worker restart skipped for TAK server {server_id}")
+        except Exception as e:
+            logger.error(f"Failed to restart worker for TAK server {server_id}: {e}")
+            # Don't fail the request if worker restart fails
+
         if request.is_json:
             return jsonify({"success": True})
         else:
-            flash("TAK Server updated successfully", "success")
+            flash("TAK Server updated successfully. Configuration changes will be applied momentarily.", "success")
             return redirect(url_for("tak_servers.view_tak_server", server_id=server_id))
 
     except ValueError as e:

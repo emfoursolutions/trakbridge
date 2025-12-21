@@ -1167,6 +1167,7 @@ class QueuedCOTService:
     async def _tx_loop(self, tak_server_id: int, writer, tak_server):
         """
         TX loop - send CoT events from queue to TAK server.
+        Plus periodic TrakBridge identity heartbeat.
 
         Args:
             tak_server_id: TAK server identifier
@@ -1174,8 +1175,40 @@ class QueuedCOTService:
             tak_server: TAK server configuration object
         """
         batch_count = 0
+        last_identity_send = datetime.now()
+        IDENTITY_INTERVAL_SECONDS = 30  # Send identity every 30 seconds
+
         while self._running:
             try:
+                # Check if we need to send identity heartbeat
+                if (
+                    datetime.now() - last_identity_send
+                ).total_seconds() >= IDENTITY_INTERVAL_SECONDS:
+                    try:
+                        identity_cot = self._generate_trakbridge_identity_cot(tak_server)
+                        if identity_cot:
+                            try:
+                                logger.debug(
+                                    f"Sending identity heartbeat to {tak_server.name} ({len(identity_cot)} bytes)"
+                                )
+                                writer.write(identity_cot)
+                                await writer.drain()
+
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to send identity heartbeat to {tak_server.name}: {e}"
+                                )
+                        else:
+                            logger.debug(
+                                f"Identity heartbeat disabled for {tak_server.name} (no callsign configured)"
+                            )
+                    except Exception as e:
+                        logger.error(
+                            f"Error generating identity heartbeat for {tak_server.name}: {e}",
+                            exc_info=True
+                        )
+                    last_identity_send = datetime.now()
+
                 # Get batch of events from queue manager
                 batch = await self.queue_manager.get_batch(tak_server_id)
 
@@ -1598,10 +1631,17 @@ class QueuedCOTService:
         try:
             # Simple connectivity test - try to create a connection
             from models.tak_server import TakServer
+            from models.dto import TakServerDTO
+            import app as flask_app
 
-            tak_server = TakServer.query.get(tak_server_id)
-            if not tak_server:
-                return False
+            # Access database within app context and convert to DTO
+            with flask_app.app.app_context():
+                tak_server_orm = TakServer.query.get(tak_server_id)
+                if not tak_server_orm:
+                    return False
+
+                # Convert to DTO for use outside app context
+                tak_server = TakServerDTO.from_orm(tak_server_orm)
 
             # Try to create a test connection with short timeout
             test_config = await self._create_pytak_config(tak_server)
@@ -2188,6 +2228,88 @@ class QueuedCOTService:
             f"Comprehensive cleanup completed - final worker mappings: {[(k, id(v)) for k, v in self.workers.items()]}"
         )
 
+    async def restart_worker(self, tak_server_id: int) -> bool:
+        """
+        Restart worker for a TAK server with updated configuration.
+
+        This is useful when TAK server configuration changes and needs to be
+        applied without restarting the entire application.
+
+        Args:
+            tak_server_id: TAK server identifier
+
+        Returns:
+            True if restart successful, False otherwise
+        """
+        from models.tak_server import TakServer
+        from models.dto import TakServerDTO
+        import app as flask_app
+
+        logger.info(f"Restarting worker for TAK server {tak_server_id}")
+
+        try:
+            # Stop existing worker
+            await self.stop_all_workers_for_server(tak_server_id)
+
+            # Small delay to ensure cleanup completes
+            await asyncio.sleep(0.5)
+
+            # Get updated server configuration from database
+            with flask_app.app.app_context():
+                from database import db
+
+                # Force fresh query from database by expiring all cached objects
+                db.session.expire_all()
+
+                tak_server_orm = TakServer.query.get(tak_server_id)
+                if not tak_server_orm:
+                    logger.error(f"TAK server {tak_server_id} not found for restart")
+                    return False
+
+                # Refresh from database to ensure we have latest values
+                db.session.refresh(tak_server_orm)
+
+                # Check if server is enabled
+                if not getattr(tak_server_orm, 'enabled', True):
+                    logger.info(f"TAK server {tak_server_id} is disabled, not restarting worker")
+                    return False
+
+                # Log the values we're loading for debugging
+                logger.debug(
+                    f"Loaded TAK server config for restart: "
+                    f"name={tak_server_orm.name}, "
+                    f"enable_rx={tak_server_orm.enable_rx}, "
+                    f"identity_enabled={tak_server_orm.identity_enabled}, "
+                    f"callsign={tak_server_orm.identity_callsign}, "
+                    f"role={tak_server_orm.identity_role}, "
+                    f"color={tak_server_orm.identity_team_color}, "
+                    f"location={tak_server_orm.identity_location_mgrs}"
+                )
+
+                # Convert to DTO for use outside app context
+                tak_server = TakServerDTO.from_orm(tak_server_orm)
+
+                # Log DTO values for comparison
+                logger.debug(
+                    f"Created DTO for restart: "
+                    f"color={tak_server.identity_team_color}, "
+                    f"role={tak_server.identity_role}"
+                )
+
+            # Start worker with new configuration
+            success = await self.start_worker(tak_server)
+
+            if success:
+                logger.info(f"Successfully restarted worker for TAK server {tak_server_id}")
+            else:
+                logger.warning(f"Failed to restart worker for TAK server {tak_server_id}")
+
+            return success
+
+        except Exception as e:
+            logger.error(f"Error restarting worker for TAK server {tak_server_id}: {e}", exc_info=True)
+            return False
+
     def extract_uid_from_cot_event(self, event: bytes) -> Optional[str]:
         """
         Extract UID from COT event XML.
@@ -2606,10 +2728,12 @@ class QueuedCOTService:
             # Add detail element
             detail = etree.SubElement(cot_event, "detail")
 
-            # Add platform info (takv element)
+            # Add platform info (takv element) - use dynamic version
+            from services.version import get_version
+
             takv = etree.SubElement(detail, "takv")
             takv.set("os", "34")
-            takv.set("version", "TrakBridge")
+            takv.set("version", get_version())  # Dynamic version from version service
             takv.set("device", "TrakBridge")
             takv.set("platform", "TrakBridge")
 
@@ -2775,6 +2899,159 @@ class QueuedCOTService:
         except Exception as e:
             logger.error(f"Error applying custom CoT attributes: {e}")
             # Don't raise - custom attributes are optional, shouldn't break CoT generation
+
+    @staticmethod
+    def _generate_trakbridge_identity_cot(tak_server) -> Optional[bytes]:
+        """
+        Generate TrakBridge self-identity CoT message.
+
+        Creates a CoT message representing TrakBridge itself to the TAK server,
+        allowing it to appear in the roster and optionally on the map.
+
+        Args:
+            tak_server: TakServer model instance with identity configuration
+
+        Returns:
+            bytes: XML CoT message, or None if identity is disabled
+
+        Identity Types:
+            - With location: Team member (a-f-G-U-C) - appears on map
+            - Without location: Status-only (b-t-c-v) - roster presence only
+        """
+        from services.version import get_version
+        import random
+
+        # Check if identity is explicitly enabled
+        if not getattr(tak_server, 'identity_enabled', False):
+            return None
+
+        # Callsign is required when identity is enabled
+        if not tak_server.identity_callsign:
+            logger.warning(
+                f"Identity enabled for TAK server {tak_server.name} but no callsign set. "
+                f"Skipping identity announcement."
+            )
+            return None
+
+        # Use UID suffix if exists, otherwise generate and persist a random one
+        # Persisting ensures the UID remains consistent across restarts and reconnections
+        if tak_server.identity_uid_suffix:
+            uid_suffix = tak_server.identity_uid_suffix
+        else:
+            # Generate random 6-digit suffix and persist it to the server object
+            uid_suffix = str(random.randint(0, 999999)).zfill(6)
+            tak_server.identity_uid_suffix = uid_suffix
+            # Persist to database if we have an active session
+            try:
+                from extensions import db
+                if db.session.object_session(tak_server):
+                    db.session.commit()
+                    logger.debug(f"Persisted UID suffix {uid_suffix} for TAK server {tak_server.name}")
+            except Exception as e:
+                # If we can't persist (e.g., in async worker without app context),
+                # the suffix is still set on the object for this session
+                logger.debug(f"Could not persist UID suffix to database: {e}")
+
+        # Build unique UID
+        uid = f"trakbridge-{tak_server.name}-{uid_suffix}"
+
+        # Generate timestamps
+        now = datetime.now(timezone.utc)
+        stale = now + timedelta(seconds=60)  # 60 second stale (sent every 30s)
+
+        time_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        start_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        stale_str = stale.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Determine CoT type based on location availability
+        has_location = bool(tak_server.identity_location_mgrs)
+        cot_type = "a-f-G-U-C" if has_location else "b-t-c-v"
+
+        # Create event element
+        cot_event = etree.Element("event")
+        cot_event.set("version", "2.0")
+        cot_event.set("uid", uid)
+        cot_event.set("type", cot_type)
+        cot_event.set("time", time_str)
+        cot_event.set("start", start_str)
+        cot_event.set("stale", stale_str)
+        cot_event.set("how", "m-g")  # Machine-generated
+
+        # Add point element if location is configured
+        if has_location:
+            try:
+                import mgrs
+
+                m = mgrs.MGRS()
+                lat, lon = m.toLatLon(tak_server.identity_location_mgrs)
+
+                point_attr = {
+                    "lat": f"{lat:.7f}",
+                    "lon": f"{lon:.7f}",
+                    "hae": "0.0",
+                    "ce": "10.0",
+                    "le": "10.0",
+                }
+                etree.SubElement(cot_event, "point", attrib=point_attr)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to convert MGRS location '{tak_server.identity_location_mgrs}': {e}. "
+                    f"Sending status-only identity."
+                )
+                # Fall back to status-only type if location conversion fails
+                cot_event.set("type", "b-t-c-v")
+                has_location = False
+
+        # Add detail element
+        detail = etree.SubElement(cot_event, "detail")
+
+        # Add platform info (takv element) with dynamic version
+        takv = etree.SubElement(detail, "takv")
+        takv.set("os", "34")
+        takv.set("version", get_version())
+        takv.set("device", "TrakBridge")
+        takv.set("platform", "TrakBridge")
+
+        # Add contact element
+        contact = etree.SubElement(detail, "contact")
+        contact.set("callsign", tak_server.identity_callsign)
+        if has_location:
+            # Team member contact format
+            contact.set("endpoint", "*:-1:stcp")
+
+        # Add uid element (for team members)
+        uid_elem = etree.SubElement(detail, "uid")
+        uid_elem.set("Droid", tak_server.identity_callsign)
+
+        # Add team member elements if location is set
+        if has_location and (tak_server.identity_role or tak_server.identity_team_color):
+            group = etree.SubElement(detail, "__group")
+            team_color = tak_server.identity_team_color or "Cyan"
+            team_role = tak_server.identity_role or "Team Member"
+            logger.debug(f"Setting team info for {tak_server.name}: color={team_color}, role={team_role}")
+            group.set("name", team_color)
+            group.set("role", team_role)
+
+        # Add status element
+        status = etree.SubElement(detail, "status")
+        status.set("battery", "100")
+
+        # Add track element for team members
+        if has_location:
+            track = etree.SubElement(detail, "track")
+            track.set("course", "0.0")
+            track.set("speed", "0.0")
+
+        # Convert to bytes
+        xml_bytes = etree.tostring(cot_event, encoding="utf-8", xml_declaration=True)
+
+        logger.info(
+            f"Generated TrakBridge identity CoT for {tak_server.name}: "
+            f"uid={uid}, type={cot_type}, location={'yes' if has_location else 'no'}"
+        )
+        logger.debug(f"Identity CoT XML for {tak_server.name}:\n{xml_bytes.decode('utf-8')}")
+
+        return xml_bytes
 
     @staticmethod
     def _is_valid_xml_name(name: str) -> bool:
