@@ -2933,15 +2933,24 @@ class QueuedCOTService:
             )
             return None
 
-        # Use UID suffix if exists, otherwise generate a consistent one based on server ID
-        # Note: UID suffix should be generated and persisted when TAK server is first created
-        # If not present, we generate a deterministic suffix based on server ID for consistency
+        # Use UID suffix if exists, otherwise generate and persist a random one
+        # Persisting ensures the UID remains consistent across restarts and reconnections
         if tak_server.identity_uid_suffix:
             uid_suffix = tak_server.identity_uid_suffix
         else:
-            # Generate deterministic suffix from server ID to ensure consistency across restarts
-            # This avoids needing app context for database updates in async workers
-            uid_suffix = str((tak_server.id * 123456) % 1000000).zfill(6)
+            # Generate random 6-digit suffix and persist it to the server object
+            uid_suffix = str(random.randint(0, 999999)).zfill(6)
+            tak_server.identity_uid_suffix = uid_suffix
+            # Persist to database if we have an active session
+            try:
+                from extensions import db
+                if db.session.object_session(tak_server):
+                    db.session.commit()
+                    logger.debug(f"Persisted UID suffix {uid_suffix} for TAK server {tak_server.name}")
+            except Exception as e:
+                # If we can't persist (e.g., in async worker without app context),
+                # the suffix is still set on the object for this session
+                logger.debug(f"Could not persist UID suffix to database: {e}")
 
         # Build unique UID
         uid = f"trakbridge-{tak_server.name}-{uid_suffix}"

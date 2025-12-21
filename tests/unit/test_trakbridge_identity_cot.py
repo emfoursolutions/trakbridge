@@ -30,6 +30,7 @@ class TestTrakBridgeIdentityCOT:
                 host="127.0.0.1",
                 port=8089,
                 protocol="tls",
+                identity_enabled=True,
                 identity_callsign="TrakBridge-Test",
                 identity_role="HQ",
                 identity_team_color="Blue",
@@ -78,6 +79,7 @@ class TestTrakBridgeIdentityCOT:
                 host="127.0.0.1",
                 port=8089,
                 protocol="tls",
+                identity_enabled=True,
                 identity_callsign="TrakBridge-Test",
                 identity_uid_suffix="123456",
             )
@@ -117,6 +119,7 @@ class TestTrakBridgeIdentityCOT:
                 host="127.0.0.1",
                 port=8089,
                 protocol="tls",
+                identity_enabled=True,
                 identity_callsign="TrakBridge-Test",
             )
             db_session.add(server)
@@ -143,6 +146,7 @@ class TestTrakBridgeIdentityCOT:
                 host="127.0.0.1",
                 port=8089,
                 protocol="tls",
+                identity_enabled=True,
                 identity_callsign="TrakBridge-Test",
                 identity_location_mgrs="38SMB4484",
                 identity_uid_suffix="123456",
@@ -182,6 +186,7 @@ class TestTrakBridgeIdentityCOT:
                 host="127.0.0.1",
                 port=8089,
                 protocol="tls",
+                identity_enabled=True,
                 identity_callsign="TrakBridge-Test",
                 identity_location_mgrs="INVALID_MGRS",
                 identity_uid_suffix="123456",
