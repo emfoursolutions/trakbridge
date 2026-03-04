@@ -47,6 +47,7 @@ class PluginManager:
         "plugins.spot_plugin",
         "plugins.traccar_plugin",
         "plugins.deepstate_plugin",
+        "plugins.liveuamap_plugin",
         "plugins",  # Allow the plugins package itself
         "external_plugins",  # Allow external plugins namespace
     }
