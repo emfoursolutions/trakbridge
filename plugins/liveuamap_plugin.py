@@ -3,7 +3,9 @@
 
 # Standard library imports
 import json
-from typing import Any, Dict, List
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 # Third-party imports
 import aiohttp
@@ -330,6 +332,97 @@ class LiveuamapPlugin(BaseGPSPlugin):
                     },
                 ),
             ],
+        }
+
+    @staticmethod
+    def _parse_colour_from_picpath(picpath) -> str:
+        """Extract colour name from a picpath URL.
+
+        Parses the filename from the URL, splits on '_', and takes
+        the last segment before '.png' as the colour name.
+        Falls back to 'darkblack' on any error.
+        """
+        fallback = "darkblack"
+        if not picpath or not isinstance(picpath, str):
+            return fallback
+        try:
+            parsed = urlparse(picpath)
+            path = parsed.path if parsed.scheme else picpath
+            filename = path.rsplit("/", 1)[-1]
+            if "." not in filename or "_" not in filename:
+                return fallback
+            name_part = filename.rsplit(".", 1)[0]
+            colour = name_part.rsplit("_", 1)[-1]
+            return colour if colour else fallback
+        except Exception:
+            return fallback
+
+    @classmethod
+    def _build_custom_cot_attrib(cls, venue) -> Dict[str, Any]:
+        """Build custom_cot_attrib dict with colour and icon for a venue."""
+        picpath = venue.get("picpath", "")
+        colour = cls._parse_colour_from_picpath(picpath)
+        argb = cls.COLOUR_TO_ARGB.get(
+            colour, cls.COLOUR_TO_ARGB["darkblack"]
+        )
+        iconsetpath = f"COT_MAPPING_SPOTMAP/b-m-p-s-m/{argb}"
+        return {
+            "detail": {
+                "color": {
+                    "_attributes": {"argb": str(argb)}
+                },
+                "usericon": {
+                    "_attributes": {"iconsetpath": iconsetpath}
+                },
+            }
+        }
+
+    @classmethod
+    def _convert_venue_to_location(
+        cls, venue: Dict, region_name: str, region_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """Convert a LiveUAMap venue dict to a standardized location dict.
+
+        Returns None if the venue is missing required fields (id, lat, lng).
+        """
+        venue_id = venue.get("id")
+        lat = venue.get("lat")
+        lng = venue.get("lng")
+
+        if venue_id is None or lat is None or lng is None:
+            return None
+
+        name = venue.get("name", "Unknown Event")
+        if len(name) > 100:
+            name = name[:100]
+
+        ts = venue.get("timestamp", 0)
+        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+
+        location_str = venue.get("location", "")
+        description = f"[LiveUAMap] {name}"
+        if location_str:
+            description += f" — {location_str}"
+
+        return {
+            "uid": f"liveuamap-{venue_id}",
+            "name": name,
+            "lat": lat,
+            "lon": lng,
+            "timestamp": dt,
+            "description": description,
+            "cot_type": "b-m-p-s-m",
+            "custom_cot_attrib": cls._build_custom_cot_attrib(venue),
+            "additional_data": {
+                "source": "liveuamap",
+                "event_id": venue_id,
+                "region": region_name,
+                "category_id": venue.get("category_id"),
+                "source_url": venue.get("source_url", ""),
+                "link": venue.get("link", ""),
+                "picpath": venue.get("picpath", ""),
+                "svimg": venue.get("svimg", ""),
+            },
         }
 
     async def fetch_locations(

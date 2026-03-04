@@ -248,6 +248,246 @@ class TestLiveuamapConfigValidation:
         assert plugin.validate_config() is True
 
 
+class TestLiveuamapColourParsing:
+    """Test colour extraction from picpath URLs."""
+
+    def _parse(self, picpath):
+        from plugins.liveuamap_plugin import LiveuamapPlugin
+        return LiveuamapPlugin._parse_colour_from_picpath(picpath)
+
+    def test_parse_darkblack_from_picpath(self):
+        """Extract 'darkblack' from aa_darkblack.png URL."""
+        url = "https://a.liveuamap.com/images/is14/aa_darkblack.png"
+        assert self._parse(url) == "darkblack"
+
+    def test_parse_red_from_picpath(self):
+        """Extract 'red' from rescue_red.png URL."""
+        url = "https://a.liveuamap.com/images/is14/rescue_red.png"
+        assert self._parse(url) == "red"
+
+    def test_parse_brown_from_picpath(self):
+        """Extract 'brown' from explode_brown.png URL."""
+        url = "https://a.liveuamap.com/images/is14/explode_brown.png"
+        assert self._parse(url) == "brown"
+
+    def test_parse_blue_from_picpath(self):
+        """Extract 'blue' from bomb_blue.png URL."""
+        url = "https://a.liveuamap.com/images/is14/bomb_blue.png"
+        assert self._parse(url) == "blue"
+
+    def test_parse_unknown_colour(self):
+        """Extract 'purple' even if not in ARGB map."""
+        url = "https://a.liveuamap.com/images/is14/unknown_purple.png"
+        assert self._parse(url) == "purple"
+
+    def test_parse_empty_picpath(self):
+        """Empty string falls back to 'darkblack'."""
+        assert self._parse("") == "darkblack"
+
+    def test_parse_none_picpath(self):
+        """None falls back to 'darkblack'."""
+        assert self._parse(None) == "darkblack"
+
+    def test_parse_malformed_picpath(self):
+        """Malformed string falls back gracefully."""
+        assert self._parse("not_a_url") == "darkblack"
+
+
+class TestLiveuamapCustomCotAttrib:
+    """Test custom CoT attribute building for venues."""
+
+    def _build(self, venue):
+        from plugins.liveuamap_plugin import LiveuamapPlugin
+        return LiveuamapPlugin._build_custom_cot_attrib(venue)
+
+    def test_build_attrib_darkblack(self):
+        """Verify colour and icon for darkblack venue."""
+        from plugins.liveuamap_plugin import LiveuamapPlugin
+
+        venue = {
+            "picpath": "https://a.liveuamap.com/images/is14/aa_darkblack.png"
+        }
+        attrib = self._build(venue)
+        argb = LiveuamapPlugin.COLOUR_TO_ARGB["darkblack"]
+        color_val = attrib["detail"]["color"]["_attributes"]["argb"]
+        assert color_val == str(argb)
+
+    def test_build_attrib_red(self):
+        """Verify correct ARGB for red."""
+        from plugins.liveuamap_plugin import LiveuamapPlugin
+
+        venue = {
+            "picpath": "https://a.liveuamap.com/images/is14/rescue_red.png"
+        }
+        attrib = self._build(venue)
+        argb = LiveuamapPlugin.COLOUR_TO_ARGB["red"]
+        color_val = attrib["detail"]["color"]["_attributes"]["argb"]
+        assert color_val == str(argb)
+
+    def test_build_attrib_unknown_colour_uses_fallback(self):
+        """Unknown colour falls back to darkblack ARGB."""
+        from plugins.liveuamap_plugin import LiveuamapPlugin
+
+        venue = {
+            "picpath": "https://a.liveuamap.com/images/is14/x_neon.png"
+        }
+        attrib = self._build(venue)
+        fallback = LiveuamapPlugin.COLOUR_TO_ARGB["darkblack"]
+        color_val = attrib["detail"]["color"]["_attributes"]["argb"]
+        assert color_val == str(fallback)
+
+    def test_attrib_structure(self):
+        """Verify dict has detail.color._attributes.argb and detail.usericon._attributes.iconsetpath."""
+        venue = {
+            "picpath": "https://a.liveuamap.com/images/is14/aa_darkblack.png"
+        }
+        attrib = self._build(venue)
+
+        assert "detail" in attrib
+        assert "color" in attrib["detail"]
+        assert "_attributes" in attrib["detail"]["color"]
+        assert "argb" in attrib["detail"]["color"]["_attributes"]
+        assert "usericon" in attrib["detail"]
+        assert "_attributes" in attrib["detail"]["usericon"]
+        assert "iconsetpath" in attrib["detail"]["usericon"]["_attributes"]
+
+    def test_iconsetpath_format(self):
+        """Verify iconsetpath format is COT_MAPPING_SPOTMAP/b-m-p-s-m/{argb}."""
+        from plugins.liveuamap_plugin import LiveuamapPlugin
+
+        venue = {
+            "picpath": "https://a.liveuamap.com/images/is14/rescue_red.png"
+        }
+        attrib = self._build(venue)
+        argb = LiveuamapPlugin.COLOUR_TO_ARGB["red"]
+        expected = f"COT_MAPPING_SPOTMAP/b-m-p-s-m/{argb}"
+        iconpath = attrib["detail"]["usericon"]["_attributes"]["iconsetpath"]
+        assert iconpath == expected
+
+
+class TestLiveuamapVenueConversion:
+    """Test venue-to-location conversion."""
+
+    SAMPLE_VENUE = {
+        "id": 12345,
+        "lat": 48.4647,
+        "lng": 35.0462,
+        "timestamp": 1709568000,
+        "name": "Explosion reported in Dnipro",
+        "location": "Dnipro, Dnipropetrovsk Oblast",
+        "picpath": "https://a.liveuamap.com/images/is14/aa_darkblack.png",
+        "svimg": "https://a.liveuamap.com/images/sv/12345.jpg",
+        "link": "/en/2024/3/4/explosion-reported-in-dnipro",
+        "source_url": "https://t.me/dnipro_news/54321",
+        "category_id": 1,
+    }
+
+    def _convert(self, venue=None, region_name="Ukraine", region_id=0):
+        from plugins.liveuamap_plugin import LiveuamapPlugin
+        if venue is None:
+            venue = dict(self.SAMPLE_VENUE)
+        return LiveuamapPlugin._convert_venue_to_location(
+            venue, region_name, region_id
+        )
+
+    def test_basic_venue_conversion(self):
+        """Convert sample venue, verify standard location fields."""
+        loc = self._convert()
+        assert loc is not None
+        assert "uid" in loc
+        assert "name" in loc
+        assert "lat" in loc
+        assert "lon" in loc
+        assert "timestamp" in loc
+        assert "description" in loc
+        assert "cot_type" in loc
+        assert "additional_data" in loc
+
+    def test_lat_lon_mapping(self):
+        """venue['lat'] maps to location['lat'], venue['lng'] to location['lon']."""
+        loc = self._convert()
+        assert loc["lat"] == 48.4647
+        assert loc["lon"] == 35.0462
+
+    def test_timestamp_conversion(self):
+        """venue['timestamp'] (Unix int) converts to datetime with UTC tz."""
+        from datetime import datetime, timezone
+        loc = self._convert()
+        ts = loc["timestamp"]
+        assert isinstance(ts, datetime)
+        assert ts.tzinfo == timezone.utc
+        assert ts.year == 2024
+
+    def test_name_truncation(self):
+        """Venue name >100 chars is truncated to 100."""
+        venue = dict(self.SAMPLE_VENUE)
+        venue["name"] = "A" * 150
+        loc = self._convert(venue)
+        assert len(loc["name"]) == 100
+
+    def test_name_short(self):
+        """Venue name <100 chars is unchanged."""
+        loc = self._convert()
+        assert loc["name"] == "Explosion reported in Dnipro"
+
+    def test_uid_format(self):
+        """Verify uid == 'liveuamap-{venue_id}'."""
+        loc = self._convert()
+        assert loc["uid"] == "liveuamap-12345"
+
+    def test_cot_type_always_bmpms(self):
+        """cot_type is always 'b-m-p-s-m'."""
+        loc = self._convert()
+        assert loc["cot_type"] == "b-m-p-s-m"
+
+    def test_description_includes_location(self):
+        """venue['location'] appears in description."""
+        loc = self._convert()
+        assert "Dnipro, Dnipropetrovsk Oblast" in loc["description"]
+
+    def test_description_includes_source(self):
+        """'LiveUAMap' appears in description."""
+        loc = self._convert()
+        assert "LiveUAMap" in loc["description"]
+
+    def test_additional_data_fields(self):
+        """Verify expected additional_data keys are present."""
+        loc = self._convert()
+        ad = loc["additional_data"]
+        assert ad["source"] == "liveuamap"
+        assert ad["event_id"] == 12345
+        assert ad["region"] == "Ukraine"
+        assert ad["category_id"] == 1
+        assert "source_url" in ad
+        assert "link" in ad
+        assert "picpath" in ad
+        assert "svimg" in ad
+
+    def test_custom_cot_attrib_present(self):
+        """custom_cot_attrib key exists in location."""
+        loc = self._convert()
+        assert "custom_cot_attrib" in loc
+        assert "detail" in loc["custom_cot_attrib"]
+
+    def test_missing_lat_skipped(self):
+        """Venue without lat returns None."""
+        venue = dict(self.SAMPLE_VENUE)
+        del venue["lat"]
+        assert self._convert(venue) is None
+
+    def test_missing_lng_skipped(self):
+        """Venue without lng returns None."""
+        venue = dict(self.SAMPLE_VENUE)
+        del venue["lng"]
+        assert self._convert(venue) is None
+
+    def test_missing_venue_id_skipped(self):
+        """Venue without id returns None."""
+        venue = dict(self.SAMPLE_VENUE)
+        del venue["id"]
+        assert self._convert(venue) is None
+
+
 class TestLiveuamapPluginRegistration:
     """Test LiveUAMap plugin registration in the plugin manager."""
 
