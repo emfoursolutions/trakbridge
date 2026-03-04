@@ -2,13 +2,17 @@
 # ABOUTME: Fetches venues from LiveUAMap API across multiple regions and converts them to CoT markers
 
 # Standard library imports
+import asyncio
 import json
+import ssl
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 # Third-party imports
 import aiohttp
+import certifi
 
 # Local application imports
 from plugins.base_plugin import (
@@ -425,11 +429,164 @@ class LiveuamapPlugin(BaseGPSPlugin):
             },
         }
 
+    @staticmethod
+    def _create_ssl_context() -> ssl.SSLContext:
+        """Create SSL context with proper configuration."""
+        ssl_context = ssl.create_default_context(
+            cafile=certifi.where()
+        )
+        ssl_context.options |= ssl.OP_NO_SSLv2
+        ssl_context.options |= ssl.OP_NO_SSLv3
+        return ssl_context
+
     async def fetch_locations(
         self, session: aiohttp.ClientSession
     ) -> List[Dict[str, Any]]:
-        """Fetch locations from LiveUAMap API. Stub implementation."""
-        return []
+        """Fetch venues from LiveUAMap API across all configured regions.
+
+        Loops through each selected region, makes one API call per region,
+        aggregates all venues, and returns the full list of locations.
+        """
+        config = self.get_decrypted_config()
+        api_key = config.get("api_key", "")
+        action = config.get("action", "mpts")
+        count = int(config.get("count", 50))
+        timeout_secs = int(config.get("timeout", 30))
+
+        # Parse regions
+        regions_str = config.get("regions", "[]")
+        try:
+            region_ids = json.loads(regions_str)
+        except (json.JSONDecodeError, TypeError):
+            logger.error("Invalid regions JSON in config")
+            return [{"_error": "config_error",
+                     "_error_message": "Invalid regions JSON"}]
+
+        # Build reverse lookup: id -> name
+        id_to_name = {v: k for k, v in self.REGIONS.items()}
+
+        # Determine timestamp
+        event_time = config.get("event_time", "")
+        if event_time and event_time.strip():
+            try:
+                dt = datetime.strptime(
+                    event_time.strip(), "%Y-%m-%d %H:%M"
+                )
+                dt = dt.replace(tzinfo=timezone.utc)
+                unix_ts = int(dt.timestamp())
+            except ValueError:
+                logger.warning(
+                    f"Invalid event_time format: {event_time}, "
+                    "using current time"
+                )
+                unix_ts = int(time.time())
+        else:
+            unix_ts = int(time.time())
+
+        locations = []
+        timeout_config = aiohttp.ClientTimeout(
+            total=timeout_secs
+        )
+
+        for region_id in region_ids:
+            region_name = id_to_name.get(region_id, f"Region-{region_id}")
+
+            url = (
+                f"https://a.liveuamap.com/api"
+                f"?a={action}"
+                f"&resid={region_id}"
+                f"&time={unix_ts}"
+                f"&count={count}"
+                f"&key={api_key}"
+            )
+
+            try:
+                async with session.get(
+                    url, timeout=timeout_config
+                ) as response:
+                    if response.status == 429:
+                        logger.warning(
+                            f"Rate limited for region {region_name}"
+                        )
+                        locations.append({
+                            "_error": "429",
+                            "_error_message": "Rate limit exceeded",
+                        })
+                        continue
+
+                    if response.status != 200:
+                        logger.error(
+                            f"HTTP {response.status} for "
+                            f"region {region_name}"
+                        )
+                        locations.append({
+                            "_error": str(response.status),
+                            "_error_message": (
+                                f"HTTP {response.status} error"
+                            ),
+                        })
+                        continue
+
+                    data = await response.json()
+
+                    if not data.get("success", False):
+                        logger.error(
+                            f"API returned success=false "
+                            f"for region {region_name}"
+                        )
+                        locations.append({
+                            "_error": "api_failure",
+                            "_error_message": (
+                                f"API failure for {region_name}"
+                            ),
+                        })
+                        continue
+
+                    venues = data.get("venues", [])
+                    logger.info(
+                        f"Fetched {len(venues)} venues "
+                        f"from {region_name}"
+                    )
+
+                    for venue in venues:
+                        loc = self._convert_venue_to_location(
+                            venue, region_name, region_id
+                        )
+                        if loc is not None:
+                            locations.append(loc)
+                        else:
+                            logger.debug(
+                                "Skipped malformed venue: "
+                                f"{venue.get('id', 'unknown')}"
+                            )
+
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"Timeout fetching region {region_name}"
+                )
+                continue
+
+            except aiohttp.ClientError as e:
+                logger.error(
+                    f"Connection error for {region_name}: {e}"
+                )
+                locations.append({
+                    "_error": "connection_failed",
+                    "_error_message": str(e),
+                })
+                continue
+
+            except Exception as e:
+                logger.error(
+                    f"Unexpected error for {region_name}: {e}"
+                )
+                locations.append({
+                    "_error": "unknown",
+                    "_error_message": str(e),
+                })
+                continue
+
+        return locations
 
     def validate_config(self) -> bool:
         """Validate plugin configuration."""

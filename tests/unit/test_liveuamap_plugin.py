@@ -1,6 +1,11 @@
-# ABOUTME: Unit tests for LiveUAMap OSINT plugin scaffold and registration
-# ABOUTME: Tests naming, metadata, regions, colours, and plugin manager
+# ABOUTME: Unit tests for LiveUAMap OSINT plugin
+# ABOUTME: Tests scaffold, validation, colours, conversion, fetch, and registration
 
+import asyncio
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import aiohttp
 import pytest
 
 from plugins.plugin_manager import PluginManager
@@ -130,15 +135,26 @@ class TestLiveuamapPluginScaffold:
         assert "region_selector" in component_types
 
     @pytest.mark.asyncio
-    async def test_fetch_locations_stub_returns_empty(self):
-        """Verify stubbed fetch_locations returns empty list."""
+    async def test_fetch_locations_returns_list(self):
+        """Verify fetch_locations returns a list."""
         from plugins.liveuamap_plugin import LiveuamapPlugin
 
         plugin = LiveuamapPlugin(
             {"api_key": "test", "regions": "[0]"}
         )
-        result = await plugin.fetch_locations(None)
-        assert result == []
+        mock_resp = AsyncMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(return_value={
+            "success": True, "venues": [],
+        })
+        mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+        mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_resp)
+
+        result = await plugin.fetch_locations(mock_session)
+        assert isinstance(result, list)
 
     def test_validate_config_stub(self):
         """Verify validate_config works with valid config."""
@@ -486,6 +502,278 @@ class TestLiveuamapVenueConversion:
         venue = dict(self.SAMPLE_VENUE)
         del venue["id"]
         assert self._convert(venue) is None
+
+
+class TestLiveuamapFetchLocations:
+    """Test fetch_locations API fetching logic."""
+
+    SAMPLE_VENUE = {
+        "id": 12345,
+        "lat": 48.4647,
+        "lng": 35.0462,
+        "timestamp": 1709568000,
+        "name": "Explosion reported in Dnipro",
+        "location": "Dnipro, Dnipropetrovsk Oblast",
+        "picpath": "https://a.liveuamap.com/images/is14/aa_darkblack.png",
+        "svimg": "",
+        "link": "/en/2024/3/4/explosion-reported-in-dnipro",
+        "source_url": "https://t.me/example/123",
+        "category_id": 1,
+    }
+
+    SAMPLE_VENUE_2 = {
+        "id": 67890,
+        "lat": 33.5138,
+        "lng": 36.2765,
+        "timestamp": 1709568100,
+        "name": "Airstrike near Damascus",
+        "location": "Damascus, Syria",
+        "picpath": "https://a.liveuamap.com/images/is14/bomb_red.png",
+        "svimg": "",
+        "link": "/en/2024/3/4/airstrike-near-damascus",
+        "source_url": "",
+        "category_id": 2,
+    }
+
+    def _make_plugin(self, **overrides):
+        from plugins.liveuamap_plugin import LiveuamapPlugin
+        config = {
+            "api_key": "test-api-key",
+            "regions": "[0]",
+            "action": "mpts",
+            "event_time": "",
+            "count": 50,
+            "timeout": 30,
+        }
+        config.update(overrides)
+        return LiveuamapPlugin(config)
+
+    def _mock_response(self, json_data, status=200):
+        """Create a mock aiohttp response."""
+        resp = AsyncMock()
+        resp.status = status
+        resp.json = AsyncMock(return_value=json_data)
+        resp.text = AsyncMock(return_value=json.dumps(json_data))
+        resp.__aenter__ = AsyncMock(return_value=resp)
+        resp.__aexit__ = AsyncMock(return_value=False)
+        return resp
+
+    @pytest.mark.asyncio
+    async def test_fetch_single_region_success(self):
+        """Mock HTTP response with sample venues, verify locations."""
+        plugin = self._make_plugin(regions="[0]")
+        api_response = {
+            "success": True,
+            "venues": [self.SAMPLE_VENUE],
+        }
+        mock_resp = self._mock_response(api_response)
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_resp)
+
+        locations = await plugin.fetch_locations(mock_session)
+
+        assert len(locations) == 1
+        assert locations[0]["uid"] == "liveuamap-12345"
+        assert locations[0]["lat"] == 48.4647
+
+    @pytest.mark.asyncio
+    async def test_fetch_multiple_regions_aggregated(self):
+        """2 regions, verify all venues from both in result."""
+        plugin = self._make_plugin(regions="[0, 3]")
+
+        resp1 = self._mock_response({
+            "success": True,
+            "venues": [self.SAMPLE_VENUE],
+        })
+        resp2 = self._mock_response({
+            "success": True,
+            "venues": [self.SAMPLE_VENUE_2],
+        })
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(side_effect=[resp1, resp2])
+
+        locations = await plugin.fetch_locations(mock_session)
+
+        assert len(locations) == 2
+        uids = [loc["uid"] for loc in locations]
+        assert "liveuamap-12345" in uids
+        assert "liveuamap-67890" in uids
+
+    @pytest.mark.asyncio
+    async def test_fetch_empty_venues(self):
+        """API returns empty venues list -> empty result."""
+        plugin = self._make_plugin(regions="[0]")
+        mock_resp = self._mock_response({
+            "success": True,
+            "venues": [],
+        })
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_resp)
+
+        locations = await plugin.fetch_locations(mock_session)
+        assert locations == []
+
+    @pytest.mark.asyncio
+    async def test_fetch_api_failure(self):
+        """API returns success=false -> error dict."""
+        plugin = self._make_plugin(regions="[0]")
+        mock_resp = self._mock_response({
+            "success": False,
+        })
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_resp)
+
+        locations = await plugin.fetch_locations(mock_session)
+
+        assert len(locations) == 1
+        assert "_error" in locations[0]
+
+    @pytest.mark.asyncio
+    async def test_fetch_http_401(self):
+        """HTTP 401 -> error dict with _error='401'."""
+        plugin = self._make_plugin(regions="[0]")
+        mock_resp = self._mock_response({}, status=401)
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_resp)
+
+        locations = await plugin.fetch_locations(mock_session)
+
+        assert len(locations) == 1
+        assert locations[0]["_error"] == "401"
+
+    @pytest.mark.asyncio
+    async def test_fetch_http_429(self):
+        """HTTP 429 -> error dict with rate limit message."""
+        plugin = self._make_plugin(regions="[0]")
+        mock_resp = self._mock_response({}, status=429)
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_resp)
+
+        locations = await plugin.fetch_locations(mock_session)
+
+        assert len(locations) == 1
+        assert locations[0]["_error"] == "429"
+        assert "rate" in locations[0]["_error_message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_fetch_timeout_one_region(self):
+        """One region times out, others succeed -> partial results."""
+        plugin = self._make_plugin(regions="[0, 3]")
+
+        resp_ok = self._mock_response({
+            "success": True,
+            "venues": [self.SAMPLE_VENUE],
+        })
+        resp_timeout = MagicMock()
+        resp_timeout.__aenter__ = AsyncMock(
+            side_effect=asyncio.TimeoutError()
+        )
+        resp_timeout.__aexit__ = AsyncMock(return_value=False)
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(
+            side_effect=[resp_timeout, resp_ok]
+        )
+
+        locations = await plugin.fetch_locations(mock_session)
+
+        # Should have the one successful venue
+        venue_locs = [l for l in locations if "_error" not in l]
+        assert len(venue_locs) == 1
+        assert venue_locs[0]["uid"] == "liveuamap-12345"
+
+    @pytest.mark.asyncio
+    async def test_fetch_malformed_venue_skipped(self):
+        """One bad venue in array -> skipped, others processed."""
+        plugin = self._make_plugin(regions="[0]")
+        bad_venue = {"name": "No coords"}
+        mock_resp = self._mock_response({
+            "success": True,
+            "venues": [bad_venue, self.SAMPLE_VENUE],
+        })
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_resp)
+
+        locations = await plugin.fetch_locations(mock_session)
+
+        assert len(locations) == 1
+        assert locations[0]["uid"] == "liveuamap-12345"
+
+    @pytest.mark.asyncio
+    async def test_fetch_timestamp_default_now(self):
+        """Empty event_time uses current Unix timestamp."""
+        import time
+        plugin = self._make_plugin(
+            regions="[0]", event_time=""
+        )
+        mock_resp = self._mock_response({
+            "success": True, "venues": [],
+        })
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_resp)
+
+        before = int(time.time())
+        await plugin.fetch_locations(mock_session)
+        after = int(time.time())
+
+        call_args = mock_session.get.call_args
+        url = call_args[0][0]
+        # Extract time param from URL
+        assert "time=" in url
+        time_val = int(
+            url.split("time=")[1].split("&")[0]
+        )
+        assert before <= time_val <= after
+
+    @pytest.mark.asyncio
+    async def test_fetch_timestamp_from_config(self):
+        """event_time='2026-03-04 12:00' -> correct Unix ts in URL."""
+        plugin = self._make_plugin(
+            regions="[0]",
+            event_time="2026-03-04 12:00",
+        )
+        mock_resp = self._mock_response({
+            "success": True, "venues": [],
+        })
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_resp)
+
+        await plugin.fetch_locations(mock_session)
+
+        call_args = mock_session.get.call_args
+        url = call_args[0][0]
+        assert "time=" in url
+        time_val = int(
+            url.split("time=")[1].split("&")[0]
+        )
+        # 2026-03-04 12:00 UTC should be around 1772452800
+        assert time_val > 0
+
+    @pytest.mark.asyncio
+    async def test_fetch_api_url_construction(self):
+        """Verify URL params: a, resid, time, count, key."""
+        plugin = self._make_plugin(
+            regions="[0]",
+            api_key="my-secret-key",
+            count=25,
+            action="mpts",
+        )
+        mock_resp = self._mock_response({
+            "success": True, "venues": [],
+        })
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_resp)
+
+        await plugin.fetch_locations(mock_session)
+
+        call_args = mock_session.get.call_args
+        url = call_args[0][0]
+        assert "a=mpts" in url
+        assert "resid=0" in url
+        assert "count=25" in url
+        assert "key=my-secret-key" in url
+        assert "time=" in url
 
 
 class TestLiveuamapPluginRegistration:
