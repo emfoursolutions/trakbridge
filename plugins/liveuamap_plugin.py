@@ -325,14 +325,14 @@ class LiveuamapPlugin(BaseGPSPlugin):
             ],
             "custom_components": [
                 PluginCustomComponent(
-                    type="region_selector",
+                    type="grouped_multi_select",
                     field_name="regions",
                     title="Select Regions",
                     icon="fa-globe",
                     help_text="Select one or more regions to monitor for events",
                     config={
-                        "regions": self.REGIONS,
-                        "region_groups": self.REGION_GROUPS,
+                        "items": self.REGIONS,
+                        "groups": self.REGION_GROUPS,
                     },
                 ),
             ],

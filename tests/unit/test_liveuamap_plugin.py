@@ -123,8 +123,8 @@ class TestLiveuamapPluginScaffold:
         assert api_key_field.field_type == "password"
         assert api_key_field.required is True
 
-    def test_custom_components_include_region_selector(self):
-        """Verify custom_components includes region_selector."""
+    def test_custom_components_include_grouped_multi_select(self):
+        """Verify custom_components includes grouped_multi_select."""
         from plugins.liveuamap_plugin import LiveuamapPlugin
 
         plugin = LiveuamapPlugin({"api_key": "test", "regions": "[0]"})
@@ -132,7 +132,7 @@ class TestLiveuamapPluginScaffold:
 
         assert "custom_components" in metadata
         component_types = [c.type for c in metadata["custom_components"]]
-        assert "region_selector" in component_types
+        assert "grouped_multi_select" in component_types
 
     @pytest.mark.asyncio
     async def test_fetch_locations_returns_list(self):
