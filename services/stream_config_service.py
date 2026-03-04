@@ -214,7 +214,7 @@ class StreamConfigService:
                 config_key = key[7:]
 
                 # Parse JSON fields (like message_rules, global_geofence_bounds)
-                if config_key in ("message_rules", "global_geofence_bounds") and isinstance(value, str):
+                if config_key in ("message_rules", "global_geofence_bounds", "regions") and isinstance(value, str):
                     try:
                         import json
                         plugin_config[config_key] = json.loads(value) if value else ({} if config_key == "global_geofence_bounds" else [])
