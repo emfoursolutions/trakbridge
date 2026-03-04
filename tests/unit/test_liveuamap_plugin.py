@@ -148,6 +148,106 @@ class TestLiveuamapPluginScaffold:
         assert plugin.validate_config() is True
 
 
+class TestLiveuamapConfigValidation:
+    """Test LiveUAMap plugin configuration validation."""
+
+    def _make_plugin(self, **overrides):
+        """Helper to create plugin with config overrides."""
+        from plugins.liveuamap_plugin import LiveuamapPlugin
+
+        config = {
+            "api_key": "test-key-123",
+            "regions": "[0, 3]",
+            "action": "mpts",
+            "event_time": "",
+            "count": 50,
+            "timeout": 30,
+        }
+        config.update(overrides)
+        return LiveuamapPlugin(config)
+
+    def test_valid_config(self):
+        """Full valid config returns True."""
+        plugin = self._make_plugin()
+        assert plugin.validate_config() is True
+
+    def test_missing_api_key(self):
+        """Empty api_key returns False."""
+        plugin = self._make_plugin(api_key="")
+        assert plugin.validate_config() is False
+
+    def test_none_api_key(self):
+        """None api_key returns False."""
+        from plugins.liveuamap_plugin import LiveuamapPlugin
+
+        plugin = LiveuamapPlugin({"regions": "[0]"})
+        assert plugin.validate_config() is False
+
+    def test_missing_regions(self):
+        """Empty regions returns False."""
+        plugin = self._make_plugin(regions="")
+        assert plugin.validate_config() is False
+
+    def test_empty_regions_list(self):
+        """regions='[]' returns False."""
+        plugin = self._make_plugin(regions="[]")
+        assert plugin.validate_config() is False
+
+    def test_invalid_regions_json(self):
+        """regions='not json' returns False."""
+        plugin = self._make_plugin(regions="not json")
+        assert plugin.validate_config() is False
+
+    def test_invalid_region_id(self):
+        """regions='[99999]' returns False (ID not in REGIONS)."""
+        plugin = self._make_plugin(regions="[99999]")
+        assert plugin.validate_config() is False
+
+    def test_valid_region_ids(self):
+        """regions='[0, 3]' (Ukraine, Syria) returns True."""
+        plugin = self._make_plugin(regions="[0, 3]")
+        assert plugin.validate_config() is True
+
+    def test_count_too_low(self):
+        """count=0 returns False."""
+        plugin = self._make_plugin(count=0)
+        assert plugin.validate_config() is False
+
+    def test_count_too_high(self):
+        """count=501 returns False."""
+        plugin = self._make_plugin(count=501)
+        assert plugin.validate_config() is False
+
+    def test_count_valid(self):
+        """count=50 returns True."""
+        plugin = self._make_plugin(count=50)
+        assert plugin.validate_config() is True
+
+    def test_timeout_too_low(self):
+        """timeout=1 returns False."""
+        plugin = self._make_plugin(timeout=1)
+        assert plugin.validate_config() is False
+
+    def test_timeout_too_high(self):
+        """timeout=999 returns False."""
+        plugin = self._make_plugin(timeout=999)
+        assert plugin.validate_config() is False
+
+    def test_timeout_valid(self):
+        """timeout=30 returns True."""
+        plugin = self._make_plugin(timeout=30)
+        assert plugin.validate_config() is True
+
+    def test_defaults_applied(self):
+        """Missing optional fields use defaults and pass."""
+        from plugins.liveuamap_plugin import LiveuamapPlugin
+
+        plugin = LiveuamapPlugin(
+            {"api_key": "test-key", "regions": "[0]"}
+        )
+        assert plugin.validate_config() is True
+
+
 class TestLiveuamapPluginRegistration:
     """Test LiveUAMap plugin registration in the plugin manager."""
 

@@ -3,7 +3,6 @@
 
 # Standard library imports
 import json
-import logging
 from typing import Any, Dict, List
 
 # Third-party imports
@@ -343,4 +342,26 @@ class LiveuamapPlugin(BaseGPSPlugin):
         """Validate plugin configuration."""
         if not super().validate_config():
             return False
+
+        config = self.get_decrypted_config()
+        valid_ids = set(self.REGIONS.values())
+
+        # Validate regions JSON
+        regions_str = config.get("regions", "")
+        if regions_str:
+            try:
+                regions = json.loads(regions_str)
+            except (json.JSONDecodeError, TypeError):
+                logger.error("Regions must be valid JSON array")
+                return False
+
+            if not isinstance(regions, list) or len(regions) == 0:
+                logger.error("At least one region must be selected")
+                return False
+
+            for rid in regions:
+                if rid not in valid_ids:
+                    logger.error(f"Invalid region ID: {rid}")
+                    return False
+
         return True
