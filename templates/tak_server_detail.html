@@ -444,6 +444,22 @@ function testServer(serverId) {
     })
     .then(response => response.json())
     .then(data => {
+        // Build warnings HTML if any warnings are present
+        let warningsHtml = '';
+        if (data.warnings && data.warnings.length > 0) {
+            warningsHtml = `
+                <div class="alert alert-warning border-0 shadow-sm mb-0 mt-2">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-exclamation-triangle fa-2x text-warning me-3"></i>
+                        <div>
+                            <h6 class="alert-heading mb-1">Warnings</h6>
+                            ${data.warnings.map(w => `<p class="mb-0 small">${w}</p>`).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         if (data.success) {
             // Show success feedback
             testBtn.innerHTML = '<i class="fas fa-check text-success"></i> Connected';
@@ -458,6 +474,7 @@ function testServer(serverId) {
                         </div>
                     </div>
                 </div>
+                ${warningsHtml}
             `;
 
             setTimeout(() => {
@@ -478,6 +495,7 @@ function testServer(serverId) {
                         </div>
                     </div>
                 </div>
+                ${warningsHtml}
             `;
 
             setTimeout(() => {

@@ -37,7 +37,7 @@ import pytak
 
 # Third-party imports
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 
 # Module level logging
@@ -93,7 +93,14 @@ class TakServerService:
                 "has_private_key": private_key is not None,
             }
 
-            return {"success": True, "cert_info": cert_info, "warnings": []}
+            warnings = []
+            if not additional_certificates:
+                warnings.append(
+                    "This certificate does not contain a CA certificate. "
+                    "SSL verification may not work without it."
+                )
+
+            return {"success": True, "cert_info": cert_info, "warnings": warnings}
 
         except ValueError as e:
             # Usually password-related errors
@@ -332,13 +339,13 @@ class TakServerConnectionTester:
     @staticmethod
     async def test_pytak_connection(server):
         """Test TAK server connection using pytak library"""
-        cert_file = None
+        cert_result = None
         temp_files = []
 
         try:
-            # Prepare certificate if provided
+            # Prepare certificate if provided (pre-converts P12 to PEM)
             if server.cert_p12:
-                cert_file = await TakServerConnectionTester.prepare_certificate(
+                cert_result = await TakServerConnectionTester.prepare_certificate(
                     server, temp_files
                 )
 
@@ -350,12 +357,15 @@ class TakServerConnectionTester:
 
             # Add TLS configuration if needed
             if server.protocol.lower() == "tls":
-                if cert_file:
-                    config_dict["PYTAK_TLS_CLIENT_CERT"] = cert_file
-                    config_dict["PYTAK_TLS_CLIENT_KEY"] = cert_file  # P12 contains both
-                    cert_password = server.get_cert_password()
-                    if cert_password:
-                        config_dict["PYTAK_TLS_CLIENT_PASSWORD"] = cert_password
+                if cert_result:
+                    config_dict["PYTAK_TLS_CLIENT_CERT"] = cert_result["cert_path"]
+                    config_dict["PYTAK_TLS_CLIENT_KEY"] = cert_result["key_path"]
+
+                    # Set CA file if available for SSL verification
+                    if cert_result["ca_path"]:
+                        config_dict["PYTAK_TLS_CLIENT_CAFILE"] = (
+                            cert_result["ca_path"]
+                        )
 
                 if not server.verify_ssl:
                     config_dict["PYTAK_TLS_DONT_VERIFY"] = "1"
@@ -371,6 +381,10 @@ class TakServerConnectionTester:
                 )
             )
 
+            # Propagate certificate warnings into the result
+            if cert_result and cert_result.get("warnings"):
+                connection_result["warnings"] = cert_result["warnings"]
+
             return connection_result
 
         except Exception as e:
@@ -383,7 +397,19 @@ class TakServerConnectionTester:
 
     @staticmethod
     async def prepare_certificate(server, temp_files):
-        """Prepare certificate file for pytak"""
+        """Prepare certificate PEM files for pytak by pre-converting from P12.
+
+        Extracts the private key, client certificate, and CA certificate (if present)
+        from the P12 data and writes them as PEM temp files. This avoids passing .p12
+        files to pytak, which crashes if the P12 lacks a CA certificate.
+
+        Returns:
+            dict with keys:
+                - cert_path (str): Path to client certificate PEM file
+                - key_path (str): Path to private key PEM file
+                - ca_path (str or None): Path to CA certificate PEM file
+                - warnings (list[str]): Any warnings generated during preparation
+        """
         try:
             # Decode P12 certificate data
             if isinstance(server.cert_p12, str):
@@ -391,13 +417,95 @@ class TakServerConnectionTester:
             else:
                 cert_data = server.cert_p12
 
-            # Create temporary P12 file
-            with tempfile.NamedTemporaryFile(suffix=".p12", delete=False) as temp_cert:
-                temp_cert.write(cert_data)
-                temp_cert_path = temp_cert.name
-                temp_files.append(temp_cert_path)
+            password = server.get_cert_password()
+            password_bytes = password.encode("utf-8") if password else None
 
-            return temp_cert_path
+            private_key, certificate, additional_certificates = (
+                pkcs12.load_key_and_certificates(cert_data, password_bytes)
+            )
+
+            if not certificate:
+                raise Exception(
+                    "No client certificate found in P12 file"
+                )
+            if not private_key:
+                raise Exception(
+                    "No private key found in P12 file"
+                )
+
+            warnings = []
+
+            # Serialize private key to PEM
+            key_pem = private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+
+            # Serialize client certificate to PEM
+            cert_pem = certificate.public_bytes(
+                encoding=serialization.Encoding.PEM
+            )
+
+            # Write client certificate PEM
+            with tempfile.NamedTemporaryFile(
+                suffix=".pem", prefix="tak_cert_", delete=False
+            ) as f:
+                f.write(cert_pem)
+                cert_path = f.name
+                temp_files.append(cert_path)
+
+            # Write private key PEM
+            with tempfile.NamedTemporaryFile(
+                suffix=".pem", prefix="tak_key_", delete=False
+            ) as f:
+                f.write(key_pem)
+                key_path = f.name
+                temp_files.append(key_path)
+
+            # Handle CA certificate
+            ca_path = None
+            if additional_certificates:
+                ca_cert = additional_certificates[0]
+                ca_pem = ca_cert.public_bytes(
+                    encoding=serialization.Encoding.PEM
+                )
+                with tempfile.NamedTemporaryFile(
+                    suffix=".pem", prefix="tak_ca_", delete=False
+                ) as f:
+                    f.write(ca_pem)
+                    ca_path = f.name
+                    temp_files.append(ca_path)
+            else:
+                server_name = (
+                    server.name if hasattr(server, "name") else "unknown"
+                )
+                logger.warning(
+                    "P12 certificate for server '%s' does not contain a "
+                    "CA certificate.",
+                    server_name,
+                )
+                if hasattr(server, "verify_ssl") and server.verify_ssl:
+                    warnings.append(
+                        "Certificate does not contain a CA certificate and "
+                        "SSL verification is enabled. The connection will "
+                        "likely fail. Consider disabling SSL verification or "
+                        "using a certificate bundle that includes the CA "
+                        "certificate."
+                    )
+                else:
+                    warnings.append(
+                        "Certificate does not contain a CA certificate. "
+                        "Connection should still work since SSL verification "
+                        "is disabled."
+                    )
+
+            return {
+                "cert_path": cert_path,
+                "key_path": key_path,
+                "ca_path": ca_path,
+                "warnings": warnings,
+            }
 
         except Exception as e:
             raise Exception(f"Failed to prepare certificate: {str(e)}")
