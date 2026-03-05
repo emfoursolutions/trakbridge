@@ -129,6 +129,9 @@ def setup_logging(app):
         getattr(logging, pytak_log_level, logging.WARNING)
     )
 
+    # Suppress noisy watchdog inotify debug logging
+    logging.getLogger("watchdog").setLevel(logging.WARNING)
+
     app.logger.info(f"Logging Service Started - Version: {version}")
 
 
