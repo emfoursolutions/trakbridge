@@ -53,7 +53,7 @@ services:
 
       # Development settings
       DEBUG: "true"
-      LOG_LEVEL: "INFO"
+      LOG_LEVEL: "DEBUG"
       LOG_DIR: "logs"
       
       # Application URL for development
