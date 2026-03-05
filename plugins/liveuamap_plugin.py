@@ -444,14 +444,17 @@ class LiveuamapPlugin(BaseGPSPlugin):
         count = int(config.get("count", 50))
         timeout_secs = int(config.get("timeout", 30))
 
-        # Parse regions
-        regions_str = config.get("regions", "[]")
-        try:
-            region_ids = json.loads(regions_str)
-        except (json.JSONDecodeError, TypeError):
-            logger.error("Invalid regions JSON in config")
-            return [{"_error": "config_error",
-                     "_error_message": "Invalid regions JSON"}]
+        # Parse regions - may be a list (already parsed) or JSON string
+        regions_raw = config.get("regions", "[]")
+        if isinstance(regions_raw, list):
+            region_ids = regions_raw
+        else:
+            try:
+                region_ids = json.loads(regions_raw)
+            except (json.JSONDecodeError, TypeError):
+                logger.error("Invalid regions JSON in config")
+                return [{"_error": "config_error",
+                         "_error_message": "Invalid regions JSON"}]
 
         # Build reverse lookup: id -> name
         id_to_name = {v: k for k, v in self.REGIONS.items()}
@@ -591,14 +594,17 @@ class LiveuamapPlugin(BaseGPSPlugin):
         config = self.get_decrypted_config()
         valid_ids = set(self.REGIONS.values())
 
-        # Validate regions JSON
-        regions_str = config.get("regions", "")
-        if regions_str:
-            try:
-                regions = json.loads(regions_str)
-            except (json.JSONDecodeError, TypeError):
-                logger.error("Regions must be valid JSON array")
-                return False
+        # Validate regions - may be a list (already parsed) or JSON string
+        regions_raw = config.get("regions", "")
+        if regions_raw:
+            if isinstance(regions_raw, list):
+                regions = regions_raw
+            else:
+                try:
+                    regions = json.loads(regions_raw)
+                except (json.JSONDecodeError, TypeError):
+                    logger.error("Regions must be valid JSON array")
+                    return False
 
             if not isinstance(regions, list) or len(regions) == 0:
                 logger.error("At least one region must be selected")
