@@ -419,6 +419,7 @@ class LiveuamapPlugin(BaseGPSPlugin):
                 "link": venue.get("link", ""),
                 "picpath": venue.get("picpath", ""),
                 "svimg": venue.get("svimg", ""),
+                "img_share": venue.get("img_share", ""),
             },
         }
 

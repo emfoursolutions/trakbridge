@@ -52,8 +52,8 @@ services:
       DB_USER: "trakbridge_dev"
 
       # Development settings
-      DEBUG: "true"
-      LOG_LEVEL: "DEBUG"
+      DEBUG: "false"
+      LOG_LEVEL: "INFO"
       LOG_DIR: "logs"
       
       # Application URL for development
