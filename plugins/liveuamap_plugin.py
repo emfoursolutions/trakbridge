@@ -213,18 +213,18 @@ class LiveuamapPlugin(BaseGPSPlugin):
         "darkblack": -16777216,      # 0xFF000000
         "black": -16777216,          # 0xFF000000
         "red": -65536,               # 0xFFFF0000
-        "darkred": -7667712,         # 0xFF8B0000
+        "darkred": -65536,         # 0xFF8B0000
         "blue": -16776961,           # 0xFF0000FF
-        "darkblue": -16777077,       # 0xFF00008B
-        "green": -16744448,          # 0xFF008000
-        "darkgreen": -16751616,      # 0xFF006400
+        "darkblue": -16776961,       # 0xFF00008B
+        "green": -16711936,          # 0xFF008000
+        "darkgreen": -16711936,      # 0xFF006400
         "yellow": -256,              # 0xFFFFFF00
-        "orange": -23296,            # 0xFFFFA500
-        "brown": -5952982,           # 0xFFA52A2A
-        "purple": -8388480,          # 0xFF800080
-        "pink": -16181,              # 0xFFFFC0CB
-        "grey": -8355712,            # 0xFF808080
-        "gray": -8355712,            # 0xFF808080
+        "orange": -35072,            # 0xFFFFA500
+        "brown": -7650029,           # 0xFFA52A2A
+        "purple": -65281,          # 0xFF800080
+        "pink": -65281,              # 0xFFFFC0CB
+        "grey": -8947849,            # 0xFF808080
+        "gray": -8947849,            # 0xFF808080
         "white": -1,                 # 0xFFFFFFFF
         "cyan": -16711681,           # 0xFF00FFFF
         "magenta": -65281,           # 0xFFFF00FF
