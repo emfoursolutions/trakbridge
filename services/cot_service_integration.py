@@ -2792,7 +2792,9 @@ class QueuedCOTService:
                     cot_event, detail, event_data["custom_cot_attrib"]
                 )
 
-            return etree.tostring(cot_event, pretty_print=False, xml_declaration=False)
+            cot_bytes = etree.tostring(cot_event, pretty_print=False, xml_declaration=False)
+            logger.debug(f"Generated CoT XML for {event_data.get('uid', 'unknown')}: {cot_bytes.decode('utf-8', errors='replace')}")
+            return cot_bytes
 
         except Exception as e:
             logger.error(f"Error generating COT XML: {e}")
@@ -3243,9 +3245,15 @@ class QueuedCOTService:
                     remarks = etree.SubElement(detail, "remarks")
                     remarks.text = str(location["description"])
 
-                cot_events.append(
-                    etree.tostring(cot_event, pretty_print=False, xml_declaration=False)
-                )
+                # Apply custom CoT attributes if provided by plugin
+                if "custom_cot_attrib" in location:
+                    QueuedCOTService._apply_custom_cot_attributes(
+                        cot_event, detail, location["custom_cot_attrib"]
+                    )
+
+                cot_bytes = etree.tostring(cot_event, pretty_print=False, xml_declaration=False)
+                logger.debug(f"Generated custom CoT XML for {uid}: {cot_bytes.decode('utf-8', errors='replace')}")
+                cot_events.append(cot_bytes)
 
             except Exception as e:
                 logger.error(f"Error creating custom COT event: {e}")

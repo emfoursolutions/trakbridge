@@ -361,6 +361,7 @@ class LiveuamapPlugin(BaseGPSPlugin):
         argb = cls.COLOUR_TO_ARGB.get(
             colour, cls.COLOUR_TO_ARGB["darkblack"]
         )
+        logger.debug(f"Venue {venue.get('id', '?')}: picpath={picpath!r} -> colour={colour!r} -> argb={argb}")
         iconsetpath = f"COT_MAPPING_SPOTMAP/b-m-p-s-m/{argb}"
         return {
             "detail": {
