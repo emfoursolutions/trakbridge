@@ -155,16 +155,18 @@
                             </div>
                         </div>
 
-                        <div class="mb-3">
-                            <label for="cot_type" class="form-label">COT Type</label>
-                            <select class="form-select" id="cot_type" name="cot_type">
-                                {% for cot_type in cot_types %}
-                                <option value="{{ cot_type.value }}" {% if cot_type.value == default_cot_type %}selected{% endif %} title="{{ cot_type.description }}">
-                                    {{ cot_type.label }} ({{ cot_type.value }})
-                                </option>
-                                {% endfor %}
-                            </select>
-                            <div class="form-text">Cursor-on-Target type identifier for tracked objects</div>
+                        <div id="cot-type-setting">
+                            <div class="mb-3">
+                                <label for="cot_type" class="form-label">COT Type</label>
+                                <select class="form-select" id="cot_type" name="cot_type">
+                                    {% for cot_type in cot_types %}
+                                    <option value="{{ cot_type.value }}" {% if cot_type.value == default_cot_type %}selected{% endif %} title="{{ cot_type.description }}">
+                                        {{ cot_type.label }} ({{ cot_type.value }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Cursor-on-Target type identifier for tracked objects</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -518,6 +520,8 @@ function updatePluginConfig() {
         configSection.style.display = 'none';
         callsignSection.style.display = 'none';
         inputPluginSettings.style.display = 'block';
+        const cotTypeSetting = document.getElementById('cot-type-setting');
+        if (cotTypeSetting) cotTypeSetting.style.display = 'block';
         helpContent.innerHTML = '<p class="text-muted">Select a stream provider to see configuration instructions.</p>';
         return;
     }
@@ -544,6 +548,12 @@ function updatePluginConfig() {
     // Hide input-specific settings (Poll Interval, COT Type, COT Stale Time) for output plugins
     const isOutputPlugin = pluginMeta.category?.toLowerCase() === 'output';
     inputPluginSettings.style.display = isOutputPlugin ? 'none' : 'block';
+
+    // Hide COT Type selector for plugins that manage their own CoT types
+    const cotTypeSetting = document.getElementById('cot-type-setting');
+    if (cotTypeSetting) {
+        cotTypeSetting.style.display = pluginMeta.hide_cot_type ? 'none' : 'block';
+    }
 
     // Show callsign mapping section for tracker plugins
     const trackerCategories = ['tracker', 'satellite', 'platform'];

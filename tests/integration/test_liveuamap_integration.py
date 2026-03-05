@@ -139,7 +139,6 @@ class TestLiveuamapFullFetchIntegration:
             "regions": "[0, 3]",
             "count": "10",
             "timeout": "30",
-            "action": "mpts",
             "event_time": "",
         }
         if config_overrides:
@@ -494,7 +493,6 @@ class TestLiveuamapStreamIntegration:
                 "regions": "[0, 3, 66]",
                 "count": "50",
                 "timeout": "30",
-                "action": "mpts",
                 "event_time": "",
             })
 

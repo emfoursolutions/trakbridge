@@ -246,6 +246,7 @@ class LiveuamapPlugin(BaseGPSPlugin):
             "description": "Fetch geolocated news and conflict events from LiveUAMap across multiple regions",
             "icon": "fas fa-globe",
             "category": "osint",
+            "hide_cot_type": True,
             "help_sections": [
                 {
                     "title": "Setup Instructions",
@@ -275,15 +276,6 @@ class LiveuamapPlugin(BaseGPSPlugin):
                     placeholder="Enter your LiveUAMap API key",
                     help_text="Your LiveUAMap API key for authentication",
                     sensitive=True,
-                ),
-                PluginConfigField(
-                    name="action",
-                    label="API Action",
-                    field_type="text",
-                    required=False,
-                    default_value="mpts",
-                    placeholder="mpts",
-                    help_text="API action parameter (default: mpts)",
                 ),
                 PluginConfigField(
                     name="regions",
@@ -449,7 +441,6 @@ class LiveuamapPlugin(BaseGPSPlugin):
         """
         config = self.get_decrypted_config()
         api_key = config.get("api_key", "")
-        action = config.get("action", "mpts")
         count = int(config.get("count", 50))
         timeout_secs = int(config.get("timeout", 30))
 
@@ -493,7 +484,7 @@ class LiveuamapPlugin(BaseGPSPlugin):
 
             url = (
                 f"https://a.liveuamap.com/api"
-                f"?a={action}"
+                f"?a=mpts"
                 f"&resid={region_id}"
                 f"&time={unix_ts}"
                 f"&count={count}"
@@ -527,7 +518,11 @@ class LiveuamapPlugin(BaseGPSPlugin):
                         })
                         continue
 
-                    data = await response.json()
+                    # content_type=None skips mimetype check;
+                    # the API returns JSON with text/html header
+                    data = await response.json(
+                        content_type=None
+                    )
 
                     if not data.get("success", False):
                         logger.error(

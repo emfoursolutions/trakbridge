@@ -105,7 +105,6 @@ class TestLiveuamapPluginScaffold:
         field_names = [f.name for f in plugin.plugin_metadata["config_fields"]]
 
         assert "api_key" in field_names
-        assert "action" in field_names
         assert "regions" in field_names
         assert "event_time" in field_names
         assert "count" in field_names
@@ -174,7 +173,7 @@ class TestLiveuamapConfigValidation:
         config = {
             "api_key": "test-key-123",
             "regions": "[0, 3]",
-            "action": "mpts",
+
             "event_time": "",
             "count": 50,
             "timeout": 30,
@@ -540,7 +539,7 @@ class TestLiveuamapFetchLocations:
         config = {
             "api_key": "test-api-key",
             "regions": "[0]",
-            "action": "mpts",
+
             "event_time": "",
             "count": 50,
             "timeout": 30,
