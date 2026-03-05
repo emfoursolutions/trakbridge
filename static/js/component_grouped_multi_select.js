@@ -89,7 +89,7 @@ componentRenderers['grouped_multi_select'] = function(pluginType, component) {
                            oninput="filterMultiSelect('${pluginType}', '${field_name}', this.value)">
                 </div>
                 ${groupsHTML}
-                <input type="hidden" id="${hiddenInputId}" name="plugin_${field_name}" value="[]">
+                <input type="hidden" id="${hiddenInputId}" name="plugin_${field_name}" value="[]" data-plugin="${pluginType}">
             </div>
         </div>
     `;

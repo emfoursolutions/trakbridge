@@ -35,7 +35,7 @@ componentRenderers['message_rules'] = function(pluginType, component) {
                     <i class="fas fa-inbox fa-3x mb-3 opacity-25"></i>
                     <p>No rules defined. Click "Add Rule" to create your first rule.</p>
                 </div>
-                <input type="hidden" id="${hiddenInputId}" name="plugin_${field_name}" value="[]">
+                <input type="hidden" id="${hiddenInputId}" name="plugin_${field_name}" value="[]" data-plugin="${pluginType}">
             </div>
         </div>
     `;
