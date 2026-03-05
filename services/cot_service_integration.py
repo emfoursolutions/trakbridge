@@ -65,6 +65,7 @@ class QueuedCOTService:
     _instance = None
     _workers: Dict[int, asyncio.Task] = {}  # Class-level worker tracking
     _connections: Dict[int, Any] = {}  # Class-level connection tracking
+    _identity_uid_suffixes: Dict[int, str] = {}  # Cached UID suffixes for identity heartbeats
 
     def __init__(
         self,
@@ -2933,23 +2934,27 @@ class QueuedCOTService:
             )
             return None
 
-        # Use UID suffix if exists, otherwise generate and persist a random one
+        # Use UID suffix from server object, in-memory cache, or generate a new one
         # Persisting ensures the UID remains consistent across restarts and reconnections
-        if tak_server.identity_uid_suffix:
-            uid_suffix = tak_server.identity_uid_suffix
-        else:
-            # Generate random 6-digit suffix and persist it to the server object
+        uid_suffix = tak_server.identity_uid_suffix or QueuedCOTService._identity_uid_suffixes.get(tak_server.id)
+        if not uid_suffix:
+            # Generate random 6-digit suffix, cache it, and persist to the database
             uid_suffix = str(random.randint(0, 999999)).zfill(6)
-            tak_server.identity_uid_suffix = uid_suffix
-            # Persist to database if we have an active session
+            QueuedCOTService._identity_uid_suffixes[tak_server.id] = uid_suffix
+            try:
+                # Try direct assignment first (works for ORM models)
+                tak_server.identity_uid_suffix = uid_suffix
+            except Exception:
+                pass
             try:
                 from extensions import db
-                if db.session.object_session(tak_server):
+                from models.tak_server import TakServer
+                db_server = db.session.get(TakServer, tak_server.id)
+                if db_server and not db_server.identity_uid_suffix:
+                    db_server.identity_uid_suffix = uid_suffix
                     db.session.commit()
                     logger.debug(f"Persisted UID suffix {uid_suffix} for TAK server {tak_server.name}")
             except Exception as e:
-                # If we can't persist (e.g., in async worker without app context),
-                # the suffix is still set on the object for this session
                 logger.debug(f"Could not persist UID suffix to database: {e}")
 
         # Build unique UID
