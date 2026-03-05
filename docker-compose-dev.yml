@@ -45,11 +45,11 @@ services:
       TRAKBRIDGE_CONFIG_UPDATE_MODE: "preserve"
 
       # Database configuration
-      DB_TYPE: "postgresql"
-      DB_HOST: "postgres"
-      DB_PORT: "5432"
-      DB_NAME: "trakbridge_dev"
-      DB_USER: "trakbridge_dev"
+      DB_TYPE: "${DB_TYPE:-postgresql}"
+      DB_HOST: "${DB_HOST:-postgres}"
+      DB_PORT: "${DB_PORT:-5432}"
+      DB_NAME: "${DB_NAME:-trakbridge_dev}"
+      DB_USER: "${DB_USER:-trakbridge_dev}"
 
       # Development settings
       DEBUG: "false"

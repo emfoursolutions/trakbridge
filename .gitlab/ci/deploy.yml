@@ -132,6 +132,11 @@ deploy-dev-mysql:
         docker pull $CI_REGISTRY_IMAGE:$IMAGE_TAG && \
         export CI_REGISTRY_IMAGE=$CI_REGISTRY_IMAGE && \
         export IMAGE_TAG=$IMAGE_TAG && \
+        export DB_TYPE=mysql && \
+        export DB_HOST=mysql && \
+        export DB_PORT=3306 && \
+        export DB_NAME=trakbridge_db && \
+        export DB_USER=trakbridge && \
         docker compose -f docker-compose.yml --profile $DB_PROFILE down && \
         docker compose -f docker-compose.yml --profile $DB_PROFILE up -d"
 
