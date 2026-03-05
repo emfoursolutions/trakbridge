@@ -15,7 +15,8 @@ This guide explains how to create output handler plugins for TrakBridge's bidire
 7. [Error Handling](#error-handling)
 8. [Performance Best Practices](#performance-best-practices)
 9. [Testing Your Plugin](#testing-your-plugin)
-10. [Advanced Topics](#advanced-topics)
+10. [Custom UI Components](#custom-ui-components)
+11. [Advanced Topics](#advanced-topics)
 
 ## Quick Start
 
@@ -1086,6 +1087,106 @@ async def test_throughput(handler):
     assert throughput >= 100, f"Throughput too low: {throughput:.1f} msg/s"
 ```
 
+## Custom UI Components
+
+Plugins can declare custom UI components via the `custom_components` metadata key. These render as interactive cards in the Stream Configuration form, below the standard config fields.
+
+### Declaring Custom Components
+
+Custom components are defined using `PluginCustomComponent` from `plugins.base_plugin`. Each component specifies a type (which maps to a shared JS renderer), a form field name, a display title, and component-specific configuration.
+
+```python
+from plugins.base_plugin import BaseOutputPlugin, PluginConfigField, PluginCustomComponent
+
+class MyHandler(BaseOutputPlugin):
+    @property
+    def plugin_metadata(self) -> Dict[str, Any]:
+        return {
+            "display_name": "My Handler",
+            "description": "Handler with custom UI",
+            "icon": "fa-bell",
+            "category": "output",
+            "config_fields": [...],
+            "custom_components": [
+                PluginCustomComponent(
+                    type="message_rules",
+                    field_name="rules",
+                    title="Message Routing Rules",
+                    icon="fa-filter",
+                    help_text="Define rules for filtering and routing messages",
+                    config={
+                        "rule_fields": [
+                            {
+                                "name": "uid_filter",
+                                "label": "UID Filter (regex)",
+                                "type": "text",
+                                "placeholder": ".*",
+                                "required": False,
+                                "help": "Regex to match CoT UIDs",
+                            },
+                            # ... more fields per rule
+                        ]
+                    },
+                ),
+            ],
+        }
+```
+
+### PluginCustomComponent Fields
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `type` | `str` | Component type: `"message_rules"`, `"geofence"`, or `"grouped_multi_select"` |
+| `field_name` | `str` | Form field name used by the backend to read submitted data |
+| `title` | `str` | Display title shown on the component card |
+| `icon` | `str` | FontAwesome icon class (e.g., `"fa-filter"`) |
+| `help_text` | `str` | Optional help text displayed below the title |
+| `config` | `dict` | Component-specific configuration (see below) |
+
+### Available Component Types
+
+#### Message Rules (`"message_rules"`)
+
+A dynamic rule builder UI. Users add/remove/edit structured rules, each with an enabled toggle and a set of fields you define. Used by Slack, IRC, and Discord handlers for message filtering and routing.
+
+**Config keys:**
+
+- `rule_fields` — list of field descriptors, each with `name`, `label`, `type` (`"text"` or `"textarea"`), `placeholder`, `required`, `help`, and `default`
+
+The submitted form value is a JSON array of rule objects. Each rule has an `id`, `enabled` flag, and the fields you defined.
+
+#### Geofence (`"geofence"`)
+
+A Leaflet map with shift+drag rectangle drawing and four coordinate inputs (north/south/east/west). Users can optionally enable geographic bounding-box filtering. The geofence values are submitted as individual form fields (`plugin_<field_name>_enabled`, `plugin_<field_name>_north`, etc.), not as a single JSON blob.
+
+**Config keys:**
+
+- `enable_checkbox_label` — label for the enable/disable checkbox
+- `default_center` — `[lat, lng]` array for initial map view
+- `default_zoom` — integer zoom level
+
+#### Grouped Multi-Select (`"grouped_multi_select"`)
+
+A searchable, grouped checkbox grid. Items are organized into collapsible groups with per-group and global select-all/clear controls, plus a text search filter. The submitted form value is a JSON array of the selected integer values.
+
+**Config keys:**
+
+- `items` — dict mapping display name to integer value, e.g. `{"Ukraine": 0, "Syria": 3}`
+- `groups` — dict mapping group name to list of item names, e.g. `{"Europe": ["Ukraine", ...], "Middle East": ["Syria", ...]}`
+
+### Shared JS Architecture
+
+Custom component rendering is handled by four shared JavaScript files loaded by both `create_stream.html` and `edit_stream.html`:
+
+| File | Purpose |
+| ---- | ------- |
+| `static/js/component_common.js` | Registry and dispatch — defines `componentRenderers`, `componentValidators`, `renderCustomComponents()`, and `validateCustomComponents()` |
+| `static/js/component_message_rules.js` | Renders the message rules builder, manages rule state, serializes to JSON |
+| `static/js/component_geofence.js` | Renders the Leaflet map, handles shift+drag drawing, validates coordinates |
+| `static/js/component_grouped_multi_select.js` | Renders the grouped checkbox grid, handles search filtering and serialization |
+
+Each component file self-registers its renderer and validator into the global `componentRenderers` and `componentValidators` dictionaries when loaded. The templates call `renderCustomComponents(pluginType, components)` when a plugin is selected, passing the `custom_components` array from plugin metadata. Templates contain no component-specific logic.
+
 ## Advanced Topics
 
 ### Connection Lifecycle Management
@@ -1261,6 +1362,27 @@ def plugin_metadata(self) -> Dict[str, Any]:
 ```
 
 Help sections appear in the UI sidebar when users configure your plugin.
+
+### Hiding the COT Type Selector
+
+Some plugins hardcode their own CoT type for every event (e.g., a spot map marker type) and the global "COT Type" selector in the Stream Configuration card would be misleading. You can hide it by setting `hide_cot_type` in your plugin metadata:
+
+```python
+@property
+def plugin_metadata(self) -> Dict[str, Any]:
+    return {
+        "display_name": "My OSINT Handler",
+        "description": "Fetches events with hardcoded CoT types",
+        "icon": "fa-globe",
+        "category": "osint",
+        "hide_cot_type": True,  # Hides the COT Type selector in Stream Configuration
+        "config_fields": [
+            # ... your config fields
+        ]
+    }
+```
+
+When `hide_cot_type` is `True`, the COT Type `<select>` is hidden in both the Create Stream and Edit Stream forms. Poll Interval and COT Stale Time remain visible. The selector reappears when the user switches to a plugin that does not set this flag.
 
 ### Message Deduplication
 

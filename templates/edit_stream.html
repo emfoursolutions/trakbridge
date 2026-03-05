@@ -728,6 +728,11 @@ function renderPluginConfig(pluginMeta) {
     // Generate form fields with current values and layout grouping for IRC handler
     const fields = pluginMeta.config_fields || [];
 
+    // Skip fields that are managed by a custom component
+    const componentFieldNames = new Set(
+        (pluginMeta.custom_components || []).map(c => c.field_name)
+    );
+
     // Define field pairs for two-column layout (IRC handler specific)
     const fieldPairs = {
         'server': 'port',
@@ -742,7 +747,7 @@ function renderPluginConfig(pluginMeta) {
     for (let i = 0; i < fields.length; i++) {
         const field = fields[i];
 
-        if (processedFields.has(field.name)) {
+        if (processedFields.has(field.name) || componentFieldNames.has(field.name)) {
             continue;
         }
 

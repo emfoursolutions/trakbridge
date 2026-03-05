@@ -496,6 +496,10 @@ class StreamConfigService:
                 else:
                     logger.warning(f"Unexpected field type: {type(field)}")
 
+            # Serialize boolean metadata flags
+            if metadata.get("hide_cot_type"):
+                serialized["hide_cot_type"] = True
+
             # Serialize help sections
             if "help_sections" in metadata:
                 serialized["help_sections"] = metadata["help_sections"]

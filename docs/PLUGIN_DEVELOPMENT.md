@@ -142,6 +142,25 @@ def plugin_metadata(self) -> Dict[str, Any]:
     }
 ```
 
+#### Hiding the COT Type Selector
+
+Some plugins hardcode their own CoT type for every event and the global "COT Type" selector in the Stream Configuration card would be misleading. Set `hide_cot_type` in your plugin metadata to hide it:
+
+```python
+@property
+def plugin_metadata(self) -> Dict[str, Any]:
+    return {
+        "display_name": "My OSINT Plugin",
+        "description": "Events with hardcoded CoT types",
+        "icon": "fas fa-globe",
+        "category": "osint",
+        "hide_cot_type": True,  # Hides the COT Type selector in Stream Configuration
+        "config_fields": [...]
+    }
+```
+
+When `hide_cot_type` is `True`, the COT Type `<select>` is hidden in both the Create Stream and Edit Stream forms. Poll Interval and COT Stale Time remain visible. The selector reappears when the user switches to a plugin that does not set this flag.
+
 #### Category Mapping Logic
 The plugin categorization service automatically maps plugin categories to display categories:
 
@@ -913,6 +932,104 @@ if field.field_type == "email" and "@" not in str(field_value):
 1. Don't mark non-sensitive fields as `sensitive` (wastes encryption cycles)
 2. Use appropriate ranges for number fields to prevent abuse
 3. Provide defaults to reduce configuration burden
+
+## Custom UI Components
+
+Plugins can declare custom UI components via the `custom_components` metadata key. These render as interactive cards in the Stream Configuration form, below the standard config fields.
+
+### Declaring Custom Components
+
+Custom components are defined using `PluginCustomComponent` from `plugins.base_plugin`:
+
+```python
+from plugins.base_plugin import BaseGPSPlugin, PluginConfigField, PluginCustomComponent
+
+class MyPlugin(BaseGPSPlugin):
+    @property
+    def plugin_metadata(self) -> Dict[str, Any]:
+        return {
+            "display_name": "My Plugin",
+            "description": "Plugin with custom UI",
+            "icon": "fas fa-map-marker-alt",
+            "category": "osint",
+            "config_fields": [...],
+            "custom_components": [
+                PluginCustomComponent(
+                    type="grouped_multi_select",
+                    field_name="regions",
+                    title="Region Selection",
+                    icon="fa-globe",
+                    help_text="Select regions to monitor",
+                    config={
+                        "items": {
+                            "Ukraine": 0,
+                            "Syria": 3,
+                            "Iraq": 4,
+                        },
+                        "groups": {
+                            "Europe": ["Ukraine"],
+                            "Middle East": ["Syria", "Iraq"],
+                        },
+                    },
+                ),
+            ],
+        }
+```
+
+### PluginCustomComponent Fields
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `type` | `str` | Component type: `"message_rules"`, `"geofence"`, or `"grouped_multi_select"` |
+| `field_name` | `str` | Form field name used by the backend to read submitted data |
+| `title` | `str` | Display title shown on the component card |
+| `icon` | `str` | FontAwesome icon class (e.g., `"fa-globe"`) |
+| `help_text` | `str` | Optional help text displayed below the title |
+| `config` | `dict` | Component-specific configuration (see below) |
+
+### Available Component Types
+
+#### Message Rules (`"message_rules"`)
+
+A dynamic rule builder UI. Users add/remove/edit structured rules, each with an enabled toggle and a set of fields you define. Used by handler plugins (Slack, IRC, Discord) for message filtering and routing.
+
+**Config keys:**
+
+- `rule_fields` — list of field descriptors, each with `name`, `label`, `type` (`"text"` or `"textarea"`), `placeholder`, `required`, `help`, and `default`
+
+The submitted form value is a JSON array of rule objects. Each rule has an `id`, `enabled` flag, and the fields you defined.
+
+#### Geofence (`"geofence"`)
+
+A Leaflet map with shift+drag rectangle drawing and four coordinate inputs (north/south/east/west). Users can optionally enable geographic bounding-box filtering. The geofence values are submitted as individual form fields (`plugin_<field_name>_enabled`, `plugin_<field_name>_north`, etc.), not as a single JSON blob.
+
+**Config keys:**
+
+- `enable_checkbox_label` — label for the enable/disable checkbox
+- `default_center` — `[lat, lng]` array for initial map view
+- `default_zoom` — integer zoom level
+
+#### Grouped Multi-Select (`"grouped_multi_select"`)
+
+A searchable, grouped checkbox grid. Items are organized into collapsible groups with per-group and global select-all/clear controls, plus a text search filter. The submitted form value is a JSON array of the selected integer values.
+
+**Config keys:**
+
+- `items` — dict mapping display name to integer value, e.g. `{"Ukraine": 0, "Syria": 3}`
+- `groups` — dict mapping group name to list of item names, e.g. `{"Europe": ["Ukraine", ...], "Middle East": ["Syria", ...]}`
+
+### Shared JS Architecture
+
+Custom component rendering is handled by four shared JavaScript files loaded by both `create_stream.html` and `edit_stream.html`:
+
+| File | Purpose |
+| ---- | ------- |
+| `static/js/component_common.js` | Registry and dispatch — defines `componentRenderers`, `componentValidators`, `renderCustomComponents()`, and `validateCustomComponents()` |
+| `static/js/component_message_rules.js` | Renders the message rules builder, manages rule state, serializes to JSON |
+| `static/js/component_geofence.js` | Renders the Leaflet map, handles shift+drag drawing, validates coordinates |
+| `static/js/component_grouped_multi_select.js` | Renders the grouped checkbox grid, handles search filtering and serialization |
+
+Each component file self-registers its renderer and validator into the global `componentRenderers` and `componentValidators` dictionaries when loaded. The templates call `renderCustomComponents(pluginType, components)` when a plugin is selected, passing the `custom_components` array from plugin metadata. Templates contain no component-specific logic.
 
 ## Plugin Development Process
 
