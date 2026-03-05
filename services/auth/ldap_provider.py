@@ -132,6 +132,13 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
         )
         self.default_role = UserRole(config.get("default_role", "user"))
 
+        # TLS certificate validation settings
+        self.validate_cert = config.get("validate_cert", True)
+        self.ca_cert_file = config.get("ca_cert_file", None)
+        # Treat "null" string (from YAML env substitution) as None
+        if self.ca_cert_file in (None, "", "null"):
+            self.ca_cert_file = None
+
         # Settings
         self.auto_create_users = config.get("auto_create_users", True)
         self.update_user_info = config.get("update_user_info", True)
@@ -157,10 +164,22 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
             # SSL/TLS configuration
             tls_config = None
             if self.use_ssl or self.use_tls:
-                tls_config = ldap3.Tls(
-                    validate=ssl.CERT_REQUIRED,
-                    version=ssl.PROTOCOL_TLS,
-                    ciphers="HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA",
+                tls_kwargs = {
+                    "validate": (
+                        ssl.CERT_REQUIRED
+                        if self.validate_cert
+                        else ssl.CERT_NONE
+                    ),
+                    "version": ssl.PROTOCOL_TLS,
+                    "ciphers": "HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA",
+                }
+                if self.ca_cert_file:
+                    tls_kwargs["ca_certs_file"] = self.ca_cert_file
+                tls_config = ldap3.Tls(**tls_kwargs)
+
+                logger.debug(
+                    f"LDAP TLS config: validate_cert={self.validate_cert}, "
+                    f"ca_cert_file={self.ca_cert_file}"
                 )
 
             # Create server
@@ -396,6 +415,7 @@ class LDAPAuthProvider(BaseAuthenticationProvider):
                 "server": f"{self.host}:{self.port}",
                 "ssl_enabled": self.use_ssl,
                 "tls_enabled": self.use_tls,
+                "validate_cert": self.validate_cert,
                 "base_dn": self.user_base_dn,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
