@@ -732,7 +732,13 @@ class StreamWorker:
                 "enable_per_callsign_cot_types", False
             )
 
-            if cot_type_mode == "per_point" or bool(enable_per_cot_types):
+            # Plugins that manage their own CoT types (hide_cot_type=True)
+            # must use per_point mode so the plugin's cot_type is respected
+            plugin_hides_cot_type = getattr(
+                self.plugin, "plugin_metadata", {}
+            ).get("hide_cot_type", False)
+
+            if cot_type_mode == "per_point" or bool(enable_per_cot_types) or plugin_hides_cot_type:
                 cot_type_mode = "per_point"
                 mode = fresh_stream_config.get('cot_type_mode', 'stream')
                 self.logger.debug(
