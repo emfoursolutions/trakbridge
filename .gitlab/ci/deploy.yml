@@ -295,7 +295,7 @@ deploy-staging:
       echo "Waiting for application to start..."
       sleep 30
       echo "Running health check..."
-      curl -f --retry 5 --retry-delay 10 https://$DOMAIN/api/health
+      curl -f -k --retry 5 --retry-delay 10 https://$DOMAIN/api/health
 
       echo "Staging deployment completed successfully"
       echo "Application available at - https://$DOMAIN"
@@ -356,7 +356,7 @@ deploy-prod:
       echo "Waiting for application to start..."
       sleep 30
       echo "Running health check..."
-      if ! curl -f --retry 5 --retry-delay 10 https://$DOMAIN/api/health; then
+      if ! curl -f -k --retry 5 --retry-delay 10 https://$DOMAIN/api/health; then
         echo "Production health check failed!"
         exit 1
       fi
