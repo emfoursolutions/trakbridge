@@ -123,7 +123,7 @@ class DeepstatePlugin(BaseGPSPlugin):
                     name="api_url",
                     label="Deepstate API URL",
                     field_type="url",
-                    required=True,
+                    required=False,
                     default_value="https://deepstatemap.live/api/history/last",
                     placeholder="https://deepstatemap.live/api/history/last",
                     help_text="URL to the Deepstate API endpoint (default is latest history)",
@@ -321,7 +321,7 @@ class DeepstatePlugin(BaseGPSPlugin):
         Internal method to fetch locations with a given session
         """
         try:
-            api_url = config.get("api_url", self.DEFAULT_API_URL)
+            api_url = config.get("api_url", "") or self.DEFAULT_API_URL
             timeout = int(config.get("timeout", 30))
             max_events = int(config.get("max_events", 100))
 
@@ -684,11 +684,8 @@ class DeepstatePlugin(BaseGPSPlugin):
 
         config = self.get_decrypted_config()
 
-        # Validate API URL
-        api_url = config.get("api_url", "")
-        if not api_url:
-            logger.error("API URL is required")
-            return False
+        # Validate API URL (falls back to default if empty)
+        api_url = config.get("api_url", "") or self.DEFAULT_API_URL
 
         if not api_url.startswith(("http://", "https://")):
             logger.error("API URL must start with http:// or https://")
