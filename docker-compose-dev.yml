@@ -241,8 +241,9 @@ services:
     secrets:
       - db_password
 
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+    # No host port binding - accessed via Docker network only
+    # ports:
+    #   - "${POSTGRES_PORT:-5432}:5432"
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -301,8 +302,9 @@ services:
     secrets:
       - db_password
 
-    ports:
-      - "${MYSQL_PORT:-3306}:3306"
+    # No host port binding - accessed via Docker network only
+    # ports:
+    #   - "${MYSQL_PORT:-3306}:3306"
 
     volumes:
       - mysql_data:/var/lib/mysql

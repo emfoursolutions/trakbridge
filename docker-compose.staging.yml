@@ -240,9 +240,10 @@ services:
     secrets:
       - db_password
     
-    ports:
-      - "5432:5432"
-    
+    # No host port binding - accessed via Docker network only
+    # ports:
+    #   - "5432:5432"
+
     volumes:
       - postgres_staging_data:/var/lib/postgresql/data
       - ./docker/init-scripts/postgres:/docker-entrypoint-initdb.d:ro
@@ -304,8 +305,9 @@ services:
     secrets:
       - db_password
     
-    ports:
-      - "3306:3306"
+    # No host port binding - accessed via Docker network only
+    # ports:
+    #   - "3306:3306"
     
     volumes:
       - mysql_staging_data:/var/lib/mysql
