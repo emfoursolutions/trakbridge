@@ -45,8 +45,9 @@ TrakBridge organizes data sources into categories to simplify selection and mana
 
 ### OSINT (Open Source Intelligence)
 **Purpose**: Intelligence platforms and open-source data feeds
-**Examples**: 
+**Examples**:
 - **Deepstate**: Battlefield intelligence and situational awareness data
+- **LiveUAMap**: Geolocated news and conflict events across 140+ regions worldwide
 
 **Use Cases**:
 - Situational awareness from public sources
@@ -65,7 +66,27 @@ TrakBridge organizes data sources into categories to simplify selection and mana
 - Fleet management and monitoring
 - Emergency response and rescue operations
 
-### EMS (Emergency Management Systems)  
+### Output Handlers (Message Routing)
+**Purpose**: Receive CoT messages from TAK servers and route them to external messaging platforms
+**Examples**:
+- **Slack**: Post CoT messages to Slack channels via incoming webhooks
+- **Discord**: Post CoT messages to Discord channels via webhooks with optional rich embeds
+- **IRC**: Post CoT messages to IRC channels via direct server connection
+
+**Key Features**:
+- Configurable message rules with CoT type pattern matching and format templates
+- Geofence filtering to restrict messages to a geographic area
+- UID-based filtering with regex support (global and per-rule)
+- Message deduplication to prevent duplicate alerts
+- Template variables for callsign, location (lat/lon/MGRS), device info, and more
+
+**Use Cases**:
+- Real-time alerting for chat messages, emergencies, or hostile contacts
+- Team notification of position updates and status changes
+- Geographic-filtered alerts for area-of-interest monitoring
+- Cross-platform situational awareness distribution
+
+### EMS (Emergency Management Systems)
 **Purpose**: Emergency management and response systems
 **Status**: Available for future expansion
 **Planned Examples**: Emergency dispatch systems, first responder networks
@@ -145,6 +166,32 @@ Refresh Interval: Data polling frequency (default: 300 seconds)
 - Valid user account with device access
 - Server configured for API access
 
+##### LiveUAMap OSINT Configuration
+```
+API Key: Your LiveUAMap API key
+Regions: One or more regions to monitor (selected via grouped region picker)
+Events Per Region: Number of events per region per poll (default: 50, max: 500)
+Event Time: Optional datetime for historical queries (leave empty for latest)
+Request Timeout: HTTP request timeout in seconds (default: 30)
+Refresh Interval: Data polling frequency (default: 600 seconds)
+```
+
+**Setup Requirements**:
+- Active LiveUAMap API key
+- Internet connectivity to LiveUAMap API servers
+- At least one region selected from the 140+ available regions
+
+**Region Categories**:
+- **International/Conflict**: 65+ countries and conflict zones (Ukraine, Syria, Iraq, Israel-Palestine, etc.)
+- **US States**: All 50 US states plus District of Columbia and Puerto Rico
+- **Organizations/Topics**: Thematic feeds (ISIS, Hezbollah, Kurds, US Protests, etc.)
+
+**How It Works**:
+- Each selected region makes one API call per poll cycle
+- Events are returned as colour-coded spot map markers on TAK
+- Marker colours are extracted from the LiveUAMap event data and mapped to CoT icon colours
+- CoT type is fixed to `b-m-p-s-m` (spot map marker) for all events
+
 #### Step 4: Configure Custom Callsigns & Tracker Control (Tracker Plugins Only)
 *Available for: Garmin InReach, SPOT Tracker, Traccar*
 
@@ -215,6 +262,129 @@ Refresh Interval: Data polling frequency (default: 300 seconds)
 - Regularly rotate credentials according to security policy
 - Enable two-factor authentication where supported
 - Avoid sharing credentials between multiple streams
+
+## Configuring Output Handlers
+
+Output handlers receive CoT messages from connected TAK servers and route them to external messaging platforms. Unlike input streams (which fetch data and push it *to* TAK), output handlers listen for CoT messages *from* TAK and forward them to Slack, Discord, or IRC.
+
+### Common Output Handler Features
+
+All output handlers share these capabilities:
+
+#### Message Rules
+Message rules control which CoT messages are forwarded and how they are formatted. Rules are evaluated in order; the first matching rule wins.
+
+Each rule includes:
+- **CoT Type Pattern**: Pattern to match against CoT types (e.g., `b-t-f` for chat, `a-f-*` for all friendly, `b-a-*` for all alerts). Supports wildcard (`*`) suffix matching.
+- **UID Filter (regex)**: Optional per-rule regex to filter by device UID (e.g., `^ANDROID-.*` to match only Android devices)
+- **Format Template**: Message format using template variables
+
+#### Template Variables
+Use these variables in format templates to build meaningful messages:
+
+| Category | Variables |
+|----------|-----------|
+| **Basic** | `{type}`, `{uid}`, `{time}`, `{stale}`, `{callsign}`, `{remarks}` |
+| **Location** | `{lat}`, `{lon}`, `{hae}`, `{mgrs}` |
+| **Group** | `{group_name}`, `{group_role}` |
+| **Device** | `{device}`, `{platform}`, `{os}`, `{version}`, `{battery}` |
+| **Track** | `{speed}`, `{course}`, `{xmpp_username}` |
+
+**Example templates**:
+- Chat messages: `[CHAT] {callsign}: {remarks}`
+- Emergency alerts: `[EMERGENCY] {callsign} at {mgrs}`
+- Position reports: `[{group_name}] {callsign} ({group_role}) - Battery: {battery}%`
+- Hostile contacts: `[HOSTILE] {type} at {mgrs}`
+
+#### Geofence Filtering
+All output handlers support geographic filtering via a bounding-box geofence. When enabled, only CoT messages with coordinates inside the defined area are forwarded to the messaging platform.
+
+**Configuring a Geofence**:
+1. Check **"Enable Geofence Filtering"** in the Geofence section
+2. Define the bounding box by setting north, south, east, and west bounds on the map
+3. Messages outside the bounds are silently dropped
+
+**Use Cases for Geofencing**:
+- Monitor a specific area of operations without noise from other regions
+- Filter out test devices or units operating in different geographic areas
+- Reduce message volume by focusing on a defined area of interest
+
+#### Global UID Filter
+An optional global regex filter applied before message rules. This acts as a pre-filter to restrict which device UIDs are even considered. Individual message rules can have their own UID filters for more granular control.
+
+#### Message Deduplication
+All handlers automatically deduplicate messages within a 5-second window. If the same UID and CoT type combination is seen multiple times within this window, only the first message is forwarded. This prevents duplicate alerts caused by TAK server rebroadcasting.
+
+### Slack Handler Configuration
+
+```
+Webhook URL: Incoming webhook URL from your Slack app (required)
+Global UID Filter: Optional regex pre-filter for device UIDs
+```
+
+**Setup Requirements**:
+- A Slack workspace with an incoming webhook configured
+- Webhook URL from Slack app settings (Settings → Incoming Webhooks)
+
+**Message Format**: Messages are sent using Slack Block Kit formatting for rich display.
+
+### Discord Handler Configuration
+
+```
+Webhook URL: Discord channel webhook URL (required)
+Bot Username: Custom display name (optional, overrides webhook default)
+Bot Avatar URL: Custom avatar image URL (optional)
+Message Format: Simple Text or Rich Embeds
+Global UID Filter: Optional regex pre-filter for device UIDs
+```
+
+**Setup Requirements**:
+- A Discord server with a channel webhook configured
+- Webhook URL from Discord channel settings (Edit Channel → Integrations → Webhooks)
+
+**Message Format Options**:
+- **Simple Text**: Plain text messages (up to 2,000 characters)
+- **Rich Embeds**: Colour-coded Discord embeds with structured fields for location, battery, group, device info, and remarks. Embed colours are automatically mapped from CoT type (green for friendly, red for hostile/emergency, blue for chat, etc.)
+
+### IRC Handler Configuration
+
+```
+IRC Server: Server hostname (required)
+IRC Port: Server port (required, default: 6667 for plain, 6697 for SSL)
+Use SSL/TLS: Enable encrypted connection
+Verify SSL Certificate: Disable only for self-signed certificates in trusted environments
+Nickname: IRC bot nickname (required)
+Channel: IRC channel to join, including # (required)
+Server Password: Optional server password
+Global UID Filter: Optional regex pre-filter for device UIDs
+```
+
+**Setup Requirements**:
+- Access to an IRC server that allows bot connections
+- A channel the bot can join (create one or use an existing channel)
+
+**Connection Behavior**:
+- The IRC connection is established when the stream starts and maintained with automatic keepalive pings
+- Messages longer than 400 characters are automatically split across multiple lines
+- The bot gracefully parts the channel and quits on stream shutdown
+
+### Output Handler Best Practices
+
+#### Rule Design
+- Place more specific rules before general ones (first match wins)
+- Use per-rule UID filters instead of the global filter when different device groups need different formatting
+- Start with a few targeted rules and expand as needed
+
+#### Geofence Planning
+- Define geofence bounds slightly larger than your actual area of interest to account for GPS drift
+- Test with a known device position inside the bounds before going operational
+- Remember that messages without coordinates (e.g., some chat messages) are not filtered by geofence
+
+#### Template Design
+- Include `{callsign}` in most templates for quick identification
+- Use `{mgrs}` for military grid references or `{lat},{lon}` for decimal coordinates
+- Add `{remarks}` for chat and alert messages where the text content matters
+- Keep templates concise for IRC (400-character line limit) and Slack/Discord readability
 
 ## Managing Existing Streams
 
@@ -527,7 +697,7 @@ Contact your system administrator for:
 
 ---
 
-**User Guide Version**: 1.4.0  
-**Last Updated**: 2025-09-13  
-**Applies To**: TrakBridge v1.0.0-rc.5 and later  
-**New Features**: Multi-server distribution, individual tracker enable/disable control, enhanced performance optimization
+**User Guide Version**: 1.5.0
+**Last Updated**: 2026-03-06
+**Applies To**: TrakBridge v1.0.0-rc.5 and later
+**New Features**: Output handler plugins (Slack, Discord, IRC) with geofence filtering and message rules, LiveUAMap OSINT plugin
