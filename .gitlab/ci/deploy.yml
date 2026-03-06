@@ -79,6 +79,8 @@ deploy-dev-postgres:
         docker pull $CI_REGISTRY_IMAGE:$IMAGE_TAG && \
         export CI_REGISTRY_IMAGE=$CI_REGISTRY_IMAGE && \
         export IMAGE_TAG=$IMAGE_TAG && \
+        export COMPOSE_PROJECT_NAME=tb-dev && \
+        export DOMAIN=$DOMAIN && \
         docker compose -f docker-compose.yml --profile $DB_PROFILE down && \
         docker compose -f docker-compose.yml --profile $DB_PROFILE up -d"
 
@@ -132,6 +134,8 @@ deploy-dev-mysql:
         docker pull $CI_REGISTRY_IMAGE:$IMAGE_TAG && \
         export CI_REGISTRY_IMAGE=$CI_REGISTRY_IMAGE && \
         export IMAGE_TAG=$IMAGE_TAG && \
+        export COMPOSE_PROJECT_NAME=tb-dev-mysql && \
+        export DOMAIN=$DOMAIN && \
         export DB_TYPE=mysql && \
         export DB_HOST=mysql && \
         export DB_PORT=3306 && \
@@ -192,6 +196,8 @@ deploy-dev-sqlite:
       ssh $DEPLOY_USER@$DEPLOY_HOST "cd $DEPLOY_PATH && \
         echo '$CI_REGISTRY_PASSWORD' | docker login -u '$CI_REGISTRY_USER' --password-stdin $CI_REGISTRY && \
         docker pull $CI_REGISTRY_IMAGE:$IMAGE_TAG && \
+        export COMPOSE_PROJECT_NAME=tb-dev-sqlite && \
+        export DOMAIN=$DOMAIN && \
         export DB_TYPE=sqlite && \
         docker compose -f docker-compose.yml down && \
         docker compose -f docker-compose.yml up -d app"

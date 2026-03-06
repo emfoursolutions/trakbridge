@@ -152,10 +152,10 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=frontend"
-      - "traefik.http.routers.tb-dev.rule=Host(`tb-dev.emfour.net`)"
-      - "traefik.http.routers.tb-dev.entrypoints=websecure"
-      - "traefik.http.routers.tb-dev.tls=true"
-      - "traefik.http.services.tb-dev.loadbalancer.server.port=5000"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-trakbridge}.rule=Host(`${DOMAIN:-tb-dev.emfour.net}`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-trakbridge}.entrypoints=websecure"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-trakbridge}.tls=true"
+      - "traefik.http.services.${COMPOSE_PROJECT_NAME:-trakbridge}.loadbalancer.server.port=5000"
 
     # Ports - removed for Traefik-only access
     # ports:
