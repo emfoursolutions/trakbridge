@@ -145,7 +145,7 @@ services:
   # TrakBridge Application - Staging Configuration
   # =============================================================================
   trakbridge:
-    image: "${CI_REGISTRY_IMAGE:-trakbridge}:${CI_COMMIT_TAG:-latest}"
+    image: "${CI_REGISTRY_IMAGE:-trakbridge}:${IMAGE_TAG:-staging-latest}"
     container_name: trakbridge-staging
     restart: unless-stopped
     
