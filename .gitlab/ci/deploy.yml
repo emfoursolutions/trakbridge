@@ -88,7 +88,7 @@ deploy-dev-postgres:
       echo "Waiting for application to start..."
       sleep 30
       echo "Running health check..."
-      curl -f --retry 5 --retry-delay 10 https://$DOMAIN/api/health
+      curl -fk --retry 5 --retry-delay 10 https://$DOMAIN/api/health
 
       echo "Development (PostgreSQL) deployment completed successfully"
       echo "Application available at - https://$DOMAIN"
@@ -148,7 +148,7 @@ deploy-dev-mysql:
       echo "Waiting for application to start..."
       sleep 30
       echo "Running health check..."
-      curl -f --retry 5 --retry-delay 10 https://$DOMAIN/api/health
+      curl -fk --retry 5 --retry-delay 10 https://$DOMAIN/api/health
 
       echo " Development (MySQL) deployment completed successfully"
       echo " Application available at - https://$DOMAIN"
@@ -206,7 +206,7 @@ deploy-dev-sqlite:
       echo "Waiting for application to start..."
       sleep 30
       echo "Running health check..."
-      curl -f --retry 5 --retry-delay 10 https://$DOMAIN/api/health
+      curl -fk --retry 5 --retry-delay 10 https://$DOMAIN/api/health
 
       echo "Development (SQLite) deployment completed successfully"
       echo "Application available at - https://$DOMAIN"
