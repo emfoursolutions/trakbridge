@@ -1398,6 +1398,17 @@ class QueuedCOTService:
         import app as flask_app
 
         try:
+            # Filter out TrakBridge's own identity heartbeats echoed back by the TAK server
+            try:
+                from defusedxml import ElementTree as DefusedET
+                root = DefusedET.fromstring(cot_xml)
+                uid = root.get('uid', '')
+                if uid.startswith('trakbridge-'):
+                    logger.debug(f"Skipping TrakBridge identity CoT echo: {uid}")
+                    return
+            except Exception:
+                pass  # If parsing fails, let the message through for plugins to handle
+
             # Ensure we're in an app context for database access
             # Use the global app instance from app.py
             with flask_app.app.app_context():
@@ -1447,7 +1458,7 @@ class QueuedCOTService:
                                 del self._output_plugin_cache[stream.id]
                                 continue
 
-                    logger.info(f"Routing CoT message to output plugin: {stream.plugin_type} (stream: {stream.name})")
+                    logger.debug(f"Routing CoT message to output plugin: {stream.plugin_type} (stream: {stream.name})")
 
                     # Route to plugin (with timeout)
                     try:

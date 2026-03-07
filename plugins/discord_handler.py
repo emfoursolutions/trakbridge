@@ -300,7 +300,7 @@ class DiscordHandler(BaseOutputPlugin):
     ) -> None:
         """Parse CoT and send to Discord if it matches our filters"""
 
-        logger.info(
+        logger.debug(
             f"DiscordHandler received CoT message from TAK server "
             f"{tak_server_id}, size: {len(cot_xml)} bytes"
         )
@@ -314,7 +314,7 @@ class DiscordHandler(BaseOutputPlugin):
             cot_type = root.get("type", "")
             uid = root.get("uid", "")
 
-            logger.info(f"Parsed CoT: type={cot_type}, uid={uid}")
+            logger.debug(f"Parsed CoT: type={cot_type}, uid={uid}")
 
             # Extract lat/lon for geofence filtering
             point = root.find("point")

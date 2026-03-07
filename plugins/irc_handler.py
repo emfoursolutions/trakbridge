@@ -399,7 +399,7 @@ class IRCHandler(BaseOutputPlugin):
     async def handle_cot_message(self, cot_xml: bytes, tak_server_id: int) -> None:
         """Parse CoT and send to IRC if it matches our filters"""
 
-        logger.info(f"IRCHandler received CoT message from TAK server {tak_server_id}, size: {len(cot_xml)} bytes")
+        logger.debug(f"IRCHandler received CoT message from TAK server {tak_server_id}, size: {len(cot_xml)} bytes")
         logger.debug(f"CoT XML preview: {cot_xml}")
 
         # Ensure we're connected before processing (reconnect if needed)
@@ -415,7 +415,7 @@ class IRCHandler(BaseOutputPlugin):
             cot_type = root.get("type", "")
             uid = root.get("uid", "")
 
-            logger.info(f"Parsed CoT: type={cot_type}, uid={uid}")
+            logger.debug(f"Parsed CoT: type={cot_type}, uid={uid}")
 
             # Extract lat/lon for future geofence filtering
             point = root.find("point")
