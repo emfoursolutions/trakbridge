@@ -135,6 +135,22 @@ def setup_logging(app):
     app.logger.info(f"Logging Service Started - Version: {version}")
 
 
+def _sanitize_db_uri(uri: str) -> str:
+    """Remove credentials from a database URI for safe display in logs"""
+    try:
+        from urllib.parse import urlparse, urlunparse
+
+        parsed = urlparse(uri)
+        if parsed.password:
+            sanitized_netloc = f"{parsed.username}:****@{parsed.hostname}"
+            if parsed.port:
+                sanitized_netloc += f":{parsed.port}"
+            return urlunparse(parsed._replace(netloc=sanitized_netloc))
+    except Exception:
+        pass
+    return uri
+
+
 def log_startup_banner(app):
     """Log a comprehensive startup banner."""
     try:
@@ -165,12 +181,14 @@ def log_startup_banner(app):
             banner_lines.append(f"   Git Commit: {build_info['git_commit']}")
 
         # Add configuration details
-        db_uri = str(app.config.get("SQLALCHEMY_DATABASE_URI", "not configured"))
+        db_uri = _sanitize_db_uri(
+            str(app.config.get("SQLALCHEMY_DATABASE_URI", "not configured"))
+        )
         banner_lines.extend(
             [
                 "",
                 "  Configuration:",
-                f"   Database: {db_uri[:50]}...",
+                f"   Database: {db_uri}",
                 f"   Max Worker Threads: {app.config.get('MAX_WORKER_THREADS', 'not set')}",
                 f"   Max Concurrent Streams: {app.config.get('MAX_CONCURRENT_STREAMS', 'not set')}",
                 f"   Log Level: {app.config.get('LOG_LEVEL', 'not set')}",
@@ -256,12 +274,14 @@ def log_primary_startup_banner(app, worker_count: Optional[int] = None):
             banner_lines.append(f"   Git Commit: {build_info['git_commit']}")
 
         # Add configuration details
-        db_uri = str(app.config.get("SQLALCHEMY_DATABASE_URI", "not configured"))
+        db_uri = _sanitize_db_uri(
+            str(app.config.get("SQLALCHEMY_DATABASE_URI", "not configured"))
+        )
         banner_lines.extend(
             [
                 "",
                 "  Configuration:",
-                f"   Database: {db_uri[:50]}...",
+                f"   Database: {db_uri}",
                 f"   Max Worker Threads: {app.config.get('MAX_WORKER_THREADS', 'not set')}",
                 f"   Max Concurrent Streams: {app.config.get('MAX_CONCURRENT_STREAMS', 'not set')}",
                 f"   Log Level: {app.config.get('LOG_LEVEL', 'not set')}",
