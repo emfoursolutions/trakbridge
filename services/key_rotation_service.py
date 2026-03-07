@@ -60,6 +60,23 @@ class KeyRotationService:
         self.is_rotating = False
         self.rotation_thread: Optional[threading.Thread] = None
 
+    @staticmethod
+    def _sanitize_db_uri(uri: str) -> str:
+        """Remove credentials from a database URI for safe display in UI and logs"""
+        try:
+            from urllib.parse import urlparse, urlunparse
+
+            parsed = urlparse(uri)
+            if parsed.password:
+                # Replace password with masked value, preserve username
+                sanitized_netloc = f"{parsed.username}:****@{parsed.hostname}"
+                if parsed.port:
+                    sanitized_netloc += f":{parsed.port}"
+                return urlunparse(parsed._replace(netloc=sanitized_netloc))
+        except Exception:
+            pass
+        return uri
+
     def get_database_info(self, app_context=None) -> Dict[str, Any]:
         """Get database type and connection information"""
 
@@ -69,6 +86,9 @@ class KeyRotationService:
 
                 # Get database URI
                 db_uri = current_app.config.get("SQLALCHEMY_DATABASE_URI", "")
+
+                # Sanitize URI to remove credentials before exposing to UI/logs
+                sanitized_uri = self._sanitize_db_uri(db_uri)
 
                 # Determine database type
                 if "sqlite" in db_uri.lower():
@@ -81,17 +101,17 @@ class KeyRotationService:
                         db_path = os.path.join(os.getcwd(), db_path)
                 elif "mysql" in db_uri.lower():
                     db_type = "mysql"
-                    db_path = db_uri
+                    db_path = sanitized_uri
                 elif "postgresql" in db_uri.lower():
                     db_type = "postgresql"
-                    db_path = db_uri
+                    db_path = sanitized_uri
                 else:
                     db_type = "unknown"
-                    db_path = db_uri
+                    db_path = sanitized_uri
 
                 return {
                     "type": db_type,
-                    "uri": db_uri,
+                    "uri": sanitized_uri,
                     "path": db_path,
                     "engine": str(db.engine),
                 }

@@ -318,11 +318,11 @@ deploy-prod:
   variables:
     DEPLOY_PATH: /opt/prod/trakbridge
     DB_PROFILE: postgres
-    DOMAIN: tb.emfour.net
+    DOMAIN: tb-prod.emfour.net
   script:
     - echo "Deploying to PRODUCTION environment..."
     - echo "PRODUCTION DEPLOYMENT - Manual approval required"
-    - echo "Environment - tb.emfour.net"
+    - echo "Environment - tb-prod.emfour.net"
     - echo "Database - PostgreSQL"
     - |
       # Determine image tag based on commit type
@@ -366,7 +366,7 @@ deploy-prod:
       echo "Production deployment verified and healthy"
   environment:
     name: production
-    url: https://tb.emfour.net
+    url: https://tb-prod.emfour.net
   rules:
     - if: $CI_COMMIT_TAG
       when: manual

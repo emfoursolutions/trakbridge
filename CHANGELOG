@@ -1,3 +1,112 @@
+## [v1.2.0] - 2026-03-06
+
+### Added
+- **Bidirectional TAK Communication**
+  - RX worker coroutine receives CoT messages from connected TAK servers alongside existing TX loop
+  - Per-server `enable_rx` toggle to control inbound message reception
+  - Plugin dispatch system routes received CoT to all registered output plugins with 10-second timeout
+  - XML security screening for XXE and entity expansion attacks on inbound messages
+  - 1MB buffer limit and 30-second read timeout for stability
+  - New plugin categories: "output" and "bidirectional"
+
+- **IRC Handler Plugin**
+  - Output plugin forwarding TAK CoT messages to IRC channels over TCP or SSL
+  - Configurable message rules with CoT type pattern matching (wildcards) and UID regex filters
+  - Template-based message formatting with variables: callsign, lat, lon, mgrs, type, remarks, battery, speed, etc.
+  - Global geofence bounding box filter for location-based message filtering
+  - 5-second deduplication window to prevent double-posting from TAK re-broadcasts
+  - Persistent connection with PING/PONG keepalive and async reader task
+
+- **Discord Webhook Output Plugin**
+  - Forward CoT messages to Discord channels via incoming webhook
+  - Rich embed support with colour-coded fields for MGRS, battery, group/role, and remarks
+  - Plain text mode with template-based formatting
+  - Message rules, UID filtering, geofence filtering, and deduplication consistent with IRC/Slack
+
+- **Slack Handler Plugin**
+  - Forward CoT messages to Slack channels via incoming webhook using Block Kit formatting
+  - Message rules, templates, geofence filtering, and deduplication consistent with IRC/Discord
+  - Sensitive webhook URL masking on edit forms
+  - SSL handling with certifi CA bundle and graceful fallback
+
+- **LiveUAMap OSINT Plugin**
+  - Pulls geolocated news and conflict events from LiveUAMap API into CoT markers
+  - 140+ selectable regions organized into groups (international conflicts, US states, etc.)
+  - SPOTMAP iconset ARGB colour mapping for event type differentiation
+  - Configurable events-per-region limit (1–500) and optional historical event time parameter
+  - Location string included in CoT remarks field
+  - Uses generic grouped_multi_select custom UI component for region selection
+
+- **TrakBridge Identity for TAK Servers**
+  - Per-server identity toggle announcing TrakBridge as a named TAK client
+  - Configurable callsign, role, team colour, and optional MGRS grid location
+  - 30-second heartbeat with 60-second stale time
+  - Two display modes: team member on map (with MGRS) or roster-only (without)
+  - Deterministic UID derived from TAK server database ID
+
+- **Geofence Map Visualization**
+  - Interactive Leaflet map on stream detail page showing configured geofence boundary
+  - Blue rectangle overlay with coordinate popup and auto-zoom to bounds
+  - COT Type card conditionally hidden for output plugin streams
+
+- **Metadata-Driven Plugin Components**
+  - Dynamic UI rendering from plugin metadata for message rules, geofence, and multi-select components
+  - Extracted ~1,070 lines of duplicated JS into four shared static files
+  - Generic grouped_multi_select component reusable by any plugin
+
+- **Sample Custom Handler Plugin**
+  - Production-ready reference implementation at docs/example_external_plugins/sample_custom_handler.py
+  - Handler Plugin Development Guide (382 lines) covering full development workflow
+  - Updated plugin docs distinguishing input vs. output plugin types
+
+- **Security Hardening**
+  - IP spoofing prevention: X-Forwarded-For only trusted when PROXY_TRUSTED=true with configurable TRUSTED_PROXY_COUNT
+  - CSRF protection via Flask-WTF CSRFProtect on all 11 HTML forms
+  - Session fixation prevention: session regenerated on every login for all auth methods
+  - HTTP security headers via flask-talisman (HSTS, CSP, frame-ancestors, X-Content-Type-Options, Referrer-Policy)
+  - Inbound CoT XML screened for XXE and billion-laughs attacks
+
+- **Modular CI/CD Pipeline**
+  - Split ~2,500 line .gitlab-ci.yml into modules: test.yml, security.yml, build.yml, deploy.yml, release.yml, validate.yml
+  - Shared template anchors for package installation and database services
+  - Pipeline documentation in .gitlab/ci/README.md
+
+- **Memory-Safe Output Plugin Stats**
+  - Bounded growth stats tracking for output plugin message metrics
+
+### Changed
+- Custom component JS extracted from templates into shared static files (component_common.js, component_geofence.js, component_grouped_multi_select.js, component_message_rules.js)
+- region_selector component type renamed to generic grouped_multi_select
+- Docker networking: removed external ports from dev and staging environments
+- Traefik labels use configurable COMPOSE_PROJECT_NAME and DOMAIN variables
+- Dev compose DB config overridable for MySQL and SQLite deployments
+- Staging compose uses IMAGE_TAG variable instead of CI_COMMIT_TAG
+- SECURITY.md updated with recent security improvements
+- User Guide updated to include handler plugins and LiveUAMap plugin
+- Plugin development documentation updated for input vs. output plugin types
+
+### Fixed
+- Deepstate URL now optional, falls back to default if left blank
+- Custom CoT attributes supported in fallback CoT path
+- COT Type selector hidden for plugins that manage their own CoT types
+- Per-point CoT type mode forced for plugins with hide_cot_type
+- Custom component hidden inputs include data-plugin attribute for JS collection
+- SPOTMAP iconset colours updated to match actual values
+- LDAP TLS respects validate_cert and ca_cert_file settings
+- P12 certificates pre-converted to PEM to avoid pytak crash when CA cert missing
+- Frozen DTO handling when setting identity_uid_suffix in heartbeat loop
+- LiveUAMap regions field handled as list or JSON string
+- Global geofence enabled state persists after save
+- Invalid longitude values prevented in geofence map drawing
+- Output plugin lifecycle management for proper connection cleanup
+- Message metrics calculated correctly after template cleanup
+- RuntimeError handled when awaiting task created in different event loop
+- Logging watchdog prevents feedback loop with debug mode and noisy logging suppression
+- CSP violations and CSRF API exemption issues resolved
+- SSL certificate checks disabled for deployment health checks on staging and production
+- Manual certificate assignment fixed for production deployment
+- Docker-compose reference and .yml file cleanup
+
 ## [v1.1.0] - 2025-11-07
 
 ### Added

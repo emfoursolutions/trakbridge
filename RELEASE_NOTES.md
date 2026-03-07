@@ -1,5 +1,199 @@
 # TrakBridge Release Notes
 
+## Version 1.2.0 - Handler Plugins & Bidirectional TAK Release
+**Release Date:** March 6, 2026
+**Major Features: Output/Handler Plugin Architecture, LiveUAMap OSINT Plugin, Security Hardening**
+
+---
+
+## NEW FEATURES & ENHANCEMENTS
+
+### Bidirectional TAK Communication
+**Receive CoT Messages from TAK Servers**
+
+TrakBridge can now receive CoT messages from connected TAK servers and dispatch them to output handler plugins. This completes the bidirectional communication loop — TrakBridge is no longer send-only.
+
+**Core Capabilities:**
+- **RX worker** - Dedicated receive coroutine runs alongside the existing transmit loop on each TAK connection
+- **Per-server toggle** - Enable or disable RX independently on each TAK server via `enable_rx` setting
+- **Plugin dispatch** - Received CoT messages are routed to all registered output plugins with 10-second per-plugin timeout
+- **Security screening** - Inbound XML is validated against XXE attacks and entity expansion before dispatch
+- **Stability safeguards** - 1MB buffer limit and 30-second read timeout prevent resource exhaustion
+
+**New Plugin Categories:**
+- **Output** - Plugins that receive CoT from TAK and forward externally (IRC, Slack, Discord)
+- **Bidirectional** - Reserved for plugins that both send and receive CoT
+
+### IRC Handler Plugin
+**Forward TAK Messages to IRC Channels**
+
+- **IRC connectivity** - Connects over plain TCP or SSL (ports 6667/6697) with optional certificate verification
+- **Message rules** - Configurable rules matching CoT type patterns with wildcards and optional UID regex filters
+- **Template formatting** - Rich message templates with variables: `{callsign}`, `{lat}`, `{lon}`, `{mgrs}`, `{type}`, `{remarks}`, `{group_name}`, `{battery}`, `{speed}`, and more
+- **Geofence filtering** - Global geographic bounding box filter to limit forwarded messages by location
+- **Deduplication** - 5-second window prevents double-posting from TAK server re-broadcasts
+- **Persistent connection** - PING/PONG keepalive with async reader task
+
+### Discord Webhook Output Plugin
+**Forward TAK Messages to Discord Channels**
+
+- **Webhook integration** - Posts to Discord channels via incoming webhook URL
+- **Rich embeds** - Colour-coded Discord embeds with structured fields for MGRS location, battery, group/role, and remarks
+- **Plain text mode** - Alternative template-based plain text formatting
+- **Message rules** - Same CoT type matching, UID filtering, and template system as IRC and Slack
+- **Geofence filtering** - Global geographic bounding box filter
+- **Deduplication** - 5-second TTL window
+
+### Slack Handler Plugin
+**Forward TAK Messages to Slack Channels**
+
+- **Block Kit formatting** - Rich Slack messages using the blocks API
+- **Webhook integration** - Posts via Slack incoming webhook URL
+- **Message rules and templates** - Consistent with IRC and Discord handler plugins
+- **Geofence filtering** - Global geographic bounding box filter
+- **Sensitive field masking** - Webhook URLs masked on edit to prevent accidental exposure
+
+### LiveUAMap OSINT Plugin
+**Geolocated News and Conflict Events on TAK Maps**
+
+- **LiveUAMap API integration** - Pulls geolocated events using a user-supplied API key
+- **140+ selectable regions** - Organized into groups: international conflicts, US states, and more
+- **CoT marker generation** - Each event becomes a map marker visible in ATAK/WinTAK
+- **SPOTMAP iconset colours** - Markers are colour-coded by event type using ARGB values from the SPOTMAP iconset
+- **Configurable limits** - 1–500 events per region per poll cycle
+- **Historical queries** - Optional event time parameter for historical data
+- **Location in remarks** - Event location string included in CoT remarks field
+
+### TrakBridge Identity for TAK Servers
+**Announce TrakBridge as a Named TAK Client**
+
+- **Per-server identity toggle** - Control whether TrakBridge appears in the TAK roster on each server
+- **Configurable identity** - Set callsign, role, team colour, and optional MGRS grid location
+- **30-second heartbeat** - Identity CoT sent every 30 seconds with 60-second stale time
+- **Two display modes:**
+  - With MGRS location: appears as team member on the map (`a-f-G-U-C`)
+  - Without location: appears in roster only (`b-t-c-v`)
+- **Deterministic UID** - Consistent identity across restarts, derived from TAK server database ID
+
+### Geofence Map Visualization
+**Interactive Map Display for Geofence Boundaries**
+
+- **Leaflet map** - Interactive map on stream detail page showing the configured geofence boundary
+- **Visual overlay** - Blue rectangle representing the bounding box with coordinate popup on click
+- **Auto-zoom** - Map automatically fits to geofence bounds
+- **Output plugin support** - Shown for output plugins with global geofence enabled
+- **COT Type card hidden** - Irrelevant COT Type card conditionally hidden for output plugin streams
+
+### Metadata-Driven Plugin Components
+**Dynamic UI Rendering from Plugin Metadata**
+
+- **Component system** - Plugin UI components (message rules, geofence, multi-select) described in plugin metadata and rendered dynamically
+- **Shared JavaScript** - Extracted ~1,070 lines of duplicated JS into four shared static files
+- **Generic grouped multi-select** - Reusable component for any plugin needing multi-select with groups
+- **Reduced template complexity** - Removed ~1,400 lines of hardcoded plugin-specific HTML/JS
+
+### Sample Custom Handler Plugin
+**Developer Reference Implementation**
+
+- **Production-ready example** - Complete handler plugin demonstrating configuration, filtering, formatting, and lifecycle management
+- **Developer guide** - 382-line HANDLER_PLUGIN_DEVELOPMENT_GUIDE.md covering the full development workflow
+- **Updated plugin docs** - Distinguishes input (GPS tracker) vs. output (handler) plugin types
+
+---
+
+## SECURITY IMPROVEMENTS
+
+### Comprehensive Security Hardening
+
+- **IP Spoofing Prevention** - `X-Forwarded-For` header only trusted when `PROXY_TRUSTED=true` is explicitly set, with configurable `TRUSTED_PROXY_COUNT`
+- **CSRF Protection** - Flask-WTF CSRFProtect added globally with tokens on all 11 HTML forms
+- **Session Fixation Prevention** - Session cleared and regenerated on every login for all auth methods
+- **HTTP Security Headers** - flask-talisman enforces HSTS, Content-Security-Policy, frame-ancestors, X-Content-Type-Options, and Referrer-Policy
+- **XML Security** - Inbound CoT XML screened for XXE attacks and billion-laughs entity expansion
+- **Updated SECURITY.md** - Documentation updated with recent security improvements
+
+---
+
+## INFRASTRUCTURE & CI/CD
+
+### Modular CI/CD Pipeline
+**Maintainable Pipeline Architecture**
+
+- **Split monolithic pipeline** - ~2,500 line `.gitlab-ci.yml` split into focused modules under `.gitlab/ci/`
+- **Pipeline modules:** `test.yml`, `security.yml`, `build.yml`, `deploy.yml`, `release.yml`, `validate.yml`
+- **Shared templates** - Reusable anchors for package installation, database services, and common configurations
+- **Pipeline documentation** - README.md documenting CI structure and usage
+
+### Deployment Improvements
+
+- **Docker networking** - Removed external ports from dev and staging environments; all communication through Docker internal networking
+- **Traefik labels** - Development environment uses configurable `${COMPOSE_PROJECT_NAME}` and `${DOMAIN}` variables
+- **Database flexibility** - Dev compose DB config overridable for MySQL and SQLite deployments
+- **Staging image tags** - Fixed IMAGE_TAG variable mismatch in staging compose
+- **SSL certificate checks** - Disabled for deployment health checks on staging and production
+
+---
+
+## BUG FIXES
+
+### Plugin Fixes
+- **Deepstate URL** now optional, falls back to default if left blank
+- **Custom CoT attributes** supported in fallback CoT path with debug logging
+- **COT Type selector** hidden for plugins that manage their own CoT types
+- **Per-point CoT type mode** forced for plugins with `hide_cot_type`
+- **Custom component hidden inputs** now include `data-plugin` attribute for proper JS collection
+- **SPOTMAP iconset colours** updated to match actual SPOTMAP values
+
+### Infrastructure Fixes
+- **LDAP TLS** - Respects `validate_cert` and `ca_cert_file` settings in TLS configuration
+- **P12 certificates** - Pre-convert P12 to PEM to avoid pytak crash when CA cert missing
+- **Frozen DTO** - Handle frozen DTO when setting `identity_uid_suffix` in heartbeat loop
+- **LiveUAMap regions** - Handle regions field as list or JSON string
+- **Geofence persistence** - Global geofence enabled state now persists after save
+- **Geofence map** - Prevent invalid longitude values in map drawing
+- **Output plugin lifecycle** - Proper connection cleanup management
+- **Message metrics** - Calculated correctly after template cleanup
+- **Event loop** - Handle RuntimeError when awaiting a task created in a different event loop
+- **Logging watchdog** - Avoid feedback loop when debug mode is enabled with noisy logging suppression
+- **CSP violations** - Resolved Content Security Policy violations and CSRF API exemption issues
+
+---
+
+## DOCUMENTATION
+
+- **User Guide** updated to include handler plugins and LiveUAMap plugin
+- **Handler Plugin Development Guide** - Comprehensive guide for building custom output plugins
+- **Sample custom handler plugin** with full documentation
+- **Plugin development docs** updated to distinguish input vs. output plugin types
+- **SECURITY.md** updated with recent improvements
+
+---
+
+## UPGRADE INSTRUCTIONS
+
+### For New Installations
+1. **Deploy normally** - All new features available immediately
+2. **Configure TAK servers** - Enable RX and TrakBridge identity as needed
+3. **Create output streams** - Set up IRC, Slack, or Discord handler plugins
+4. **Add LiveUAMap** - Configure with API key and select regions
+5. **Verify in ATAK** - Confirm TrakBridge identity appears in roster
+
+### For Existing Deployments
+1. **Automatic migration** - Database schema updates applied automatically on startup
+2. **Zero configuration changes** - Existing streams continue operating unchanged
+3. **New features opt-in** - Handler plugins, identity, and LiveUAMap available when creating new streams
+4. **Security improvements active** - CSRF protection, security headers, and session hardening active immediately
+5. **CI/CD pipeline** - Update `.gitlab-ci.yml` to use new modular includes if using GitLab CI
+
+### Validation Steps
+1. **Verify existing streams** - Confirm current streams operate normally after upgrade
+2. **Test RX functionality** - Enable RX on a TAK server and verify CoT messages are received
+3. **Test output plugins** - Create a test stream with IRC, Slack, or Discord handler
+4. **Check TrakBridge identity** - Enable identity on a TAK server and verify it appears in ATAK roster
+5. **Review security** - Confirm CSRF tokens are present on forms and security headers are active
+
+---
+
 ## Version 1.1.0 - Team Member COT Enhancement Release
 **Release Date:** November 7, 2025
 **Major Feature: ATAK Team Member Support**
