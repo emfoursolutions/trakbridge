@@ -1337,6 +1337,12 @@ def ensure_startup_thread():
     """Ensure startup thread is only created once per process"""
     global _startup_thread_started
 
+    # Skip startup thread during database migrations to avoid querying
+    # columns that haven't been created yet by pending migrations
+    if os.environ.get("TRAKBRIDGE_MIGRATION_MODE") == "1":
+        logger.debug("Migration mode detected - skipping startup thread")
+        return
+
     if not _startup_thread_started:
         _startup_thread_started = True
 

@@ -566,6 +566,8 @@ except Exception as e:
                 migration_attempts=$((migration_attempts + 1))
                 log_info "Migration attempt $migration_attempts/$max_attempts"
 
+                # Prevent app startup thread from querying DB during migrations
+                export TRAKBRIDGE_MIGRATION_MODE=1
                 if flask db upgrade; then
                     log_info "Database migrations completed successfully"
                     break
@@ -579,6 +581,7 @@ except Exception as e:
                     sleep 5
                 fi
             done
+            unset TRAKBRIDGE_MIGRATION_MODE
             ;;
         2)
             # Error occurred

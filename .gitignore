@@ -70,3 +70,4 @@ docker/init-scripts/*/*.local.sql
 # Backup directories
 backups/
 config_backups/
+trakbridge.wiki/*.md
