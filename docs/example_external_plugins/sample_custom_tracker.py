@@ -155,6 +155,10 @@ class SampleCustomTrackerPlugin(BaseGPSPlugin, CallsignMappable):
             "description": "Comprehensive example integration demonstrating modern TrakBridge patterns",
             "icon": "fas fa-satellite",
             "category": "custom",
+            # Override the default 30s minimum poll interval for the stream form.
+            # Plugins that need faster polling (e.g. ADS-B, real-time feeds) can
+            # set this as low as 5. If omitted, the UI defaults to 30 seconds.
+            "min_poll_interval": 30,
             "help_sections": [
                 {
                     "title": "Quick Start Guide",
