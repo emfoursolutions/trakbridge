@@ -47,7 +47,7 @@ monitoring:
 # Queue Management Configuration (Phase 2)
 queue:
   # Maximum events per queue (prevents unbounded growth)
-  max_size: 500
+  max_size: 600
   
   # Events per transmission batch
   batch_size: 20
@@ -74,7 +74,7 @@ monitoring:
   log_queue_stats: true
 
   # Log warning when queue exceeds this threshold
-  queue_warning_threshold: 400
+  queue_warning_threshold: 600
 
 # Performance regression detection for queue optimizer
 regression_detection:

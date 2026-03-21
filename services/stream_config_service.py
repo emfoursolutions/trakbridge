@@ -500,6 +500,10 @@ class StreamConfigService:
             if metadata.get("hide_cot_type"):
                 serialized["hide_cot_type"] = True
 
+            # Serialize poll interval override if plugin specifies one
+            if "min_poll_interval" in metadata:
+                serialized["min_poll_interval"] = metadata["min_poll_interval"]
+
             # Serialize help sections
             if "help_sections" in metadata:
                 serialized["help_sections"] = metadata["help_sections"]
