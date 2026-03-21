@@ -207,6 +207,7 @@ class BaseGPSPlugin(ABC):
             - help_sections: List of help content sections
             - config_fields: List of PluginConfigField objects
             - custom_components: List of PluginCustomComponent objects (optional)
+            - min_poll_interval: Minimum poll interval in seconds (optional, default 30)
         """
         pass
 

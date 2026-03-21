@@ -142,7 +142,7 @@
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="poll_interval" class="form-label">Poll Interval (seconds)</label>
-                                    <input type="number" class="form-control" id="poll_interval" name="poll_interval" value="120" min="30" max="3600">
+                                    <input type="number" class="form-control" id="poll_interval" name="poll_interval" value="120" min="5" max="3600">
                                     <div class="form-text">How often to check for new data</div>
                                 </div>
                             </div>
@@ -548,6 +548,16 @@ function updatePluginConfig() {
     // Hide input-specific settings (Poll Interval, COT Type, COT Stale Time) for output plugins
     const isOutputPlugin = pluginMeta.category?.toLowerCase() === 'output';
     inputPluginSettings.style.display = isOutputPlugin ? 'none' : 'block';
+
+    // Apply plugin-specific minimum poll interval if defined
+    const pollIntervalInput = document.getElementById('poll_interval');
+    if (pollIntervalInput) {
+        const minPoll = pluginMeta.min_poll_interval || 30;
+        pollIntervalInput.min = minPoll;
+        if (parseInt(pollIntervalInput.value) < minPoll) {
+            pollIntervalInput.value = minPoll;
+        }
+    }
 
     // Hide COT Type selector for plugins that manage their own CoT types
     const cotTypeSetting = document.getElementById('cot-type-setting');

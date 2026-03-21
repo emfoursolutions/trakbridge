@@ -1,5 +1,61 @@
 # TrakBridge Release Notes
 
+## Version 1.2.2 - Plugin Poll Interval & Queue Capacity
+
+**Release Date:** March 21, 2026
+**Focus: Plugin Developer Experience & High-Volume Stream Stability**
+
+---
+
+### ENHANCEMENTS
+
+#### Plugin-Overridable Minimum Poll Interval
+
+- **New `min_poll_interval` metadata key** — Plugins can now declare a minimum poll interval as low as 5 seconds, overriding the previous hard-coded 30-second floor
+- **Dynamic UI enforcement** — Stream create/edit forms read the plugin's `min_poll_interval` from metadata and adjust the HTML input minimum accordingly
+- **Global floor lowered** — JSON validator schema minimum reduced from 30 to 5 seconds; individual plugins control their own safe minimum
+- **Backward compatible** — Plugins without `min_poll_interval` default to the existing 30-second minimum
+
+#### Queue Capacity Increase
+
+- **Max queue size increased** from 500 to 600 events to accommodate high-volume streams (e.g. AIS producing 400+ events per cycle)
+- **Warning threshold raised** to 600 to match the new capacity, reducing false-positive queue warnings
+
+### DOCUMENTATION
+
+- Plugin Development Guide (wiki and docs) updated with `min_poll_interval` usage, behaviour table, and code examples
+
+---
+
+## Version 1.2.1 - Stability & Security Patch
+
+**Release Date:** March 17, 2026
+**Focus: Production Stability, Log Hygiene, Data Corrections**
+
+---
+
+### BUG FIXES
+
+#### Security & Log Hygiene
+
+- **Database credential sanitisation** — DB connection strings in logs are now masked to prevent credential leakage
+- **Reduced handler plugin log noise** — Suppressed repetitive log messages from output handler plugins during normal operation
+
+#### Startup Reliability
+
+- **Migration race condition fix** — Prevented the startup monitoring thread from querying the database before migrations complete, eliminating transient errors on first boot
+
+#### Data Corrections
+
+- **LiveUAMap region IDs** — Corrected region identifiers to match current LiveUAMap API; expanded from 140+ to 180+ selectable regions
+- **TrakBridge Identity echo filtering** — Identity heartbeat CoT is no longer re-dispatched to output handler plugins
+
+#### Infrastructure
+
+- **Docker networking cleanup** — Removed external port bindings from dev and staging Docker Compose files; all service communication uses Docker internal networking
+
+---
+
 ## Version 1.2.0 - Handler Plugins & Bidirectional TAK Release
 **Release Date:** March 6, 2026
 **Major Features: Output/Handler Plugin Architecture, LiveUAMap OSINT Plugin, Security Hardening**

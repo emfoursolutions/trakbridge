@@ -40,6 +40,7 @@ class CustomPlugin(BaseGPSPlugin):
             "description": "Connect to custom GPS tracking system",
             "icon": "fas fa-map-marker-alt",
             "category": "tracker",  # osint, tracker, or ems
+            "min_poll_interval": 10,  # Optional: override default 30s minimum (see below)
             "help_sections": [...],
             "config_fields": [
                 PluginConfigField(
@@ -160,6 +161,31 @@ def plugin_metadata(self) -> Dict[str, Any]:
 ```
 
 When `hide_cot_type` is `True`, the COT Type `<select>` is hidden in both the Create Stream and Edit Stream forms. Poll Interval and COT Stale Time remain visible. The selector reappears when the user switches to a plugin that does not set this flag.
+
+#### Overriding the Minimum Poll Interval
+
+By default, the stream configuration form enforces a minimum poll interval of **30 seconds**. Plugins that need faster polling (e.g., ADS-B receivers, real-time feeds) can lower this by setting `min_poll_interval` in their `plugin_metadata` dictionary. The absolute floor is **5 seconds**.
+
+```python
+@property
+def plugin_metadata(self) -> Dict[str, Any]:
+    return {
+        "display_name": "ADS-B Receiver",
+        "description": "Real-time aircraft tracking via ADS-B",
+        "icon": "fas fa-plane",
+        "category": "tracker",
+        "min_poll_interval": 5,  # Allow polling as fast as every 5 seconds
+        "config_fields": [...]
+    }
+```
+
+When the user selects this plugin in the Create/Edit Stream form, the Poll Interval input's minimum constraint is dynamically updated to the plugin's value. If the field is omitted, the default minimum of 30 seconds applies.
+
+| Value | Behaviour |
+| --- | --- |
+| Omitted | Default 30-second minimum |
+| `5`–`29` | Allows faster polling than the default |
+| `30`+ | Same as or more restrictive than the default |
 
 #### Category Mapping Logic
 The plugin categorization service automatically maps plugin categories to display categories:
@@ -1099,6 +1125,7 @@ class ExampleTrackerPlugin(BaseGPSPlugin):
             "description": "Connect to example GPS tracking service",
             "icon": "fas fa-map-marker-alt",
             "category": "tracker",
+            "min_poll_interval": 30,  # Default; set lower for real-time sources
             "help_sections": [
                 {
                     "title": "Setup Instructions",
@@ -1719,6 +1746,6 @@ docker compose --profiles postgres --porfiles nginx up -d
 
 ---
 
-**Plugin Development Guide Version**: 1.3.0
-**Last Updated**: 2025-11-08
-**Compatible with**: TrakBridge v1.1.0+
+**Plugin Development Guide Version**: 1.4.0
+**Last Updated**: 2026-03-19
+**Compatible with**: TrakBridge v1.2.0+

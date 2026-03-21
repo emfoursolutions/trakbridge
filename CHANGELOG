@@ -1,3 +1,27 @@
+## [v1.2.2] - 2026-03-21
+
+### Added
+- **Plugin-Overridable Minimum Poll Interval**
+  - New `min_poll_interval` metadata key allows plugins to set poll floors as low as 5 seconds
+  - Stream create/edit forms dynamically adjust minimum based on plugin metadata
+  - JSON validator global floor lowered from 30 to 5 seconds
+  - Backward compatible: plugins without the key default to 30-second minimum
+  - Plugin Development Guide (wiki and docs) updated with usage examples
+
+### Changed
+- Queue max_size increased from 500 to 600 events for high-volume streams (e.g. AIS)
+- Queue warning_threshold raised to 600 to match new capacity
+
+## [v1.2.1] - 2026-03-17
+
+### Fixed
+- Database credential sanitisation in log output to prevent credential leakage
+- Startup race condition: monitoring thread no longer queries DB before migrations complete
+- LiveUAMap region IDs corrected to match current API; expanded from 140+ to 180+ regions
+- TrakBridge Identity heartbeat CoT no longer re-dispatched to output handler plugins
+- Reduced handler plugin log noise during normal operation
+- Removed external port bindings from dev and staging Docker Compose files
+
 ## [v1.2.0] - 2026-03-06
 
 ### Added
