@@ -11,15 +11,34 @@
 
 #### Plugin-Overridable Minimum Poll Interval
 
-- **New `min_poll_interval` metadata key** — Plugins can now declare a minimum poll interval as low as 5 seconds, overriding the previous hard-coded 30-second floor
+- **New `min_poll_interval` metadata key** — Plugins can now declare a minimum poll interval as low as 1 seconds, overriding the previous hard-coded 30-second floor
 - **Dynamic UI enforcement** — Stream create/edit forms read the plugin's `min_poll_interval` from metadata and adjust the HTML input minimum accordingly
-- **Global floor lowered** — JSON validator schema minimum reduced from 30 to 5 seconds; individual plugins control their own safe minimum
+- **Global floor lowered** — JSON validator schema minimum reduced from 30 to 1 seconds; individual plugins control their own safe minimum
 - **Backward compatible** — Plugins without `min_poll_interval` default to the existing 30-second minimum
 
 #### Queue Capacity Increase
 
 - **Max queue size increased** from 500 to 600 events to accommodate high-volume streams (e.g. AIS producing 400+ events per cycle)
 - **Warning threshold raised** to 600 to match the new capacity, reducing false-positive queue warnings
+
+### BUG FIXES
+
+#### TAK Connection Stability
+
+- **TX loop clean exit on dead connections** — Connection errors (`ConnectionError`, `OSError`, `SSLError`) now cause the TX loop to break immediately instead of retrying on a dead socket, eliminating error spam when stream config changes tear down SSL connections
+- **Identity heartbeat propagates connection errors** — A dead socket during heartbeat write now exits the TX loop cleanly instead of being silently caught
+- **Transmit batch aborts on connection loss** — Remaining events in a batch are skipped when the socket is dead, instead of logging errors for each one
+
+#### RX Worker Resilience
+
+- **Exponential backoff on RX errors** — RX worker now backs off from 1s to 60s on repeated errors instead of retrying every second
+- **SSL error give-up threshold** — After 5 consecutive SSL failures, the RX worker stops cleanly with a log message suggesting certificate check or disabling `enable_rx`
+- **Improved RX error logging** — Error messages now include the TAK server ID, attempt count, and next retry delay
+
+#### Queue Configuration
+
+- **Performance.yaml settings now applied** — Queue manager was ignoring `max_size`, `queue_warning_threshold`, and transmission settings from `performance.yaml` due to config keys living under separate YAML sections (`queue`, `monitoring`, `transmission`) that weren't merged before being passed to the queue manager
+- **Stale hardcoded defaults updated** — Internal fallback defaults updated from 500/400 to 600/600 to match `performance.yaml`
 
 ### DOCUMENTATION
 

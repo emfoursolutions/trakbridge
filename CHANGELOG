@@ -2,15 +2,26 @@
 
 ### Added
 - **Plugin-Overridable Minimum Poll Interval**
-  - New `min_poll_interval` metadata key allows plugins to set poll floors as low as 5 seconds
+  - New `min_poll_interval` metadata key allows plugins to set poll floors as low as 1 seconds
   - Stream create/edit forms dynamically adjust minimum based on plugin metadata
-  - JSON validator global floor lowered from 30 to 5 seconds
+  - JSON validator global floor lowered from 30 to 1 seconds
   - Backward compatible: plugins without the key default to 30-second minimum
   - Plugin Development Guide (wiki and docs) updated with usage examples
 
 ### Changed
 - Queue max_size increased from 500 to 600 events for high-volume streams (e.g. AIS)
 - Queue warning_threshold raised to 600 to match new capacity
+
+### Fixed
+
+- TX loop now breaks immediately on connection errors instead of retrying on a dead socket after stream config changes
+- Identity heartbeat connection errors propagate to exit the TX loop cleanly
+- Transmit batch aborts remaining events on connection loss instead of logging errors for each one
+- RX worker uses exponential backoff (1s→60s) on repeated errors instead of fixed 1-second retry
+- RX worker gives up after 5 consecutive SSL errors with actionable log message
+- RX worker error logs now include TAK server ID, attempt count, and next retry delay
+- Queue manager now reads max_size, queue_warning_threshold, and transmission settings from performance.yaml instead of using stale hardcoded defaults
+- Hardcoded queue defaults updated from 500/400 to 600/600 to match performance.yaml
 
 ## [v1.2.1] - 2026-03-17
 

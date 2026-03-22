@@ -95,6 +95,7 @@ deploy-dev-postgres:
   environment:
     name: development-postgres
     url: https://tb-dev.emfour.net
+    on_stop: stop-dev-postgres
   rules:
     - if: $CI_COMMIT_BRANCH == "develop"
   needs:
@@ -227,19 +228,41 @@ deploy-dev-sqlite:
 # Development Environment Cleanup Jobs
 # -----------------------------------------------------------------------------
 
+stop-dev-postgres:
+  extends: .deploy-base
+  stage: deploy-dev
+  variables:
+    DEPLOY_PATH: /opt/dev/tb-dev
+    DB_PROFILE: postgres
+  script:
+    - echo "Stopping PostgreSQL development environment..."
+    - ssh $DEPLOY_USER@$DEPLOY_HOST "cd $DEPLOY_PATH && docker compose -f docker-compose.yml --profile $DB_PROFILE down"
+    - echo "PostgreSQL development environment stopped (volumes preserved)"
+  environment:
+    name: development-postgres
+    action: stop
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+      when: manual
+      allow_failure: true
+
 stop-dev-mysql:
   extends: .deploy-base
   stage: deploy-dev
   variables:
     DEPLOY_PATH: /opt/dev/tb-dev-mysql
+    DB_PROFILE: mysql
   script:
     - echo "Stopping MySQL development environment..."
-    - ssh $DEPLOY_USER@$DEPLOY_HOST "cd $DEPLOY_PATH && docker-compose --profile mysql down -v"
-    - echo "MySQL development environment stopped and volumes removed"
+    - ssh $DEPLOY_USER@$DEPLOY_HOST "cd $DEPLOY_PATH && docker compose -f docker-compose.yml --profile $DB_PROFILE down"
+    - echo "MySQL development environment stopped (volumes preserved)"
   environment:
     name: development-mysql
     action: stop
-  when: manual
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+      when: manual
+      allow_failure: true
 
 stop-dev-sqlite:
   extends: .deploy-base
@@ -248,12 +271,15 @@ stop-dev-sqlite:
     DEPLOY_PATH: /opt/dev/tb-dev-sqlite
   script:
     - echo "Stopping SQLite development environment..."
-    - ssh $DEPLOY_USER@$DEPLOY_HOST "cd $DEPLOY_PATH && docker-compose down -v"
-    - echo "SQLite development environment stopped and volumes removed"
+    - ssh $DEPLOY_USER@$DEPLOY_HOST "cd $DEPLOY_PATH && docker compose -f docker-compose.yml down"
+    - echo "SQLite development environment stopped (volumes preserved)"
   environment:
     name: development-sqlite
     action: stop
-  when: manual
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+      when: manual
+      allow_failure: true
 
 # =============================================================================
 # Staging Environment Deployment
@@ -303,10 +329,33 @@ deploy-staging:
   environment:
     name: staging
     url: https://tb-staging.emfour.net
+    on_stop: stop-staging
   rules:
     - if: $CI_COMMIT_BRANCH == "staging"
   needs:
     - build-staging
+
+# -----------------------------------------------------------------------------
+# Staging Environment Cleanup Job
+# -----------------------------------------------------------------------------
+
+stop-staging:
+  extends: .deploy-base
+  stage: deploy-staging
+  variables:
+    DEPLOY_PATH: /opt/dev/tb-staging
+    DB_PROFILE: postgres
+  script:
+    - echo "Stopping staging environment..."
+    - ssh $DEPLOY_USER@$DEPLOY_HOST "cd $DEPLOY_PATH && docker compose -f docker-compose.yml --profile $DB_PROFILE down"
+    - echo "Staging environment stopped (volumes preserved)"
+  environment:
+    name: staging
+    action: stop
+  rules:
+    - if: $CI_COMMIT_BRANCH == "staging"
+      when: manual
+      allow_failure: true
 
 # =============================================================================
 # Production Environment Deployment
@@ -367,6 +416,7 @@ deploy-prod:
   environment:
     name: production
     url: https://tb-prod.emfour.net
+    on_stop: stop-prod
   rules:
     - if: $CI_COMMIT_TAG
       when: manual
@@ -374,3 +424,29 @@ deploy-prod:
       when: manual
   needs:
     - build-prod
+
+# -----------------------------------------------------------------------------
+# Production Environment Cleanup Job
+# -----------------------------------------------------------------------------
+
+stop-prod:
+  extends: .deploy-base
+  stage: deploy-prod
+  variables:
+    DEPLOY_PATH: /opt/prod/trakbridge
+    DB_PROFILE: postgres
+  script:
+    - echo "Stopping PRODUCTION environment..."
+    - echo "WARNING - This will stop the production application"
+    - ssh $DEPLOY_USER@$DEPLOY_HOST "cd $DEPLOY_PATH && docker compose -f docker-compose.yml --profile $DB_PROFILE down"
+    - echo "Production environment stopped (volumes preserved)"
+  environment:
+    name: production
+    action: stop
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: manual
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
