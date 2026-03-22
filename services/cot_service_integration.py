@@ -125,6 +125,21 @@ class QueuedCOTService:
         if queue_config is None:
             queue_config = self.parallel_config.get("queue", {})
 
+            # Merge monitoring settings into queue config so the queue manager
+            # picks up queue_warning_threshold from performance.yaml
+            monitoring_config = self.parallel_config.get("monitoring", {})
+            if "queue_warning_threshold" in monitoring_config:
+                queue_config["queue_warning_threshold"] = monitoring_config["queue_warning_threshold"]
+            if "log_queue_stats" in monitoring_config:
+                queue_config["log_queue_stats"] = monitoring_config["log_queue_stats"]
+
+            # Merge transmission settings so batch_timeout_ms and
+            # queue_check_interval_ms reach the queue manager
+            transmission_config = self.parallel_config.get("transmission", {})
+            for key in ("batch_timeout_ms", "queue_check_interval_ms"):
+                if key in transmission_config:
+                    queue_config[key] = transmission_config[key]
+
         # Log configuration for debugging
         logger.info(f"COT Service initialising with queue config: {queue_config}")
         logger.debug(f"Full parallel config: {self.parallel_config}")
@@ -186,10 +201,10 @@ class QueuedCOTService:
                 "failure_threshold": 3,
                 "recovery_timeout": 60.0,
             },
-            # Phase 2: Queue management defaults
+            # Phase 2: Queue management defaults (should match performance.yaml)
             "queue": {
-                "max_size": 500,
-                "batch_size": 20,  # Changed from 8 to 20 to match performance.yaml
+                "max_size": 600,
+                "batch_size": 20,
                 "overflow_strategy": "drop_oldest",
                 "flush_on_config_change": True,
             },
@@ -199,7 +214,7 @@ class QueuedCOTService:
             },
             "monitoring": {
                 "log_queue_stats": True,
-                "queue_warning_threshold": 400,
+                "queue_warning_threshold": 600,
             },
         }
 

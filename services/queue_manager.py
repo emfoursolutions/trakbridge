@@ -94,14 +94,14 @@ class QueueManager:
     def _get_default_config(self) -> Dict[str, Any]:
         """Get default configuration for queue management"""
         return {
-            "max_size": 500,
-            "batch_size": 20,  # Updated to match performance.yaml default
+            "max_size": 600,
+            "batch_size": 20,
             "overflow_strategy": "drop_oldest",
             "flush_on_config_change": True,
             "batch_timeout_ms": 100,
             "queue_check_interval_ms": 100,
             "log_queue_stats": True,
-            "queue_warning_threshold": 400,
+            "queue_warning_threshold": 600,
         }
 
     def _validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:

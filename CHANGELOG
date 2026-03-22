@@ -20,6 +20,8 @@
 - RX worker uses exponential backoff (1s→60s) on repeated errors instead of fixed 1-second retry
 - RX worker gives up after 5 consecutive SSL errors with actionable log message
 - RX worker error logs now include TAK server ID, attempt count, and next retry delay
+- Queue manager now reads max_size, queue_warning_threshold, and transmission settings from performance.yaml instead of using stale hardcoded defaults
+- Hardcoded queue defaults updated from 500/400 to 600/600 to match performance.yaml
 
 ## [v1.2.1] - 2026-03-17
 

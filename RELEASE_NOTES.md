@@ -35,6 +35,11 @@
 - **SSL error give-up threshold** — After 5 consecutive SSL failures, the RX worker stops cleanly with a log message suggesting certificate check or disabling `enable_rx`
 - **Improved RX error logging** — Error messages now include the TAK server ID, attempt count, and next retry delay
 
+#### Queue Configuration
+
+- **Performance.yaml settings now applied** — Queue manager was ignoring `max_size`, `queue_warning_threshold`, and transmission settings from `performance.yaml` due to config keys living under separate YAML sections (`queue`, `monitoring`, `transmission`) that weren't merged before being passed to the queue manager
+- **Stale hardcoded defaults updated** — Internal fallback defaults updated from 500/400 to 600/600 to match `performance.yaml`
+
 ### DOCUMENTATION
 
 - Plugin Development Guide (wiki and docs) updated with `min_poll_interval` usage, behaviour table, and code examples
