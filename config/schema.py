@@ -176,7 +176,7 @@ CONFIG_SCHEMAS = {
         "write_timeout": {"type": "integer", "minimum": 1, "maximum": 300},
     },
     "app": {
-        "default_poll_interval": {"type": "integer", "minimum": 5, "maximum": 3600},
+        "default_poll_interval": {"type": "integer", "minimum": 1, "maximum": 3600},
         "max_concurrent_streams": {"type": "integer", "minimum": 1, "maximum": 1000},
         "http_timeout": {"type": "integer", "minimum": 1, "maximum": 300},
         "http_max_connections": {"type": "integer", "minimum": 1, "maximum": 1000},
@@ -283,7 +283,7 @@ def get_config_documentation() -> Dict[str, Any]:
                 "default_poll_interval": {
                     "description": "Default interval between data polls (seconds)",
                     "type": "integer",
-                    "minimum": 5,
+                    "minimum": 1,
                     "maximum": 3600,
                     "default": 120,
                 },

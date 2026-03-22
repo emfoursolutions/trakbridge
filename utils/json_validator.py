@@ -275,7 +275,7 @@ PLUGIN_CONFIG_SCHEMA = {
         "server_url": {"type": "string", "pattern": "^https?://.*"},
         "username": {"type": "string", "maxLength": 255},
         "password": {"type": "string", "maxLength": 1000},
-        "poll_interval": {"type": "integer", "minimum": 5, "maximum": 3600},
+        "poll_interval": {"type": "integer", "minimum": 1, "maximum": 3600},
         "timeout": {"type": "integer", "minimum": 5, "maximum": 300},
         "max_retries": {"type": "integer", "minimum": 0, "maximum": 10},
         "device_filter": {"type": "string", "maxLength": 1000},
