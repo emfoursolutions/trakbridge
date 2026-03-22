@@ -1195,6 +1195,11 @@ class QueuedCOTService:
                                 writer.write(identity_cot)
                                 await writer.drain()
 
+                            except (ConnectionError, OSError, ssl.SSLError) as e:
+                                logger.warning(
+                                    f"Connection lost sending identity heartbeat to {tak_server.name}: {e}"
+                                )
+                                raise  # Propagate so outer handler breaks the loop
                             except Exception as e:
                                 logger.warning(
                                     f"Failed to send identity heartbeat to {tak_server.name}: {e}"
@@ -1260,6 +1265,11 @@ class QueuedCOTService:
 
             except asyncio.CancelledError:
                 break
+            except (ConnectionError, OSError, ssl.SSLError) as e:
+                logger.error(
+                    f"Connection lost in TX loop for {tak_server.name}: {e}"
+                )
+                break  # Socket is dead, exit so the worker can reconnect
             except Exception as e:
                 logger.error(
                     f"Error in TX loop for {tak_server.name}: {e}"
@@ -1289,6 +1299,13 @@ class QueuedCOTService:
         buffer = b""
         MAX_BUFFER_SIZE = 1024 * 1024  # 1MB limit
 
+        # Exponential backoff for repeated errors
+        RX_BACKOFF_INITIAL = 1
+        RX_BACKOFF_MAX = 60
+        RX_BACKOFF_MULTIPLIER = 2
+        consecutive_errors = 0
+        backoff_delay = RX_BACKOFF_INITIAL
+
         while self._running:
             try:
                 # Read chunk
@@ -1297,6 +1314,10 @@ class QueuedCOTService:
                 if not chunk:
                     logger.warning(f"Connection closed by TAK server {tak_server_id}")
                     break
+
+                # Successful read resets backoff
+                consecutive_errors = 0
+                backoff_delay = RX_BACKOFF_INITIAL
 
                 buffer += chunk
 
@@ -1325,9 +1346,29 @@ class QueuedCOTService:
                 continue  # Keep alive
             except asyncio.CancelledError:
                 break
+            except ssl.SSLError as e:
+                consecutive_errors += 1
+                logger.error(
+                    f"SSL error in RX worker for TAK server {tak_server_id}: {e} "
+                    f"(attempt {consecutive_errors}, next retry in {backoff_delay}s)"
+                )
+                if consecutive_errors >= 5:
+                    logger.error(
+                        f"RX worker for TAK server {tak_server_id} hit {consecutive_errors} "
+                        f"consecutive SSL errors, giving up. Check certificates or disable "
+                        f"enable_rx for this server."
+                    )
+                    break
+                await asyncio.sleep(backoff_delay)
+                backoff_delay = min(backoff_delay * RX_BACKOFF_MULTIPLIER, RX_BACKOFF_MAX)
             except Exception as e:
-                logger.error(f"Error in RX worker: {e}")
-                await asyncio.sleep(1)
+                consecutive_errors += 1
+                logger.error(
+                    f"Error in RX worker for TAK server {tak_server_id}: {e} "
+                    f"(retry in {backoff_delay}s)"
+                )
+                await asyncio.sleep(backoff_delay)
+                backoff_delay = min(backoff_delay * RX_BACKOFF_MULTIPLIER, RX_BACKOFF_MAX)
 
         logger.info(f"RX worker stopped for TAK server {tak_server_id}")
 
@@ -1821,6 +1862,12 @@ class QueuedCOTService:
                         )
                         batch_success = False
 
+                except (ConnectionError, OSError, ssl.SSLError) as e:
+                    logger.error(
+                        f"Error transmitting event {i + 1} to TAK server '{tak_server.name}': {e}"
+                    )
+                    # Connection is dead, no point sending remaining events
+                    raise
                 except Exception as e:
                     logger.error(
                         f"Error transmitting event {i + 1} to TAK server '{tak_server.name}': {e}"
