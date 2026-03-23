@@ -2236,12 +2236,29 @@ class QueuedCOTService:
                 f"Remaining worker mappings: {[(k, id(v)) for k, v in self.workers.items()]}"
             )
 
+        # Reset circuit breaker so restart gets a clean connection
+        try:
+            circuit_breaker = self._get_tak_circuit_breaker(tak_server_id)
+            if circuit_breaker:
+                await circuit_breaker.manual_reset()
+                logger.info(
+                    f"Circuit breaker reset for TAK server {tak_server_id} during worker stop"
+                )
+        except Exception as e:
+            logger.debug(
+                f"Could not reset circuit breaker for TAK server {tak_server_id}: {e}"
+            )
+
         # Remove queue and cleanup
         await self.queue_manager.remove_queue(tak_server_id)
 
         # Cleanup device state manager
         if tak_server_id in self.device_state_managers:
             del self.device_state_managers[tak_server_id]
+
+        # Cleanup stale connection reference
+        if tak_server_id in self.connections:
+            del self.connections[tak_server_id]
 
         logger.debug(
             f"Complete cleanup finished for TAK server {tak_server_id} at {datetime.now()}"

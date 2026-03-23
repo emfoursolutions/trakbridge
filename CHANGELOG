@@ -1,3 +1,9 @@
+## [v1.2.3] - 2026-03-23
+
+### Fixed
+- Circuit breaker now resets when a stream worker is stopped, preventing permanent connection loss after stream edits
+- Stale connection references cleaned up during worker stop to prevent dead socket reuse
+
 ## [v1.2.2] - 2026-03-21
 
 ### Added

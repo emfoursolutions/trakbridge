@@ -1,5 +1,21 @@
 # TrakBridge Release Notes
 
+## Version 1.2.3 - Circuit Breaker Recovery Fix
+
+**Release Date:** March 23, 2026
+**Focus: Stream Edit Connection Recovery**
+
+---
+
+### BUG FIXES
+
+#### Circuit Breaker Not Recovering After Stream Edit
+
+- **Circuit breaker reset on worker stop** — When a stream is edited and saved, TrakBridge stops and restarts the stream worker. Previously, the circuit breaker (keyed per TAK server) remained in OPEN state from connection errors during the teardown, blocking the restarted worker from establishing a new connection. The circuit breaker is now reset to CLOSED during worker stop, allowing the restarted stream to connect immediately.
+- **Stale connection cleanup** — Worker stop now removes the old connection reference from the connection registry, preventing dead socket reuse on restart.
+
+---
+
 ## Version 1.2.2 - Plugin Poll Interval & Queue Capacity
 
 **Release Date:** March 21, 2026
