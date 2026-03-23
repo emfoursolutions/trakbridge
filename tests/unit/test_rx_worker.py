@@ -469,14 +469,21 @@ class TestEnhancedTransmissionWorkerBidirectional:
             patch.object(service, '_tx_loop', new_callable=AsyncMock) as mock_tx,  # noqa: E501
             patch.object(service, '_rx_worker', new_callable=AsyncMock) as mock_rx,  # noqa: E501
             patch.object(service, '_cleanup_connection', new_callable=AsyncMock),  # noqa: E501
+            patch.object(service, '_get_tak_circuit_breaker', return_value=None),  # noqa: E501
         ):
             # Make tasks complete immediately
             mock_tx.return_value = None
             mock_rx.return_value = None
 
-            service._running = False  # Stop after one iteration
-
-            await service._enhanced_transmission_worker(tak_server_id, tak_server)  # noqa: E501
+            # Worker has a reconnection loop; run as task and cancel after
+            # TX/RX tasks complete and assertions can be checked
+            task = asyncio.create_task(
+                service._enhanced_transmission_worker(tak_server_id, tak_server)
+            )
+            # Give the worker time to run one iteration
+            await asyncio.sleep(0.1)
+            task.cancel()
+            await task  # Worker handles CancelledError internally and exits
 
             # Verify both workers were started
             assert mock_tx.called
@@ -498,12 +505,18 @@ class TestEnhancedTransmissionWorkerBidirectional:
             patch.object(service, '_tx_loop', new_callable=AsyncMock) as mock_tx,  # noqa: E501
             patch.object(service, '_rx_worker', new_callable=AsyncMock) as mock_rx,  # noqa: E501
             patch.object(service, '_cleanup_connection', new_callable=AsyncMock),  # noqa: E501
+            patch.object(service, '_get_tak_circuit_breaker', return_value=None),  # noqa: E501
         ):
             mock_tx.return_value = None
 
-            service._running = False  # Stop after one iteration
-
-            await service._enhanced_transmission_worker(tak_server_id, tak_server)  # noqa: E501
+            # Worker has a reconnection loop; run as task and cancel after
+            # TX task completes and assertions can be checked
+            task = asyncio.create_task(
+                service._enhanced_transmission_worker(tak_server_id, tak_server)
+            )
+            await asyncio.sleep(0.1)
+            task.cancel()
+            await task  # Worker handles CancelledError internally and exits
 
             # Verify only TX was started
             assert mock_tx.called
