@@ -1034,6 +1034,19 @@ class QueuedCOTService:
                 del self.workers[tak_server_id]
                 if tak_server_id in self.connections:
                     del self.connections[tak_server_id]
+                # Reset circuit breaker so new worker gets a clean slate
+                try:
+                    circuit_breaker = self._get_tak_circuit_breaker(tak_server_id)
+                    if circuit_breaker:
+                        await circuit_breaker.manual_reset()
+                        logger.info(
+                            f"Circuit breaker reset for TAK server {tak_server_id} "
+                            f"during dead worker cleanup"
+                        )
+                except Exception as e:
+                    logger.debug(
+                        f"Could not reset circuit breaker for TAK server {tak_server_id}: {e}"
+                    )
             else:
                 # Worker exists and is healthy
                 logger.debug(
@@ -1102,83 +1115,130 @@ class QueuedCOTService:
         RX worker does minimal filtering - only validates XML structure.
         Plugins decide what messages they care about.
 
+        Includes automatic reconnection with exponential backoff when the
+        connection is lost. Only exits on task cancellation (stream stop/edit).
+
         Args:
             tak_server_id: TAK server identifier
             tak_server: TAK server configuration object
         """
-        try:
-            logger.info(
-                f"Enhanced transmission worker started for TAK server {tak_server.name}"
-            )
-            logger.debug(
-                f"Worker thread started: server_id={tak_server_id}, server_name={tak_server.name}, timestamp={datetime.now()}"
-            )
+        RECONNECT_INITIAL = 5
+        RECONNECT_MAX = 120
+        RECONNECT_MULTIPLIER = 2
 
-            # Create PyTAK connection (reusing existing logic)
-            connection = await self._create_pytak_connection(tak_server)
-            if not connection:
-                logger.error(
-                    f"Failed to create connection for TAK server {tak_server.name}"
+        reconnect_delay = RECONNECT_INITIAL
+
+        while True:
+            try:
+                logger.info(
+                    f"Enhanced transmission worker started for TAK server {tak_server.name}"
                 )
-                return
-
-            self.connections[tak_server_id] = connection
-            logger.debug(
-                f"Connection mapping established: TAK_server_{tak_server_id} -> connection_{id(connection)}"
-            )
-
-            # Extract reader and writer from connection
-            reader, writer = connection
-
-            # TX always runs
-            tx_task = asyncio.create_task(
-                self._tx_loop(tak_server_id, writer, tak_server)
-            )
-
-            # RX only runs if enabled for this TAK server
-            tasks = [tx_task]
-            if getattr(tak_server, 'enable_rx', True):  # Default True
-                rx_task = asyncio.create_task(
-                    self._rx_worker(tak_server_id, reader)
+                logger.debug(
+                    f"Worker thread started: server_id={tak_server_id}, server_name={tak_server.name}, timestamp={datetime.now()}"
                 )
-                tasks.append(rx_task)
-                logger.info(f"RX worker enabled for TAK server {tak_server_id}")
-            else:
-                logger.info(f"RX worker disabled for TAK server {tak_server_id}")
 
-            # Wait for any task to complete (connection failure)
-            done, pending = await asyncio.wait(
-                tasks,
-                return_when=asyncio.FIRST_COMPLETED
-            )
-
-            # Cancel remaining tasks
-            for task in pending:
-                task.cancel()
-
-        except Exception as e:
-            logger.error(
-                f"Enhanced transmission worker failed for TAK server {tak_server_id}: {e}"
-            )
-        finally:
-            logger.debug(
-                f"Worker cleanup starting for TAK server {tak_server_id} at {datetime.now()}"
-            )
-            # Cleanup connection
-            if tak_server_id in self.connections:
+                # Reset circuit breaker before connection attempt so stale
+                # OPEN state from a previous failure doesn't block reconnection
                 try:
-                    await self._cleanup_connection(self.connections[tak_server_id])
-                except Exception as e:
-                    logger.error(
-                        f"Failed to cleanup connection for {tak_server_id}: {e}"
+                    circuit_breaker = self._get_tak_circuit_breaker(tak_server_id)
+                    if circuit_breaker:
+                        await circuit_breaker.manual_reset()
+                except Exception:
+                    pass
+
+                # Create PyTAK connection (reusing existing logic)
+                connection = await self._create_pytak_connection(tak_server)
+                if not connection:
+                    logger.warning(
+                        f"Failed to create connection for TAK server {tak_server.name}, "
+                        f"retrying in {reconnect_delay}s"
                     )
-                del self.connections[tak_server_id]
+                    await asyncio.sleep(reconnect_delay)
+                    reconnect_delay = min(
+                        reconnect_delay * RECONNECT_MULTIPLIER, RECONNECT_MAX
+                    )
+                    continue
+
+                self.connections[tak_server_id] = connection
                 logger.debug(
-                    f"Connection cleanup completed for TAK server {tak_server_id}"
+                    f"Connection mapping established: TAK_server_{tak_server_id} -> connection_{id(connection)}"
                 )
-                logger.debug(
-                    f"Connection mapping removed: TAK_server_{tak_server_id} connection deleted"
+
+                # Reset backoff on successful connection
+                reconnect_delay = RECONNECT_INITIAL
+
+                # Extract reader and writer from connection
+                reader, writer = connection
+
+                # TX always runs
+                tx_task = asyncio.create_task(
+                    self._tx_loop(tak_server_id, writer, tak_server)
                 )
+
+                # RX only runs if enabled for this TAK server
+                tasks = [tx_task]
+                if getattr(tak_server, 'enable_rx', True):  # Default True
+                    rx_task = asyncio.create_task(
+                        self._rx_worker(tak_server_id, reader)
+                    )
+                    tasks.append(rx_task)
+                    logger.info(f"RX worker enabled for TAK server {tak_server_id}")
+                else:
+                    logger.info(f"RX worker disabled for TAK server {tak_server_id}")
+
+                # Wait for any task to complete (connection failure)
+                done, pending = await asyncio.wait(
+                    tasks,
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+
+                # Cancel remaining tasks
+                for task in pending:
+                    task.cancel()
+
+                # Connection lost — will loop back to reconnect
+                logger.warning(
+                    f"Connection lost for TAK server {tak_server.name}, "
+                    f"reconnecting in {reconnect_delay}s"
+                )
+
+            except asyncio.CancelledError:
+                logger.info(
+                    f"Transmission worker cancelled for TAK server {tak_server_id}"
+                )
+                break
+
+            except Exception as e:
+                logger.error(
+                    f"Enhanced transmission worker error for TAK server {tak_server_id}: {e}"
+                )
+
+            finally:
+                # Cleanup connection before reconnect or exit
+                if tak_server_id in self.connections:
+                    try:
+                        await self._cleanup_connection(self.connections[tak_server_id])
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to cleanup connection for {tak_server_id}: {e}"
+                        )
+                    del self.connections[tak_server_id]
+                    logger.debug(
+                        f"Connection cleanup completed for TAK server {tak_server_id}"
+                    )
+
+            # Wait before reconnecting (outside try so CancelledError during
+            # sleep exits the while loop cleanly)
+            try:
+                await asyncio.sleep(reconnect_delay)
+                reconnect_delay = min(
+                    reconnect_delay * RECONNECT_MULTIPLIER, RECONNECT_MAX
+                )
+            except asyncio.CancelledError:
+                logger.info(
+                    f"Transmission worker cancelled during reconnect wait for TAK server {tak_server_id}"
+                )
+                break
 
     async def _tx_loop(self, tak_server_id: int, writer, tak_server):
         """
@@ -2236,12 +2296,29 @@ class QueuedCOTService:
                 f"Remaining worker mappings: {[(k, id(v)) for k, v in self.workers.items()]}"
             )
 
+        # Reset circuit breaker so restart gets a clean connection
+        try:
+            circuit_breaker = self._get_tak_circuit_breaker(tak_server_id)
+            if circuit_breaker:
+                await circuit_breaker.manual_reset()
+                logger.info(
+                    f"Circuit breaker reset for TAK server {tak_server_id} during worker stop"
+                )
+        except Exception as e:
+            logger.debug(
+                f"Could not reset circuit breaker for TAK server {tak_server_id}: {e}"
+            )
+
         # Remove queue and cleanup
         await self.queue_manager.remove_queue(tak_server_id)
 
         # Cleanup device state manager
         if tak_server_id in self.device_state_managers:
             del self.device_state_managers[tak_server_id]
+
+        # Cleanup stale connection reference
+        if tak_server_id in self.connections:
+            del self.connections[tak_server_id]
 
         logger.debug(
             f"Complete cleanup finished for TAK server {tak_server_id} at {datetime.now()}"

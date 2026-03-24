@@ -1,5 +1,27 @@
 # TrakBridge Release Notes
 
+## Version 1.2.3 - TAK Connection Auto-Recovery
+
+**Release Date:** March 23, 2026
+**Focus: Automatic TAK Server Reconnection & Circuit Breaker Recovery**
+
+---
+
+### BUG FIXES
+
+#### TX Worker Auto-Reconnect on Connectivity Loss
+
+- **Automatic reconnection with exponential backoff** — When a TAK server connection is lost (network outage, server restart, etc.), the TX worker now automatically retries with exponential backoff (5s → 10s → 20s → ... capped at 120s) instead of exiting permanently. When connectivity is restored, the worker reconnects and resumes transmitting without any manual intervention. Backoff resets to 5s after a successful connection.
+- **Circuit breaker reset before reconnection** — The circuit breaker is reset to CLOSED before each connection attempt, preventing stale OPEN state from blocking recovery after transient failures.
+
+#### Circuit Breaker Not Recovering After Stream Edit
+
+- **Circuit breaker reset on worker stop** — When a stream is edited and saved, TrakBridge stops and restarts the stream worker. Previously, the circuit breaker (keyed per TAK server) remained in OPEN state from connection errors during the teardown, blocking the restarted worker from establishing a new connection. The circuit breaker is now reset to CLOSED during worker stop, allowing the restarted stream to connect immediately.
+- **Dead worker cleanup resets circuit breaker** — If the stream worker detects a dead TX worker task and attempts to revive it via `start_worker()`, the circuit breaker is now reset as part of dead worker cleanup.
+- **Stale connection cleanup** — Worker stop now removes the old connection reference from the connection registry, preventing dead socket reuse on restart.
+
+---
+
 ## Version 1.2.2 - Plugin Poll Interval & Queue Capacity
 
 **Release Date:** March 21, 2026
