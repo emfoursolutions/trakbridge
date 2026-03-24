@@ -1,3 +1,12 @@
+## [v1.2.3] - 2026-03-23
+
+### Fixed
+- TX worker now automatically reconnects with exponential backoff (5s→120s) when TAK server connectivity is lost and restored
+- Circuit breaker resets before each reconnection attempt to prevent stale OPEN state from blocking recovery
+- Circuit breaker now resets when a stream worker is stopped, preventing permanent connection loss after stream edits
+- Circuit breaker resets during dead worker cleanup in start_worker() as a safety net
+- Stale connection references cleaned up during worker stop to prevent dead socket reuse
+
 ## [v1.2.2] - 2026-03-21
 
 ### Added
