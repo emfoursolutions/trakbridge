@@ -429,6 +429,26 @@ class PluginManager:
         logger.warning(f"Unexpected config type {type(config)}, using empty config")
         return {}
 
+    def get_plugin_class(
+        self, plugin_name: str
+    ) -> Optional[Type[Union["BaseGPSPlugin", "BaseOutputPlugin", "BaseInboundPlugin"]]]:
+        """
+        Get a plugin class by name without instantiation.
+
+        Used by the inbound endpoint to instantiate plugins with stream-specific
+        config and set the stream reference before validation.
+
+        Args:
+            plugin_name: Name of the registered plugin
+
+        Returns:
+            The plugin class, or None if not found
+        """
+        if plugin_name not in self.plugins:
+            logger.error(f"Plugin class not found: {plugin_name}")
+            return None
+        return self.plugins[plugin_name]
+
     def get_plugin(
         self, plugin_name: str, config: Union[Dict, str, None] = None
     ) -> Optional[Union["BaseGPSPlugin", "BaseOutputPlugin"]]:
