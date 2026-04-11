@@ -514,10 +514,12 @@ def create_app(config_name=None):
     from routes.main import bp as main_bp
     from routes.streams import bp as streams_bp
     from routes.tak_servers import bp as tak_servers_bp
+    from routes.inbound import bp as inbound_bp
 
     # Apply rate limits to specific route groups
     limiter.limit("30 per minute")(api_bp)
     limiter.limit("10 per minute")(auth_bp)
+    limiter.limit("60 per minute")(inbound_bp)
 
     app.register_blueprint(main_bp)
     app.register_blueprint(streams_bp, url_prefix="/streams")
@@ -526,6 +528,7 @@ def create_app(config_name=None):
     app.register_blueprint(cot_types_bp, url_prefix="/admin")
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(auth_bp, url_prefix="/auth")
+    app.register_blueprint(inbound_bp, url_prefix="/api/inbound")
 
     # Add context processors and error handlers
     setup_template_helpers(app)
