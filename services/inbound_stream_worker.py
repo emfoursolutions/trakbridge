@@ -6,9 +6,14 @@ ABOUTME: this worker has no poll loop — it ensures TAK workers are running and
 import asyncio
 import logging
 import threading
-from typing import Dict
+from datetime import datetime, timezone
+from typing import Any, Dict, List
 
 from services.cot_service import get_cot_service
+
+# Capture buffer limits
+_MAX_CAPTURE_ENTRIES = 10
+_MAX_CAPTURE_BYTES = 102_400  # ~100KB total raw body size
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +54,10 @@ class InboundStreamWorker:
         self._startup_complete = False
         self._tak_worker_ensured = False
         self._start_lock = asyncio.Lock()
+
+        # Preview capture buffer — ephemeral ring buffer for debugging
+        self._capture_buffer: List[Dict[str, Any]] = []
+        self._capture_lock = threading.Lock()
 
     @property
     def startup_complete(self):
@@ -160,9 +169,69 @@ class InboundStreamWorker:
             with _registry_lock:
                 _active_inbound_streams.pop(self.stream.id, None)
 
+            self.clear_captured_payloads()
+
             self.logger.info(
                 f"Inbound stream '{self.stream.name}' stopped successfully"
             )
+
+    # ----- Capture buffer for preview mode -----
+
+    def capture_payload(
+        self,
+        raw_body: bytes,
+        content_type: str,
+        headers: Dict[str, str],
+        source_ip: str,
+        mapped_result: List[Dict[str, Any]],
+    ) -> None:
+        """
+        Store a raw payload and its mapped result in the ring buffer.
+
+        Masks the Authorization header before storing. Evicts oldest
+        entries when the buffer exceeds max count or total byte size.
+        """
+        safe_headers = dict(headers)
+        auth = safe_headers.get("Authorization", "")
+        if auth:
+            # Mask to last 4 chars
+            masked = "****" + auth[-4:] if len(auth) > 4 else "****"
+            safe_headers["Authorization"] = masked
+
+        entry = {
+            "raw_body": raw_body,
+            "content_type": content_type,
+            "headers": safe_headers,
+            "source_ip": source_ip,
+            "received_at": datetime.now(timezone.utc).isoformat(),
+            "mapped_result": mapped_result,
+        }
+
+        with self._capture_lock:
+            self._capture_buffer.append(entry)
+
+            # Evict oldest if count exceeds max
+            while len(self._capture_buffer) > _MAX_CAPTURE_ENTRIES:
+                self._capture_buffer.pop(0)
+
+            # Evict oldest if total raw body size exceeds cap
+            while (
+                len(self._capture_buffer) > 1
+                and sum(
+                    len(e["raw_body"]) for e in self._capture_buffer
+                ) > _MAX_CAPTURE_BYTES
+            ):
+                self._capture_buffer.pop(0)
+
+    def get_captured_payloads(self) -> List[Dict[str, Any]]:
+        """Return a copy of the capture buffer."""
+        with self._capture_lock:
+            return list(self._capture_buffer)
+
+    def clear_captured_payloads(self) -> None:
+        """Clear the capture buffer."""
+        with self._capture_lock:
+            self._capture_buffer.clear()
 
     def get_health_status(self) -> Dict:
         """

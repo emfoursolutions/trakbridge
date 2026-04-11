@@ -16,6 +16,7 @@ from flask import Blueprint, jsonify, request
 from database import db
 from models.stream import Stream
 from plugins.plugin_manager import get_plugin_manager
+from services.inbound_stream_worker import get_active_inbound_streams
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,12 @@ def _validate_coordinates(locations: List[Dict]) -> str | None:
         if lon is not None and (lon < -180 or lon > 180):
             return f"Invalid coordinate: longitude {lon} outside ±180 range"
     return None
+
+
+def _get_worker_for_stream(stream_id: int):
+    """Look up the active InboundStreamWorker for a stream ID."""
+    registry = get_active_inbound_streams()
+    return registry.get(stream_id)
 
 
 def _process_inbound_async(locations, stream) -> Dict:
@@ -247,12 +254,38 @@ def receive_inbound_data(stream_id: int):
     if coord_error:
         return jsonify({"error": coord_error}), 400
 
+    # --- Preview mode: buffer and return mapped result, skip TAK ---
+    if stream.inbound_preview_mode:
+        worker = _get_worker_for_stream(stream_id)
+        if worker:
+            worker.capture_payload(
+                raw_body=raw_body,
+                content_type=content_type,
+                headers=headers,
+                source_ip=request.remote_addr,
+                mapped_result=locations,
+            )
+
+        logger.info(
+            f"Inbound preview: stream {stream_id} received "
+            f"{len(locations)} locations from {request.remote_addr}"
+        )
+
+        return jsonify({
+            "status": "preview",
+            "locations_received": len(locations),
+            "mapped_result": locations,
+        }), 202
+
     # --- Process and distribute ---
     result = _process_inbound_async(locations, stream)
 
     if not result.get("success"):
         error_msg = result.get("error", "Internal processing error")
-        logger.error(f"Inbound processing failed for stream {stream_id}: {error_msg}")
+        logger.error(
+            f"Inbound processing failed for stream "
+            f"{stream_id}: {error_msg}"
+        )
         stream.update_stats(error=error_msg)
         db.session.commit()
         return jsonify({"error": error_msg}), 500
@@ -263,8 +296,10 @@ def receive_inbound_data(stream_id: int):
     db.session.commit()
 
     logger.info(
-        f"Inbound: stream {stream_id} received {len(locations)} locations, "
-        f"created {events_created} CoT events from {request.remote_addr}"
+        f"Inbound: stream {stream_id} received "
+        f"{len(locations)} locations, "
+        f"created {events_created} CoT events "
+        f"from {request.remote_addr}"
     )
 
     return jsonify({
@@ -273,3 +308,136 @@ def receive_inbound_data(stream_id: int):
         "events_created": events_created,
         "servers": result.get("servers", {}),
     }), 202
+
+
+def _validate_inbound_stream(stream_id: int):
+    """
+    Look up a stream and verify it is an active inbound stream.
+
+    Returns (stream, None) on success or (None, error_response) on failure.
+    """
+    stream = db.session.get(Stream, stream_id)
+    if not stream or stream.stream_mode != "inbound":
+        return None, (jsonify({"error": "Not found"}), 404)
+    return stream, None
+
+
+def _serialize_payload(entry: Dict) -> Dict:
+    """
+    Convert a capture buffer entry to JSON-safe format.
+
+    raw_body (bytes) is decoded to UTF-8 if possible, otherwise
+    represented as a base64 string.
+    """
+    raw = entry.get("raw_body", b"")
+    try:
+        raw_str = raw.decode("utf-8")
+    except (UnicodeDecodeError, AttributeError):
+        import base64 as b64
+        raw_str = b64.b64encode(raw).decode("ascii")
+
+    return {
+        "raw_body": raw_str,
+        "content_type": entry.get("content_type", ""),
+        "headers": entry.get("headers", {}),
+        "source_ip": entry.get("source_ip", ""),
+        "received_at": entry.get("received_at", ""),
+        "mapped_result": entry.get("mapped_result", []),
+    }
+
+
+@bp.route("/<int:stream_id>/preview", methods=["GET"])
+def get_preview(stream_id: int):
+    """
+    Return captured payloads and their mapped results for an
+    inbound stream.
+    """
+    stream, error = _validate_inbound_stream(stream_id)
+    if error:
+        return error
+
+    worker = _get_worker_for_stream(stream_id)
+    if not worker:
+        return jsonify({
+            "stream_id": stream_id,
+            "preview_mode": stream.inbound_preview_mode,
+            "payloads": [],
+        }), 200
+
+    payloads = worker.get_captured_payloads()
+
+    return jsonify({
+        "stream_id": stream_id,
+        "preview_mode": stream.inbound_preview_mode,
+        "payloads": [_serialize_payload(p) for p in payloads],
+    }), 200
+
+
+@bp.route("/<int:stream_id>/preview", methods=["DELETE"])
+def clear_preview(stream_id: int):
+    """Clear the capture buffer for an inbound stream."""
+    stream, error = _validate_inbound_stream(stream_id)
+    if error:
+        return error
+
+    worker = _get_worker_for_stream(stream_id)
+    if worker:
+        worker.clear_captured_payloads()
+
+    return jsonify({"status": "cleared"}), 200
+
+
+@bp.route(
+    "/<int:stream_id>/preview/remap", methods=["POST"]
+)
+def remap_preview(stream_id: int):
+    """
+    Re-run transform_payload against captured payloads using an
+    alternate plugin config. Does NOT persist config changes.
+    """
+    stream, error = _validate_inbound_stream(stream_id)
+    if error:
+        return error
+
+    body = request.get_json(silent=True) or {}
+    alt_config = body.get("plugin_config", {})
+
+    worker = _get_worker_for_stream(stream_id)
+    if not worker:
+        return jsonify({"results": []}), 200
+
+    captured = worker.get_captured_payloads()
+    if not captured:
+        return jsonify({"results": []}), 200
+
+    # Instantiate plugin with the alternate config
+    plugin_manager = get_plugin_manager()
+    plugin_class = plugin_manager.get_plugin_class(
+        stream.plugin_type
+    )
+    if not plugin_class:
+        return jsonify({"error": "Plugin not found"}), 404
+
+    # Merge stream's existing config with overrides
+    base_config = stream.get_plugin_config() or {}
+    merged_config = {**base_config, **alt_config}
+    plugin = plugin_class(merged_config)
+    plugin.stream = stream
+
+    results = []
+    for entry in captured:
+        try:
+            mapped = plugin.transform_payload(
+                entry["raw_body"],
+                entry["content_type"],
+                entry["headers"],
+            )
+        except Exception as e:
+            mapped = {"error": str(e)}
+
+        results.append({
+            "received_at": entry.get("received_at", ""),
+            "mapped_result": mapped,
+        })
+
+    return jsonify({"results": results}), 200
