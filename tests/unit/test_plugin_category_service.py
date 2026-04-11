@@ -127,6 +127,7 @@ class TestPluginCategoryService:
             "ems": "EMS",
             "output": "Output",
             "bidirectional": "Bidirectional",
+            "inbound": "Inbound",
         }
 
         assert mapping == expected_mapping
