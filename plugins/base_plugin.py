@@ -7,6 +7,7 @@ Created: 2025-07-05
 """
 
 # Standard library imports
+import hmac
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -1049,6 +1050,11 @@ class BaseInboundPlugin(PluginConfigMixin, ABC):
         auth_mode = config.get("auth_mode", "api_key")
 
         if auth_mode == "none":
+            stream_id = getattr(self.stream, "id", "unknown")
+            get_logger().warning(
+                f"Inbound stream {stream_id} has auth_mode='none' — "
+                f"requests are unauthenticated"
+            )
             return (True, None)
 
         # Default: Bearer token auth
@@ -1061,7 +1067,7 @@ class BaseInboundPlugin(PluginConfigMixin, ABC):
             return (False, "Missing or invalid Authorization header")
 
         provided_key = auth_header[7:]  # Strip "Bearer " prefix
-        if provided_key != expected_key:
+        if not hmac.compare_digest(provided_key, expected_key):
             return (False, "Invalid API key")
 
         return (True, None)

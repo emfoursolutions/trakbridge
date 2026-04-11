@@ -7,6 +7,8 @@ import asyncio
 import ipaddress
 import json
 import logging
+import threading
+import time
 from typing import Dict, List
 
 from flask import Blueprint, jsonify, request
@@ -25,6 +27,37 @@ MAX_LOCATIONS_PER_REQUEST = 100
 
 # Anti-enumeration: identical response for not-found, auth-fail, inactive, wrong mode
 _NOT_FOUND_RESPONSE = {"error": "Not found"}, 404
+
+# Per-stream sliding-window rate limiter (stream_id → list of request timestamps)
+_rate_limit_buckets: Dict[int, List[float]] = {}
+_rate_limit_lock = threading.Lock()
+
+
+def _is_rate_limited(stream_id: int, max_requests_per_minute: int) -> bool:
+    """
+    Check if a stream has exceeded its configured rate limit using a
+    sliding 60-second window.
+
+    Returns True if the request should be rejected.
+    """
+    if not max_requests_per_minute or max_requests_per_minute <= 0:
+        return False
+
+    now = time.monotonic()
+    window_start = now - 60.0
+
+    with _rate_limit_lock:
+        timestamps = _rate_limit_buckets.get(stream_id, [])
+        # Prune timestamps outside the window
+        timestamps = [t for t in timestamps if t > window_start]
+
+        if len(timestamps) >= max_requests_per_minute:
+            _rate_limit_buckets[stream_id] = timestamps
+            return True
+
+        timestamps.append(now)
+        _rate_limit_buckets[stream_id] = timestamps
+        return False
 
 
 def _mask_api_key(key: str) -> str:
@@ -170,6 +203,15 @@ def receive_inbound_data(stream_id: int):
         )
         return jsonify(_NOT_FOUND_RESPONSE[0]), _NOT_FOUND_RESPONSE[1]
 
+    # --- Rate limiting ---
+    if _is_rate_limited(stream_id, stream.inbound_rate_limit):
+        logger.warning(
+            f"Inbound rate limit exceeded for stream {stream_id} "
+            f"from {request.remote_addr} "
+            f"(limit: {stream.inbound_rate_limit} req/min)"
+        )
+        return jsonify({"error": "Rate limit exceeded"}), 429
+
     # --- Content-Type validation ---
     content_type = request.content_type or ""
     # Strip parameters (e.g., "application/json; charset=utf-8" → "application/json")
@@ -188,7 +230,7 @@ def receive_inbound_data(stream_id: int):
         logger.warning(
             f"Inbound transform failed for stream {stream_id}: {e}"
         )
-        return jsonify({"error": f"Payload transform failed: {e}"}), 400
+        return jsonify({"error": "Payload transform failed"}), 400
 
     if not locations:
         return jsonify({"error": "No locations extracted from payload"}), 400

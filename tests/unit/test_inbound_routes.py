@@ -429,3 +429,127 @@ class TestProcessingFailure:
             )
 
             assert response.status_code == 500
+
+
+class TestRateLimiting:
+    """Test per-stream rate limiting on the inbound endpoint."""
+
+    def test_rate_limit_exceeded_returns_429(
+        self, client, mock_stream, mock_plugin, mock_plugin_manager
+    ):
+        """Exceeding stream rate limit returns 429."""
+        mock_stream.inbound_rate_limit = 2  # 2 requests per minute
+
+        with patch("routes.inbound.db") as mock_db, \
+             patch("routes.inbound.get_plugin_manager", return_value=mock_plugin_manager), \
+             patch("routes.inbound._process_inbound_async", return_value={
+                 "success": True, "events_created": 1, "servers": {},
+             }), \
+             patch("routes.inbound._rate_limit_buckets", {}):
+            mock_db.session.get.return_value = mock_stream
+
+            # First two requests should succeed
+            for _ in range(2):
+                response = client.post(
+                    "/api/inbound/42/data",
+                    data=json.dumps({"id": "d1", "lat": 38.9, "lon": -77.0}),
+                    content_type="application/json",
+                    headers={"Authorization": "Bearer test-api-key-123"},
+                )
+                assert response.status_code == 202
+
+            # Third request should be rate limited
+            response = client.post(
+                "/api/inbound/42/data",
+                data=json.dumps({"id": "d1", "lat": 38.9, "lon": -77.0}),
+                content_type="application/json",
+                headers={"Authorization": "Bearer test-api-key-123"},
+            )
+
+            assert response.status_code == 429
+            assert "rate limit" in response.get_json()["error"].lower()
+
+    def test_no_rate_limit_when_disabled(
+        self, client, mock_stream, mock_plugin, mock_plugin_manager
+    ):
+        """Null or zero rate limit allows unlimited requests."""
+        mock_stream.inbound_rate_limit = None
+
+        with patch("routes.inbound.db") as mock_db, \
+             patch("routes.inbound.get_plugin_manager", return_value=mock_plugin_manager), \
+             patch("routes.inbound._process_inbound_async", return_value={
+                 "success": True, "events_created": 1, "servers": {},
+             }), \
+             patch("routes.inbound._rate_limit_buckets", {}):
+            mock_db.session.get.return_value = mock_stream
+
+            # Many requests should all succeed
+            for _ in range(10):
+                response = client.post(
+                    "/api/inbound/42/data",
+                    data=json.dumps({"id": "d1", "lat": 38.9, "lon": -77.0}),
+                    content_type="application/json",
+                    headers={"Authorization": "Bearer test-api-key-123"},
+                )
+                assert response.status_code == 202
+
+    def test_rate_limit_per_stream_isolation(
+        self, client, mock_stream, mock_plugin, mock_plugin_manager
+    ):
+        """Rate limiting is isolated per stream ID."""
+        mock_stream.inbound_rate_limit = 1
+
+        with patch("routes.inbound.db") as mock_db, \
+             patch("routes.inbound.get_plugin_manager", return_value=mock_plugin_manager), \
+             patch("routes.inbound._process_inbound_async", return_value={
+                 "success": True, "events_created": 1, "servers": {},
+             }), \
+             patch("routes.inbound._rate_limit_buckets", {}):
+
+            # First request to stream 42
+            mock_stream.id = 42
+            mock_db.session.get.return_value = mock_stream
+            response = client.post(
+                "/api/inbound/42/data",
+                data=json.dumps({"id": "d1", "lat": 38.9, "lon": -77.0}),
+                content_type="application/json",
+                headers={"Authorization": "Bearer test-api-key-123"},
+            )
+            assert response.status_code == 202
+
+            # Stream 42 is now rate limited
+            response = client.post(
+                "/api/inbound/42/data",
+                data=json.dumps({"id": "d1", "lat": 38.9, "lon": -77.0}),
+                content_type="application/json",
+                headers={"Authorization": "Bearer test-api-key-123"},
+            )
+            assert response.status_code == 429
+
+
+class TestTransformErrorDoesNotLeakDetails:
+    """Test that internal exception details are not leaked to clients."""
+
+    def test_transform_error_is_generic(
+        self, client, mock_stream, mock_plugin, mock_plugin_manager
+    ):
+        """Transform error response does not include exception details."""
+        mock_plugin.transform_payload.side_effect = ValueError(
+            "Internal secret: database password is hunter2"
+        )
+
+        with patch("routes.inbound.db") as mock_db, \
+             patch("routes.inbound.get_plugin_manager", return_value=mock_plugin_manager):
+            mock_db.session.get.return_value = mock_stream
+
+            response = client.post(
+                "/api/inbound/42/data",
+                data=b"bad data",
+                content_type="application/json",
+                headers={"Authorization": "Bearer test-api-key-123"},
+            )
+
+            assert response.status_code == 400
+            body = response.get_json()
+            assert "hunter2" not in body["error"]
+            assert body["error"] == "Payload transform failed"

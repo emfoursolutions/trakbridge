@@ -3,6 +3,8 @@ ABOUTME: Unit tests for BaseInboundPlugin abstract base class covering instantia
 ABOUTME: transform_payload, validate_inbound_request, config encryption, and metadata.
 """
 
+import hmac
+import logging
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -279,3 +281,71 @@ class TestInheritedMixinMethods:
         plugin = ConcreteInboundPlugin({})
         with patch.object(plugin, "get_decrypted_config", return_value={}):
             assert plugin.validate_config() is False
+
+
+class TestTimingSafeKeyComparison:
+    """Test that API key comparison uses constant-time comparison."""
+
+    def test_uses_hmac_compare_digest(self):
+        """API key comparison uses hmac.compare_digest to prevent timing attacks."""
+        plugin = ConcreteInboundPlugin({"api_key": "secret123", "auth_mode": "api_key"})
+        with patch.object(plugin, "get_decrypted_config", return_value={
+            "api_key": "secret123", "auth_mode": "api_key"
+        }), patch("plugins.base_plugin.hmac") as mock_hmac:
+            mock_hmac.compare_digest.return_value = True
+
+            is_valid, error = plugin.validate_inbound_request(
+                {"Authorization": "Bearer secret123"}
+            )
+
+            mock_hmac.compare_digest.assert_called_once_with("secret123", "secret123")
+            assert is_valid is True
+
+    def test_hmac_compare_digest_rejects_wrong_key(self):
+        """Timing-safe comparison still rejects wrong keys."""
+        plugin = ConcreteInboundPlugin({"api_key": "secret123", "auth_mode": "api_key"})
+        with patch.object(plugin, "get_decrypted_config", return_value={
+            "api_key": "secret123", "auth_mode": "api_key"
+        }):
+            is_valid, error = plugin.validate_inbound_request(
+                {"Authorization": "Bearer wrong_key"}
+            )
+            assert is_valid is False
+            assert "Invalid API key" in error
+
+
+class TestAuthModeNoneWarning:
+    """Test that auth_mode='none' logs a warning."""
+
+    def test_auth_mode_none_logs_warning(self, caplog):
+        """Auth mode 'none' emits a warning about unauthenticated access."""
+        plugin = ConcreteInboundPlugin({"auth_mode": "none"})
+        mock_stream = MagicMock()
+        mock_stream.id = 99
+        plugin.stream = mock_stream
+
+        with patch.object(plugin, "get_decrypted_config", return_value={
+            "auth_mode": "none"
+        }), caplog.at_level(logging.WARNING):
+            is_valid, error = plugin.validate_inbound_request({})
+
+            assert is_valid is True
+            assert any(
+                "auth_mode='none'" in record.message and "99" in record.message
+                for record in caplog.records
+            )
+
+    def test_auth_mode_api_key_does_not_warn(self, caplog):
+        """Auth mode 'api_key' does not emit auth_mode warning."""
+        plugin = ConcreteInboundPlugin({"api_key": "secret123", "auth_mode": "api_key"})
+        with patch.object(plugin, "get_decrypted_config", return_value={
+            "api_key": "secret123", "auth_mode": "api_key"
+        }), caplog.at_level(logging.WARNING):
+            plugin.validate_inbound_request(
+                {"Authorization": "Bearer secret123"}
+            )
+
+            assert not any(
+                "auth_mode='none'" in record.message
+                for record in caplog.records
+            )
