@@ -1,5 +1,6 @@
 # ABOUTME: Webhook Forwarder output plugin that monitors CoT traffic from TAK servers,
 # ABOUTME: filters by rules, converts to JSON/XML/template, and delivers via HTTP, WebSocket, or MQTT.
+# ABOUTME: Supports bidirectional mode: inbound messages on WS/MQTT are parsed and injected as CoT into TAK.
 
 import asyncio
 import base64
@@ -78,6 +79,10 @@ class WebhookHandler(BaseOutputPlugin):
 
         # Rate throttle state
         self._last_event_time: float = 0.0
+
+        # Bidirectional state
+        self._ws_reader_task: Optional[asyncio.Task] = None
+        self._inbound_received: int = 0
 
     @property
     def plugin_name(self) -> str:
@@ -299,6 +304,102 @@ class WebhookHandler(BaseOutputPlugin):
                     max_value=600,
                     help_text="MQTT keepalive interval in seconds",
                 ),
+                # Bidirectional mode fields (WebSocket/MQTT only)
+                PluginConfigField(
+                    name="bidirectional",
+                    label="Bidirectional Mode",
+                    field_type="select",
+                    options=[
+                        {"value": "false", "label": "Outbound Only"},
+                        {"value": "true", "label": "Bidirectional"},
+                    ],
+                    default_value="false",
+                    help_text=(
+                        "When enabled, also listens for inbound messages on the "
+                        "same WS/MQTT connection and converts them to CoT for TAK."
+                    ),
+                ),
+                PluginConfigField(
+                    name="inbound_format",
+                    label="Inbound Format",
+                    field_type="select",
+                    options=[
+                        {"value": "json", "label": "JSON"},
+                        {"value": "xml", "label": "XML"},
+                        {"value": "custom", "label": "Custom"},
+                    ],
+                    default_value="json",
+                    help_text="Format of inbound messages (bidirectional mode)",
+                ),
+                PluginConfigField(
+                    name="inbound_lat_field",
+                    label="Inbound Latitude Field",
+                    field_type="text",
+                    default_value="lat",
+                    placeholder="lat or position.latitude",
+                    help_text="Dot-notation path to latitude in inbound JSON",
+                ),
+                PluginConfigField(
+                    name="inbound_lon_field",
+                    label="Inbound Longitude Field",
+                    field_type="text",
+                    default_value="lon",
+                    placeholder="lon or position.longitude",
+                    help_text="Dot-notation path to longitude in inbound JSON",
+                ),
+                PluginConfigField(
+                    name="inbound_uid_field",
+                    label="Inbound UID Field",
+                    field_type="text",
+                    default_value="uid",
+                    placeholder="uid or device.id",
+                    help_text="Dot-notation path to device UID in inbound JSON",
+                ),
+                PluginConfigField(
+                    name="inbound_callsign_field",
+                    label="Inbound Callsign Field",
+                    field_type="text",
+                    default_value="callsign",
+                    placeholder="callsign or device.name",
+                    help_text="Dot-notation path to callsign in inbound JSON",
+                ),
+                PluginConfigField(
+                    name="inbound_speed_field",
+                    label="Inbound Speed Field",
+                    field_type="text",
+                    placeholder="speed (optional)",
+                    help_text="Dot-notation path to speed in inbound JSON",
+                ),
+                PluginConfigField(
+                    name="inbound_course_field",
+                    label="Inbound Course Field",
+                    field_type="text",
+                    placeholder="course (optional)",
+                    help_text="Dot-notation path to course/heading in inbound JSON",
+                ),
+                PluginConfigField(
+                    name="mqtt_subscribe_topic",
+                    label="MQTT Subscribe Topic",
+                    field_type="text",
+                    placeholder="trakbridge/inbound",
+                    help_text="MQTT topic to listen on for inbound messages (bidirectional mode)",
+                ),
+                PluginConfigField(
+                    name="inbound_cot_type",
+                    label="Inbound CoT Type",
+                    field_type="text",
+                    default_value="a-f-G-U-C",
+                    help_text="Default CoT type for inbound events",
+                ),
+                PluginConfigField(
+                    name="inbound_cot_stale_time",
+                    label="Inbound CoT Stale Time (seconds)",
+                    field_type="number",
+                    default_value=300,
+                    min_value=10,
+                    max_value=86400,
+                    help_text="Stale time for inbound CoT events in seconds",
+                ),
             ],
             "custom_components": [
                 PluginCustomComponent(
@@ -374,16 +475,25 @@ class WebhookHandler(BaseOutputPlugin):
         """Initialize persistent connections for WebSocket/MQTT modes."""
         config = self.get_decrypted_config()
         mode = config.get("delivery_mode", "http")
+        bidi = config.get("bidirectional", "false") == "true"
 
         if mode == "websocket":
             buffer_size = int(config.get("stream_buffer_size", 100))
             self._ws_queue = asyncio.Queue(maxsize=buffer_size)
             await self._connect_websocket()
+            if bidi:
+                self._ws_reader_task = asyncio.create_task(
+                    self._ws_reader_loop()
+                )
         elif mode == "mqtt":
             await self._connect_mqtt()
 
     async def cleanup(self):
         """Release resources for persistent connections."""
+        if self._ws_reader_task:
+            self._ws_reader_task.cancel()
+            self._ws_reader_task = None
+
         if self._ws_writer_task:
             self._ws_writer_task.cancel()
             self._ws_writer_task = None
@@ -702,10 +812,16 @@ class WebhookHandler(BaseOutputPlugin):
         if use_tls:
             client.tls_set()
 
+        bidi = config.get("bidirectional", "false") == "true"
+        subscribe_topic = config.get("mqtt_subscribe_topic", "")
+
         def on_connect(client, userdata, flags, rc):
             if rc == 0:
                 self._mqtt_connected = True
                 logger.info(f"MQTT connected to {host}:{port}")
+                if bidi and subscribe_topic:
+                    client.subscribe(subscribe_topic)
+                    logger.info(f"MQTT subscribed to {subscribe_topic}")
             else:
                 logger.error(f"MQTT connection failed with rc={rc}")
 
@@ -714,8 +830,25 @@ class WebhookHandler(BaseOutputPlugin):
             if rc != 0:
                 logger.warning(f"MQTT unexpected disconnect (rc={rc}), will reconnect")
 
+        def on_message(client, userdata, msg):
+            if bidi:
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        asyncio.ensure_future(
+                            self._handle_inbound_message(msg.payload)
+                        )
+                    else:
+                        loop.run_until_complete(
+                            self._handle_inbound_message(msg.payload)
+                        )
+                except Exception as e:
+                    logger.error(f"MQTT inbound handler error: {e}")
+
         client.on_connect = on_connect
         client.on_disconnect = on_disconnect
+        if bidi:
+            client.on_message = on_message
         client.reconnect_delay_set(min_delay=1, max_delay=60)
 
         try:
@@ -758,6 +891,155 @@ class WebhookHandler(BaseOutputPlugin):
             msg = json.dumps(payload)
 
         self._mqtt_client.publish(topic, msg, qos=qos)
+
+    # ------------------------------------------------------------------
+    # Bidirectional: inbound receive path
+    # ------------------------------------------------------------------
+
+    def _resolve_path(self, data: dict, path: str):
+        """Resolve a dot-notation path against a nested dict."""
+        current = data
+        for segment in path.split("."):
+            if not isinstance(current, dict) or segment not in current:
+                return None
+            current = current[segment]
+        return current
+
+    def _parse_inbound_message(self, raw: bytes) -> list:
+        """
+        Parse an inbound message into location dicts using configured field mapping.
+
+        Returns a list of location dicts, or empty list on failure.
+        """
+        config = self.get_decrypted_config()
+
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            logger.warning("Bidi inbound: failed to parse JSON")
+            return []
+
+        lat_field = config.get("inbound_lat_field", "lat")
+        lon_field = config.get("inbound_lon_field", "lon")
+        uid_field = config.get("inbound_uid_field", "uid")
+        callsign_field = config.get("inbound_callsign_field", "callsign")
+        speed_field = config.get("inbound_speed_field", "")
+        course_field = config.get("inbound_course_field", "")
+
+        lat = self._resolve_path(data, lat_field)
+        lon = self._resolve_path(data, lon_field)
+        uid = self._resolve_path(data, uid_field)
+
+        # Require lat, lon, uid at minimum
+        if lat is None or lon is None or uid is None:
+            logger.debug("Bidi inbound: missing required fields (lat/lon/uid)")
+            return []
+
+        # Coordinate validation
+        try:
+            lat_f = float(lat)
+            lon_f = float(lon)
+        except (ValueError, TypeError):
+            logger.warning("Bidi inbound: non-numeric lat/lon")
+            return []
+
+        if lat_f < -90 or lat_f > 90 or lon_f < -180 or lon_f > 180:
+            logger.warning(
+                f"Bidi inbound: coordinates out of range "
+                f"(lat={lat_f}, lon={lon_f})"
+            )
+            return []
+
+        location = {
+            "lat": lat_f,
+            "lon": lon_f,
+            "uid": str(uid),
+            "callsign": str(
+                self._resolve_path(data, callsign_field) or uid
+            ),
+        }
+
+        if speed_field:
+            speed = self._resolve_path(data, speed_field)
+            if speed is not None:
+                location["speed"] = speed
+
+        if course_field:
+            course = self._resolve_path(data, course_field)
+            if course is not None:
+                location["course"] = course
+
+        return [location]
+
+    async def _handle_inbound_message(self, raw: bytes) -> None:
+        """
+        Process a single inbound message through the CoT pipeline.
+
+        Parses the message, converts to location dicts, and feeds to
+        InboundCOTService for CoT generation and TAK distribution.
+        Errors are logged but never propagated to the outbound path.
+        """
+        try:
+            locations = self._parse_inbound_message(raw)
+            if not locations:
+                return
+
+            self._inbound_received += 1
+
+            if not self.stream:
+                logger.warning(
+                    "Bidi inbound: no stream context, cannot process"
+                )
+                return
+
+            from services.inbound_cot_service import InboundCOTService
+
+            service = InboundCOTService()
+            result = await service.process_inbound_locations(
+                locations, self.stream
+            )
+
+            if result.get("success"):
+                logger.debug(
+                    f"Bidi inbound: processed {result.get('events_created', 0)} events"
+                )
+            else:
+                logger.warning(
+                    f"Bidi inbound processing failed: {result.get('error')}"
+                )
+
+        except Exception as e:
+            logger.error(f"Bidi inbound handler error: {e}")
+
+    async def _ws_reader_loop(self) -> None:
+        """Background task that reads inbound messages from WebSocket."""
+        while True:
+            try:
+                if not self._ws_connected or not self._ws_connection:
+                    await asyncio.sleep(1.0)
+                    continue
+
+                msg = await self._ws_connection.receive()
+
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    await self._handle_inbound_message(
+                        msg.data.encode("utf-8")
+                    )
+                elif msg.type == aiohttp.WSMsgType.BINARY:
+                    await self._handle_inbound_message(msg.data)
+                elif msg.type in (
+                    aiohttp.WSMsgType.CLOSE,
+                    aiohttp.WSMsgType.ERROR,
+                ):
+                    self._ws_connected = False
+                    logger.warning("WebSocket closed during bidi read")
+                    await asyncio.sleep(1.0)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"WebSocket bidi reader error: {e}")
+                await asyncio.sleep(1.0)
 
     # ------------------------------------------------------------------
     # Filtering (same pattern as Discord/Slack handlers)
@@ -929,11 +1211,13 @@ class WebhookHandler(BaseOutputPlugin):
         """Return current health statistics."""
         config = self.get_decrypted_config()
         mode = config.get("delivery_mode", "http")
+        bidi = config.get("bidirectional", "false") == "true"
 
         stats = {
             "delivery_mode": mode,
             "events_sent": self._events_sent,
             "events_dropped": self._events_dropped,
+            "inbound_received": self._inbound_received,
         }
 
         if mode == "websocket":
@@ -941,6 +1225,9 @@ class WebhookHandler(BaseOutputPlugin):
             stats["buffer_size"] = self._ws_queue.qsize() if self._ws_queue else 0
         elif mode == "mqtt":
             stats["mqtt_connected"] = self._mqtt_connected
+
+        if bidi:
+            stats["bidirectional"] = True
 
         return stats
 
