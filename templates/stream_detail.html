@@ -75,8 +75,13 @@
     <div class="col-md-3 mb-3">
         <div class="card bg-light">
             <div class="card-body text-center">
+                {% if stream.stream_mode == 'inbound' %}
+                <div class="metric-value text-info">Push</div>
+                <div class="metric-label">Inbound Mode</div>
+                {% else %}
                 <div class="metric-value text-info">{{ stream.poll_interval }}s</div>
                 <div class="metric-label">Poll Interval</div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -117,6 +122,21 @@
                             <label class="info-label">Provider</label>
                             <div class="info-value">
                                 <span class="version-badge">{{ stream.plugin_type|title }}</span>
+                            </div>
+                        </div>
+
+                        <div class="info-group mb-3">
+                            <label class="info-label">Stream Mode</label>
+                            <div class="info-value">
+                                {% if stream.stream_mode == 'inbound' %}
+                                <span class="badge bg-info text-dark">
+                                    <i class="fas fa-arrow-circle-down me-1"></i>Inbound
+                                </span>
+                                {% else %}
+                                <span class="badge bg-primary">
+                                    <i class="fas fa-clock me-1"></i>Poll
+                                </span>
+                                {% endif %}
                             </div>
                         </div>
                         
@@ -187,6 +207,90 @@
                 {% endif %}
             </div>
         </div>
+
+        <!-- Inbound Stream Configuration Card -->
+        {% if stream.stream_mode == 'inbound' %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-arrow-circle-down"></i> Inbound Configuration
+                    </h5>
+                    {% if stream.inbound_preview_mode %}
+                    <span class="badge bg-warning text-dark">Preview Mode</span>
+                    {% else %}
+                    <span class="badge bg-success">Live</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <div class="info-group">
+                            <label class="info-label">Endpoint URL</label>
+                            <div class="info-value">
+                                <code class="text-mono">/api/inbound/{{ stream.id }}/data</code>
+                                <button class="btn btn-outline-secondary btn-sm ms-2" onclick="copyEndpointUrl()" title="Copy URL">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="info-group">
+                            <label class="info-label">API Key</label>
+                            <div class="info-value">
+                                {% if stream.inbound_api_key %}
+                                <span class="text-mono">••••••••</span>
+                                <span class="badge bg-success ms-2">Configured</span>
+                                {% else %}
+                                <span class="text-muted">Not configured</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="info-group">
+                            <label class="info-label">Rate Limit</label>
+                            <div class="info-value">
+                                <span class="text-mono">{{ stream.inbound_rate_limit or 60 }}</span> requests/min
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="info-group">
+                            <label class="info-label">IP Allowlist</label>
+                            <div class="info-value">
+                                {% if stream.inbound_ip_allowlist %}
+                                <span class="text-mono">{{ stream.inbound_ip_allowlist }}</span>
+                                {% else %}
+                                <span class="text-muted">All IPs allowed</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="info-group">
+                            <label class="info-label">Mode</label>
+                            <div class="info-value">
+                                {% if stream.inbound_preview_mode %}
+                                <span class="badge bg-warning text-dark">Preview</span>
+                                <small class="text-muted ms-1">Payloads accepted but not forwarded to TAK</small>
+                                {% else %}
+                                <span class="badge bg-success">Live</span>
+                                <small class="text-muted ms-1">Payloads forwarded to TAK servers</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- TAK Servers Card (only show for multiple servers) -->
         {% set server_info = stream.get_tak_server_display_info() %}
@@ -527,6 +631,16 @@
 
 {% block scripts %}
 <script>
+function copyEndpointUrl() {
+    const url = window.location.origin + '/api/inbound/{{ stream.id }}/data';
+    navigator.clipboard.writeText(url).then(() => {
+        const btn = event.target.closest('button');
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check"></i>';
+        setTimeout(() => { btn.innerHTML = orig; }, 1500);
+    });
+}
+
 function controlStream(streamId, action) {
     const actionBtn = document.querySelector(`button[onclick="controlStream(${streamId}, '${action}')"]`);
     const originalText = actionBtn.innerHTML;

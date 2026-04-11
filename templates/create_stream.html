@@ -136,7 +136,7 @@
                         </div>
                     </div>
 
-                    <!-- Input plugin settings (hidden for output plugins) -->
+                    <!-- Input plugin settings (hidden for output and inbound plugins) -->
                     <div id="input-plugin-settings">
                         <div class="row">
                             <div class="col-md-6">
@@ -167,6 +167,83 @@
                                 </select>
                                 <div class="form-text">Cursor-on-Target type identifier for tracked objects</div>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Inbound stream settings (hidden by default, shown for inbound plugins) -->
+                    <div id="inbound-config-section" style="display: none;">
+                        <input type="hidden" id="stream_mode" name="stream_mode" value="poll">
+
+                        <div class="alert alert-info mb-3">
+                            <i class="fas fa-arrow-circle-down me-2"></i>
+                            <strong>Inbound Stream</strong> — External devices push data to TrakBridge via HTTP.
+                            <span id="inbound-endpoint-url" class="d-block mt-1 text-mono small">
+                                Endpoint URL will be shown after creation: <code>/api/inbound/&lt;stream_id&gt;/data</code>
+                            </span>
+                        </div>
+
+                        <!-- COT settings for inbound (stale time and type still apply) -->
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="inbound_cot_stale_time" class="form-label">COT Stale Time (seconds)</label>
+                                    <input type="number" class="form-control" id="inbound_cot_stale_time" name="cot_stale_time" value="300" min="60">
+                                    <div class="form-text">When to consider position data stale</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div id="inbound-cot-type-setting">
+                                    <div class="mb-3">
+                                        <label for="inbound_cot_type" class="form-label">COT Type</label>
+                                        <select class="form-select" id="inbound_cot_type" name="cot_type">
+                                            {% for cot_type in cot_types %}
+                                            <option value="{{ cot_type.value }}" {% if cot_type.value == default_cot_type %}selected{% endif %} title="{{ cot_type.description }}">
+                                                {{ cot_type.label }} ({{ cot_type.value }})
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                        <div class="form-text">Cursor-on-Target type identifier</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="inbound_api_key" class="form-label">API Key</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="inbound_api_key" name="inbound_api_key" readonly placeholder="Click Generate to create a key">
+                                        <button type="button" class="btn btn-outline-primary" onclick="generateApiKey()">
+                                            <i class="fas fa-key"></i> Generate
+                                        </button>
+                                    </div>
+                                    <div class="form-text">API key for authenticating inbound requests (auto-generated if left blank)</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="inbound_rate_limit" class="form-label">Rate Limit (requests/min)</label>
+                                    <input type="number" class="form-control" id="inbound_rate_limit" name="inbound_rate_limit" value="60" min="1" max="10000">
+                                    <div class="form-text">Maximum inbound requests per minute</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="inbound_ip_allowlist" class="form-label">IP Allowlist (optional)</label>
+                            <textarea class="form-control" id="inbound_ip_allowlist" name="inbound_ip_allowlist" rows="2" placeholder='e.g. ["10.0.0.0/8", "192.168.1.0/24"]'></textarea>
+                            <div class="form-text">JSON list of allowed CIDR ranges. Leave empty to allow all IPs.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="inbound_preview_mode" name="inbound_preview_mode" checked>
+                                <label class="form-check-label" for="inbound_preview_mode">
+                                    <strong>Preview Mode</strong> — Accept and transform payloads without sending to TAK servers
+                                </label>
+                            </div>
+                            <div class="form-text">Recommended for initial setup. Switch to live mode after verifying field mappings.</div>
                         </div>
                     </div>
                 </div>
@@ -545,9 +622,20 @@ function updatePluginConfig() {
     // Show config section
     configSection.style.display = 'block';
 
-    // Hide input-specific settings (Poll Interval, COT Type, COT Stale Time) for output plugins
+    // Hide input-specific settings for output and inbound plugins
     const isOutputPlugin = pluginMeta.category?.toLowerCase() === 'output';
-    inputPluginSettings.style.display = isOutputPlugin ? 'none' : 'block';
+    const isInboundPlugin = pluginMeta.category?.toLowerCase() === 'inbound';
+    inputPluginSettings.style.display = (isOutputPlugin || isInboundPlugin) ? 'none' : 'block';
+
+    // Show/hide inbound configuration section
+    const inboundSection = document.getElementById('inbound-config-section');
+    const streamModeInput = document.getElementById('stream_mode');
+    if (inboundSection) {
+        inboundSection.style.display = isInboundPlugin ? 'block' : 'none';
+        if (streamModeInput) {
+            streamModeInput.value = isInboundPlugin ? 'inbound' : 'poll';
+        }
+    }
 
     // Apply plugin-specific minimum poll interval if defined
     const pollIntervalInput = document.getElementById('poll_interval');
@@ -768,6 +856,25 @@ function renderHelpContent(pluginMeta) {
     }
 
     helpContent.innerHTML = html;
+}
+
+function generateApiKey() {
+    fetch('/api/inbound/generate-api-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.api_key) {
+            document.getElementById('inbound_api_key').value = data.api_key;
+        } else {
+            alert('Failed to generate API key');
+        }
+    })
+    .catch(error => {
+        console.error('Error generating API key:', error);
+        alert('Failed to generate API key');
+    });
 }
 
 function testStreamConfig() {

@@ -199,6 +199,23 @@ class StreamOperationsService:
                 "cot_type_mode", "stream"
             )
 
+            # Determine stream mode from form data
+            stream_mode = data.get("stream_mode", "poll")
+
+            # Inbound stream fields
+            inbound_api_key = data.get("inbound_api_key") or None
+            inbound_rate_limit_raw = data.get("inbound_rate_limit")
+            inbound_rate_limit = int(inbound_rate_limit_raw) if inbound_rate_limit_raw else 60
+            inbound_ip_allowlist = data.get("inbound_ip_allowlist") or None
+            # Checkbox: 'on' or 'true' means enabled
+            preview_raw = data.get("inbound_preview_mode")
+            inbound_preview_mode = preview_raw in (True, "true", "True", "on", "1", 1)
+
+            # Auto-generate API key for inbound streams if none provided
+            if stream_mode == "inbound" and not inbound_api_key:
+                import secrets as _secrets
+                inbound_api_key = _secrets.token_urlsafe(32)
+
             # Create stream with appropriate server configuration
             stream = Stream(
                 name=data["name"],
@@ -217,6 +234,12 @@ class StreamOperationsService:
                 enable_per_callsign_cot_types=bool(
                     data.get("enable_per_callsign_cot_types", False)
                 ),
+                # Inbound stream fields
+                stream_mode=stream_mode,
+                inbound_api_key=inbound_api_key,
+                inbound_rate_limit=inbound_rate_limit,
+                inbound_ip_allowlist=inbound_ip_allowlist,
+                inbound_preview_mode=inbound_preview_mode,
             )
 
             # Set plugin configuration (already extracted above)
@@ -532,6 +555,31 @@ class StreamOperationsService:
                 stream.enable_per_callsign_cot_types = bool(
                     data.get("enable_per_callsign_cot_types", False)
                 )
+
+                # Update inbound stream fields
+                stream_mode = data.get("stream_mode", stream.stream_mode or "poll")
+                stream.stream_mode = stream_mode
+
+                if "inbound_rate_limit" in data and data["inbound_rate_limit"]:
+                    stream.inbound_rate_limit = int(data["inbound_rate_limit"])
+
+                if "inbound_ip_allowlist" in data:
+                    val = data["inbound_ip_allowlist"]
+                    stream.inbound_ip_allowlist = val if val else None
+
+                if "inbound_preview_mode" in data:
+                    raw = data["inbound_preview_mode"]
+                    stream.inbound_preview_mode = raw in (
+                        True, "true", "True", "on", "1", 1,
+                    )
+                elif stream_mode == "inbound":
+                    # Checkbox not present in form data means unchecked
+                    stream.inbound_preview_mode = False
+
+                # Update API key only if a new one was explicitly provided
+                new_key = data.get("inbound_api_key")
+                if new_key and not new_key.startswith("•"):
+                    stream.inbound_api_key = new_key
 
                 # Update plugin configuration with password preservation
                 from plugins.plugin_manager import get_plugin_manager

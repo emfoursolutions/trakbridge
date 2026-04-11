@@ -16,6 +16,7 @@ from flask import Blueprint, jsonify, request
 from database import db
 from models.stream import Stream
 from plugins.plugin_manager import get_plugin_manager
+from services.auth import require_permission
 from services.inbound_stream_worker import get_active_inbound_streams
 
 logger = logging.getLogger(__name__)
@@ -441,3 +442,19 @@ def remap_preview(stream_id: int):
         })
 
     return jsonify({"results": results}), 200
+
+
+@bp.route("/generate-api-key", methods=["POST"])
+@require_permission("streams", "write")
+def generate_api_key():
+    """
+    Generate a random API key for inbound stream authentication.
+
+    Returns a cryptographically secure token that can be used as an
+    inbound stream API key. Does not persist — the caller stores it
+    in the stream creation/edit form.
+    """
+    import secrets as _secrets
+
+    key = _secrets.token_urlsafe(32)
+    return jsonify({"api_key": key}), 200
