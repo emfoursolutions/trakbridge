@@ -205,7 +205,7 @@ class TestCaptureBuffer:
         # Internal buffer should be unaffected
         assert len(worker.get_captured_payloads()) == 1
 
-    def test_stop_clears_buffer(self, worker):
+    async def test_stop_clears_buffer(self, worker):
         """Stopping the worker clears the capture buffer."""
         worker.capture_payload(
             raw_body=b"{}",
@@ -219,14 +219,12 @@ class TestCaptureBuffer:
         mock_cot_service.get_worker_status.return_value = {"worker_running": True}
         mock_cot_service.start_worker = AsyncMock(return_value=True)
 
-        import asyncio
-
         with patch(
             "services.inbound_stream_worker.get_cot_service",
             return_value=mock_cot_service,
         ):
-            asyncio.get_event_loop().run_until_complete(worker.start())
-            asyncio.get_event_loop().run_until_complete(worker.stop())
+            await worker.start()
+            await worker.stop()
 
         assert len(worker.get_captured_payloads()) == 0
 
