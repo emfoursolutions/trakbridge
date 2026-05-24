@@ -1874,7 +1874,7 @@ class QueuedCOTService:
             # Handle P12 certificate if available
             if tak_server.cert_p12 and len(tak_server.cert_p12) > 0:
                 try:
-                    cert_pem, key_pem = QueuedCOTService._extract_p12_certificate(
+                    cert_pem, key_pem, ca_pem = QueuedCOTService._extract_p12_certificate(
                         tak_server.cert_p12, tak_server.get_cert_password()
                     )
                     cert_path, key_path = QueuedCOTService._create_temp_cert_files(
@@ -1882,6 +1882,18 @@ class QueuedCOTService:
                     )
                     config.set("pytak", "PYTAK_TLS_CLIENT_CERT", cert_path)
                     config.set("pytak", "PYTAK_TLS_CLIENT_KEY", key_path)
+
+                    # Set CA certificate for SSL verification if present in the P12
+                    if ca_pem:
+                        ca_fd, ca_path = tempfile.mkstemp(suffix=".pem", prefix="tak_ca_")
+                        with os.fdopen(ca_fd, "wb") as ca_file:
+                            ca_file.write(ca_pem)
+                        config.set("pytak", "PYTAK_TLS_CLIENT_CAFILE", ca_path)
+                    else:
+                        logger.warning(
+                            f"P12 for TAK server '{tak_server.name}' does not "
+                            f"contain a CA certificate — SSL verification may fail"
+                        )
                 except Exception as e:
                     logger.error(f"Failed to configure P12 certificate: {e}")
 
@@ -3437,7 +3449,7 @@ class QueuedCOTService:
 
                 if tak_server.cert_p12 and len(tak_server.cert_p12) > 0:
                     try:
-                        cert_pem, key_pem = QueuedCOTService._extract_p12_certificate(
+                        cert_pem, key_pem, ca_pem = QueuedCOTService._extract_p12_certificate(
                             tak_server.cert_p12, tak_server.get_cert_password()
                         )
                         cert_path, key_path = QueuedCOTService._create_temp_cert_files(
@@ -3446,6 +3458,12 @@ class QueuedCOTService:
                         ssl_context.load_cert_chain(
                             certfile=cert_path, keyfile=key_path
                         )
+                        # Load CA certificate for server verification if present
+                        if ca_pem:
+                            ca_fd, ca_path = tempfile.mkstemp(suffix=".pem", prefix="tak_ca_")
+                            with os.fdopen(ca_fd, "wb") as ca_file:
+                                ca_file.write(ca_pem)
+                            ssl_context.load_verify_locations(cafile=ca_path)
                         logger.debug(
                             f"Loaded client certificate for TAK server '{tak_server.name}'"
                         )
@@ -3522,8 +3540,13 @@ class QueuedCOTService:
     @staticmethod
     def _extract_p12_certificate(
         p12_data: bytes, password: Optional[str] = None
-    ) -> Tuple[bytes, bytes]:
-        """Extract certificate and key from P12 data"""
+    ) -> Tuple[bytes, bytes, Optional[bytes]]:
+        """Extract certificate, key, and CA certificate from P12 data.
+
+        Returns:
+            Tuple of (cert_pem, key_pem, ca_pem) where ca_pem is None
+            if the P12 does not contain a CA certificate chain.
+        """
         try:
             password_bytes = password.encode("utf-8") if password else None
             private_key, certificate, additional_certificates = (
@@ -3537,7 +3560,14 @@ class QueuedCOTService:
                 encryption_algorithm=serialization.NoEncryption(),
             )
 
-            return cert_pem, key_pem
+            # Extract CA certificate from the chain if present
+            ca_pem = None
+            if additional_certificates:
+                ca_pem = additional_certificates[0].public_bytes(
+                    serialization.Encoding.PEM
+                )
+
+            return cert_pem, key_pem, ca_pem
 
         except Exception as e:
             raise Exception(f"P12 certificate extraction failed: {str(e)}")

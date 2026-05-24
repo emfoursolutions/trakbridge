@@ -74,6 +74,10 @@ class Stream(db.Model, TimestampMixin):
         db.Boolean, default=False
     )  # Feature toggle
 
+    # CA certificate for output plugin TLS verification (upload source)
+    ca_cert = db.Column(db.LargeBinary, nullable=True)
+    ca_cert_filename = db.Column(db.String(255), nullable=True)
+
     # Inbound stream fields
     stream_mode = db.Column(
         db.String(20), default="poll", nullable=False, index=True

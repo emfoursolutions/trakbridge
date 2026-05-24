@@ -75,6 +75,69 @@ class TestWebhookHandlerMetadata:
         assert "delivery_mode" in field_names
         assert "output_format" in field_names
 
+    def test_mqtt_password_field_type_is_password(self):
+        from plugins.webhook_handler import WebhookHandler
+
+        handler = WebhookHandler({})
+        fields = {f.name: f for f in handler.plugin_metadata["config_fields"]}
+        assert fields["mqtt_password"].field_type == "password"
+
+    def test_mqtt_password_is_sensitive(self):
+        from plugins.webhook_handler import WebhookHandler
+
+        handler = WebhookHandler({})
+        fields = {f.name: f for f in handler.plugin_metadata["config_fields"]}
+        assert fields["mqtt_password"].sensitive is True
+
+    def test_mqtt_client_id_default_is_trakbridge(self):
+        from plugins.webhook_handler import WebhookHandler
+
+        handler = WebhookHandler({})
+        fields = {f.name: f for f in handler.plugin_metadata["config_fields"]}
+        assert fields["mqtt_client_id"].default_value == "trakbridge"
+
+    def test_ca_source_field_present_with_options(self):
+        from plugins.webhook_handler import WebhookHandler
+
+        handler = WebhookHandler({})
+        fields = {f.name: f for f in handler.plugin_metadata["config_fields"]}
+        assert "ca_source" in fields
+        option_values = [o["value"] for o in fields["ca_source"].options]
+        assert "system" in option_values
+        assert "tak_server" in option_values
+        assert "upload" in option_values
+
+    def test_ca_source_default_is_system(self):
+        from plugins.webhook_handler import WebhookHandler
+
+        handler = WebhookHandler({})
+        fields = {f.name: f for f in handler.plugin_metadata["config_fields"]}
+        assert fields["ca_source"].default_value == "system"
+
+    def test_ca_source_has_no_custom_option(self):
+        from plugins.webhook_handler import WebhookHandler
+
+        handler = WebhookHandler({})
+        fields = {f.name: f for f in handler.plugin_metadata["config_fields"]}
+        option_values = [o["value"] for o in fields["ca_source"].options]
+        assert "custom" not in option_values
+
+    def test_ca_cert_path_field_removed(self):
+        from plugins.webhook_handler import WebhookHandler
+
+        handler = WebhookHandler({})
+        fields = {f.name: f for f in handler.plugin_metadata["config_fields"]}
+        assert "ca_cert_path" not in fields
+
+    def test_help_sections_cover_all_groups(self):
+        from plugins.webhook_handler import WebhookHandler
+
+        handler = WebhookHandler({})
+        sections = handler.plugin_metadata["help_sections"]
+        titles = [s["title"] for s in sections]
+        for expected in ["Connection", "Output Format", "Filtering", "Performance", "MQTT Settings", "Bidirectional / Inbound", "Template Variables"]:
+            assert expected in titles, f"Missing help section: {expected}"
+
     def test_plugin_has_custom_components(self):
         from plugins.webhook_handler import WebhookHandler
 

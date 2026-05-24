@@ -26,7 +26,7 @@
 
 <div class="row">
     <div class="col-lg-8">
-        <form id="streamForm" method="POST">
+        <form id="streamForm" method="POST" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div class="card">
                 <div class="card-header">
@@ -423,6 +423,35 @@
                 <!-- Components will be dynamically rendered here based on plugin metadata -->
             </div>
 
+
+            <!-- CA Certificate Upload (shown when ca_source=upload is selected) -->
+            <div id="ca-cert-upload-section" class="card mt-3" style="display:none">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-certificate"></i> CA Certificate</h5>
+                </div>
+                <div class="card-body">
+                    {% if stream.ca_cert_filename %}
+                    <div id="ca-cert-current" class="alert alert-info py-2 d-flex align-items-center justify-content-between mb-2">
+                        <span><i class="fas fa-file-certificate me-1"></i> Current: <strong>{{ stream.ca_cert_filename }}</strong></span>
+                        <form method="POST" action="{{ url_for('streams.remove_ca_cert', stream_id=stream.id) }}" class="d-inline" onsubmit="return confirm('Remove the CA certificate?')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="fas fa-times"></i> Remove
+                            </button>
+                        </form>
+                    </div>
+                    {% endif %}
+                    <p class="text-muted small mb-2">
+                        Upload a PEM or DER encoded CA certificate (<code>.crt</code>, <code>.pem</code>, <code>.cer</code>, <code>.der</code>).
+                        {% if stream.ca_cert_filename %}Uploading a new file will replace the existing certificate.{% endif %}
+                    </p>
+                    <div class="mb-0">
+                        <input type="file" class="form-control" name="ca_cert_file"
+                               id="ca_cert_file" accept=".crt,.pem,.cer,.der">
+                        <div id="ca-cert-feedback" class="form-text"></div>
+                    </div>
+                </div>
+            </div>
 
             <div class="mt-4">
                 <button type="submit" class="btn btn-primary">
@@ -825,52 +854,166 @@ function renderPluginConfig(pluginMeta) {
     configIcon.className = pluginMeta.icon || 'fas fa-cog';
     configName.textContent = `${pluginMeta.display_name} Configuration`;
 
-    // Generate form fields with current values and layout grouping for IRC handler
     const fields = pluginMeta.config_fields || [];
+    const fieldGroups = pluginMeta.field_groups || [];
 
     // Skip fields that are managed by a custom component
     const componentFieldNames = new Set(
         (pluginMeta.custom_components || []).map(c => c.field_name)
     );
 
-    // Define field pairs for two-column layout (IRC handler specific)
-    const fieldPairs = {
-        'server': 'port',
-        'use_ssl': 'verify_ssl',
-        'nickname': 'channel',
-        'password': 'uid_filter'
-    };
+    // Filter out component-managed fields
+    const renderFields = fields.filter(f => !componentFieldNames.has(f.name));
+
+    // Build a group lookup map
+    const groupMeta = {};
+    fieldGroups.forEach(g => { groupMeta[g.id] = g; });
+
+    // Bucket fields by group (ungrouped go to '_default')
+    const buckets = {};
+    const groupOrder = [];
+    renderFields.forEach(field => {
+        const gid = field.group || '_default';
+        if (!buckets[gid]) {
+            buckets[gid] = [];
+            groupOrder.push(gid);
+        }
+        buckets[gid].push(field);
+    });
 
     let html = '';
-    const processedFields = new Set();
 
-    for (let i = 0; i < fields.length; i++) {
-        const field = fields[i];
+    groupOrder.forEach(gid => {
+        const groupFields = buckets[gid];
+        const gMeta = groupMeta[gid];
 
-        if (processedFields.has(field.name) || componentFieldNames.has(field.name)) {
-            continue;
+        // Render group header if metadata exists
+        if (gMeta) {
+            html += `<div class="field-group" data-group="${gid}">
+                <h6 class="mt-3 mb-2 pb-1 border-bottom text-muted">
+                    <i class="${gMeta.icon || 'fas fa-cog'} me-1"></i> ${gMeta.label}
+                </h6>`;
         }
 
-        // Check if this field has a pair
-        const pairFieldName = fieldPairs[field.name];
-        const pairField = pairFieldName ? fields.find(f => f.name === pairFieldName) : null;
+        // Pair fields by row_group
+        const processed = new Set();
+        const rowGroups = {};
 
-        if (pairField) {
-            // Render as two-column row
-            html += `<div class="row">
-                <div class="col-md-6">${generateFormField(field, currentConfig, true)}</div>
-                <div class="col-md-6">${generateFormField(pairField, currentConfig, true)}</div>
-            </div>`;
-            processedFields.add(field.name);
-            processedFields.add(pairField.name);
-        } else {
-            // Render as full-width field
-            html += generateFormField(field, currentConfig, false);
-            processedFields.add(field.name);
+        groupFields.forEach(field => {
+            if (field.row_group) {
+                if (!rowGroups[field.row_group]) rowGroups[field.row_group] = [];
+                rowGroups[field.row_group].push(field);
+            }
+        });
+
+        groupFields.forEach(field => {
+            if (processed.has(field.name)) return;
+
+            const dependsAttr = field.depends_on
+                ? ` data-depends-on='${JSON.stringify(field.depends_on)}'`
+                : '';
+            const fieldNameAttr = ` data-field-name="${field.name}"`;
+
+            if (field.row_group && rowGroups[field.row_group] && rowGroups[field.row_group].length > 1) {
+                const pair = rowGroups[field.row_group];
+                // Only render the row once (when we hit the first field in the pair)
+                if (processed.has(pair[0].name)) return;
+
+                html += `<div class="row">`;
+                pair.forEach(pf => {
+                    const pfDepends = pf.depends_on
+                        ? ` data-depends-on='${JSON.stringify(pf.depends_on)}'`
+                        : '';
+                    html += `<div class="col-md-6" data-field-name="${pf.name}"${pfDepends}>
+                        ${generateFormField(pf, currentConfig, true)}
+                    </div>`;
+                    processed.add(pf.name);
+                });
+                html += `</div>`;
+            } else {
+                html += `<div${fieldNameAttr}${dependsAttr}>
+                    ${generateFormField(field, currentConfig, false)}
+                </div>`;
+                processed.add(field.name);
+            }
+        });
+
+        if (gMeta) {
+            html += `</div>`;
         }
-    }
+    });
 
     configBody.innerHTML = html;
+
+    // Initialize conditional field visibility
+    initFieldVisibility();
+}
+
+function initFieldVisibility() {
+    const dependentEls = document.querySelectorAll('[data-depends-on]');
+    if (dependentEls.length === 0) return;
+
+    // Collect trigger field names and attach change listeners
+    const triggerNames = new Set();
+    dependentEls.forEach(el => {
+        let conditions = JSON.parse(el.getAttribute('data-depends-on'));
+        if (!Array.isArray(conditions)) conditions = [conditions];
+        conditions.forEach(c => triggerNames.add(c.field));
+    });
+
+    triggerNames.forEach(name => {
+        const input = document.getElementById(`plugin_${name}`);
+        if (input) {
+            input.addEventListener('change', evaluateFieldVisibility);
+        }
+    });
+
+    // Run initial evaluation
+    evaluateFieldVisibility();
+}
+
+function evaluateFieldVisibility() {
+    const dependentEls = document.querySelectorAll('[data-depends-on]');
+
+    dependentEls.forEach(el => {
+        let conditions = JSON.parse(el.getAttribute('data-depends-on'));
+        if (!Array.isArray(conditions)) conditions = [conditions];
+
+        // ALL conditions must match (AND logic)
+        const visible = conditions.every(cond => {
+            const input = document.getElementById(`plugin_${cond.field}`);
+            if (!input) return false;
+            const val = input.value;
+            return cond.values.includes(val);
+        });
+
+        el.style.display = visible ? '' : 'none';
+
+        // Toggle required off on hidden inputs to prevent form validation blocking
+        const inputs = el.querySelectorAll('input, select, textarea');
+        inputs.forEach(inp => {
+            if (!visible) {
+                inp._wasRequired = inp.required;
+                inp.required = false;
+            } else if (inp._wasRequired !== undefined) {
+                inp.required = inp._wasRequired;
+            }
+        });
+    });
+
+    // Hide empty .row containers where all children are hidden
+    document.querySelectorAll('#plugin-config-body .row').forEach(row => {
+        const children = Array.from(row.children);
+        const allHidden = children.every(ch => ch.style.display === 'none');
+        row.style.display = allHidden ? 'none' : '';
+    });
+
+    // Hide empty field-group containers where all children (except header) are hidden
+    document.querySelectorAll('#plugin-config-body .field-group').forEach(group => {
+        const children = Array.from(group.children).filter(ch => ch.tagName !== 'H6');
+        const allHidden = children.every(ch => ch.style.display === 'none');
+        group.style.display = allHidden ? 'none' : '';
+    });
 }
 
 function generateFormField(field, currentConfig, inRow = false) {
@@ -2136,6 +2279,45 @@ function populateTrackerMappingTableWithExistingAndState(identifierField) {
         }
     });
 }
+
+// CA cert upload section show/hide based on ca_source field
+// Plugin config fields are rendered with a "plugin_" prefix (id="plugin_ca_source")
+(function() {
+    function updateCaCertSection() {
+        var section = document.getElementById('ca-cert-upload-section');
+        if (!section) return;
+        var sel = document.getElementById('plugin_ca_source');
+        var show = sel && sel.value === 'upload';
+        section.style.display = show ? '' : 'none';
+        if (!show) {
+            var input = document.getElementById('ca_cert_file');
+            if (input) input.value = '';
+        }
+    }
+
+    document.addEventListener('change', function(e) {
+        if (e.target && (e.target.id === 'plugin_ca_source' || e.target.name === 'plugin_ca_source')) {
+            updateCaCertSection();
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', updateCaCertSection);
+    // Re-check after plugin config fields are rendered by renderPluginConfig()
+    var _origRender = window.renderPluginConfig;
+    if (typeof _origRender === 'function') {
+        window.renderPluginConfig = function() {
+            _origRender.apply(this, arguments);
+            updateCaCertSection();
+        };
+    }
+    // MutationObserver fallback: watch for plugin_ca_source appearing in the DOM
+    var observer = new MutationObserver(function() {
+        if (document.getElementById('plugin_ca_source')) {
+            updateCaCertSection();
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+})();
 
 </script>
 

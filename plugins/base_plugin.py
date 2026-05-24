@@ -103,6 +103,9 @@ class PluginConfigField:
         min_value: Optional[int] = None,
         max_value: Optional[int] = None,
         sensitive: bool = False,
+        depends_on: Optional[Any] = None,
+        group: Optional[str] = None,
+        row_group: Optional[str] = None,
     ):
         self.name = name
         self.label = label
@@ -115,10 +118,13 @@ class PluginConfigField:
         self.min_value = min_value
         self.max_value = max_value
         self.sensitive = sensitive  # For password fields and other sensitive data
+        self.depends_on = depends_on  # Visibility condition(s): dict or list of dicts
+        self.group = group  # Field group ID for section grouping
+        self.row_group = row_group  # Fields with same row_group render side-by-side
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
-        return {
+        result = {
             "name": self.name,
             "label": self.label,
             "type": self.field_type,
@@ -131,6 +137,13 @@ class PluginConfigField:
             "max": self.max_value,
             "sensitive": self.sensitive,
         }
+        if self.depends_on is not None:
+            result["depends_on"] = self.depends_on
+        if self.group is not None:
+            result["group"] = self.group
+        if self.row_group is not None:
+            result["row_group"] = self.row_group
+        return result
 
 
 @dataclass

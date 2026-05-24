@@ -504,6 +504,10 @@ class StreamConfigService:
             if "min_poll_interval" in metadata:
                 serialized["min_poll_interval"] = metadata["min_poll_interval"]
 
+            # Serialize field groups for conditional visibility/grouping
+            if "field_groups" in metadata:
+                serialized["field_groups"] = metadata["field_groups"]
+
             # Serialize help sections
             if "help_sections" in metadata:
                 serialized["help_sections"] = metadata["help_sections"]
