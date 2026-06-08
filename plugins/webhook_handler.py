@@ -100,11 +100,69 @@ class WebhookHandler(BaseOutputPlugin):
             "category": "output",
             "help_sections": [
                 {
-                    "title": "Delivery Modes",
+                    "title": "Connection",
                     "content": [
-                        "HTTP: Per-message POST/PUT — good for webhooks, logging, low-volume feeds",
-                        "WebSocket: Persistent connection — good for real-time dashboards, custom C2",
-                        "MQTT: Publish to broker — good for UAS telemetry, IoT, GCS, data pipelines",
+                        "Endpoint URL: HTTP → https://..., WebSocket → ws:// or wss://, MQTT → mqtt:// or mqtts://",
+                        "HTTP: Stateless POST/PUT per message — good for webhooks, logging, low-volume feeds",
+                        "WebSocket: Persistent connection — good for real-time dashboards and custom C2 systems",
+                        "MQTT: Publish/subscribe broker — good for UAS telemetry, IoT, GCS, data pipelines",
+                        "HTTP Method: POST or PUT — only applies in HTTP mode",
+                    ],
+                },
+                {
+                    "title": "Output Format",
+                    "content": [
+                        "JSON: Structured object with cot, contact, position, group, device sections",
+                        "XML: Raw CoT XML passthrough — byte-for-byte as received from TAK server",
+                        "Custom Template: Free-form string using {variable} substitution (see Template Variables below)",
+                        "Include Raw XML: Adds base64-encoded raw CoT to the JSON payload under 'raw_xml'",
+                        "Custom Headers: One per line as 'Header-Name: value' — useful for API keys or auth tokens",
+                    ],
+                },
+                {
+                    "title": "Filtering",
+                    "content": [
+                        "Global UID Filter: Python regex matched against event UID before any rules",
+                        "Example: ^ANDROID-.* forwards only Android ATAK devices",
+                        "Message Rules: First-match-wins — each rule can have its own UID filter and output template",
+                        "Geofence: Optional bounding box — events outside the box are dropped",
+                    ],
+                },
+                {
+                    "title": "Performance",
+                    "content": [
+                        "Timeout: Applies to HTTP requests and initial WebSocket/MQTT connection (1–60s)",
+                        "Max Events/Second: Rate limit — older events are dropped when limit is reached",
+                        "Deduplication: Suppresses repeat UID+type combos within the TTL window",
+                        "Dedup TTL: How long to remember a UID+type before allowing it again (default 5s)",
+                        "Stream Buffer Size: Bounded queue for WebSocket/MQTT — oldest dropped when full (default 100)",
+                    ],
+                },
+                {
+                    "title": "MQTT Settings",
+                    "content": [
+                        "MQTT Topic: Topic to publish to. Supports {uid} and {cot_type} substitution",
+                        "Example topic: trakbridge/{uid}/position → trakbridge/ANDROID-123/position",
+                        "QoS 0: At most once (fire and forget) — lowest latency, recommended for high-frequency telemetry",
+                        "QoS 1: At least once — broker acknowledges, may deliver duplicates",
+                        "QoS 2: Exactly once — highest reliability, highest overhead",
+                        "Client ID: Unique identifier for this connection. Each stream on the same broker needs a distinct ID.",
+                        "TLS CA Source (System): Uses Python's built-in CA bundle — works for public CAs (Let's Encrypt etc.)",
+                        "TLS CA Source (TAK Server): Extracts the CA from the TAK server P12 stored for this stream",
+                        "TLS CA Source (Uploaded): Upload a CA cert (.crt or .pem) in the CA Certificate section below",
+                    ],
+                },
+                {
+                    "title": "Bidirectional / Inbound",
+                    "content": [
+                        "Bidirectional mode (WebSocket/MQTT only): also reads messages arriving on the same connection",
+                        "Inbound messages are parsed using the configured field mapping and converted to CoT for TAK",
+                        "Inbound Latitude/Longitude/UID/Callsign Fields: dot-notation paths into the inbound JSON",
+                        "Example: position.latitude for {'position': {'latitude': 38.9}}",
+                        "Inbound CoT Type: CoT type assigned to inbound detections (default: a-f-G-U-C)",
+                        "Stale Time: How long the inbound marker persists on the TAK map without an update",
+                        "MQTT Subscribe Topic: Topic to receive inbound messages on (separate from publish topic)",
+                        "Inbound parse errors are isolated — failures do not affect outbound forwarding",
                     ],
                 },
                 {
@@ -115,20 +173,6 @@ class WebhookHandler(BaseOutputPlugin):
                         "Group: {group_name}, {group_role}",
                         "Device: {device}, {platform}, {os}, {version}, {battery}",
                         "Track: {speed}, {course}, {xmpp_username}",
-                    ],
-                },
-                {
-                    "title": "JSON Output",
-                    "content": [
-                        "Structured JSON with sections: cot, contact, position, group, device",
-                        "Optionally include base64-encoded raw CoT XML",
-                    ],
-                },
-                {
-                    "title": "MQTT Topics",
-                    "content": [
-                        "Topic supports {uid} and {cot_type} substitution",
-                        "Example: trakbridge/{uid}/position → trakbridge/ANDROID-123/position",
                     ],
                 },
             ],
@@ -280,7 +324,8 @@ class WebhookHandler(BaseOutputPlugin):
                     name="mqtt_client_id",
                     label="MQTT Client ID",
                     field_type="text",
-                    help_text="Optional. Auto-generated if not set.",
+                    default_value="trakbridge",
+                    help_text="Unique client identifier for the broker. Each stream connecting to the same broker must use a distinct ID.",
                 ),
                 PluginConfigField(
                     name="mqtt_username",
@@ -291,7 +336,7 @@ class WebhookHandler(BaseOutputPlugin):
                 PluginConfigField(
                     name="mqtt_password",
                     label="MQTT Password",
-                    field_type="text",
+                    field_type="password",
                     sensitive=True,
                     help_text="Optional broker authentication password",
                 ),
@@ -303,6 +348,24 @@ class WebhookHandler(BaseOutputPlugin):
                     min_value=10,
                     max_value=600,
                     help_text="MQTT keepalive interval in seconds",
+                ),
+                PluginConfigField(
+                    name="ca_source",
+                    label="TLS CA Certificate Source",
+                    field_type="select",
+                    options=[
+                        {"value": "system", "label": "System CA Bundle (default)"},
+                        {"value": "tak_server", "label": "Reuse TAK Server Certificate CA"},
+                        {"value": "upload", "label": "Uploaded CA Certificate"},
+                    ],
+                    default_value="system",
+                    help_text=(
+                        "How to verify the MQTT broker's TLS certificate. "
+                        "'TAK Server CA' reuses the CA from the TAK server already "
+                        "configured for this stream — useful when the broker and TAK "
+                        "server share the same PKI. 'Uploaded CA Certificate' uses the "
+                        "CA cert uploaded in the CA Certificate section below."
+                    ),
                 ),
                 # Bidirectional mode fields (WebSocket/MQTT only)
                 PluginConfigField(

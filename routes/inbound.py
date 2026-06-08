@@ -1,6 +1,6 @@
 """
-ABOUTME: HTTP endpoint for receiving push data from external devices, converting
-ABOUTME: to CoT XML via inbound plugins, and distributing to TAK servers.
+ABOUTME: HTTP endpoint for receiving push data from external devices,
+ABOUTME: converting to CoT XML via inbound plugins, and distributing to TAK.
 """
 
 import asyncio
@@ -27,10 +27,10 @@ bp = Blueprint("inbound", __name__)
 MAX_PAYLOAD_BYTES = 1_048_576  # 1 MB
 MAX_LOCATIONS_PER_REQUEST = 100
 
-# Anti-enumeration: identical response for not-found, auth-fail, inactive, wrong mode
+# Anti-enumeration: same response for not-found/auth-fail/inactive/wrong-mode
 _NOT_FOUND_RESPONSE = {"error": "Not found"}, 404
 
-# Per-stream sliding-window rate limiter (stream_id → list of request timestamps)
+# Per-stream sliding-window rate limiter (stream_id → request timestamps)
 _rate_limit_buckets: Dict[int, List[float]] = {}
 _rate_limit_lock = threading.Lock()
 
@@ -86,7 +86,10 @@ def _check_ip_allowlist(allowlist_json: str, remote_addr: str) -> bool:
     try:
         cidrs = json.loads(allowlist_json)
         client_ip = ipaddress.ip_address(remote_addr)
-        return any(client_ip in ipaddress.ip_network(cidr, strict=False) for cidr in cidrs)
+        return any(
+            client_ip in ipaddress.ip_network(cidr, strict=False)
+            for cidr in cidrs
+        )
     except (json.JSONDecodeError, ValueError) as e:
         logger.warning(f"Invalid IP allowlist config: {e}")
         # Fail closed — if allowlist is configured but malformed, deny
@@ -130,7 +133,7 @@ def _process_inbound_async(locations, stream) -> Dict:
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            # Inside an already-running loop (e.g., Hypercorn) — use a new thread
+            # Inside an already-running loop (e.g. Hypercorn) — use a thread
             import concurrent.futures
 
             with concurrent.futures.ThreadPoolExecutor() as pool:
@@ -145,7 +148,9 @@ def _process_inbound_async(locations, stream) -> Dict:
             )
     except RuntimeError:
         # No event loop — create one
-        return asyncio.run(service.process_inbound_locations(locations, stream))
+        return asyncio.run(
+            service.process_inbound_locations(locations, stream)
+        )
 
 
 @bp.route("/<int:stream_id>/data", methods=["POST"])
@@ -155,13 +160,13 @@ def receive_inbound_data(stream_id: int):
 
     Flow:
         1. Validate stream exists, is active, and is inbound mode
-        2. Check IP allowlist
-        3. Instantiate plugin and validate auth
-        4. Validate Content-Type against plugin's accepted types
-        5. Parse payload via plugin.transform_payload()
-        6. Validate coordinates and location count
-        7. Create CoT events and distribute to TAK servers
-        8. Return per-server delivery status
+        2. Instantiate plugin, resolve config (plugin config + column fallback)
+        3. Check IP allowlist
+        4. Validate auth via plugin.validate_inbound_request()
+        5. Validate Content-Type against plugin's accepted types
+        6. Parse payload via plugin.transform_payload()
+        7. Validate coordinates and location count
+        8. Preview mode: buffer and return; live mode: distribute to TAK
     """
     # --- Payload size check (before any DB lookup) ---
     content_length = request.content_length or 0
@@ -178,57 +183,73 @@ def receive_inbound_data(stream_id: int):
     if not stream or not stream.is_active or stream.stream_mode != "inbound":
         logger.debug(
             f"Inbound request rejected for stream {stream_id}: "
-            f"{'not found' if not stream else 'inactive' if not stream.is_active else 'wrong mode'}"
+            + (
+                "not found" if not stream
+                else "inactive" if not stream.is_active
+                else "wrong mode"
+            )
         )
         return jsonify(_NOT_FOUND_RESPONSE[0]), _NOT_FOUND_RESPONSE[1]
 
-    # --- IP allowlist ---
-    if not _check_ip_allowlist(stream.inbound_ip_allowlist, request.remote_addr):
-        logger.warning(
-            f"Inbound request blocked by IP allowlist for stream {stream_id} "
-            f"from {request.remote_addr}"
-        )
-        return jsonify(_NOT_FOUND_RESPONSE[0]), _NOT_FOUND_RESPONSE[1]
-
-    # --- Plugin instantiation ---
+    # --- Plugin instantiation (needed for config values and auth) ---
     plugin_manager = get_plugin_manager()
     plugin_class = plugin_manager.get_plugin_class(stream.plugin_type)
     if not plugin_class:
-        logger.error(f"Plugin type '{stream.plugin_type}' not found for stream {stream_id}")
+        logger.error(
+            f"Plugin type '{stream.plugin_type}' not found "
+            f"for stream {stream_id}"
+        )
         return jsonify(_NOT_FOUND_RESPONSE[0]), _NOT_FOUND_RESPONSE[1]
 
     plugin = plugin_class(stream.get_plugin_config())
     plugin.stream = stream
+    plugin_config = plugin.get_decrypted_config()
+
+    # --- IP allowlist: plugin config preferred, stream column as fallback ---
+    ip_allowlist = (
+        plugin_config.get("ip_allowlist") or stream.inbound_ip_allowlist
+    )
+    if not _check_ip_allowlist(ip_allowlist, request.remote_addr):
+        logger.warning(
+            f"Inbound request blocked by IP allowlist "
+            f"for stream {stream_id} from {request.remote_addr}"
+        )
+        return jsonify(_NOT_FOUND_RESPONSE[0]), _NOT_FOUND_RESPONSE[1]
 
     # --- Authentication ---
     headers = dict(request.headers)
     is_valid, auth_error = plugin.validate_inbound_request(headers)
     if not is_valid:
-        masked_key = _mask_api_key(headers.get("Authorization", "")[7:] if "Bearer" in headers.get("Authorization", "") else "")
+        auth_hdr = headers.get("Authorization", "")
+        raw_key = auth_hdr[7:] if auth_hdr.startswith("Bearer ") else ""
         logger.warning(
             f"Inbound auth failed for stream {stream_id} "
-            f"from {request.remote_addr} (key: {masked_key})"
+            f"from {request.remote_addr} (key: {_mask_api_key(raw_key)})"
         )
         return jsonify(_NOT_FOUND_RESPONSE[0]), _NOT_FOUND_RESPONSE[1]
 
-    # --- Rate limiting ---
-    if _is_rate_limited(stream_id, stream.inbound_rate_limit):
+    # --- Rate limiting: plugin config preferred, stream column as fallback ---
+    rate_limit = plugin_config.get("rate_limit") or stream.inbound_rate_limit
+    if rate_limit is None:
+        rate_limit = 60
+    if _is_rate_limited(stream_id, int(rate_limit)):
         logger.warning(
             f"Inbound rate limit exceeded for stream {stream_id} "
-            f"from {request.remote_addr} "
-            f"(limit: {stream.inbound_rate_limit} req/min)"
+            f"from {request.remote_addr} (limit: {rate_limit} req/min)"
         )
         return jsonify({"error": "Rate limit exceeded"}), 429
 
     # --- Content-Type validation ---
     content_type = request.content_type or ""
-    # Strip parameters (e.g., "application/json; charset=utf-8" → "application/json")
+    # Strip parameters (e.g. "application/json; charset=utf-8")
     base_content_type = content_type.split(";")[0].strip().lower()
     accepted = [ct.lower() for ct in plugin.get_accepted_content_types()]
     if base_content_type not in accepted:
         return jsonify({
-            "error": f"Unsupported Content-Type: {content_type}. "
-                     f"Accepted: {', '.join(accepted)}"
+            "error": (
+                f"Unsupported Content-Type: {content_type}. "
+                f"Accepted: {', '.join(accepted)}"
+            )
         }), 415
 
     # --- Payload transformation ---
@@ -246,8 +267,10 @@ def receive_inbound_data(stream_id: int):
     # --- Location count limit ---
     if len(locations) > MAX_LOCATIONS_PER_REQUEST:
         return jsonify({
-            "error": f"Too many locations: {len(locations)} "
-                     f"(max {MAX_LOCATIONS_PER_REQUEST})"
+            "error": (
+                f"Too many locations: {len(locations)} "
+                f"(max {MAX_LOCATIONS_PER_REQUEST})"
+            )
         }), 400
 
     # --- Coordinate validation ---
@@ -255,8 +278,14 @@ def receive_inbound_data(stream_id: int):
     if coord_error:
         return jsonify({"error": coord_error}), 400
 
-    # --- Preview mode: buffer and return mapped result, skip TAK ---
-    if stream.inbound_preview_mode:
+    # --- Preview mode: plugin config preferred, stream column as fallback ---
+    preview_raw = plugin_config.get("preview_mode")
+    if preview_raw is None:
+        preview_mode = bool(stream.inbound_preview_mode)
+    else:
+        preview_mode = preview_raw in (True, "true", "True", "on", "1", 1)
+
+    if preview_mode:
         worker = _get_worker_for_stream(stream_id)
         if worker:
             worker.capture_payload(
@@ -388,9 +417,7 @@ def clear_preview(stream_id: int):
     return jsonify({"status": "cleared"}), 200
 
 
-@bp.route(
-    "/<int:stream_id>/preview/remap", methods=["POST"]
-)
+@bp.route("/<int:stream_id>/preview/remap", methods=["POST"])
 def remap_preview(stream_id: int):
     """
     Re-run transform_payload against captured payloads using an
@@ -413,9 +440,7 @@ def remap_preview(stream_id: int):
 
     # Instantiate plugin with the alternate config
     plugin_manager = get_plugin_manager()
-    plugin_class = plugin_manager.get_plugin_class(
-        stream.plugin_type
-    )
+    plugin_class = plugin_manager.get_plugin_class(stream.plugin_type)
     if not plugin_class:
         return jsonify({"error": "Plugin not found"}), 404
 

@@ -65,6 +65,13 @@ def mock_plugin():
         {"uid": "dev-1", "name": "Alpha", "lat": 38.9, "lon": -77.0},
     ]
     plugin.get_accepted_content_types.return_value = ["application/json"]
+    plugin.get_decrypted_config.return_value = {
+        "api_key": "test-api-key-123",
+        "auth_mode": "api_key",
+        "ip_allowlist": None,
+        "rate_limit": 60,
+        "preview_mode": None,  # Let stream column drive preview_mode in tests
+    }
     return plugin
 
 

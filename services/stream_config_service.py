@@ -496,6 +496,10 @@ class StreamConfigService:
                 else:
                     logger.warning(f"Unexpected field type: {type(field)}")
 
+            # Pass through inbound transport discriminator if present
+            if "inbound_transport" in metadata:
+                serialized["inbound_transport"] = metadata["inbound_transport"]
+
             # Serialize boolean metadata flags
             if metadata.get("hide_cot_type"):
                 serialized["hide_cot_type"] = True

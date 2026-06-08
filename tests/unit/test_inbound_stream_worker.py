@@ -44,7 +44,7 @@ def mock_stream():
     server2.id = 20
     server2.name = "TAK Server Bravo"
 
-    stream.get_all_tak_servers.return_value = [server1, server2]
+    stream.get_active_tak_servers.return_value = [server1, server2]
     stream.tak_server = server1  # legacy single-server field
     stream.tak_server_id = server1.id
 
@@ -155,7 +155,7 @@ class TestInboundStreamWorkerStart:
 
     async def test_start_ensures_tak_workers_for_all_servers(self, worker, mock_stream):
         """start() calls start_worker for each configured TAK server."""
-        servers = mock_stream.get_all_tak_servers()
+        servers = mock_stream.get_active_tak_servers()
         mock_cot_service = MagicMock()
         mock_cot_service.get_worker_status.return_value = {"worker_running": True}
         mock_cot_service.start_worker = AsyncMock(return_value=True)
@@ -184,7 +184,7 @@ class TestInboundStreamWorkerStart:
 
     async def test_start_fails_when_no_tak_servers(self, worker, mock_stream):
         """start() returns False when stream has no TAK servers configured."""
-        mock_stream.get_all_tak_servers.return_value = []
+        mock_stream.get_active_tak_servers.return_value = []
 
         result = await worker.start()
 
@@ -208,7 +208,7 @@ class TestInboundStreamWorkerStart:
 
     async def test_start_succeeds_with_partial_tak_workers(self, worker, mock_stream):
         """start() succeeds if at least one TAK worker initializes."""
-        servers = mock_stream.get_all_tak_servers()
+        servers = mock_stream.get_active_tak_servers()
         call_count = 0
 
         async def start_worker_side_effect(server):
@@ -486,7 +486,7 @@ class TestInboundStreamRegistry:
         """If start() fails, stream is NOT added to the registry."""
         from services.inbound_stream_worker import get_active_inbound_streams
 
-        mock_stream.get_all_tak_servers.return_value = []
+        mock_stream.get_active_tak_servers.return_value = []
 
         await worker.start()
 

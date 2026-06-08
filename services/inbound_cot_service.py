@@ -23,6 +23,8 @@ class InboundCOTService:
         self,
         locations: List[Dict[str, Any]],
         stream,
+        cot_type: str = None,
+        cot_stale_time: int = None,
     ) -> Dict[str, Any]:
         """
         Process inbound locations into CoT events and enqueue for TAK distribution.
@@ -37,7 +39,7 @@ class InboundCOTService:
         if not locations:
             return {"success": False, "error": "Empty location list"}
 
-        target_servers = stream.get_all_tak_servers()
+        target_servers = stream.get_active_tak_servers()
         if not target_servers:
             return {"success": False, "error": "No TAK servers configured for stream"}
 
@@ -46,8 +48,8 @@ class InboundCOTService:
         try:
             cot_events = await cot_service.create_cot_events(
                 locations,
-                stream.cot_type,
-                stream.cot_stale_time,
+                cot_type or stream.cot_type,
+                cot_stale_time or stream.cot_stale_time,
                 stream.cot_type_mode,
             )
         except Exception as e:

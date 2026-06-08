@@ -127,6 +127,7 @@ class StreamDTO:
     tak_server_id: Optional[int] = None
     enable_per_callsign_cot_types: bool = False
     config_version: Optional[str] = None
+    stream_mode: str = "poll"
 
     def __post_init__(self):
         """Ensure tak_servers is always a list and setup compatibility attributes"""
@@ -182,6 +183,7 @@ class StreamDTO:
                 stream, "enable_per_callsign_cot_types", False
             ),
             config_version=getattr(stream, "config_version", None),
+            stream_mode=getattr(stream, "stream_mode", "poll"),
         )
 
     def get_active_tak_servers(self) -> List[TakServerDTO]:

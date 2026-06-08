@@ -837,7 +837,7 @@ class StreamManager:
                     if (
                         not health["running"]
                         or (health["task_done"] and not health["task_cancelled"])
-                        or health["consecutive_errors"] >= 3
+                        or health.get("consecutive_errors", 0) >= 3
                     ):
                         unhealthy_workers.append((stream_id, health))
 
@@ -1539,7 +1539,7 @@ class StreamManager:
             if (
                 not health_status["running"]
                 or (health_status["task_done"] and not health_status["task_cancelled"])
-                or health_status["consecutive_errors"] >= 3
+                or health_status.get("consecutive_errors", 0) >= 3
             ):
                 unhealthy_streams.append(stream_id)
                 logger.warning(f"Stream {stream_id} appears unhealthy: {health_status}")

@@ -106,6 +106,7 @@ class PluginConfigField:
         depends_on: Optional[Any] = None,
         group: Optional[str] = None,
         row_group: Optional[str] = None,
+        allowed_schemes: Optional[tuple] = None,
     ):
         self.name = name
         self.label = label
@@ -121,6 +122,7 @@ class PluginConfigField:
         self.depends_on = depends_on  # Visibility condition(s): dict or list of dicts
         self.group = group  # Field group ID for section grouping
         self.row_group = row_group  # Fields with same row_group render side-by-side
+        self.allowed_schemes = allowed_schemes  # URL scheme whitelist; defaults to http(s)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
@@ -333,11 +335,11 @@ class PluginConfigMixin:
 
             # Type-specific validation
             if field_value is not None and field_value != "":
-                if field.field_type in ["url"] and not str(field_value).startswith(
-                    ("http://", "https://")
-                ):
-                    get_logger().error(f"Field '{field_name}' must be a valid URL")
-                    return False
+                if field.field_type in ["url"]:
+                    schemes = field.allowed_schemes if field.allowed_schemes else ("http://", "https://")
+                    if not str(field_value).startswith(schemes):
+                        get_logger().error(f"Field '{field_name}' must be a valid URL")
+                        return False
 
                 if field.field_type == "number":
                     try:
@@ -964,12 +966,15 @@ class BaseOutputPlugin(PluginConfigMixin, ABC):
 
 class BaseInboundPlugin(PluginConfigMixin, ABC):
     """
-    Base class for inbound plugins that receive pushed data from external sources
+    Base class for inbound plugins that receive data from external sources
     and convert it to location dicts for CoT generation.
 
-    Unlike BaseGPSPlugin (which polls external APIs), inbound plugins handle data
-    pushed to TrakBridge via HTTP POST. The plugin is responsible for parsing the
-    raw payload (JSON, XML, Protobuf, CSV, NMEA, etc.) and extracting location data.
+    Two patterns are supported:
+    - HTTP push: external devices POST to TrakBridge; transform_payload()
+      parses the raw body and returns locations. start()/cleanup() are no-ops.
+    - Active connect: TrakBridge dials out to MQTT/WebSocket; override start()
+      to establish the connection and cleanup() to tear it down. transform_payload()
+      is not used and raises NotImplementedError by default.
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -1004,16 +1009,14 @@ class BaseInboundPlugin(PluginConfigMixin, ABC):
         """
         pass
 
-    @abstractmethod
     def transform_payload(
         self, raw_body: bytes, content_type: str, headers: Dict[str, str]
     ) -> List[Dict[str, Any]]:
         """
         Transform a raw inbound payload into standard location dictionaries.
 
-        The plugin handles all parsing — TrakBridge passes raw bytes and the
-        Content-Type so the plugin can support any format (JSON, XML, Protobuf,
-        CSV, NMEA, binary, etc.).
+        HTTP-push plugins must override this. Active-connect plugins (MQTT/WebSocket)
+        drive data via start()/cleanup() and never call this method.
 
         Args:
             raw_body: Raw request body bytes
@@ -1036,7 +1039,26 @@ class BaseInboundPlugin(PluginConfigMixin, ABC):
             - cot_type: Per-point CoT type override (optional)
 
         Raises:
+            NotImplementedError: If the plugin uses active-connect transport
             ValueError: If payload cannot be parsed or contains no valid locations
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support HTTP push payloads"
+        )
+
+    async def start(self) -> None:
+        """Optional lifecycle hook called when the stream starts.
+
+        Override in active-connect plugins (MQTT, WebSocket) to establish
+        the outbound connection. HTTP-push plugins leave this as a no-op.
+        """
+        pass
+
+    async def cleanup(self) -> None:
+        """Optional lifecycle hook called when the stream stops.
+
+        Override in active-connect plugins to close connections and cancel
+        tasks. HTTP-push plugins leave this as a no-op.
         """
         pass
 

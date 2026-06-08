@@ -51,6 +51,13 @@ def mock_plugin():
         {"uid": "dev-1", "name": "Alpha", "lat": 38.9, "lon": -77.0},
     ]
     plugin.get_accepted_content_types.return_value = ["application/json"]
+    plugin.get_decrypted_config.return_value = {
+        "api_key": "test-api-key-123",
+        "auth_mode": "api_key",
+        "ip_allowlist": None,
+        "rate_limit": 60,
+        "preview_mode": False,
+    }
     return plugin
 
 
@@ -698,7 +705,11 @@ class TestRateLimiting:
         # Use a unique stream ID to avoid cross-test contamination
         test_stream_id = 7777
         mock_stream.id = test_stream_id
-        mock_stream.inbound_rate_limit = 1  # 1 per minute
+        mock_stream.inbound_rate_limit = 1  # fallback column
+        mock_plugin.get_decrypted_config.return_value = {
+            **mock_plugin.get_decrypted_config.return_value,
+            "rate_limit": 1,
+        }
         _rate_limit_buckets.pop(test_stream_id, None)
 
         with patch("routes.inbound.db") as mock_db, \

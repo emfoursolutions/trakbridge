@@ -66,7 +66,7 @@ class TestProcessInboundLocations:
         server1 = MagicMock()
         server1.id = 10
         server1.name = "TAK Server 1"
-        stream.get_all_tak_servers.return_value = [server1]
+        stream.get_active_tak_servers.return_value = [server1]
         return stream
 
     @pytest.mark.asyncio
@@ -108,7 +108,7 @@ class TestProcessInboundLocations:
         server1.name = "Server A"
         server2 = MagicMock(id=20)
         server2.name = "Server B"
-        stream.get_all_tak_servers.return_value = [server1, server2]
+        stream.get_active_tak_servers.return_value = [server1, server2]
 
         mock_cot_service = AsyncMock()
         mock_cot_service.create_cot_events.return_value = [b"<event1/>", b"<event2/>"]
@@ -143,7 +143,7 @@ class TestProcessInboundLocations:
         ):
             await service.process_inbound_locations(sample_locations, mock_stream)
 
-        server = mock_stream.get_all_tak_servers.return_value[0]
+        server = mock_stream.get_active_tak_servers.return_value[0]
         mock_cot_service.start_worker.assert_called_with(server)
 
     @pytest.mark.asyncio
@@ -160,7 +160,7 @@ class TestProcessInboundLocations:
         stream = MagicMock()
         stream.id = 1
         stream.name = "No Servers"
-        stream.get_all_tak_servers.return_value = []
+        stream.get_active_tak_servers.return_value = []
 
         result = await service.process_inbound_locations(sample_locations, stream)
 
@@ -208,7 +208,7 @@ class TestServerFailureIsolation:
         server_ok.name = "OK Server"
         server_fail = MagicMock(id=20)
         server_fail.name = "Fail Server"
-        stream.get_all_tak_servers.return_value = [server_ok, server_fail]
+        stream.get_active_tak_servers.return_value = [server_ok, server_fail]
 
         mock_cot_service = AsyncMock()
         mock_cot_service.create_cot_events.return_value = [b"<event/>"]
@@ -254,7 +254,7 @@ class TestServerFailureIsolation:
 
         server = MagicMock(id=10)
         server.name = "Broken Server"
-        stream.get_all_tak_servers.return_value = [server]
+        stream.get_active_tak_servers.return_value = [server]
 
         mock_cot_service = AsyncMock()
         mock_cot_service.create_cot_events.return_value = [b"<event/>"]
@@ -293,7 +293,7 @@ class TestResultStructure:
         stream.name = "Test"
         server = MagicMock(id=10)
         server.name = "Server"
-        stream.get_all_tak_servers.return_value = [server]
+        stream.get_active_tak_servers.return_value = [server]
 
         mock_cot_service = AsyncMock()
         mock_cot_service.create_cot_events.return_value = [b"<event/>"]

@@ -669,6 +669,9 @@ def configure_flask_app(app, config_instance):
     app.config["PROXY_TRUSTED"] = getattr(config_instance, "PROXY_TRUSTED", False)
     app.config["TRUSTED_PROXY_COUNT"] = getattr(config_instance, "TRUSTED_PROXY_COUNT", 0)
 
+    # Rate limiting — disabled in testing to prevent cross-test pollution
+    app.config["RATELIMIT_ENABLED"] = getattr(config_instance, "RATELIMIT_ENABLED", True)
+
     # Global request size limit (1 MB) — defense-in-depth alongside per-route checks
     app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024
 

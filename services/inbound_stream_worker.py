@@ -1,6 +1,6 @@
 """
-ABOUTME: Lifecycle manager for inbound (push-based) streams. Unlike StreamWorker,
-ABOUTME: this worker has no poll loop — it ensures TAK workers are running and registers in the active stream registry for fast HTTP endpoint lookups.
+ABOUTME: Lifecycle manager for inbound streams. Ensures TAK workers are running,
+ABOUTME: registers in the active stream registry, and manages active-connect plugins.
 """
 
 import asyncio
@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from services.cot_service import get_cot_service
+from utils.app_helpers import get_plugin_manager
 
 # Capture buffer limits
 _MAX_CAPTURE_ENTRIES = 10
@@ -55,6 +56,9 @@ class InboundStreamWorker:
         self._tak_worker_ensured = False
         self._start_lock = asyncio.Lock()
 
+        # Active-connect plugin instance (MQTT/WebSocket transports)
+        self._active_plugin = None
+
         # Preview capture buffer — ephemeral ring buffer for debugging
         self._capture_buffer: List[Dict[str, Any]] = []
         self._capture_lock = threading.Lock()
@@ -77,7 +81,7 @@ class InboundStreamWorker:
                 return True
 
             try:
-                target_servers = self.stream.get_all_tak_servers()
+                target_servers = self.stream.get_active_tak_servers()
                 if not target_servers:
                     self.logger.error(
                         f"No TAK servers configured for inbound stream '{self.stream.name}'"
@@ -128,6 +132,9 @@ class InboundStreamWorker:
                 with _registry_lock:
                     _active_inbound_streams[self.stream.id] = self
 
+                # Start active-connect plugin if the stream uses one
+                await self._start_active_plugin()
+
                 self.logger.info(
                     f"Inbound stream '{self.stream.name}' started successfully"
                 )
@@ -154,6 +161,7 @@ class InboundStreamWorker:
                 self.logger.info(
                     f"Inbound stream '{self.stream.name}' is not running, nothing to stop"
                 )
+                self.clear_captured_payloads()
                 return
 
             self.logger.info(
@@ -169,11 +177,65 @@ class InboundStreamWorker:
             with _registry_lock:
                 _active_inbound_streams.pop(self.stream.id, None)
 
+            # Tear down active-connect plugin if one is running
+            await self._stop_active_plugin()
+
             self.clear_captured_payloads()
 
             self.logger.info(
                 f"Inbound stream '{self.stream.name}' stopped successfully"
             )
+
+    # ----- Active-connect plugin lifecycle -----
+
+    async def _start_active_plugin(self) -> None:
+        """Start an active-connect plugin (MQTT/WebSocket) if the stream uses one."""
+        from plugins.base_plugin import BaseInboundPlugin
+
+        plugin_type = getattr(self.stream, "plugin_type", None)
+        if not plugin_type:
+            return
+
+        try:
+            plugin_manager = get_plugin_manager()
+            plugin = plugin_manager.get_plugin(
+                plugin_type, self.stream.get_plugin_config()
+            )
+            if not isinstance(plugin, BaseInboundPlugin):
+                return
+
+            # Only start if the plugin overrides start() — i.e. is active-connect
+            if type(plugin).start is BaseInboundPlugin.start:
+                return  # HTTP-push plugin, no-op start — skip
+
+            plugin.stream = self.stream
+            await plugin.start()
+            self._active_plugin = plugin
+            self.logger.info(
+                f"Active-connect plugin '{plugin_type}' started for "
+                f"stream '{self.stream.name}'"
+            )
+        except Exception as e:
+            self.logger.error(
+                f"Failed to start active plugin '{plugin_type}': {e}",
+                exc_info=True,
+            )
+
+    async def _stop_active_plugin(self) -> None:
+        """Tear down the active-connect plugin if one is running."""
+        if self._active_plugin is None:
+            return
+        try:
+            await self._active_plugin.cleanup()
+            self.logger.info(
+                f"Active-connect plugin stopped for stream '{self.stream.name}'"
+            )
+        except Exception as e:
+            self.logger.error(
+                f"Error stopping active plugin: {e}", exc_info=True
+            )
+        finally:
+            self._active_plugin = None
 
     # ----- Capture buffer for preview mode -----
 

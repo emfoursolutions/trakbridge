@@ -45,6 +45,13 @@ def mock_plugin():
         {"uid": "dev-1", "name": "Alpha", "lat": 38.9, "lon": -77.0},
     ]
     plugin.get_accepted_content_types.return_value = ["application/json"]
+    plugin.get_decrypted_config.return_value = {
+        "api_key": "test-api-key-123",
+        "auth_mode": "api_key",
+        "ip_allowlist": None,
+        "rate_limit": 60,
+        "preview_mode": False,
+    }
     return plugin
 
 
@@ -438,7 +445,10 @@ class TestRateLimiting:
         self, client, mock_stream, mock_plugin, mock_plugin_manager
     ):
         """Exceeding stream rate limit returns 429."""
-        mock_stream.inbound_rate_limit = 2  # 2 requests per minute
+        mock_plugin.get_decrypted_config.return_value = {
+            **mock_plugin.get_decrypted_config.return_value,
+            "rate_limit": 2,
+        }
 
         with patch("routes.inbound.db") as mock_db, \
              patch("routes.inbound.get_plugin_manager", return_value=mock_plugin_manager), \
@@ -473,7 +483,10 @@ class TestRateLimiting:
         self, client, mock_stream, mock_plugin, mock_plugin_manager
     ):
         """Null or zero rate limit allows unlimited requests."""
-        mock_stream.inbound_rate_limit = None
+        mock_plugin.get_decrypted_config.return_value = {
+            **mock_plugin.get_decrypted_config.return_value,
+            "rate_limit": None,
+        }
 
         with patch("routes.inbound.db") as mock_db, \
              patch("routes.inbound.get_plugin_manager", return_value=mock_plugin_manager), \
@@ -497,7 +510,10 @@ class TestRateLimiting:
         self, client, mock_stream, mock_plugin, mock_plugin_manager
     ):
         """Rate limiting is isolated per stream ID."""
-        mock_stream.inbound_rate_limit = 1
+        mock_plugin.get_decrypted_config.return_value = {
+            **mock_plugin.get_decrypted_config.return_value,
+            "rate_limit": 1,
+        }
 
         with patch("routes.inbound.db") as mock_db, \
              patch("routes.inbound.get_plugin_manager", return_value=mock_plugin_manager), \
