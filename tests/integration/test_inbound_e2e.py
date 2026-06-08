@@ -383,7 +383,7 @@ class TestInboundCOTServiceE2E:
 
         service = InboundCOTService()
         stream = MagicMock()
-        stream.get_all_tak_servers.return_value = []
+        stream.get_active_tak_servers.return_value = []
 
         locations = [{"uid": "dev-1", "lat": 38.9, "lon": -77.0}]
         result = await service.process_inbound_locations(
@@ -408,7 +408,7 @@ class TestInboundCOTServiceE2E:
 
         server = MagicMock(id=10)
         server.name = "TAK1"
-        stream.get_all_tak_servers.return_value = [server]
+        stream.get_active_tak_servers.return_value = [server]
 
         locations = [
             {"uid": "dev-1", "lat": 38.9, "lon": -77.0},
@@ -453,7 +453,7 @@ class TestInboundCOTServiceE2E:
         server_ok.name = "TAK-OK"
         server_fail = MagicMock(id=20)
         server_fail.name = "TAK-FAIL"
-        stream.get_all_tak_servers.return_value = [
+        stream.get_active_tak_servers.return_value = [
             server_ok, server_fail,
         ]
 
