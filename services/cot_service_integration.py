@@ -3111,15 +3111,19 @@ class QueuedCOTService:
             except Exception:
                 pass
             try:
-                from extensions import db
+                import app as flask_app
+                from database import db
                 from models.tak_server import TakServer
-                db_server = db.session.get(TakServer, tak_server.id)
-                if db_server and not db_server.identity_uid_suffix:
-                    db_server.identity_uid_suffix = uid_suffix
-                    db.session.commit()
-                    logger.debug(f"Persisted UID suffix {uid_suffix} for TAK server {tak_server.name}")
+                with flask_app.app.app_context():
+                    db_server = db.session.get(TakServer, tak_server.id)
+                    if db_server and not db_server.identity_uid_suffix:
+                        db_server.identity_uid_suffix = uid_suffix
+                        db.session.commit()
+                        logger.debug(
+                            f"Persisted UID suffix {uid_suffix} for TAK server {tak_server.name}"
+                        )
             except Exception as e:
-                logger.debug(f"Could not persist UID suffix to database: {e}")
+                logger.warning(f"Could not persist UID suffix to database: {e}")
 
         # Build unique UID
         uid = f"trakbridge-{tak_server.name}-{uid_suffix}"
@@ -3211,8 +3215,9 @@ class QueuedCOTService:
             track.set("course", "0.0")
             track.set("speed", "0.0")
 
-        # Convert to bytes
-        xml_bytes = etree.tostring(cot_event, encoding="utf-8", xml_declaration=True)
+        # Convert to bytes — match the wire format used by regular CoT events
+        # (TAK Server closes the connection if an XML declaration is present)
+        xml_bytes = etree.tostring(cot_event, pretty_print=False, xml_declaration=False)
 
         logger.info(
             f"Generated TrakBridge identity CoT for {tak_server.name}: "

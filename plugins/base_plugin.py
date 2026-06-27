@@ -1102,7 +1102,9 @@ class BaseInboundPlugin(PluginConfigMixin, ABC):
             return (False, "Missing or invalid Authorization header")
 
         provided_key = auth_header[7:]  # Strip "Bearer " prefix
-        if not hmac.compare_digest(provided_key, expected_key):
+        if not hmac.compare_digest(
+            provided_key.encode("utf-8"), expected_key.encode("utf-8")
+        ):
             return (False, "Invalid API key")
 
         return (True, None)

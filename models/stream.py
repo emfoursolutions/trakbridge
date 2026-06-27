@@ -349,6 +349,10 @@ class Stream(db.Model, TimestampMixin):
 
         return servers
 
+    def get_active_tak_servers(self):
+        """Alias used by the inbound pipeline — same as get_all_tak_servers."""
+        return self.get_all_tak_servers()
+
     def get_tak_server_count(self):
         """Get total count of TAK servers configured for this stream"""
         return len(self.get_all_tak_servers())

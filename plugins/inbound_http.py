@@ -211,13 +211,26 @@ class InboundHTTP(BaseInboundPlugin):
                 PluginConfigField(
                     name="api_key",
                     label="API Key",
-                    field_type="text",
+                    field_type="api_key",
                     sensitive=True,
                     required=False,
                     default_value="",
                     help_text=(
                         "Bearer token for authenticating inbound requests. "
-                        "Leave blank to auto-generate on save."
+                        "Click Generate to create a new random key."
+                    ),
+                ),
+                PluginConfigField(
+                    name="preview_mode",
+                    label="Preview Mode",
+                    field_type="checkbox",
+                    required=False,
+                    default_value=True,
+                    help_text=(
+                        "Accept and transform payloads without forwarding "
+                        "to TAK servers. The transformed result is returned "
+                        "in the HTTP response so you can verify field "
+                        "mapping. Turn off to deliver to TAK."
                     ),
                 ),
                 PluginConfigField(
@@ -240,17 +253,6 @@ class InboundHTTP(BaseInboundPlugin):
                     help_text=(
                         "JSON list of allowed CIDR ranges. "
                         "Leave empty to allow all IPs."
-                    ),
-                ),
-                PluginConfigField(
-                    name="preview_mode",
-                    label="Preview Mode",
-                    field_type="checkbox",
-                    required=False,
-                    default_value=True,
-                    help_text=(
-                        "Accept and transform payloads without forwarding "
-                        "to TAK servers. Recommended during initial setup."
                     ),
                 ),
             ],

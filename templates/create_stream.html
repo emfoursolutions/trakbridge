@@ -819,6 +819,15 @@ function generateFormField(field, inRow = false) {
         case 'password':
             inputHtml = `<input type="password" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} ${dataPluginAttr}>`;
             break;
+        case 'api_key':
+            inputHtml = `
+                <div class="input-group">
+                    <input type="text" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} ${dataPluginAttr}>
+                    <button type="button" class="btn btn-outline-secondary" onclick="generateApiKey('${fieldId}')">
+                        <i class="fas fa-key"></i> Generate
+                    </button>
+                </div>`;
+            break;
         case 'url':
             inputHtml = `<input type="url" class="form-control" id="${fieldId}" name="${fieldId}" ${isRequired} ${placeholder} ${dataPluginAttr}>`;
             break;
@@ -890,6 +899,26 @@ function generateFormField(field, inRow = false) {
             ${helpText}
         </div>
     `;
+}
+
+async function generateApiKey(fieldId) {
+    try {
+        const response = await fetch('/api/inbound/generate-api-key', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+        });
+        if (!response.ok) {
+            alert('Failed to generate API key (HTTP ' + response.status + ')');
+            return;
+        }
+        const data = await response.json();
+        const input = document.getElementById(fieldId);
+        if (input && data.api_key) {
+            input.value = data.api_key;
+        }
+    } catch (e) {
+        alert('Error generating API key: ' + e.message);
+    }
 }
 
 function renderHelpContent(pluginMeta) {

@@ -123,34 +123,18 @@ def _process_inbound_async(locations, stream) -> Dict:
     """
     Run the async InboundCOTService from a sync Flask context.
 
+    Hypercorn dispatches sync views into a worker thread that has no
+    event loop, so always create a fresh loop here.
+
     Returns:
         Result dict from InboundCOTService.process_inbound_locations
     """
     from services.inbound_cot_service import InboundCOTService
 
     service = InboundCOTService()
-
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # Inside an already-running loop (e.g. Hypercorn) — use a thread
-            import concurrent.futures
-
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(
-                    asyncio.run,
-                    service.process_inbound_locations(locations, stream),
-                )
-                return future.result(timeout=30)
-        else:
-            return loop.run_until_complete(
-                service.process_inbound_locations(locations, stream)
-            )
-    except RuntimeError:
-        # No event loop — create one
-        return asyncio.run(
-            service.process_inbound_locations(locations, stream)
-        )
+    return asyncio.run(
+        service.process_inbound_locations(locations, stream)
+    )
 
 
 @bp.route("/<int:stream_id>/data", methods=["POST"])
