@@ -83,7 +83,7 @@ class GenericXMLInboundPlugin(BaseInboundPlugin):
                 PluginConfigField(
                     name="api_key",
                     label="API Key",
-                    field_type="password",
+                    field_type="api_key",
                     required=False,
                     sensitive=True,
                     help_text="Secret key sent as Bearer token in the Authorization header",
@@ -158,6 +158,19 @@ class GenericXMLInboundPlugin(BaseInboundPlugin):
                     default_value="",
                     placeholder="course",
                     help_text="Relative XPath to heading in degrees (optional)",
+                ),
+                PluginConfigField(
+                    name="preview_mode",
+                    label="Preview Mode",
+                    field_type="checkbox",
+                    required=False,
+                    default_value=True,
+                    help_text=(
+                        "Accept and transform payloads without forwarding "
+                        "to TAK servers. The transformed result is returned "
+                        "in the HTTP response so you can verify XPath "
+                        "mapping. Turn off to deliver to TAK."
+                    ),
                 ),
             ],
         }

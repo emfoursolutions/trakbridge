@@ -208,8 +208,8 @@
             </div>
         </div>
 
-        <!-- Inbound Stream Configuration Card -->
-        {% if stream.stream_mode == 'inbound' %}
+        <!-- Inbound Stream Configuration Card (HTTP push only) -->
+        {% if stream.stream_mode == 'inbound' and stream.plugin_type in ['inbound_http', 'generic_xml_inbound'] %}
         {% set inbound_plugin_config = stream.to_dict(include_sensitive=False).get('plugin_config', {}) %}
         {% set preview_raw = inbound_plugin_config.get('preview_mode') %}
         {% if preview_raw is none %}

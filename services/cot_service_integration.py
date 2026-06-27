@@ -1264,8 +1264,10 @@ class QueuedCOTService:
                         identity_cot = self._generate_trakbridge_identity_cot(tak_server)
                         if identity_cot:
                             try:
-                                logger.debug(
-                                    f"Sending identity heartbeat to {tak_server.name} ({len(identity_cot)} bytes)"
+                                logger.info(
+                                    f"TX heartbeat -> {tak_server.name} "
+                                    f"({len(identity_cot)} bytes): "
+                                    f"{identity_cot.decode('utf-8', errors='replace')}"
                                 )
                                 writer.write(identity_cot)
                                 await writer.drain()
@@ -1934,6 +1936,12 @@ class QueuedCOTService:
             batch_success = True
             for i, event in enumerate(batch):
                 try:
+                    # Log the exact bytes being sent so a TAK-side reject
+                    # can be matched against the payload that triggered it
+                    logger.info(
+                        f"TX -> {tak_server.name} (event {i + 1}/{len(batch)}, "
+                        f"{len(event)} bytes): {event.decode('utf-8', errors='replace')}"
+                    )
                     # Send the event using the appropriate method
                     if use_writer and writer:
                         # Use writer for TCP connections
@@ -3148,7 +3156,9 @@ class QueuedCOTService:
         cot_event.set("time", time_str)
         cot_event.set("start", start_str)
         cot_event.set("stale", stale_str)
-        cot_event.set("how", "m-g")  # Machine-generated
+        # Team-member types require human-entered how; machine-generated
+        # is rejected by TAK Server for a-f-G-U-C events
+        cot_event.set("how", "h-e" if has_location else "m-g")
 
         # Add point element if location is configured
         if has_location:
@@ -3196,12 +3206,18 @@ class QueuedCOTService:
         uid_elem = etree.SubElement(detail, "uid")
         uid_elem.set("Droid", tak_server.identity_callsign)
 
+        # Team members must include precisionlocation or TAK Server
+        # rejects the event as malformed
+        if has_location:
+            precision = etree.SubElement(detail, "precisionlocation")
+            precision.set("altsrc", "DTED0")
+            precision.set("geopointsrc", "USER")
+
         # Add team member elements if location is set
-        if has_location and (tak_server.identity_role or tak_server.identity_team_color):
+        if has_location:
             group = etree.SubElement(detail, "__group")
             team_color = tak_server.identity_team_color or "Cyan"
             team_role = tak_server.identity_role or "Team Member"
-            logger.debug(f"Setting team info for {tak_server.name}: color={team_color}, role={team_role}")
             group.set("name", team_color)
             group.set("role", team_role)
 

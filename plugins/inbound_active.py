@@ -118,7 +118,6 @@ class InboundActive(BaseInboundPlugin):
                     label="Source URL",
                     field_type="url",
                     required=True,
-                    sensitive=True,
                     allowed_schemes=("mqtt://", "mqtts://", "ws://", "wss://"),
                     help_text=(
                         "MQTT: mqtt://host:port or mqtts://host:port | "
