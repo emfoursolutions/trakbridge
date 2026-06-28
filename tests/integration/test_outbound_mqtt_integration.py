@@ -124,6 +124,12 @@ def _make_passwd_file(tmpdir: str, username: str, password: str) -> str:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    # Relax permissions so mosquitto (which may run as a different user in CI)
+    # can traverse the directory and read the passwd file.  The file contains
+    # only a bcrypt hash — no plaintext secret — so world-readable is safe for
+    # a temporary test fixture.
+    os.chmod(tmpdir, 0o755)
+    os.chmod(passwd_path, 0o644)
     return passwd_path
 
 
