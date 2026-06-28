@@ -90,7 +90,7 @@ class _MosquittoFixture:
         self._process = subprocess.Popen(
             [mosquitto, "-c", self._config_path],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
@@ -99,7 +99,23 @@ class _MosquittoFixture:
                     return
             except OSError:
                 time.sleep(0.05)
-        raise RuntimeError(f"mosquitto did not start on port {self.port}")
+        # Collect whatever stderr mosquitto wrote before raising, to aid CI diagnosis.
+        err = b""
+        exit_code = self._process.poll()
+        if self._process.stderr is not None:
+            try:
+                import fcntl
+                fd = self._process.stderr.fileno()
+                flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+                fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+                err = self._process.stderr.read() or b""
+            except Exception:
+                pass
+        stderr_text = err.decode(errors="replace").strip() or "(no stderr)"
+        exit_info = f" (exit code {exit_code})" if exit_code is not None else ""
+        raise RuntimeError(
+            f"mosquitto did not start on port {self.port}{exit_info}: {stderr_text}"
+        )
 
     def stop(self):
         if self._process:
