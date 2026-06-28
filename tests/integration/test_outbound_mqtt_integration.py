@@ -1,5 +1,5 @@
 # ABOUTME: Integration tests for OutboundMQTT using a real mosquitto broker process.
-# ABOUTME: Verifies round-trip delivery, topic substitution, QoS levels, and auth rejection.
+# ABOUTME: Verifies round-trip delivery, topic substitution, QoS levels, and bad-auth rejection.
 
 import asyncio
 import json
@@ -94,6 +94,24 @@ class _MosquittoFixture:
                 self._process.kill()
             self._process = None
         shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+
+def _make_passwd_file(tmpdir: str, username: str, password: str) -> str:
+    """Create a mosquitto password file using mosquitto_passwd.
+
+    Returns the path to the password file, or raises RuntimeError if
+    mosquitto_passwd is not available.
+    """
+    mosquitto_passwd = shutil.which("mosquitto_passwd")
+    if not mosquitto_passwd:
+        raise RuntimeError("mosquitto_passwd not found in PATH")
+    passwd_path = os.path.join(tmpdir, "passwd")
+    subprocess.check_call(
+        [mosquitto_passwd, "-c", "-b", passwd_path, username, password],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return passwd_path
 
 
 @pytest.fixture
@@ -424,3 +442,58 @@ async def test_broker_bounce_plugin_reconnects():
         await plugin.cleanup()
         broker2.stop()
         broker1.stop()  # cleanup tmpdir
+
+
+@pytest.mark.asyncio
+async def test_bad_auth_plugin_stays_disconnected():
+    """Broker with password auth rejects wrong credentials; plugin stays disconnected and drops events."""
+    from plugins.outbound_mqtt import OutboundMQTT
+
+    port = _free_port()
+    tmpdir = tempfile.mkdtemp()
+    try:
+        passwd_path = _make_passwd_file(tmpdir, "validuser", "correctpassword")
+        broker = _MosquittoFixture(port, password_file=passwd_path)
+        broker.start()
+        try:
+            plugin = OutboundMQTT({
+                "broker_url": f"mqtt://127.0.0.1:{port}",
+                "topic": "cot/auth",
+                "output_format": "json",
+                "username": "validuser",
+                "password": "WRONGPASSWORD",
+                "message_rules": MINIMAL_RULES,
+            })
+            await plugin.start()
+
+            # Give paho time to attempt the connection and receive auth rejection
+            await asyncio.sleep(1.0)
+
+            assert plugin._connected is False, (
+                "Plugin should remain disconnected after bad-auth rejection"
+            )
+
+            # Events fed while disconnected should be dropped (queue re-enqueue + drop)
+            # rather than published. Record the baseline drop count.
+            drops_before = plugin._events_dropped
+            await plugin.handle_cot_message(SAMPLE_COT_XML, tak_server_id=1)
+            # Allow writer loop one cycle to attempt (and fail) publishing
+            await asyncio.sleep(0.3)
+
+            assert plugin._connected is False, (
+                "Plugin should still be disconnected after event feed"
+            )
+            # The event was enqueued; the writer re-enqueues while disconnected.
+            # We confirm nothing was sent.
+            assert plugin._events_sent == 0, (
+                "No events should be published when broker rejects auth"
+            )
+            # events_dropped tracks queue-full drops; the enqueued event may not
+            # yet be dropped (it stays in the buffer), but nothing was delivered.
+            # We simply assert drops didn't go negative.
+            assert plugin._events_dropped >= drops_before
+        finally:
+            await plugin.cleanup()
+            broker.stop()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)

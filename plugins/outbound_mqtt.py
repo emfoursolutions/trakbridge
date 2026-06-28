@@ -492,6 +492,7 @@ class OutboundMQTT(BaseOutputPlugin):
         if self._queue.full():
             try:
                 self._queue.get_nowait()
+                self._queue.task_done()
             except asyncio.QueueEmpty:
                 pass
             self._events_dropped += 1
@@ -513,34 +514,35 @@ class OutboundMQTT(BaseOutputPlugin):
             except asyncio.CancelledError:
                 break
 
-            if not self._connected or not self._mqtt_client:
-                # Re-enqueue so the event buffers until reconnected — but to
-                # avoid infinite spin when the queue is empty, put it back and yield.
-                try:
-                    self._queue.put_nowait((topic, payload))
-                except asyncio.QueueFull:
-                    self._events_dropped += 1
-                await asyncio.sleep(0.1)
-                continue
-
-            qos = int(self.config.get("qos", 0))
-
             try:
-                result = self._mqtt_client.publish(topic, payload, qos=qos)
-                if result.rc != 0:
-                    error_msg = f"MQTT publish returned rc={result.rc}"
-                    logger.warning("outbound_mqtt: %s", error_msg)
+                if not self._connected or not self._mqtt_client:
+                    # Re-enqueue so the event buffers until reconnected — but to
+                    # avoid infinite spin when the queue is empty, put it back and yield.
+                    try:
+                        self._queue.put_nowait((topic, payload))
+                    except asyncio.QueueFull:
+                        self._events_dropped += 1
+                    await asyncio.sleep(0.1)
+                    continue
+
+                qos = int(self.config.get("qos", 0))
+
+                try:
+                    result = self._mqtt_client.publish(topic, payload, qos=qos)
+                    if result.rc != 0:
+                        error_msg = f"MQTT publish returned rc={result.rc}"
+                        logger.warning("outbound_mqtt: %s", error_msg)
+                        self._last_error = error_msg
+                        self._events_dropped += 1
+                    else:
+                        self._events_sent += 1
+                except Exception as exc:
+                    error_msg = f"MQTT publish error: {exc}"
+                    logger.error("outbound_mqtt: %s", error_msg)
                     self._last_error = error_msg
                     self._events_dropped += 1
-                else:
-                    self._events_sent += 1
-            except Exception as exc:
-                error_msg = f"MQTT publish error: {exc}"
-                logger.error("outbound_mqtt: %s", error_msg)
-                self._last_error = error_msg
-                self._events_dropped += 1
-
-            self._queue.task_done()
+            finally:
+                self._queue.task_done()
 
     # ------------------------------------------------------------------
     # Health reporting
