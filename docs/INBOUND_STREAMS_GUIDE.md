@@ -4,7 +4,7 @@
 
 Inbound streams allow external devices and systems to push location data to TrakBridge via HTTP POST. TrakBridge converts the incoming data to CoT XML using inbound plugins and distributes it to TAK servers through the existing queue infrastructure.
 
-This guide covers the architecture, API endpoints, plugin development, security model, and the Webhook Forwarder output plugin with its bidirectional mode.
+This guide covers the architecture, API endpoints, plugin development, security model, and the outbound output plugins.
 
 ## Architecture
 
@@ -291,30 +291,19 @@ The `InboundStreamWorker` (`services/inbound_stream_worker.py`) manages the life
 - Registers in the active stream registry for fast HTTP endpoint lookup
 - Maintains a capture buffer (ring buffer, last 10 payloads) for preview mode
 
-## Webhook Forwarder (Output Plugin)
+## Outbound Plugins
 
-The Webhook Forwarder (`plugins/webhook_handler.py`) is an output plugin that forwards CoT from TAK servers to external systems. It plugs into the existing RX worker routing in `cot_service_integration.py`.
+Three focused outbound plugins forward CoT from TAK servers to external systems. Each plugs into the existing RX worker routing in `cot_service_integration.py`.
 
-### Delivery Modes
+- `plugins/outbound_http.py` — Outbound HTTP plugin (POST/PUT JSON/XML/template to an HTTP endpoint).
+- `plugins/outbound_mqtt.py` — Outbound MQTT plugin (publish CoT to an MQTT broker topic).
+- `plugins/outbound_websocket.py` — Outbound WebSocket plugin (push CoT to a WebSocket endpoint).
 
-| Mode | Connection | Dedup Default | Buffer |
-| --- | --- | --- | --- |
-| HTTP | Per-message POST/PUT | Enabled (5s) | N/A |
-| WebSocket | Persistent, with reconnect | Disabled | Bounded (100) |
-| MQTT | Persistent, via `paho-mqtt` | Disabled | Bounded (100) |
-
-### Bidirectional Mode
-
-When `bidirectional=true` (WebSocket/MQTT only), the plugin also receives inbound data:
-
-- **WebSocket**: Background reader task reads incoming frames
-- **MQTT**: Subscribes to `mqtt_subscribe_topic`, processes via `on_message` callback
-- Inbound data is parsed using the configured field mapping and fed to `InboundCOTService`
-- Error isolation: inbound parse failures do not affect outbound forwarding
+Users wanting inbound and outbound on the same transport should combine an inbound stream (e.g. `inbound_active`) with the matching outbound plugin.
 
 ### Conditional Field Visibility
 
-The plugin uses `PluginConfigField` metadata attributes for conditional UI rendering:
+The plugins use `PluginConfigField` metadata attributes for conditional UI rendering:
 
 | Attribute | Purpose |
 | --- | --- |
@@ -348,15 +337,25 @@ The `Stream` model (`models/stream.py`) has these inbound-specific columns:
 | `tests/unit/test_inbound_routes.py` | HTTP endpoint: auth, rate limiting, payload validation, error cases |
 | `tests/unit/test_generic_inbound_plugin.py` | JSON field mapping, nested paths, batch payloads |
 | `tests/unit/test_inbound_preview.py` | Capture buffer, preview mode, remap |
-| `tests/unit/test_webhook_handler.py` | Webhook forwarder: HTTP/WebSocket/MQTT modes, filtering, JSON payload, dedup |
-| `tests/unit/test_webhook_handler_bidi.py` | Bidirectional: inbound JSON → CoT → TAK, field mapping, error isolation |
+| `tests/unit/test_outbound_http.py` | OutboundHTTP: metadata, pipeline, HTTP/JSON/XML/template delivery, dedup, health stats |
+| `tests/integration/test_outbound_http_integration.py` | OutboundHTTP: real HTTP server, POST/PUT, headers, error handling |
+| `tests/e2e/test_outbound_http_e2e.py` | OutboundHTTP: plugin discovery, batch delivery, geofence, rule filtering |
+| `tests/unit/test_outbound_mqtt.py` | OutboundMQTT: metadata, pipeline, queue, dedup, rate limiting, health stats |
+| `tests/integration/test_outbound_mqtt_integration.py` | OutboundMQTT: real mosquitto broker, publish, reconnect, TLS |
+| `tests/e2e/test_outbound_mqtt_e2e.py` | OutboundMQTT: plugin discovery, batch delivery, geofence, buffer overflow |
+| `tests/unit/test_outbound_websocket.py` | OutboundWebSocket: metadata, lifecycle, pipeline, writer, backoff, health stats |
+| `tests/integration/test_outbound_websocket_integration.py` | OutboundWebSocket: real aiohttp WS server, reconnect, custom headers |
+| `tests/e2e/test_outbound_websocket_e2e.py` | OutboundWebSocket: plugin discovery, batch delivery, geofence, buffer overflow |
 | `tests/integration/test_inbound_e2e.py` | POST → CoT → queued for TAK |
 
 ### Running Tests
 
 ```bash
 # All inbound tests
-pytest tests/unit/test_inbound_*.py tests/unit/test_webhook_handler*.py -v
+pytest tests/unit/test_inbound_*.py -v
+
+# All outbound plugin tests
+pytest tests/unit/test_outbound_*.py tests/integration/test_outbound_*.py tests/e2e/test_outbound_*.py -v
 
 # Integration tests
 pytest tests/integration/test_inbound_e2e.py -v
@@ -371,7 +370,9 @@ pytest tests/ -v
 | --- | --- |
 | `plugins/base_plugin.py` | `BaseInboundPlugin` base class, `PluginConfigField` |
 | `plugins/generic_inbound_plugin.py` | Built-in JSON inbound plugin |
-| `plugins/webhook_handler.py` | Webhook Forwarder output plugin (HTTP/WS/MQTT + bidi) |
+| `plugins/outbound_http.py` | Outbound HTTP plugin (POST/PUT JSON/XML/template to an HTTP endpoint) |
+| `plugins/outbound_mqtt.py` | Outbound MQTT plugin (publish CoT to an MQTT broker topic) |
+| `plugins/outbound_websocket.py` | Outbound WebSocket plugin (push CoT to a WebSocket endpoint) |
 | `routes/inbound.py` | HTTP endpoint, preview endpoints, API key generation |
 | `services/inbound_cot_service.py` | Location → CoT → TAK distribution |
 | `services/inbound_stream_worker.py` | Lifecycle manager + capture buffer |
