@@ -508,6 +508,46 @@ class TestParseCustomHeaders:
         result = parse_custom_headers(raw)
         assert result["Authorization"] == "Bearer tok:en"
 
+    def test_cr_in_value_is_rejected(self):
+        """A header value containing an embedded CR (\\r) is silently skipped.
+
+        Splitting on \\n preserves an embedded \\r within the value. The CRLF
+        guard detects the \\r and drops the header, while adjacent headers pass.
+        """
+        from services.output_plugin_helpers import parse_custom_headers
+
+        # Embed a literal CR mid-value; the \\n split preserves it.
+        bad_value = "bad\r mid"
+        raw = f"X-Injected: {bad_value}\nX-Good: keep"
+        result = parse_custom_headers(raw)
+        assert "X-Injected" not in result
+        assert result.get("X-Good") == "keep"
+
+    def test_cr_mid_value_alongside_clean_headers(self):
+        """A second header with embedded CR is also silently skipped."""
+        from services.output_plugin_helpers import parse_custom_headers
+
+        # Two bad headers (CR mid-value) alongside two good ones.
+        bad1 = "evil\r injected"
+        bad2 = "also\r bad"
+        raw = f"X-Good1: fine\nX-Bad1: {bad1}\nX-Good2: ok\nX-Bad2: {bad2}"
+        result = parse_custom_headers(raw)
+        assert result.get("X-Good1") == "fine"
+        assert "X-Bad1" not in result
+        assert result.get("X-Good2") == "ok"
+        assert "X-Bad2" not in result
+
+    def test_adjacent_good_headers_still_parsed_after_bad(self):
+        """Good headers surrounding a CR-containing header are all parsed."""
+        from services.output_plugin_helpers import parse_custom_headers
+
+        bad_value = "bad\r stuff"
+        raw = f"X-First: ok\nX-Injection: {bad_value}\nX-Last: also-ok"
+        result = parse_custom_headers(raw)
+        assert result.get("X-First") == "ok"
+        assert "X-Injection" not in result
+        assert result.get("X-Last") == "also-ok"
+
 
 # ---------------------------------------------------------------------------
 # Deduplicator

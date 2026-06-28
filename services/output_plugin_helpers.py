@@ -335,7 +335,12 @@ def parse_custom_headers(headers_text: str) -> Dict[str, str]:
         line = line.strip()
         if ":" in line:
             key, _, value = line.partition(":")
-            headers[key.strip()] = value.strip()
+            value = value.strip()
+            # Reject header values containing CRLF characters — these can enable
+            # HTTP header-injection attacks. Skip the offending header silently.
+            if "\r" in value or "\n" in value:
+                continue
+            headers[key.strip()] = value
     return headers
 
 

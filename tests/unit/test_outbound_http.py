@@ -593,3 +593,66 @@ class TestLifecycle:
         plugin = _make_plugin()
         # Must not raise
         await plugin.cleanup()
+
+
+# ===========================================================================
+# Scheme validation — unsupported schemes must be rejected without network call
+# ===========================================================================
+
+
+class TestSchemeValidation:
+    """Verify that non-http/https schemes are rejected before any network I/O."""
+
+    @pytest.mark.asyncio
+    async def test_bad_scheme_increments_events_dropped(self):
+        """A file:// URL increments _events_dropped and makes no HTTP request."""
+        from plugins.outbound_http import OutboundHTTP
+
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        mock_request = AsyncMock()
+        mock_request.__aenter__ = AsyncMock(return_value=MagicMock(status=200))
+        mock_request.__aexit__ = AsyncMock(return_value=False)
+        mock_session.request = MagicMock(return_value=mock_request)
+
+        plugin = OutboundHTTP({
+            "endpoint_url": "file:///etc/passwd",
+            "http_method": "POST",
+            "output_format": "json",
+            "dedup_enabled": "false",
+            "message_rules": [
+                {"cot_type_pattern": "a-f-*", "enabled": True, "format_template": "x"},
+            ],
+        })
+
+        with patch("aiohttp.ClientSession", return_value=mock_session):
+            await plugin.handle_cot_message(SAMPLE_COT_XML, tak_server_id=1)
+
+        assert plugin._events_dropped >= 1
+        mock_session.request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_bad_scheme_sets_last_error(self):
+        """A non-http scheme sets _last_error with a descriptive message."""
+        from plugins.outbound_http import OutboundHTTP
+
+        plugin = OutboundHTTP({
+            "endpoint_url": "file:///etc/passwd",
+            "http_method": "POST",
+            "output_format": "json",
+            "dedup_enabled": "false",
+            "message_rules": [
+                {"cot_type_pattern": "a-f-*", "enabled": True, "format_template": "x"},
+            ],
+        })
+
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("aiohttp.ClientSession", return_value=mock_session):
+            await plugin.handle_cot_message(SAMPLE_COT_XML, tak_server_id=1)
+
+        assert plugin._last_error is not None
+        assert "file" in plugin._last_error

@@ -316,14 +316,11 @@ class TestHandleCotMessage:
             await plugin.start()
             plugin._connected = True
 
-            pre_size = plugin._queue.qsize()
             await plugin.handle_cot_message(SAMPLE_COT_XML, tak_server_id=1)
-            # Give the writer task a tick to potentially drain
-            await asyncio.sleep(0.05)
+            await plugin._queue.join()
 
-            # Either the queue still has an item OR it was published
-            total = plugin._queue.qsize() + plugin._events_sent
-            assert total >= 1
+            # Item was published by the writer task
+            assert plugin._events_sent >= 1
             await plugin.cleanup()
 
     @pytest.mark.asyncio
@@ -445,12 +442,16 @@ class TestWriterTask:
             plugin._connected = True
 
             await plugin.handle_cot_message(SAMPLE_COT_XML, tak_server_id=1)
-            await asyncio.sleep(0.1)
+            await plugin._queue.join()
 
             assert plugin._events_sent >= 1
             call_args = mock_client.publish.call_args
             assert call_args is not None
-            assert call_args.kwargs.get("qos") == 2 or call_args[1].get("qos") == 2 or (len(call_args[0]) > 2 and call_args[0][2] == 2)
+            assert (
+                call_args.kwargs.get("qos") == 2
+                or call_args[1].get("qos") == 2
+                or (len(call_args[0]) > 2 and call_args[0][2] == 2)
+            )
             await plugin.cleanup()
 
     @pytest.mark.asyncio
@@ -473,7 +474,7 @@ class TestWriterTask:
             plugin._connected = True
 
             await plugin.handle_cot_message(SAMPLE_COT_XML, tak_server_id=1)
-            await asyncio.sleep(0.1)
+            await plugin._queue.join()
 
             assert mock_client.publish.called
             topic_used = mock_client.publish.call_args[0][0]
@@ -505,7 +506,7 @@ class TestWriterTask:
 
             # Must not raise
             await plugin.handle_cot_message(SAMPLE_COT_XML, tak_server_id=1)
-            await asyncio.sleep(0.1)
+            await plugin._queue.join()
 
             assert plugin._last_error is not None
             await plugin.cleanup()

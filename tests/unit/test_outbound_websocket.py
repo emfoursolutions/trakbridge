@@ -453,9 +453,10 @@ class TestWriterTask:
             plugin._ws = mock_ws
 
             await plugin.handle_cot_message(SAMPLE_COT_XML, tak_server_id=1)
-            await asyncio.sleep(0.05)
+            await plugin._queue.join()
 
-            assert mock_ws.send_str.called or plugin._events_sent >= 1
+            assert mock_ws.send_str.called
+            assert plugin._events_sent >= 1
             await plugin.cleanup()
 
     @pytest.mark.asyncio
@@ -484,9 +485,10 @@ class TestWriterTask:
             plugin._ws = mock_ws
 
             await plugin.handle_cot_message(SAMPLE_COT_XML, tak_server_id=1)
-            await asyncio.sleep(0.05)
+            await plugin._queue.join()
 
-            assert mock_ws.send_bytes.called or plugin._events_sent >= 1
+            assert mock_ws.send_bytes.called
+            assert plugin._events_sent >= 1
             await plugin.cleanup()
 
     @pytest.mark.asyncio
@@ -515,7 +517,7 @@ class TestWriterTask:
             plugin._ws = mock_ws
 
             await plugin.handle_cot_message(SAMPLE_COT_XML, tak_server_id=1)
-            await asyncio.sleep(0.1)
+            await plugin._queue.join()
 
             assert plugin._events_sent >= 1
             await plugin.cleanup()
@@ -639,17 +641,16 @@ class TestWriterTask:
         plugin._ws = mock_ws
         plugin._connected = True
 
-        # Run writer briefly
+        # Run writer until all queued items are processed, then cancel.
         task = asyncio.create_task(plugin._writer_loop())
-        await asyncio.sleep(0.1)
+        await plugin._queue.join()
         task.cancel()
         try:
             await task
         except (asyncio.CancelledError, Exception):
             pass
 
-        # Whatever was dequeued must have had task_done() called — verify via
-        # events_sent counter (each send increments it only after successful send).
+        # All 3 items must have been sent (task_done called for each get).
         # The key invariant: queue.qsize() + events_sent == 3
         assert plugin._queue.qsize() + plugin._events_sent == 3
 
@@ -772,3 +773,95 @@ class TestTestConnection:
                 assert headers_passed["X-Api-Key"] == "secret"
 
             await plugin.cleanup()
+
+
+# ===================================================================
+# URL redaction — credentials must not appear in log output
+# ===================================================================
+
+class TestUrlRedaction:
+    @pytest.mark.asyncio
+    async def test_credentials_not_logged_on_connect_success(self, caplog):
+        """User:password in wss:// URL must not appear in any log message."""
+        import logging
+        mock_ws = AsyncMock()
+        mock_ws.closed = False
+        mock_ws.close = AsyncMock()
+
+        mock_session = AsyncMock()
+        mock_session.ws_connect = AsyncMock(return_value=mock_ws)
+        mock_session.close = AsyncMock()
+
+        with patch("aiohttp.ClientSession", return_value=mock_session):
+            from plugins.outbound_websocket import OutboundWebSocket
+            plugin = OutboundWebSocket({
+                "endpoint_url": "wss://user:secretpw@127.0.0.1:1/path",
+                "message_rules": MINIMAL_RULES,
+            })
+            with caplog.at_level(logging.DEBUG, logger="plugins.outbound_websocket"):
+                await plugin._connect()
+
+        all_messages = " ".join(caplog.messages)
+        assert "secretpw" not in all_messages
+        assert "user" not in all_messages
+        assert "127.0.0.1" in all_messages
+
+    @pytest.mark.asyncio
+    async def test_credentials_not_logged_on_connect_failure(self, caplog):
+        """User:password in wss:// URL must not appear even when connect fails."""
+        import logging
+        mock_session = AsyncMock()
+        mock_session.ws_connect = AsyncMock(side_effect=Exception("refused"))
+        mock_session.close = AsyncMock()
+
+        with patch("aiohttp.ClientSession", return_value=mock_session):
+            from plugins.outbound_websocket import OutboundWebSocket
+            plugin = OutboundWebSocket({
+                "endpoint_url": "wss://user:secretpw@127.0.0.1:1/path",
+                "message_rules": MINIMAL_RULES,
+            })
+            with caplog.at_level(logging.DEBUG, logger="plugins.outbound_websocket"):
+                await plugin._connect()
+
+        all_messages = " ".join(caplog.messages)
+        assert "secretpw" not in all_messages
+        assert "127.0.0.1" in all_messages
+
+
+# ===================================================================
+# Scheme validation — unsupported schemes must be rejected, not sent
+# ===================================================================
+
+class TestSchemeValidation:
+    @pytest.mark.asyncio
+    async def test_bad_scheme_increments_events_dropped(self):
+        """A non-ws/wss scheme increments _events_dropped without a network call."""
+        mock_session = AsyncMock()
+        mock_session.ws_connect = AsyncMock()
+
+        with patch("aiohttp.ClientSession", return_value=mock_session):
+            from plugins.outbound_websocket import OutboundWebSocket
+            plugin = OutboundWebSocket({
+                "endpoint_url": "ftp://x/",
+                "message_rules": MINIMAL_RULES,
+            })
+            plugin._session = mock_session
+            await plugin._connect()
+
+        assert plugin._connected is False
+        assert plugin._events_dropped >= 1
+        mock_session.ws_connect.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_bad_scheme_sets_last_error(self):
+        """A non-ws/wss scheme sets _last_error with a descriptive message."""
+        from plugins.outbound_websocket import OutboundWebSocket
+        plugin = OutboundWebSocket({
+            "endpoint_url": "ftp://x/",
+            "message_rules": MINIMAL_RULES,
+        })
+        plugin._session = AsyncMock()
+        await plugin._connect()
+
+        assert plugin._last_error is not None
+        assert "ftp" in plugin._last_error

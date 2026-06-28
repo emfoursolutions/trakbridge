@@ -3,6 +3,7 @@
 
 import logging
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 import aiohttp
 
@@ -20,6 +21,9 @@ from services.output_plugin_helpers import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Allowed URL schemes for HTTP delivery.
+_ALLOWED_HTTP_SCHEMES = {"http", "https"}
 
 
 class OutboundHTTP(BaseOutputPlugin):
@@ -309,6 +313,18 @@ class OutboundHTTP(BaseOutputPlugin):
         method = str(config.get("http_method", "POST")).upper()
         timeout_sec = int(config.get("timeout_seconds", 10))
         headers = parse_custom_headers(config.get("custom_headers", "") or "")
+
+        # Validate scheme before making any network call.
+        parsed_scheme = urlparse(url).scheme.lower() if url else ""
+        if parsed_scheme not in _ALLOWED_HTTP_SCHEMES:
+            error_msg = (
+                f"endpoint_url has unsupported scheme '{parsed_scheme}'; "
+                f"expected http:// or https://"
+            )
+            logger.error("outbound_http: %s", error_msg)
+            self._last_error = error_msg
+            self._events_dropped += 1
+            return
 
         # Determine Content-Type and request kwargs based on payload type
         if isinstance(payload, bytes):

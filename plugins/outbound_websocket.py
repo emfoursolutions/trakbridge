@@ -4,6 +4,7 @@
 import asyncio
 import logging
 from typing import Any, Dict, Optional, Union
+from urllib.parse import urlparse, urlunparse
 
 import aiohttp
 
@@ -25,6 +26,27 @@ logger = logging.getLogger(__name__)
 
 # Maximum reconnect sleep in seconds — caps exponential backoff growth.
 _MAX_BACKOFF = 30.0
+
+# Allowed URL schemes for WebSocket connections.
+_ALLOWED_WS_SCHEMES = {"ws", "wss"}
+
+
+def _redact_url(url: str) -> str:
+    """Return the URL with any userinfo (username:password) stripped from netloc.
+
+    Preserves host, port, path, query, and fragment so log messages remain
+    useful while keeping credentials out of log files.
+    """
+    try:
+        parsed = urlparse(url)
+        # Rebuild netloc as host only (with optional port), dropping userinfo.
+        host = parsed.hostname or ""
+        port = parsed.port
+        netloc = f"{host}:{port}" if port else host
+        return urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
+    except Exception:
+        # If parsing fails, return a safe placeholder rather than the raw URL.
+        return "<url-parse-error>"
 
 
 class OutboundWebSocket(BaseOutputPlugin):
@@ -453,6 +475,20 @@ class OutboundWebSocket(BaseOutputPlugin):
         headers = parse_custom_headers(config.get("custom_headers", "") or "")
         timeout_sec = int(config.get("timeout_seconds", 10))
 
+        # Validate scheme before making any network call.
+        parsed_scheme = urlparse(url).scheme.lower() if url else ""
+        if parsed_scheme not in _ALLOWED_WS_SCHEMES:
+            error_msg = (
+                f"WebSocket endpoint_url has unsupported scheme '{parsed_scheme}'; "
+                f"expected ws:// or wss://"
+            )
+            logger.error("outbound_websocket: %s", error_msg)
+            self._last_error = error_msg
+            self._events_dropped += 1
+            self._connected = False
+            return
+
+        redacted = _redact_url(url)
         try:
             if self._session is None:
                 self._session = aiohttp.ClientSession()
@@ -465,10 +501,10 @@ class OutboundWebSocket(BaseOutputPlugin):
             self._connected = True
             # Start the reader task to detect server-initiated CLOSE frames.
             self._reader_task = asyncio.create_task(self._reader_loop())
-            logger.info("outbound_websocket: connected to %s", url)
+            logger.info("outbound_websocket: connected to %s", redacted)
         except Exception as exc:
             error_msg = f"WebSocket connection failed: {exc}"
-            logger.error("outbound_websocket: %s", error_msg)
+            logger.error("outbound_websocket: %s at %s", error_msg, redacted)
             self._last_error = error_msg
             self._connected = False
 
