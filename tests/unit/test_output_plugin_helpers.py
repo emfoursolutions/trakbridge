@@ -528,26 +528,34 @@ class TestDeduplicator:
         d.check("uid:type")
         assert d.check("uid:type") is False  # dup → False
 
-    def test_key_after_ttl_is_new(self):
+    def test_key_after_ttl_is_new(self, monkeypatch):
+        from unittest.mock import patch
+
         from services.output_plugin_helpers import Deduplicator
 
-        d = Deduplicator(ttl_seconds=0.001)  # 1ms TTL
-        d.check("uid:type")
-        time.sleep(0.01)  # Wait for TTL to expire
-        d.prune()
-        assert d.check("uid:type") is True
+        with patch("services.output_plugin_helpers.time") as mock_time:
+            # t=0.0: first check (key added), t=1.0: explicit prune, t=1.0: second check (TTL=0.5s expired)
+            mock_time.time.side_effect = [0.0, 1.0, 1.0]
+            d = Deduplicator(ttl_seconds=0.5)
+            d.check("uid:type")
+            d.prune()
+            assert d.check("uid:type") is True
 
-    def test_prune_removes_expired_entries(self):
+    def test_prune_removes_expired_entries(self, monkeypatch):
+        from unittest.mock import patch
+
         from services.output_plugin_helpers import Deduplicator
 
-        d = Deduplicator(ttl_seconds=0.001)
-        d.check("key1")
-        d.check("key2")
-        time.sleep(0.01)
-        d.prune()
-        # After prune, both keys should be gone so they appear new
-        assert d.check("key1") is True
-        assert d.check("key2") is True
+        with patch("services.output_plugin_helpers.time") as mock_time:
+            # t=0.0: check key1, t=0.0: check key2, t=1.0: prune, t=1.0: re-check key1, t=1.0: re-check key2
+            mock_time.time.side_effect = [0.0, 0.0, 1.0, 1.0, 1.0]
+            d = Deduplicator(ttl_seconds=0.5)
+            d.check("key1")
+            d.check("key2")
+            d.prune()
+            # After prune, both keys should be gone so they appear new
+            assert d.check("key1") is True
+            assert d.check("key2") is True
 
     def test_different_keys_are_independent(self):
         from services.output_plugin_helpers import Deduplicator
@@ -587,13 +595,19 @@ class TestRateLimiter:
         assert rl.check() is False
 
     def test_allows_again_after_interval(self):
+        """Use clock mock to verify rate-limit reset without sleeping."""
+        from unittest.mock import patch
+
         from services.output_plugin_helpers import RateLimiter
 
-        rl = RateLimiter(max_rate_per_sec=100.0)  # min_interval = 10ms
-        assert rl.check() is True
-        assert rl.check() is False  # Too fast
-        time.sleep(0.015)  # Wait more than 10ms
-        assert rl.check() is True  # Allowed again
+        with patch("services.output_plugin_helpers.time") as mock_time:
+            # t=0.0: first check (allowed), t=0.005: second check (blocked, < 10ms),
+            # t=0.015: third check (allowed, > 10ms)
+            mock_time.time.side_effect = [0.0, 0.005, 0.015]
+            rl = RateLimiter(max_rate_per_sec=100.0)  # min_interval = 10ms
+            assert rl.check() is True
+            assert rl.check() is False  # Too fast
+            assert rl.check() is True   # Interval elapsed
 
     def test_rate_limiter_with_clock_mock(self):
         """Use time mock to verify rate gate without sleeping."""

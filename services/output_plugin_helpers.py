@@ -7,7 +7,7 @@ import logging
 import re
 import time
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 import mgrs
 from defusedxml import ElementTree as DefusedET
@@ -251,7 +251,7 @@ def build_payload(
     custom_template: str,
     include_raw_xml: bool,
     raw_xml: bytes,
-) -> str:
+) -> Union[str, bytes]:
     """Construct the output payload from pre-extracted variables.
 
     Args:
@@ -263,8 +263,10 @@ def build_payload(
         raw_xml:         The original CoT XML bytes (used for "xml" passthrough
                          and for include_raw_xml encoding).
 
-    Returns the payload as a string (JSON string for "json", raw bytes for "xml",
-    or formatted string for "custom_template").
+    Returns:
+        bytes when output_format is "xml" (raw CoT passthrough, unchanged).
+        str  when output_format is "json" (serialised JSON string).
+        str  when output_format is "custom_template" (rendered template string).
     """
     if output_format == "xml":
         # Raw CoT passthrough — return bytes unchanged
