@@ -43,6 +43,7 @@ class OutboundHTTP(BaseOutputPlugin):
         # Deduplicator is created lazily in handle_cot_message based on config,
         # but initialise a default here so the object is always consistent.
         self._deduplicator: Optional[Deduplicator] = None
+        self._dedup_ttl: Optional[int] = None
 
     # ------------------------------------------------------------------
     # BaseOutputPlugin abstract interface
@@ -136,26 +137,6 @@ class OutboundHTTP(BaseOutputPlugin):
                         "Optional regex applied to event UID before message rules. "
                         "Leave empty to skip UID filtering."
                     ),
-                ),
-                # message_rules and global_geofence are declared as PluginConfigField
-                # placeholders so field-count assertions pass; the real UI widgets are
-                # declared in custom_components below.
-                PluginConfigField(
-                    name="message_rules",
-                    label="Message Rules",
-                    field_type="custom",
-                    default_value=[],
-                    help_text=(
-                        "Rules that control which CoT types are forwarded. "
-                        "First matching rule wins. No rules = all events dropped."
-                    ),
-                ),
-                PluginConfigField(
-                    name="global_geofence",
-                    label="Geofence",
-                    field_type="custom",
-                    default_value=None,
-                    help_text="Optional bounding box; events outside are dropped.",
                 ),
                 PluginConfigField(
                     name="include_raw_xml",
@@ -288,9 +269,11 @@ class OutboundHTTP(BaseOutputPlugin):
         dedup_enabled = str(config.get("dedup_enabled", "true")).lower() == "true"
         if dedup_enabled:
             dedup_ttl = int(config.get("dedup_ttl_seconds", 5))
-            # Re-create deduplicator if TTL changed, or lazily initialise
-            if self._deduplicator is None or self._deduplicator._ttl != dedup_ttl:
+            # Re-create deduplicator if TTL changed, or lazily initialise.
+            # Cache the TTL locally to avoid reaching into Deduplicator internals.
+            if self._deduplicator is None or self._dedup_ttl != dedup_ttl:
                 self._deduplicator = Deduplicator(ttl_seconds=dedup_ttl)
+                self._dedup_ttl = dedup_ttl
 
             try:
                 from defusedxml import ElementTree as _ET

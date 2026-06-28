@@ -72,11 +72,11 @@ class TestOutboundHTTPMetadata:
         assert "display_name" in meta
         assert meta["display_name"]
 
-    def test_exactly_12_config_fields(self):
+    def test_exactly_10_config_fields(self):
         plugin = _make_plugin()
         fields = plugin.plugin_metadata["config_fields"]
-        assert len(fields) == 12, (
-            f"Expected 12 config fields, got {len(fields)}: "
+        assert len(fields) == 10, (
+            f"Expected 10 config fields, got {len(fields)}: "
             f"{[f.name for f in fields]}"
         )
 
@@ -91,8 +91,6 @@ class TestOutboundHTTPMetadata:
             "custom_headers",
             "timeout_seconds",
             "uid_filter",
-            "message_rules",
-            "global_geofence",
             "include_raw_xml",
             "dedup_enabled",
             "dedup_ttl_seconds",
@@ -318,7 +316,7 @@ class TestHandleCotMessageHappyPath:
         body = captured.get("json", {})
         body_str = json.dumps(body)
         assert "tak_server_id" not in body_str
-        assert "42" not in body_str or "42" in body_str  # value 42 may appear elsewhere, but key must not
+        assert "tak_server_id" not in body
 
     @pytest.mark.asyncio
     async def test_custom_headers_are_sent_on_wire(self):
