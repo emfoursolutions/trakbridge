@@ -298,7 +298,7 @@ class TestTimingSafeKeyComparison:
                 {"Authorization": "Bearer secret123"}
             )
 
-            mock_hmac.compare_digest.assert_called_once_with("secret123", "secret123")
+            mock_hmac.compare_digest.assert_called_once_with(b"secret123", b"secret123")
             assert is_valid is True
 
     def test_hmac_compare_digest_rejects_wrong_key(self):
