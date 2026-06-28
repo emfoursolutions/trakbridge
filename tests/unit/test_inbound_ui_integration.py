@@ -31,7 +31,7 @@ def inbound_stream(app, db_session):
 
     stream = Stream(
         name="Inbound Test Stream",
-        plugin_type="generic_inbound",
+        plugin_type="generic_xml_inbound",
         stream_mode="inbound",
         tak_server_id=server.id,
         inbound_api_key="ENC:test-key-abcd1234",
