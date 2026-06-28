@@ -569,6 +569,8 @@ class TestWriterTask:
         # The send failure should have set last_error before the reconnect attempt
         assert plugin._last_error is not None
         assert "connection reset" in plugin._last_error
+        # The writer must mark the connection as down after a send failure
+        assert plugin._connected is False
 
     @pytest.mark.asyncio
     async def test_backoff_schedule_doubles_to_cap(self):

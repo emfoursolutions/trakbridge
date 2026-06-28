@@ -102,9 +102,9 @@ async def ws_server():
 async def _wait_for_messages(server: _CaptureWSServer, count: int,
                               timeout: float = 4.0):
     """Wait until at least `count` messages have arrived."""
-    deadline = asyncio.get_event_loop().time() + timeout
+    deadline = asyncio.get_running_loop().time() + timeout
     while len(server.messages) < count:
-        if asyncio.get_event_loop().time() >= deadline:
+        if asyncio.get_running_loop().time() >= deadline:
             break
         await asyncio.sleep(0.05)
 
@@ -271,13 +271,32 @@ async def test_server_close_triggers_reconnect(ws_server):
     assert len(ws_server.messages) >= 2
 
 
+def _free_port() -> int:
+    """Return a port number that has nothing listening on it.
+
+    Binds a socket with port=0, records the OS-assigned port, then closes
+    the socket.  The returned port is almost certainly free immediately
+    after this call and will give an instant 'connection refused' from any
+    connect attempt.
+    """
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 @pytest.mark.asyncio
 async def test_unreachable_endpoint_connected_stays_false():
     """When endpoint is unreachable, _connected stays False and events are dropped."""
     from plugins.outbound_websocket import OutboundWebSocket
 
+    # Use a loopback port that has nothing listening — the OS returns
+    # 'connection refused' immediately, keeping the test fast.  We grab a
+    # free port via _free_port() to avoid any collision with hardcoded port
+    # numbers.
+    port = _free_port()
     plugin = OutboundWebSocket({
-        "endpoint_url": "ws://127.0.0.1:19998/ws",  # nothing listening
+        "endpoint_url": f"ws://127.0.0.1:{port}/ws",
         "output_format": "json",
         "dedup_enabled": "false",
         "message_rules": MINIMAL_RULES,

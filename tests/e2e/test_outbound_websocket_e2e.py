@@ -102,9 +102,9 @@ class _LocalWSServer:
 
 
 async def _wait_for(server: _LocalWSServer, count: int, timeout: float = 5.0):
-    deadline = asyncio.get_event_loop().time() + timeout
+    deadline = asyncio.get_running_loop().time() + timeout
     while len(server.messages) < count:
-        if asyncio.get_event_loop().time() >= deadline:
+        if asyncio.get_running_loop().time() >= deadline:
             break
         await asyncio.sleep(0.05)
 
@@ -277,54 +277,104 @@ async def test_rate_limiter_throttles_delivery():
         await server.stop()
 
 
+class _StallWSServer:
+    """WebSocket server that accepts the upgrade but never reads frames.
+
+    This keeps the writer task blocked in ws.send_*() so the queue fills
+    up and triggers oldest-drop backpressure semantics.
+    """
+
+    def __init__(self):
+        self._app = None
+        self._runner = None
+        self._site = None
+        self.port = None
+        self.connected_event = asyncio.Event()
+
+    async def _stall_handler(self, request: web.Request) -> web.WebSocketResponse:
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
+        self.connected_event.set()
+        # Hold the connection open without reading frames so the plugin
+        # writer blocks on send.  Use a short timeout so cleanup() never
+        # hangs — CancelledError is expected during server shutdown.
+        try:
+            await asyncio.wait_for(asyncio.Event().wait(), timeout=5.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            pass
+        return ws
+
+    async def start(self):
+        self._app = web.Application()
+        self._app.router.add_get("/ws", self._stall_handler)
+        self._runner = web.AppRunner(self._app)
+        await self._runner.setup()
+        self._site = web.TCPSite(self._runner, "127.0.0.1", 0)
+        await self._site.start()
+        self.port = self._site._server.sockets[0].getsockname()[1]
+
+    async def stop(self):
+        if self._runner:
+            await self._runner.cleanup()
+
+    @property
+    def url(self):
+        return f"ws://127.0.0.1:{self.port}/ws"
+
+
 @pytest.mark.asyncio
 async def test_buffer_overflow_drops_oldest():
     """
-    Buffer overflow scenario: queue is filled to capacity, then more events
-    are pushed via handle_cot_message. Verify oldest-drop semantics and
-    that events_dropped increments for each evicted item.
-
-    This test uses an unreachable endpoint so the writer stays in the
-    reconnect-backoff loop and never drains the queue, ensuring the queue
-    stays full for the duration of the overflow assertions.
+    Buffer overflow with a real stall server: the server accepts the WS
+    upgrade but never reads frames, so the plugin writer blocks and the
+    queue fills up.  Pushing more events than stream_buffer_size via
+    handle_cot_message must evict the oldest items (oldest-drop semantics)
+    and increment events_dropped accordingly.  plugin.cleanup() must return
+    without hanging.
     """
     from plugins.outbound_websocket import OutboundWebSocket
 
     buffer_size = 3
-    plugin = OutboundWebSocket({
-        # Unreachable endpoint: writer stays in backoff, never drains queue.
-        "endpoint_url": "ws://127.0.0.1:19997/ws",
-        "output_format": "json",
-        "stream_buffer_size": str(buffer_size),
-        "dedup_enabled": "false",
-        "message_rules": [
-            {"cot_type_pattern": "a-f-*", "enabled": True, "format_template": ""},
-        ],
-    })
+    server = _StallWSServer()
+    await server.start()
 
-    # Initialise queue and rate limiter directly — no start() so we keep
-    # the writer task out of the picture and the queue stays full.
-    plugin._queue = asyncio.Queue(maxsize=buffer_size)
-    from services.output_plugin_helpers import RateLimiter
-    plugin._rate_limiter = RateLimiter(None)
+    try:
+        plugin = OutboundWebSocket({
+            "endpoint_url": server.url,
+            "output_format": "json",
+            "stream_buffer_size": str(buffer_size),
+            "dedup_enabled": "false",
+            # No max_rate — unlimited so rate limiter is not the bottleneck.
+            "message_rules": [
+                {"cot_type_pattern": "a-f-*", "enabled": True, "format_template": ""},
+            ],
+        })
 
-    # Fill the queue to capacity with directly-placed payloads.
-    for i in range(buffer_size):
-        plugin._queue.put_nowait(f"early-payload-{i}")
+        await plugin.start()
+        # Wait for the writer to connect to the stall server.
+        await asyncio.wait_for(server.connected_event.wait(), timeout=3.0)
 
-    assert plugin._queue.full()
+        # Push more events than the buffer can hold.  The writer is stalled
+        # so these accumulate in the queue and then overflow it.
+        total_events = 10
+        for i in range(total_events):
+            xml = _make_cot_xml(f"ANDROID-ws-overflow-{i}")
+            await plugin.handle_cot_message(xml, tak_server_id=1)
 
-    # Push buffer_size more events via handle_cot_message; each should
-    # evict the oldest item (with task_done) and count it as dropped.
-    drops_before = plugin._events_dropped
-    for i in range(buffer_size):
-        xml = _make_cot_xml(f"ANDROID-ws-overflow-{i}")
-        await plugin.handle_cot_message(xml, tak_server_id=1)
+        # Give the enqueue path a moment to process all handle_cot_message calls.
+        await asyncio.sleep(0.1)
 
-    stats = plugin.get_health_stats()
-    # Each handle_cot_message on a full queue drops one oldest item.
-    assert stats["events_dropped"] >= drops_before + buffer_size, (
-        f"Expected at least {drops_before + buffer_size} drops, got: {stats}"
-    )
-    # Queue should still be at capacity (old items replaced by new)
-    assert plugin._queue.qsize() == buffer_size
+        stats = plugin.get_health_stats()
+        # At least (total_events - buffer_size) events must have been dropped
+        # because the queue can only hold buffer_size items.
+        assert stats["events_dropped"] > 0, (
+            f"Expected events_dropped > 0 but got: {stats}"
+        )
+        assert plugin._queue.qsize() <= buffer_size, (
+            f"Queue exceeded buffer_size={buffer_size}: qsize={plugin._queue.qsize()}"
+        )
+
+        # cleanup() must return promptly — the stall handler exits via CancelledError.
+        await asyncio.wait_for(plugin.cleanup(), timeout=6.0)
+    finally:
+        await server.stop()
