@@ -3569,7 +3569,7 @@ class QueuedCOTService:
         # (TAK Server closes the connection if an XML declaration is present)
         xml_bytes = etree.tostring(cot_event, pretty_print=False, xml_declaration=False)
 
-        logger.info(
+        logger.debug(
             f"Generated TrakBridge identity CoT for {tak_server.name}: "
             f"uid={uid}, type={cot_type}, location={'yes' if has_location else 'no'}"
         )
