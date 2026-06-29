@@ -266,6 +266,11 @@ class TestingConfig(BaseConfig):
         return True
 
     @property
+    def RATELIMIT_ENABLED(self) -> bool:
+        """Disable Flask-Limiter in tests to prevent cross-test rate limit pollution."""
+        return False
+
+    @property
     def DEBUG(self) -> bool:
         """Disable debug mode in testing for cleaner output."""
         return False

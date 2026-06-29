@@ -1264,8 +1264,10 @@ class QueuedCOTService:
                         identity_cot = self._generate_trakbridge_identity_cot(tak_server)
                         if identity_cot:
                             try:
-                                logger.debug(
-                                    f"Sending identity heartbeat to {tak_server.name} ({len(identity_cot)} bytes)"
+                                logger.info(
+                                    f"TX heartbeat -> {tak_server.name} "
+                                    f"({len(identity_cot)} bytes): "
+                                    f"{identity_cot.decode('utf-8', errors='replace')}"
                                 )
                                 writer.write(identity_cot)
                                 await writer.drain()
@@ -1874,7 +1876,7 @@ class QueuedCOTService:
             # Handle P12 certificate if available
             if tak_server.cert_p12 and len(tak_server.cert_p12) > 0:
                 try:
-                    cert_pem, key_pem = QueuedCOTService._extract_p12_certificate(
+                    cert_pem, key_pem, ca_pem = QueuedCOTService._extract_p12_certificate(
                         tak_server.cert_p12, tak_server.get_cert_password()
                     )
                     cert_path, key_path = QueuedCOTService._create_temp_cert_files(
@@ -1882,6 +1884,18 @@ class QueuedCOTService:
                     )
                     config.set("pytak", "PYTAK_TLS_CLIENT_CERT", cert_path)
                     config.set("pytak", "PYTAK_TLS_CLIENT_KEY", key_path)
+
+                    # Set CA certificate for SSL verification if present in the P12
+                    if ca_pem:
+                        ca_fd, ca_path = tempfile.mkstemp(suffix=".pem", prefix="tak_ca_")
+                        with os.fdopen(ca_fd, "wb") as ca_file:
+                            ca_file.write(ca_pem)
+                        config.set("pytak", "PYTAK_TLS_CLIENT_CAFILE", ca_path)
+                    else:
+                        logger.warning(
+                            f"P12 for TAK server '{tak_server.name}' does not "
+                            f"contain a CA certificate — SSL verification may fail"
+                        )
                 except Exception as e:
                     logger.error(f"Failed to configure P12 certificate: {e}")
 
@@ -1922,6 +1936,12 @@ class QueuedCOTService:
             batch_success = True
             for i, event in enumerate(batch):
                 try:
+                    # Log the exact bytes being sent so a TAK-side reject
+                    # can be matched against the payload that triggered it
+                    logger.info(
+                        f"TX -> {tak_server.name} (event {i + 1}/{len(batch)}, "
+                        f"{len(event)} bytes): {event.decode('utf-8', errors='replace')}"
+                    )
                     # Send the event using the appropriate method
                     if use_writer and writer:
                         # Use writer for TCP connections
@@ -3099,15 +3119,19 @@ class QueuedCOTService:
             except Exception:
                 pass
             try:
-                from extensions import db
+                import app as flask_app
+                from database import db
                 from models.tak_server import TakServer
-                db_server = db.session.get(TakServer, tak_server.id)
-                if db_server and not db_server.identity_uid_suffix:
-                    db_server.identity_uid_suffix = uid_suffix
-                    db.session.commit()
-                    logger.debug(f"Persisted UID suffix {uid_suffix} for TAK server {tak_server.name}")
+                with flask_app.app.app_context():
+                    db_server = db.session.get(TakServer, tak_server.id)
+                    if db_server and not db_server.identity_uid_suffix:
+                        db_server.identity_uid_suffix = uid_suffix
+                        db.session.commit()
+                        logger.debug(
+                            f"Persisted UID suffix {uid_suffix} for TAK server {tak_server.name}"
+                        )
             except Exception as e:
-                logger.debug(f"Could not persist UID suffix to database: {e}")
+                logger.warning(f"Could not persist UID suffix to database: {e}")
 
         # Build unique UID
         uid = f"trakbridge-{tak_server.name}-{uid_suffix}"
@@ -3132,7 +3156,9 @@ class QueuedCOTService:
         cot_event.set("time", time_str)
         cot_event.set("start", start_str)
         cot_event.set("stale", stale_str)
-        cot_event.set("how", "m-g")  # Machine-generated
+        # Team-member types require human-entered how; machine-generated
+        # is rejected by TAK Server for a-f-G-U-C events
+        cot_event.set("how", "h-e" if has_location else "m-g")
 
         # Add point element if location is configured
         if has_location:
@@ -3180,12 +3206,18 @@ class QueuedCOTService:
         uid_elem = etree.SubElement(detail, "uid")
         uid_elem.set("Droid", tak_server.identity_callsign)
 
+        # Team members must include precisionlocation or TAK Server
+        # rejects the event as malformed
+        if has_location:
+            precision = etree.SubElement(detail, "precisionlocation")
+            precision.set("altsrc", "DTED0")
+            precision.set("geopointsrc", "USER")
+
         # Add team member elements if location is set
-        if has_location and (tak_server.identity_role or tak_server.identity_team_color):
+        if has_location:
             group = etree.SubElement(detail, "__group")
             team_color = tak_server.identity_team_color or "Cyan"
             team_role = tak_server.identity_role or "Team Member"
-            logger.debug(f"Setting team info for {tak_server.name}: color={team_color}, role={team_role}")
             group.set("name", team_color)
             group.set("role", team_role)
 
@@ -3199,8 +3231,9 @@ class QueuedCOTService:
             track.set("course", "0.0")
             track.set("speed", "0.0")
 
-        # Convert to bytes
-        xml_bytes = etree.tostring(cot_event, encoding="utf-8", xml_declaration=True)
+        # Convert to bytes — match the wire format used by regular CoT events
+        # (TAK Server closes the connection if an XML declaration is present)
+        xml_bytes = etree.tostring(cot_event, pretty_print=False, xml_declaration=False)
 
         logger.info(
             f"Generated TrakBridge identity CoT for {tak_server.name}: "
@@ -3437,7 +3470,7 @@ class QueuedCOTService:
 
                 if tak_server.cert_p12 and len(tak_server.cert_p12) > 0:
                     try:
-                        cert_pem, key_pem = QueuedCOTService._extract_p12_certificate(
+                        cert_pem, key_pem, ca_pem = QueuedCOTService._extract_p12_certificate(
                             tak_server.cert_p12, tak_server.get_cert_password()
                         )
                         cert_path, key_path = QueuedCOTService._create_temp_cert_files(
@@ -3446,6 +3479,12 @@ class QueuedCOTService:
                         ssl_context.load_cert_chain(
                             certfile=cert_path, keyfile=key_path
                         )
+                        # Load CA certificate for server verification if present
+                        if ca_pem:
+                            ca_fd, ca_path = tempfile.mkstemp(suffix=".pem", prefix="tak_ca_")
+                            with os.fdopen(ca_fd, "wb") as ca_file:
+                                ca_file.write(ca_pem)
+                            ssl_context.load_verify_locations(cafile=ca_path)
                         logger.debug(
                             f"Loaded client certificate for TAK server '{tak_server.name}'"
                         )
@@ -3522,8 +3561,13 @@ class QueuedCOTService:
     @staticmethod
     def _extract_p12_certificate(
         p12_data: bytes, password: Optional[str] = None
-    ) -> Tuple[bytes, bytes]:
-        """Extract certificate and key from P12 data"""
+    ) -> Tuple[bytes, bytes, Optional[bytes]]:
+        """Extract certificate, key, and CA certificate from P12 data.
+
+        Returns:
+            Tuple of (cert_pem, key_pem, ca_pem) where ca_pem is None
+            if the P12 does not contain a CA certificate chain.
+        """
         try:
             password_bytes = password.encode("utf-8") if password else None
             private_key, certificate, additional_certificates = (
@@ -3537,7 +3581,14 @@ class QueuedCOTService:
                 encryption_algorithm=serialization.NoEncryption(),
             )
 
-            return cert_pem, key_pem
+            # Extract CA certificate from the chain if present
+            ca_pem = None
+            if additional_certificates:
+                ca_pem = additional_certificates[0].public_bytes(
+                    serialization.Encoding.PEM
+                )
+
+            return cert_pem, key_pem, ca_pem
 
         except Exception as e:
             raise Exception(f"P12 certificate extraction failed: {str(e)}")

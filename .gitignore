@@ -6,7 +6,7 @@ app.db*
 *.db*
 .env*
 config.py
-
+.venv/
 # Generated version file
 _version.py
 

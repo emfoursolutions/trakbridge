@@ -124,6 +124,7 @@ class IRCHandler(BaseOutputPlugin):
                     required=True,
                     placeholder="irc.libera.chat",
                     help_text="IRC server hostname",
+                    row_group="irc_row_1",
                 ),
                 PluginConfigField(
                     name="port",
@@ -134,6 +135,7 @@ class IRCHandler(BaseOutputPlugin):
                     min_value=1,
                     max_value=65535,
                     help_text="IRC server port (6667 for plain, 6697 for SSL)",
+                    row_group="irc_row_1",
                 ),
                 PluginConfigField(
                     name="use_ssl",
@@ -146,6 +148,7 @@ class IRCHandler(BaseOutputPlugin):
                         {"value": "false", "label": "No"},
                     ],
                     help_text="Enable SSL/TLS encryption",
+                    row_group="irc_row_2",
                 ),
                 PluginConfigField(
                     name="verify_ssl",
@@ -158,6 +161,7 @@ class IRCHandler(BaseOutputPlugin):
                         {"value": "false", "label": "No (Allow Self-Signed)"},
                     ],
                     help_text="Disable only for self-signed certificates in trusted environments",
+                    row_group="irc_row_2",
                 ),
                 PluginConfigField(
                     name="nickname",
@@ -166,6 +170,7 @@ class IRCHandler(BaseOutputPlugin):
                     required=True,
                     placeholder="TrakBridge",
                     help_text="IRC bot nickname",
+                    row_group="irc_row_3",
                 ),
                 PluginConfigField(
                     name="channel",
@@ -174,6 +179,7 @@ class IRCHandler(BaseOutputPlugin):
                     required=True,
                     placeholder="#tak-alerts",
                     help_text="IRC channel to join (include #)",
+                    row_group="irc_row_3",
                 ),
                 PluginConfigField(
                     name="password",
@@ -182,6 +188,7 @@ class IRCHandler(BaseOutputPlugin):
                     required=False,
                     sensitive=True,
                     help_text="IRC server password (if required)",
+                    row_group="irc_row_4",
                 ),
                 # Note: global_geofence_enabled, global_geofence_bounds, and message_rules
                 # are handled by custom UI sections (irc-global-geofence-section and irc-message-rules-section)
@@ -192,6 +199,7 @@ class IRCHandler(BaseOutputPlugin):
                     field_type="text",
                     placeholder="^ANDROID-.*",
                     help_text="Global pre-filter applied before message rules (optional). See Help section for details and examples.",
+                    row_group="irc_row_4",
                 ),
             ],
             "custom_components": [

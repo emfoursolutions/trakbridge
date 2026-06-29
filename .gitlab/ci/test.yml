@@ -299,7 +299,7 @@ integration-tests-sqlite:
 
   before_script:
     - *install_packages
-    - install_packages git curl build-essential
+    - install_packages git curl build-essential mosquitto mosquitto-clients
     - pip install --upgrade pip
     - pip install -e ".[dev]"
 
@@ -343,7 +343,7 @@ integration-tests-postgresql:
 
   before_script:
     - *install_packages
-    - install_packages git curl build-essential
+    - install_packages git curl build-essential mosquitto mosquitto-clients
     - pip install --upgrade pip
     - pip install -e ".[dev]"
 
@@ -394,7 +394,7 @@ integration-tests-mysql:
 
   before_script:
     - *install_packages
-    - install_packages git curl build-essential
+    - install_packages git curl build-essential mosquitto mosquitto-clients
     - pip install --upgrade pip
     - pip install -e ".[dev]"
 

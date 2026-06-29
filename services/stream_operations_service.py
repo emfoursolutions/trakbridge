@@ -199,6 +199,14 @@ class StreamOperationsService:
                 "cot_type_mode", "stream"
             )
 
+            # Determine stream mode from form data
+            stream_mode = data.get("stream_mode", "poll")
+
+            # Auto-generate API key for inbound HTTP streams if none provided
+            if stream_mode == "inbound" and not plugin_config.get("api_key"):
+                import secrets as _secrets
+                plugin_config["api_key"] = _secrets.token_urlsafe(32)
+
             # Create stream with appropriate server configuration
             stream = Stream(
                 name=data["name"],
@@ -213,10 +221,13 @@ class StreamOperationsService:
                     data.get("enable_callsign_mapping", False)
                 ),
                 callsign_identifier_field=data.get("callsign_identifier_field"),
-                callsign_error_handling=data.get("callsign_error_handling", "fallback"),
+                callsign_error_handling=data.get(
+                    "callsign_error_handling", "fallback"
+                ),
                 enable_per_callsign_cot_types=bool(
                     data.get("enable_per_callsign_cot_types", False)
                 ),
+                stream_mode=stream_mode,
             )
 
             # Set plugin configuration (already extracted above)
@@ -532,6 +543,10 @@ class StreamOperationsService:
                 stream.enable_per_callsign_cot_types = bool(
                     data.get("enable_per_callsign_cot_types", False)
                 )
+
+                # Update inbound stream fields
+                stream_mode = data.get("stream_mode", stream.stream_mode or "poll")
+                stream.stream_mode = stream_mode
 
                 # Update plugin configuration with password preservation
                 from plugins.plugin_manager import get_plugin_manager

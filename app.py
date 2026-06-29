@@ -494,6 +494,18 @@ def create_app(config_name=None):
     # Register version CLI commands
     register_version_commands(app)
 
+    # Initialize rate limiting
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=["120 per minute"],
+        storage_uri="memory://",
+    )
+    app.limiter = limiter
+
     # Register blueprints
     from routes.admin import bp as admin_bp
     from routes.api import bp as api_bp
@@ -502,6 +514,12 @@ def create_app(config_name=None):
     from routes.main import bp as main_bp
     from routes.streams import bp as streams_bp
     from routes.tak_servers import bp as tak_servers_bp
+    from routes.inbound import bp as inbound_bp
+
+    # Apply rate limits to specific route groups
+    limiter.limit("30 per minute")(api_bp)
+    limiter.limit("10 per minute")(auth_bp)
+    limiter.limit("60 per minute")(inbound_bp)
 
     app.register_blueprint(main_bp)
     app.register_blueprint(streams_bp, url_prefix="/streams")
@@ -510,6 +528,7 @@ def create_app(config_name=None):
     app.register_blueprint(cot_types_bp, url_prefix="/admin")
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(auth_bp, url_prefix="/auth")
+    app.register_blueprint(inbound_bp, url_prefix="/api/inbound")
 
     # Add context processors and error handlers
     setup_template_helpers(app)
@@ -649,6 +668,12 @@ def configure_flask_app(app, config_instance):
     # Security settings
     app.config["PROXY_TRUSTED"] = getattr(config_instance, "PROXY_TRUSTED", False)
     app.config["TRUSTED_PROXY_COUNT"] = getattr(config_instance, "TRUSTED_PROXY_COUNT", 0)
+
+    # Rate limiting — disabled in testing to prevent cross-test pollution
+    app.config["RATELIMIT_ENABLED"] = getattr(config_instance, "RATELIMIT_ENABLED", True)
+
+    # Global request size limit (1 MB) — defense-in-depth alongside per-route checks
+    app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024
 
     # Store the config instance for later use
     app.config_instance = config_instance

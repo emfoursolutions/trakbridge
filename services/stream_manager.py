@@ -57,6 +57,7 @@ from services.logging_service import get_module_logger
 from services.queue_monitoring import get_queue_monitoring_service
 from services.queue_performance_optimizer import get_performance_optimizer
 from services.session_manager import SessionManager
+from services.inbound_stream_worker import InboundStreamWorker
 from services.stream_worker import StreamWorker
 
 # Worker coordination import removed for single worker deployment
@@ -836,7 +837,7 @@ class StreamManager:
                     if (
                         not health["running"]
                         or (health["task_done"] and not health["task_cancelled"])
-                        or health["consecutive_errors"] >= 3
+                        or health.get("consecutive_errors", 0) >= 3
                     ):
                         unhealthy_workers.append((stream_id, health))
 
@@ -921,9 +922,14 @@ class StreamManager:
                 logger.error(f"Stream {stream_id} has no TAK server configured")
                 return False
 
-            # Create worker
+            # Create worker — route by stream_mode
             logger.debug(f"Creating worker for stream {stream_id} ({stream.name})")
-            worker = StreamWorker(stream, self.session_manager, self.db_manager)
+            if getattr(stream, "stream_mode", "poll") == "inbound":
+                worker = InboundStreamWorker(
+                    stream, self.session_manager, self.db_manager
+                )
+            else:
+                worker = StreamWorker(stream, self.session_manager, self.db_manager)
 
             # Start worker with timeout
             try:
@@ -1533,7 +1539,7 @@ class StreamManager:
             if (
                 not health_status["running"]
                 or (health_status["task_done"] and not health_status["task_cancelled"])
-                or health_status["consecutive_errors"] >= 3
+                or health_status.get("consecutive_errors", 0) >= 3
             ):
                 unhealthy_streams.append(stream_id)
                 logger.warning(f"Stream {stream_id} appears unhealthy: {health_status}")
