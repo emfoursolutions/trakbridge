@@ -186,6 +186,7 @@ class UdpMulticastListener(BaseInboundPlugin):
     PLUGIN_NAME = "udp_multicast_listener"
     _RATE_BUCKET_SOFT_CAP = 1024
     _DIAGNOSTIC_SAMPLE_LIMIT = 5
+    _UID_COUNTER_SOFT_CAP = 256
 
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
@@ -199,6 +200,9 @@ class UdpMulticastListener(BaseInboundPlugin):
         self._dropped_validation = 0
         self._dropped_rate = 0
         self._dropped_size = 0
+        # Per-UID forwarded counter — diagnostic for silent-drop investigation.
+        # Capped to bound memory if the multicast group has many distinct UIDs.
+        self._forwarded_by_uid: Dict[str, int] = {}
         self._diagnostic_samples_logged = 0
 
     @property
@@ -417,6 +421,20 @@ class UdpMulticastListener(BaseInboundPlugin):
             f"{self._dropped_validation}, dropped_rate={self._dropped_rate}, "
             f"dropped_size={self._dropped_size}"
         )
+        # Per-UID totals help diagnose silent drops further downstream: compare
+        # these against TX loop's per-UID write counters and TAK Server's
+        # "Processed" count for each subscription.
+        if self._forwarded_by_uid:
+            top = sorted(
+                self._forwarded_by_uid.items(),
+                key=lambda kv: kv[1],
+                reverse=True,
+            )[:10]
+            summary = ", ".join(f"{uid}={count}" for uid, count in top)
+            logger.info(
+                f"UDP multicast forwarded-per-uid (top {len(top)} of "
+                f"{len(self._forwarded_by_uid)}): {summary}"
+            )
 
     # ------------------------------------------------------------------
     # Socket
@@ -557,16 +575,41 @@ class UdpMulticastListener(BaseInboundPlugin):
         if not self._target_servers or self._cot_service is None:
             return
 
+        # Extract UID once so per-UID counters can attribute the forward.
+        # If extraction fails (post-conversion this should be rare), we still
+        # forward; the global _forwarded counter still increments.
+        uid = self._extract_uid(outbound)
+
         for server in self._target_servers:
             try:
                 ok = await self._cot_service.enqueue_event(outbound, server.id)
                 if ok:
                     self._forwarded += 1
+                    if uid:
+                        self._bump_uid_counter(uid)
             except Exception as exc:
                 logger.error(
                     f"UDP multicast: enqueue failed for TAK server "
                     f"{getattr(server, 'name', '?')}: {exc}"
                 )
+
+    def _extract_uid(self, event: bytes) -> str:
+        """Pull the event UID for per-UID diagnostics. Returns '' on failure."""
+        try:
+            root = ET.fromstring(event)
+        except (ET.ParseError, ValueError):
+            return ""
+        return root.get("uid") or ""
+
+    def _bump_uid_counter(self, uid: str) -> None:
+        """Increment per-UID forwarded counter under a soft memory cap."""
+        if uid in self._forwarded_by_uid:
+            self._forwarded_by_uid[uid] += 1
+            return
+        if len(self._forwarded_by_uid) >= self._UID_COUNTER_SOFT_CAP:
+            # Evict an arbitrary entry; this counter is diagnostic, not exact.
+            self._forwarded_by_uid.pop(next(iter(self._forwarded_by_uid)))
+        self._forwarded_by_uid[uid] = 1
 
 
 class _Protocol(asyncio.DatagramProtocol):

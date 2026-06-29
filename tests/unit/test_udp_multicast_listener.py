@@ -591,3 +591,58 @@ class TestFormatRouting:
 
         plugin._cot_service.enqueue_event.assert_not_awaited()
         assert plugin._dropped_validation == 1
+
+
+# ---------------------------------------------------------------------------
+# Per-UID forwarded counters (diagnostics for silent-drop investigation)
+# ---------------------------------------------------------------------------
+
+
+class TestPerUidCounters:
+    async def test_increments_per_uid_on_successful_forward(self):
+        plugin = _make_plugin()
+        plugin._cot_service = MagicMock(enqueue_event=AsyncMock(return_value=True))
+        plugin._target_servers = plugin.stream.get_active_tak_servers()
+
+        # Two distinct UIDs, varying frequencies
+        evt_a = VALID_COT  # uid="test-1"
+        datagram_b = _build_takproto_datagram(uid="ANDROID-xyz")
+
+        await plugin._handle_datagram(evt_a, ("10.0.0.5", 6969))
+        await plugin._handle_datagram(evt_a, ("10.0.0.5", 6969))
+        await plugin._handle_datagram(datagram_b, ("10.0.0.6", 6969))
+
+        counts = plugin._forwarded_by_uid
+        # Two TAK servers, so each forward increments by 2 per server
+        assert counts.get("test-1") == 2 * 2
+        assert counts.get("ANDROID-xyz") == 1 * 2
+
+    async def test_no_uid_increment_for_dropped_validation(self):
+        plugin = _make_plugin()
+        plugin._cot_service = MagicMock(enqueue_event=AsyncMock(return_value=True))
+        plugin._target_servers = plugin.stream.get_active_tak_servers()
+
+        await plugin._handle_datagram(b"<event ", ("10.0.0.5", 6969))
+
+        assert plugin._forwarded_by_uid == {}
+
+    async def test_capped_at_soft_limit(self):
+        plugin = _make_plugin()
+        plugin._cot_service = MagicMock(enqueue_event=AsyncMock(return_value=True))
+        plugin._target_servers = plugin.stream.get_active_tak_servers()
+
+        # Soft cap protects memory under wide UID fan-out.
+        cap = plugin._UID_COUNTER_SOFT_CAP
+        for i in range(cap + 5):
+            evt = (
+                f'<event version="2.0" uid="dev-{i}" type="a-f-G-U-C" '
+                f'how="m-g" time="2026-06-29T00:00:00Z" '
+                f'start="2026-06-29T00:00:00Z" '
+                f'stale="2026-06-29T00:05:00Z">'
+                f'<point lat="0" lon="0" hae="0" ce="0" le="0"/>'
+                f"</event>"
+            ).encode()
+            await plugin._handle_datagram(evt, ("10.0.0.5", 6969))
+
+        # Dict size doesn't blow past the cap.
+        assert len(plugin._forwarded_by_uid) <= cap
