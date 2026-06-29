@@ -52,6 +52,7 @@ dependencies = [
     "PyJWT>=2.8.0",
     "PyMySQL",
     "pytak",
+    "takproto>=3.0.0,<4.0.0",
     "requests>=2.31.0",
     "python-dateutil",
     "python-dotenv",

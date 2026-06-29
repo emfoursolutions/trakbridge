@@ -37,9 +37,16 @@ TrakBridge streams operate in one of two modes:
 | Mode | Base Class | Trigger | Worker |
 | --- | --- | --- | --- |
 | `poll` | `BaseGPSPlugin` | Timer calls `fetch_locations()` | `StreamWorker` |
-| `inbound` | `BaseInboundPlugin` | HTTP POST calls `transform_payload()` | `InboundStreamWorker` |
+| `inbound` | `BaseInboundPlugin` | HTTP POST, or an active listener spawned in `start()` | `InboundStreamWorker` |
 
 The `stream_mode` column on the `Stream` model determines which worker type is used.
+
+Inbound plugins themselves use one of two transports, distinguished by the `inbound_transport` field of `plugin_metadata`:
+
+| Transport | Driver | Plugin examples |
+| --- | --- | --- |
+| HTTP push | External device POSTs to `/api/inbound/...`; `transform_payload()` parses the body | `generic_inbound_plugin`, `generic_xml_inbound_plugin`, `inbound_http` |
+| Active-connect | Plugin's `start()` dials out, opens a socket, or joins a multicast group; `transform_payload()` is not used | `inbound_active` (MQTT / WebSocket), `udp_multicast_listener` |
 
 ## Inbound Plugin Development
 
@@ -173,6 +180,55 @@ The plugin accepts both single objects and arrays:
 ]
 ```
 
+## Built-in Plugin: UDP Multicast CoT Bridge
+
+The `UdpMulticastListener` (`plugins/udp_multicast_listener.py`) joins a UDP multicast group and forwards CoT events to every TAK server configured on the stream. The intended use case is bridging LAN multicast Mesh SA (e.g. ATAK clients) across VPN/WAN links that do not carry multicast.
+
+This is an **active-connect** plugin — it has no HTTP endpoint and does not call `transform_payload()`. The listener is opened in `start()` and torn down in `cleanup()`.
+
+### Wire formats
+
+The plugin accepts both ATAK wire formats and auto-detects per datagram:
+
+| Format | Trigger | Forwarding |
+| --- | --- | --- |
+| CoT XML | Datagram starts with `<event …>` | Forwarded byte-for-byte to TAK servers |
+| TAK Protocol v1 (Mesh SA protobuf) | Datagram starts with magic `0xbf 0x01 0xbf` | Decoded to CoT XML via `takproto`, then forwarded |
+
+Decoded XML preserves the structured Detail submessages (`contact`, `__group`, `precisionlocation`, `status`, `takv`, `track`) plus the residual `xmlDetail` string. Times are converted from ms-since-epoch to ISO-8601 UTC.
+
+### Configuration fields
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `multicast_group` | `239.2.3.1` | IPv4 multicast address (224.0.0.0/4) |
+| `multicast_port` | `6969` | UDP port |
+| `bind_interface` | `0.0.0.0` | Local IP for the IGMP join; set explicitly on multi-homed hosts |
+| `source_filter` | empty | Comma-separated source IP allowlist; switches to IGMPv3 source-specific multicast when set |
+| `max_packet_bytes` | `65535` | Drop datagrams larger than this |
+| `per_source_rate_limit` | `200` | Per-source-IP token bucket cap (packets/sec); `0` disables |
+| `require_cot_event_root` | `true` | Drop datagrams whose root element is not `<event>` (XML) or whose magic prefix isn't `0xbf 0x01 0xbf` (takproto) |
+| `format` | `auto` | `auto`, `xml`, or `takproto` |
+
+### Forwarding path
+
+The plugin calls `QueuedCOTService.enqueue_event(bytes, tak_server_id)` directly for every configured TAK server — no `InboundCOTService.process_inbound_locations()` round-trip. This keeps the bytes on the wire to the TAK server bit-identical to the decoded CoT (or the originally-received XML), avoiding the parse-and-re-emit cost of the standard inbound path.
+
+### Operator diagnostics
+
+`cleanup()` (called when the stream stops) emits two INFO summary lines:
+
+```text
+UDP multicast listener stopped — received=812, forwarded=2436, dropped_validation=4, dropped_rate=0, dropped_size=0
+UDP multicast forwarded-per-uid (top 3 of 3): ANDROID-abc=270, ANDROID-def=265, ANDROID-ghi=258
+```
+
+The per-UID counter is matched by the TX side's `TX written-per-uid for <server>: …` line emitted by the `QueuedCOTService` TX loop on exit. Comparing the two lets you locate silent drops between the bridge and the socket (queue overflow, transmission failures, etc).
+
+### Out of scope
+
+ATAK's "Network Encryption" Mesh SA option (pre-shared AES key) is **not yet supported**. Encrypted datagrams arrive opaque and fail validation. Implementation is pending a verified writeup of the on-wire layout from the ATAK-CIV `commoncommo` source.
+
 ## API Endpoints
 
 All endpoints are under the `/api/inbound` blueprint, registered in `app.py`.
@@ -299,7 +355,7 @@ Three focused outbound plugins forward CoT from TAK servers to external systems.
 - `plugins/outbound_mqtt.py` — Outbound MQTT plugin (publish CoT to an MQTT broker topic).
 - `plugins/outbound_websocket.py` — Outbound WebSocket plugin (push CoT to a WebSocket endpoint).
 
-Users wanting inbound and outbound on the same transport should combine an inbound stream (e.g. `inbound_active`) with the matching outbound plugin.
+Users wanting inbound and outbound on the same transport should combine an inbound stream (e.g. `inbound_active` or `udp_multicast_listener`) with the matching outbound plugin.
 
 ### Conditional Field Visibility
 
@@ -336,6 +392,7 @@ The `Stream` model (`models/stream.py`) has these inbound-specific columns:
 | `tests/unit/test_inbound_dedup.py` | `DeviceStateManager`: stale rejection, new device acceptance, timestamp ordering |
 | `tests/unit/test_inbound_routes.py` | HTTP endpoint: auth, rate limiting, payload validation, error cases |
 | `tests/unit/test_generic_inbound_plugin.py` | JSON field mapping, nested paths, batch payloads |
+| `tests/unit/test_udp_multicast_listener.py` | UDP multicast bridge: IGMP join, XML/takproto auto-detect, rate limit, per-UID counters |
 | `tests/unit/test_inbound_preview.py` | Capture buffer, preview mode, remap |
 | `tests/unit/test_outbound_http.py` | OutboundHTTP: metadata, pipeline, HTTP/JSON/XML/template delivery, dedup, health stats |
 | `tests/integration/test_outbound_http_integration.py` | OutboundHTTP: real HTTP server, POST/PUT, headers, error handling |
@@ -370,6 +427,7 @@ pytest tests/ -v
 | --- | --- |
 | `plugins/base_plugin.py` | `BaseInboundPlugin` base class, `PluginConfigField` |
 | `plugins/generic_inbound_plugin.py` | Built-in JSON inbound plugin |
+| `plugins/udp_multicast_listener.py` | Built-in UDP multicast CoT bridge (XML + TAK Protocol v1 protobuf via `takproto`) |
 | `plugins/outbound_http.py` | Outbound HTTP plugin (POST/PUT JSON/XML/template to an HTTP endpoint) |
 | `plugins/outbound_mqtt.py` | Outbound MQTT plugin (publish CoT to an MQTT broker topic) |
 | `plugins/outbound_websocket.py` | Outbound WebSocket plugin (push CoT to a WebSocket endpoint) |
