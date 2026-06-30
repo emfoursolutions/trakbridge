@@ -246,7 +246,9 @@ networks:
       config:
         - subnet: 192.168.1.0/24       # match your real LAN subnet
           gateway: 192.168.1.1         # match your real LAN gateway
-          ip_range: 192.168.1.240/29   # carve out IPs not handed out by DHCP
+          ip_range: 192.168.1.240/29   # carve out IPs not handed out by DHCP;
+                                       # ip_range must align to its mask
+                                       # (a /29 must start on a multiple of 8)
 
 services:
   trakbridge:
