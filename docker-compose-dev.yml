@@ -201,7 +201,7 @@ services:
     networks:
       frontend: {}     # External for Traefik
       lan_multicast:
-        ipv4_address: 10.0.30.71
+        ipv4_address: 10.0.30.65
 
   # PostgreSQL database (optional)
   postgres:
@@ -347,7 +347,7 @@ networks:
       config:
         - subnet: 10.0.30.0/24       # match your real LAN subnet
           gateway: 10.0.30.254         # match your real LAN gateway
-          ip_range: 10.0.30.71/29   # carve out IPs not handed out by DHCP
+          ip_range: 10.0.30.64/29   # 10.0.30.64–.71; .65–.70 usable for containers
 # Volumes
 volumes:
   postgres_data:
