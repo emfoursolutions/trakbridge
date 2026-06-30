@@ -22,8 +22,6 @@ def manager():
         db_mgr_cls.return_value = MagicMock()
         session_mgr_cls.return_value = MagicMock()
         mgr = StreamManager(app_context_factory=MagicMock())
-        mgr._shutdown_event = asyncio.Event()
-        mgr._loop = asyncio.get_event_loop()
         return mgr
 
 
