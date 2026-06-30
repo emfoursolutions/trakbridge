@@ -173,6 +173,119 @@ The plugin accepts both single objects and arrays:
 ]
 ```
 
+## Built-in Plugin: UDP Multicast CoT Bridge
+
+The `UdpMulticastListener` (`plugins/udp_multicast_listener.py`) joins a UDP multicast group and forwards CoT events to every TAK server configured on the stream. The intended use case is bridging LAN multicast Mesh SA (e.g. ATAK clients) across VPN/WAN links that do not carry multicast.
+
+This is an **active-connect** plugin — it has no HTTP endpoint and does not call `transform_payload()`. The listener is opened in `start()` and torn down in `cleanup()`.
+
+### Wire formats
+
+The plugin accepts both ATAK wire formats and auto-detects per datagram:
+
+| Format | Trigger | Forwarding |
+| --- | --- | --- |
+| CoT XML | Datagram starts with `<event …>` | Forwarded byte-for-byte to TAK servers |
+| TAK Protocol v1 (Mesh SA protobuf) | Datagram starts with magic `0xbf 0x01 0xbf` | Decoded to CoT XML via `takproto`, then forwarded |
+
+Decoded XML preserves the structured Detail submessages (`contact`, `__group`, `precisionlocation`, `status`, `takv`, `track`) plus the residual `xmlDetail` string. Times are converted from ms-since-epoch to ISO-8601 UTC.
+
+### Configuration fields
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `multicast_group` | `239.2.3.1` | IPv4 multicast address (224.0.0.0/4) |
+| `multicast_port` | `6969` | UDP port |
+| `bind_interface` | `0.0.0.0` | Local IP for the IGMP join; set explicitly on multi-homed hosts |
+| `source_filter` | empty | Comma-separated source IP allowlist; switches to IGMPv3 source-specific multicast when set |
+| `max_packet_bytes` | `65535` | Drop datagrams larger than this |
+| `per_source_rate_limit` | `200` | Per-source-IP token bucket cap (packets/sec); `0` disables |
+| `require_cot_event_root` | `true` | Drop datagrams whose root element is not `<event>` (XML) or whose magic prefix isn't `0xbf 0x01 0xbf` (takproto) |
+| `format` | `auto` | `auto`, `xml`, or `takproto` |
+
+### Forwarding path
+
+The plugin calls `QueuedCOTService.enqueue_event(bytes, tak_server_id)` directly for every configured TAK server — no `InboundCOTService.process_inbound_locations()` round-trip. This keeps the bytes on the wire to the TAK server bit-identical to the decoded CoT (or the originally-received XML), avoiding the parse-and-re-emit cost of the standard inbound path.
+
+### Operator diagnostics
+
+`cleanup()` (called when the stream stops) emits two INFO summary lines:
+
+```text
+UDP multicast listener stopped — received=812, forwarded=2436, dropped_validation=4, dropped_rate=0, dropped_size=0
+UDP multicast forwarded-per-uid (top 3 of 3): ANDROID-abc=270, ANDROID-def=265, ANDROID-ghi=258
+```
+
+The per-UID counter is matched by the TX side's `TX written-per-uid for <server>: …` line emitted by the `QueuedCOTService` TX loop on exit. Comparing the two lets you locate silent drops between the bridge and the socket (queue overflow, transmission failures, etc).
+
+### Running under Docker
+
+UDP multicast does not cross Docker's default bridge network. A container whose only NIC is the bridge (typically `172.x.x.x`) will issue its IGMP join on that interface and never see the LAN traffic. The listener appears healthy in the log (`UDP multicast listener joined 239.2.3.1:6969`) but `received` stays at zero. There are two supported deployment topologies; pick based on whether the container sits behind a reverse proxy on a Docker network.
+
+#### Option A — `macvlan` network (recommended behind Traefik / nginx)
+
+Attach a second network on the host's LAN NIC. The container keeps its existing bridge IP for HTTP traffic (so the reverse proxy on the bridge network keeps working) and gets a real LAN IP for the multicast listener.
+
+```yaml
+networks:
+  web:
+    external: true            # whatever your reverse-proxy network is called
+
+  lan_multicast:
+    driver: macvlan
+    driver_opts:
+      parent: eth0            # host's LAN NIC (eth0, en0, enp3s0, ens18, ...)
+    ipam:
+      config:
+        - subnet: 192.168.1.0/24       # match your real LAN subnet
+          gateway: 192.168.1.1         # match your real LAN gateway
+          ip_range: 192.168.1.240/29   # carve out IPs not handed out by DHCP
+
+services:
+  trakbridge:
+    networks:
+      web: {}                          # reverse proxy keeps reaching you here
+      lan_multicast:
+        ipv4_address: 192.168.1.242    # one of the addresses in ip_range
+```
+
+Then in the multicast stream config:
+
+- `multicast_group`, `multicast_port`: as desired
+- `bind_interface`: set to the macvlan IP (`192.168.1.242` in this example) — not `0.0.0.0`. This makes the IGMP join deterministic on the LAN-facing interface.
+
+**macvlan caveats:**
+
+- On Linux, the Docker host machine cannot reach the macvlan container IP on the same NIC. Other devices on the LAN can. Not an issue when the reverse proxy reaches the container over the bridge network instead.
+- The `parent` NIC must allow promiscuous-mode traffic. Bare metal and most hypervisors are fine; some cloud-VM virtual NICs are not.
+- Docker Desktop for Mac/Windows does not support macvlan reliably (the VM doesn't expose host NICs the way Linux does). Use a Linux host for production multicast deployments.
+
+#### Option B — `network_mode: host` (simplest when not behind a reverse proxy)
+
+The container shares the host's network namespace directly:
+
+```yaml
+services:
+  trakbridge:
+    network_mode: host
+    # delete `ports:` and `networks:` — host mode bypasses them
+```
+
+The multicast join lands on the host's NICs directly, just as a bare-metal deployment would. **Do not use this if Traefik / nginx is fronting TrakBridge on a Docker network** — host mode bypasses the network the reverse proxy is on, so the proxy won't route to it. Host networking is also not supported on Docker Desktop for Mac/Windows.
+
+#### Common symptoms and fixes
+
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| Log says `joined 239.2.3.1:6969`, but `received` stays at 0 on stop | IGMP join landed on the Docker bridge interface, not the LAN NIC | Switch to macvlan or host mode (above); set `bind_interface` explicitly |
+| Works in dev (bare metal) but not in Docker | Same as above | Same as above |
+| Receives packets but only from some senders | Multi-homed host picked the wrong NIC, or IGMP snooping on an upstream switch is dropping multicast | Set `bind_interface` to the explicit LAN IP; check switch IGMP-snooping config |
+| Traffic stops a few minutes after start | IGMP membership query timed out (some switches require periodic re-querying) | Confirm IGMP querier is enabled on the LAN switch; otherwise switch ATAK to a static multicast TTL |
+
+### Out of scope
+
+ATAK's "Network Encryption" Mesh SA option (pre-shared AES key) is **not yet supported**. Encrypted datagrams arrive opaque and fail validation. Implementation is pending a verified writeup of the on-wire layout from the ATAK-CIV `commoncommo` source.
+
 ## API Endpoints
 
 All endpoints are under the `/api/inbound` blueprint, registered in `app.py`.
