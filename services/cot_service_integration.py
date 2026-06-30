@@ -2619,9 +2619,21 @@ class QueuedCOTService:
         if tak_server_id in self.device_state_managers:
             del self.device_state_managers[tak_server_id]
 
-        # Cleanup stale connection reference
+        # Close the StreamWriter for this TAK server. Required: cancelling
+        # the worker task does not deterministically run the loop's finally
+        # block (where _cleanup_connection lives) before this method
+        # returns, so without an explicit close here the underlying TCP
+        # socket stays half-open and TAK Server holds the old subscription
+        # until its stale-timeout fires. That's the source of the
+        # "two subscriptions on TAK Server after editing the config" bug.
         if tak_server_id in self.connections:
-            del self.connections[tak_server_id]
+            connection = self.connections.pop(tak_server_id)
+            try:
+                await self._cleanup_connection(connection)
+            except Exception as e:
+                logger.debug(
+                    f"Error closing connection for TAK server " f"{tak_server_id}: {e}"
+                )
 
         logger.debug(
             f"Complete cleanup finished for TAK server {tak_server_id} at {datetime.now()}"
