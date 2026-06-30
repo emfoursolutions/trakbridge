@@ -37,9 +37,16 @@ TrakBridge streams operate in one of two modes:
 | Mode | Base Class | Trigger | Worker |
 | --- | --- | --- | --- |
 | `poll` | `BaseGPSPlugin` | Timer calls `fetch_locations()` | `StreamWorker` |
-| `inbound` | `BaseInboundPlugin` | HTTP POST calls `transform_payload()` | `InboundStreamWorker` |
+| `inbound` | `BaseInboundPlugin` | HTTP POST, or an active listener spawned in `start()` | `InboundStreamWorker` |
 
 The `stream_mode` column on the `Stream` model determines which worker type is used.
+
+Inbound plugins themselves use one of two transports, distinguished by the `inbound_transport` field of `plugin_metadata`:
+
+| Transport | Driver | Plugin examples |
+| --- | --- | --- |
+| HTTP push | External device POSTs to `/api/inbound/...`; `transform_payload()` parses the body | `generic_inbound_plugin`, `generic_xml_inbound_plugin`, `inbound_http` |
+| Active-connect | Plugin's `start()` dials out, opens a socket, or joins a multicast group; `transform_payload()` is not used | `inbound_active` (MQTT / WebSocket), `udp_multicast_listener` |
 
 ## Inbound Plugin Development
 
@@ -412,7 +419,7 @@ Three focused outbound plugins forward CoT from TAK servers to external systems.
 - `plugins/outbound_mqtt.py` — Outbound MQTT plugin (publish CoT to an MQTT broker topic).
 - `plugins/outbound_websocket.py` — Outbound WebSocket plugin (push CoT to a WebSocket endpoint).
 
-Users wanting inbound and outbound on the same transport should combine an inbound stream (e.g. `inbound_active`) with the matching outbound plugin.
+Users wanting inbound and outbound on the same transport should combine an inbound stream (e.g. `inbound_active` or `udp_multicast_listener`) with the matching outbound plugin.
 
 ### Conditional Field Visibility
 
@@ -449,6 +456,7 @@ The `Stream` model (`models/stream.py`) has these inbound-specific columns:
 | `tests/unit/test_inbound_dedup.py` | `DeviceStateManager`: stale rejection, new device acceptance, timestamp ordering |
 | `tests/unit/test_inbound_routes.py` | HTTP endpoint: auth, rate limiting, payload validation, error cases |
 | `tests/unit/test_generic_inbound_plugin.py` | JSON field mapping, nested paths, batch payloads |
+| `tests/unit/test_udp_multicast_listener.py` | UDP multicast bridge: IGMP join, XML/takproto auto-detect, rate limit, per-UID counters |
 | `tests/unit/test_inbound_preview.py` | Capture buffer, preview mode, remap |
 | `tests/unit/test_outbound_http.py` | OutboundHTTP: metadata, pipeline, HTTP/JSON/XML/template delivery, dedup, health stats |
 | `tests/integration/test_outbound_http_integration.py` | OutboundHTTP: real HTTP server, POST/PUT, headers, error handling |
@@ -483,6 +491,7 @@ pytest tests/ -v
 | --- | --- |
 | `plugins/base_plugin.py` | `BaseInboundPlugin` base class, `PluginConfigField` |
 | `plugins/generic_inbound_plugin.py` | Built-in JSON inbound plugin |
+| `plugins/udp_multicast_listener.py` | Built-in UDP multicast CoT bridge (XML + TAK Protocol v1 protobuf via `takproto`) |
 | `plugins/outbound_http.py` | Outbound HTTP plugin (POST/PUT JSON/XML/template to an HTTP endpoint) |
 | `plugins/outbound_mqtt.py` | Outbound MQTT plugin (publish CoT to an MQTT broker topic) |
 | `plugins/outbound_websocket.py` | Outbound WebSocket plugin (push CoT to a WebSocket endpoint) |

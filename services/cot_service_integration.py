@@ -41,6 +41,118 @@ from services.device_state_manager import DeviceStateManager
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 
+
+class _TxSummary:
+    """
+    Rolling per-TAK-server stats for periodic INFO-level TX summaries.
+
+    The TX loop calls record() for every forwarded event (cheap), then
+    should_flush() each iteration. When true, render() produces a one-line
+    summary suitable for INFO and reset() rearms the window.
+    """
+
+    _CALLSIGN_DISPLAY_CAP = 8
+
+    def __init__(
+        self,
+        interval_seconds: float = 30.0,
+        max_events: int = 100,
+        now=None,
+    ):
+        import time as _time
+
+        self._now = now or _time.monotonic
+        self._interval = interval_seconds
+        self._max_events = max_events
+        self._window_start = self._now()
+        self.event_count = 0
+        self.callsigns: set = set()
+
+    def record(self, callsign: str) -> None:
+        self.event_count += 1
+        if callsign:
+            self.callsigns.add(callsign)
+
+    def should_flush(self) -> bool:
+        if self.event_count == 0:
+            return False
+        if self.event_count >= self._max_events:
+            return True
+        return (self._now() - self._window_start) >= self._interval
+
+    def render(self, duration_seconds: float) -> str:
+        callsigns_sorted = sorted(self.callsigns)
+        if len(callsigns_sorted) <= self._CALLSIGN_DISPLAY_CAP:
+            cs_str = ", ".join(callsigns_sorted)
+        else:
+            head = ", ".join(callsigns_sorted[: self._CALLSIGN_DISPLAY_CAP])
+            remaining = len(callsigns_sorted) - self._CALLSIGN_DISPLAY_CAP
+            cs_str = f"{head} (+{remaining} more)"
+        return (
+            f"{self.event_count} events in {duration_seconds:.0f}s "
+            f"from {len(self.callsigns)} unique [{cs_str}]"
+        )
+
+    def window_seconds(self) -> float:
+        return self._now() - self._window_start
+
+    def reset(self) -> None:
+        self.event_count = 0
+        self.callsigns = set()
+        self._window_start = self._now()
+
+
+def _extract_callsign(event: bytes) -> str:
+    """Return the contact callsign (or uid fallback) from a CoT event, or ''."""
+    try:
+        from defusedxml import ElementTree as DefusedET
+
+        root = DefusedET.fromstring(event)
+    except Exception:
+        return ""
+    contact = root.find("./detail/contact")
+    if contact is not None and contact.get("callsign"):
+        return contact.get("callsign")
+    return root.get("uid") or ""
+
+
+def _summarise_cot_for_log(event: bytes) -> str:
+    """
+    Build a concise one-line summary of a CoT event for INFO-level logs.
+
+    Format: "callsign (platform) @ ip" — falls back gracefully when fields
+    are missing or the payload is malformed (logging must never raise).
+    The full payload is intended to be logged separately at DEBUG.
+    """
+    try:
+        from defusedxml import ElementTree as DefusedET
+
+        root = DefusedET.fromstring(event)
+    except Exception:
+        return f"<unparseable {len(event)}B>"
+
+    def _attr(xpath, name):
+        node = root.find(xpath)
+        return node.get(name) if node is not None else None
+
+    callsign = _attr("./detail/contact", "callsign") or root.get("uid") or "?"
+    platform = _attr("./detail/takv", "platform")
+    endpoint = _attr("./detail/contact", "endpoint")
+
+    # ATAK endpoint format is "ip:port:proto". TrakBridge's own identity CoT
+    # uses "*:-1:stcp" which is a self-marker and not a real address.
+    ip = None
+    if endpoint and not endpoint.startswith("*:"):
+        ip = endpoint.split(":", 1)[0]
+
+    parts = [callsign]
+    if platform:
+        parts.append(f"({platform})")
+    if ip:
+        parts.append(f"@ {ip}")
+    return " ".join(parts)
+
+
 # PyTAK imports
 try:
     import pytak
@@ -65,7 +177,9 @@ class QueuedCOTService:
     _instance = None
     _workers: Dict[int, asyncio.Task] = {}  # Class-level worker tracking
     _connections: Dict[int, Any] = {}  # Class-level connection tracking
-    _identity_uid_suffixes: Dict[int, str] = {}  # Cached UID suffixes for identity heartbeats
+    _identity_uid_suffixes: Dict[int, str] = (
+        {}
+    )  # Cached UID suffixes for identity heartbeats
 
     def __init__(
         self,
@@ -100,6 +214,15 @@ class QueuedCOTService:
         # Device state managers for queue replacement functionality
         self.device_state_managers: Dict[int, DeviceStateManager] = {}
 
+        # Per-TAK-server rolling TX stats; flushed to INFO periodically by the
+        # TX loop so we don't write one INFO line per forwarded CoT event.
+        self._tx_summaries: Dict[int, "_TxSummary"] = {}
+
+        # Per-TAK-server, per-UID written counter. Diagnostic only — compared
+        # against the inbound plugin's per-UID forwarded counter to locate
+        # silent drops in the queue / TX path. Soft cap at 256 unique UIDs.
+        self._tx_written_by_uid: Dict[int, Dict[str, int]] = {}
+
         # Cache for output plugin instances (persistent connections)
         self._output_plugin_cache: Dict[int, Any] = {}  # stream_id -> plugin_instance
 
@@ -129,7 +252,9 @@ class QueuedCOTService:
             # picks up queue_warning_threshold from performance.yaml
             monitoring_config = self.parallel_config.get("monitoring", {})
             if "queue_warning_threshold" in monitoring_config:
-                queue_config["queue_warning_threshold"] = monitoring_config["queue_warning_threshold"]
+                queue_config["queue_warning_threshold"] = monitoring_config[
+                    "queue_warning_threshold"
+                ]
             if "log_queue_stats" in monitoring_config:
                 queue_config["log_queue_stats"] = monitoring_config["log_queue_stats"]
 
@@ -839,7 +964,9 @@ class QueuedCOTService:
 
                 # Extract custom CoT attributes if provided by plugin
                 if "custom_cot_attrib" in cleaned_location:
-                    event_data["custom_cot_attrib"] = cleaned_location["custom_cot_attrib"]
+                    event_data["custom_cot_attrib"] = cleaned_location[
+                        "custom_cot_attrib"
+                    ]
 
                 # Generate complete COT XML using old logic
                 event_xml = QueuedCOTService._generate_cot_xml(event_data)
@@ -1177,7 +1304,7 @@ class QueuedCOTService:
 
                 # RX only runs if enabled for this TAK server
                 tasks = [tx_task]
-                if getattr(tak_server, 'enable_rx', True):  # Default True
+                if getattr(tak_server, "enable_rx", True):  # Default True
                     rx_task = asyncio.create_task(
                         self._rx_worker(tak_server_id, reader)
                     )
@@ -1188,8 +1315,7 @@ class QueuedCOTService:
 
                 # Wait for any task to complete (connection failure)
                 done, pending = await asyncio.wait(
-                    tasks,
-                    return_when=asyncio.FIRST_COMPLETED
+                    tasks, return_when=asyncio.FIRST_COMPLETED
                 )
 
                 # Cancel remaining tasks
@@ -1240,10 +1366,105 @@ class QueuedCOTService:
                 )
                 break
 
+    async def _send_identity_heartbeat(self, writer, tak_server, label: str) -> bool:
+        """
+        Send one TrakBridge identity CoT on the given writer.
+
+        Returns True if a heartbeat was sent (or was disabled), False only if
+        the send itself failed in a way the caller cares about. Raises
+        ConnectionError/OSError/ssl.SSLError so the TX loop can break and
+        trigger a reconnect.
+        """
+        try:
+            identity_cot = self._generate_trakbridge_identity_cot(tak_server)
+        except Exception as exc:
+            logger.error(
+                f"Error generating identity heartbeat for {tak_server.name}: " f"{exc}",
+                exc_info=True,
+            )
+            return False
+
+        if not identity_cot:
+            logger.debug(
+                f"Identity heartbeat disabled for {tak_server.name} "
+                f"(no callsign configured)"
+            )
+            return True
+
+        # Connect-time identity is a meaningful per-session event (logged INFO);
+        # the 30s recurring heartbeat is a liveness ping (logged DEBUG).
+        emit = logger.info if label == "identity" else logger.debug
+        try:
+            emit(
+                f"TX {label} -> {tak_server.name} "
+                f"({len(identity_cot)} bytes): "
+                f"{_summarise_cot_for_log(identity_cot)}"
+            )
+            logger.debug(
+                f"TX {label} payload -> {tak_server.name}: "
+                f"{identity_cot.decode('utf-8', errors='replace')}"
+            )
+            writer.write(identity_cot)
+            await writer.drain()
+            return True
+        except (ConnectionError, OSError, ssl.SSLError) as exc:
+            logger.warning(
+                f"Connection lost sending identity {label} to "
+                f"{tak_server.name}: {exc}"
+            )
+            raise  # Propagate so the TX loop breaks and the worker reconnects
+        except Exception as exc:
+            logger.warning(
+                f"Failed to send identity {label} to {tak_server.name}: {exc}"
+            )
+            return False
+
+    _TX_UID_COUNTER_SOFT_CAP = 256
+
+    def _bump_tx_written_uid(self, tak_server_id: int, event: bytes) -> None:
+        """
+        Increment per-(server, UID) written counter. Diagnostic only.
+
+        Soft-capped at 256 unique UIDs per server to bound memory.
+        Compared against the inbound plugin's _forwarded_by_uid to locate
+        silent drops between enqueue and socket write.
+        """
+        try:
+            from defusedxml import ElementTree as DefusedET
+
+            root = DefusedET.fromstring(event)
+        except Exception:
+            return
+        uid = root.get("uid") or ""
+        if not uid:
+            return
+        counters = self._tx_written_by_uid.setdefault(tak_server_id, {})
+        if uid in counters:
+            counters[uid] += 1
+            return
+        if len(counters) >= self._TX_UID_COUNTER_SOFT_CAP:
+            counters.pop(next(iter(counters)))
+        counters[uid] = 1
+
+    def _flush_tx_summary(self, tak_server_id: int, tak_server_name: str) -> None:
+        """Emit an INFO TX summary for this server if the window is due."""
+        summary = self._tx_summaries.get(tak_server_id)
+        if summary is None or not summary.should_flush():
+            return
+        logger.info(
+            f"TX -> {tak_server_name}: " f"{summary.render(summary.window_seconds())}"
+        )
+        summary.reset()
+
     async def _tx_loop(self, tak_server_id: int, writer, tak_server):
         """
         TX loop - send CoT events from queue to TAK server.
-        Plus periodic TrakBridge identity heartbeat.
+
+        The identity heartbeat is sent SYNCHRONOUSLY before any queued events
+        are dequeued. This guarantees that on a freshly-opened TAK Server
+        socket the first CoT byte carries TrakBridge's UID, so TAK Server
+        stamps the subscription with TrakBridge's identity rather than the
+        UID of whatever queued event happened to be at the head of the queue.
 
         Args:
             tak_server_id: TAK server identifier
@@ -1251,46 +1472,35 @@ class QueuedCOTService:
             tak_server: TAK server configuration object
         """
         batch_count = 0
-        last_identity_send = datetime.now()
         IDENTITY_INTERVAL_SECONDS = 30  # Send identity every 30 seconds
+
+        # Connect-time identity: must be the first write on this socket so
+        # TAK Server stamps the subscription with the right UID. If this
+        # raises, the TX loop exits and the worker reconnects without ever
+        # draining the queue onto a doomed socket.
+        try:
+            await self._send_identity_heartbeat(writer, tak_server, "identity")
+        except (ConnectionError, OSError, ssl.SSLError) as exc:
+            logger.error(
+                f"Connection lost during initial identity send for "
+                f"{tak_server.name}: {exc}"
+            )
+            return
+        last_identity_send = datetime.now()
 
         while self._running:
             try:
-                # Check if we need to send identity heartbeat
+                # Periodic identity heartbeat keeps the subscription alive
+                # but is NOT what stamps it (the connect-time send above is).
                 if (
                     datetime.now() - last_identity_send
                 ).total_seconds() >= IDENTITY_INTERVAL_SECONDS:
-                    try:
-                        identity_cot = self._generate_trakbridge_identity_cot(tak_server)
-                        if identity_cot:
-                            try:
-                                logger.info(
-                                    f"TX heartbeat -> {tak_server.name} "
-                                    f"({len(identity_cot)} bytes): "
-                                    f"{identity_cot.decode('utf-8', errors='replace')}"
-                                )
-                                writer.write(identity_cot)
-                                await writer.drain()
-
-                            except (ConnectionError, OSError, ssl.SSLError) as e:
-                                logger.warning(
-                                    f"Connection lost sending identity heartbeat to {tak_server.name}: {e}"
-                                )
-                                raise  # Propagate so outer handler breaks the loop
-                            except Exception as e:
-                                logger.warning(
-                                    f"Failed to send identity heartbeat to {tak_server.name}: {e}"
-                                )
-                        else:
-                            logger.debug(
-                                f"Identity heartbeat disabled for {tak_server.name} (no callsign configured)"
-                            )
-                    except Exception as e:
-                        logger.error(
-                            f"Error generating identity heartbeat for {tak_server.name}: {e}",
-                            exc_info=True
-                        )
+                    await self._send_identity_heartbeat(writer, tak_server, "heartbeat")
                     last_identity_send = datetime.now()
+
+                # Flush any pending TX summary (so low-rate streams still get
+                # periodic visibility instead of holding stats forever).
+                self._flush_tx_summary(tak_server_id, tak_server.name)
 
                 # Get batch of events from queue manager
                 batch = await self.queue_manager.get_batch(tak_server_id)
@@ -1343,16 +1553,31 @@ class QueuedCOTService:
             except asyncio.CancelledError:
                 break
             except (ConnectionError, OSError, ssl.SSLError) as e:
-                logger.error(
-                    f"Connection lost in TX loop for {tak_server.name}: {e}"
-                )
+                logger.error(f"Connection lost in TX loop for {tak_server.name}: {e}")
                 break  # Socket is dead, exit so the worker can reconnect
             except Exception as e:
-                logger.error(
-                    f"Error in TX loop for {tak_server.name}: {e}"
-                )
+                logger.error(f"Error in TX loop for {tak_server.name}: {e}")
                 await asyncio.sleep(1)  # Brief pause before retry
 
+        # Flush any pending TX summary on loop exit so we don't lose tail stats.
+        summary = self._tx_summaries.get(tak_server_id)
+        if summary is not None and summary.event_count > 0:
+            logger.info(
+                f"TX -> {tak_server.name}: "
+                f"{summary.render(summary.window_seconds())} (final)"
+            )
+            summary.reset()
+
+        # Per-UID written totals — compare against the inbound plugin's
+        # _forwarded_by_uid to locate silent drops between enqueue and write.
+        uid_counts = self._tx_written_by_uid.get(tak_server_id) or {}
+        if uid_counts:
+            top = sorted(uid_counts.items(), key=lambda kv: kv[1], reverse=True)[:10]
+            uid_summary = ", ".join(f"{uid}={n}" for uid, n in top)
+            logger.info(
+                f"TX written-per-uid for {tak_server.name} "
+                f"(top {len(top)} of {len(uid_counts)}): {uid_summary}"
+            )
         logger.info(f"TX loop stopped for TAK server {tak_server_id}")
 
     async def _rx_worker(self, tak_server_id: int, reader):
@@ -1437,7 +1662,9 @@ class QueuedCOTService:
                     )
                     break
                 await asyncio.sleep(backoff_delay)
-                backoff_delay = min(backoff_delay * RX_BACKOFF_MULTIPLIER, RX_BACKOFF_MAX)
+                backoff_delay = min(
+                    backoff_delay * RX_BACKOFF_MULTIPLIER, RX_BACKOFF_MAX
+                )
             except Exception as e:
                 consecutive_errors += 1
                 logger.error(
@@ -1445,7 +1672,9 @@ class QueuedCOTService:
                     f"(retry in {backoff_delay}s)"
                 )
                 await asyncio.sleep(backoff_delay)
-                backoff_delay = min(backoff_delay * RX_BACKOFF_MULTIPLIER, RX_BACKOFF_MAX)
+                backoff_delay = min(
+                    backoff_delay * RX_BACKOFF_MULTIPLIER, RX_BACKOFF_MAX
+                )
 
         logger.info(f"RX worker stopped for TAK server {tak_server_id}")
 
@@ -1464,7 +1693,7 @@ class QueuedCOTService:
         import re
 
         messages = []
-        pattern = rb'<event\b[^>]*>.*?</event>'
+        pattern = rb"<event\b[^>]*>.*?</event>"
 
         for match in re.finditer(pattern, buffer, re.DOTALL):
             messages.append(match.group(0))
@@ -1492,11 +1721,11 @@ class QueuedCOTService:
             True if message should be dropped
         """
         # Check for XML entity attacks
-        if b'<!ENTITY' in cot_xml or b'<!DOCTYPE' in cot_xml:
+        if b"<!ENTITY" in cot_xml or b"<!DOCTYPE" in cot_xml:
             return True
 
         # Check for suspicious nested depth (billion laughs attack)
-        open_tags = cot_xml.count(b'<')
+        open_tags = cot_xml.count(b"<")
         if open_tags > 1000:  # Reasonable limit
             return True
 
@@ -1519,9 +1748,10 @@ class QueuedCOTService:
             # Filter out TrakBridge's own identity heartbeats echoed back by the TAK server
             try:
                 from defusedxml import ElementTree as DefusedET
+
                 root = DefusedET.fromstring(cot_xml)
-                uid = root.get('uid', '')
-                if uid.startswith('trakbridge-'):
+                uid = root.get("uid", "")
+                if uid.startswith("trakbridge-"):
                     logger.debug(f"Skipping TrakBridge identity CoT echo: {uid}")
                     return
             except Exception:
@@ -1532,25 +1762,35 @@ class QueuedCOTService:
             with flask_app.app.app_context():
                 # Find all streams configured for this TAK server
                 streams = Stream.query.filter_by(tak_server_id=tak_server_id).all()
-                logger.debug(f"Found {len(streams)} streams for TAK server {tak_server_id}")
+                logger.debug(
+                    f"Found {len(streams)} streams for TAK server {tak_server_id}"
+                )
 
                 plugin_manager = get_plugin_manager()
 
                 for stream in streams:
                     # Skip disabled streams
                     if not stream.is_active:
-                        logger.debug(f"Skipping disabled stream {stream.id} ({stream.name})")
+                        logger.debug(
+                            f"Skipping disabled stream {stream.id} ({stream.name})"
+                        )
                         continue
 
-                    logger.debug(f"Processing stream {stream.id} ({stream.name}) with plugin {stream.plugin_type}")
+                    logger.debug(
+                        f"Processing stream {stream.id} ({stream.name}) with plugin {stream.plugin_type}"
+                    )
 
                     # Check if we have a cached plugin instance
                     if stream.id in self._output_plugin_cache:
                         plugin = self._output_plugin_cache[stream.id]
-                        logger.debug(f"Using cached plugin instance for stream {stream.id}")
+                        logger.debug(
+                            f"Using cached plugin instance for stream {stream.id}"
+                        )
                     else:
                         # Create new plugin instance
-                        plugin = plugin_manager.get_plugin(stream.plugin_type, stream.get_plugin_config())
+                        plugin = plugin_manager.get_plugin(
+                            stream.plugin_type, stream.get_plugin_config()
+                        )
 
                         if not plugin:
                             logger.debug(f"No plugin instance for {stream.plugin_type}")
@@ -1558,36 +1798,51 @@ class QueuedCOTService:
 
                         # Check if plugin is an output plugin (inherits from BaseOutputPlugin)
                         if not isinstance(plugin, BaseOutputPlugin):
-                            logger.debug(f"Plugin {stream.plugin_type} is not an output plugin, skipping")
+                            logger.debug(
+                                f"Plugin {stream.plugin_type} is not an output plugin, skipping"
+                            )
                             continue  # Skip GPS plugins
 
                         # Cache the plugin instance
                         self._output_plugin_cache[stream.id] = plugin
-                        logger.debug(f"Cached new plugin instance for stream {stream.id}")
+                        logger.debug(
+                            f"Cached new plugin instance for stream {stream.id}"
+                        )
 
                         # Call start() if the plugin has it (for persistent connections)
-                        if hasattr(plugin, 'start') and callable(getattr(plugin, 'start')):
+                        if hasattr(plugin, "start") and callable(
+                            getattr(plugin, "start")
+                        ):
                             try:
                                 await plugin.start()
-                                logger.info(f"Initialized output plugin {stream.plugin_type} for stream {stream.name}")
+                                logger.info(
+                                    f"Initialized output plugin {stream.plugin_type} for stream {stream.name}"
+                                )
                             except Exception as e:
-                                logger.error(f"Failed to start plugin {stream.plugin_type}: {e}", exc_info=True)
+                                logger.error(
+                                    f"Failed to start plugin {stream.plugin_type}: {e}",
+                                    exc_info=True,
+                                )
                                 # Remove from cache if start fails
                                 del self._output_plugin_cache[stream.id]
                                 continue
 
-                    logger.debug(f"Routing CoT message to output plugin: {stream.plugin_type} (stream: {stream.name})")
+                    logger.debug(
+                        f"Routing CoT message to output plugin: {stream.plugin_type} (stream: {stream.name})"
+                    )
 
                     # Route to plugin (with timeout)
                     try:
                         await asyncio.wait_for(
                             plugin.handle_cot_message(cot_xml, tak_server_id),
-                            timeout=10.0
+                            timeout=10.0,
                         )
                         logger.debug(f"Successfully routed CoT to {stream.plugin_type}")
 
                         # Track message in memory (will be flushed periodically)
-                        self._output_stats[stream.id] = self._output_stats.get(stream.id, 0) + 1
+                        self._output_stats[stream.id] = (
+                            self._output_stats.get(stream.id, 0) + 1
+                        )
 
                         # Flush stats to database if interval elapsed
                         await self._flush_output_stats_if_needed(stream.id)
@@ -1597,7 +1852,9 @@ class QueuedCOTService:
                             f"Plugin {stream.plugin_type} timed out handling CoT"
                         )
                     except Exception as e:
-                        logger.error(f"Plugin {stream.plugin_type} failed: {e}", exc_info=True)
+                        logger.error(
+                            f"Plugin {stream.plugin_type} failed: {e}", exc_info=True
+                        )
 
         except Exception as e:
             logger.error(f"Failed to route CoT message: {e}")
@@ -1614,12 +1871,17 @@ class QueuedCOTService:
         last_flush = self._stats_last_flush.get(stream_id)
 
         # Flush if interval elapsed or never flushed
-        if last_flush is None or (now - last_flush).total_seconds() >= self._stats_flush_interval:
+        if (
+            last_flush is None
+            or (now - last_flush).total_seconds() >= self._stats_flush_interval
+        ):
             await self._flush_output_stats(stream_id)
             self._stats_last_flush[stream_id] = now
 
         # Periodic cleanup (non-blocking)
-        if (now - self._last_stats_cleanup).total_seconds() >= self._stats_cleanup_interval:
+        if (
+            now - self._last_stats_cleanup
+        ).total_seconds() >= self._stats_cleanup_interval:
             self._cleanup_stale_output_stats()
             self._last_stats_cleanup = now
 
@@ -1672,7 +1934,8 @@ class QueuedCOTService:
 
             # Get active stream IDs
             active_stream_ids = {
-                s[0] for s in db.session.query(Stream.id)
+                s[0]
+                for s in db.session.query(Stream.id)
                 .filter(Stream.is_active == True)
                 .all()
             }
@@ -1876,8 +2139,10 @@ class QueuedCOTService:
             # Handle P12 certificate if available
             if tak_server.cert_p12 and len(tak_server.cert_p12) > 0:
                 try:
-                    cert_pem, key_pem, ca_pem = QueuedCOTService._extract_p12_certificate(
-                        tak_server.cert_p12, tak_server.get_cert_password()
+                    cert_pem, key_pem, ca_pem = (
+                        QueuedCOTService._extract_p12_certificate(
+                            tak_server.cert_p12, tak_server.get_cert_password()
+                        )
                     )
                     cert_path, key_path = QueuedCOTService._create_temp_cert_files(
                         cert_pem, key_pem
@@ -1887,7 +2152,9 @@ class QueuedCOTService:
 
                     # Set CA certificate for SSL verification if present in the P12
                     if ca_pem:
-                        ca_fd, ca_path = tempfile.mkstemp(suffix=".pem", prefix="tak_ca_")
+                        ca_fd, ca_path = tempfile.mkstemp(
+                            suffix=".pem", prefix="tak_ca_"
+                        )
                         with os.fdopen(ca_fd, "wb") as ca_file:
                             ca_file.write(ca_pem)
                         config.set("pytak", "PYTAK_TLS_CLIENT_CAFILE", ca_path)
@@ -1932,30 +2199,46 @@ class QueuedCOTService:
                 writer = None
                 use_writer = False
 
+            # Per-server rolling summary (flushed to INFO periodically). The
+            # tx_loop calls flush_tx_summary() each iteration; here we just
+            # record. Full XML stays at DEBUG for reject diagnostics.
+            summary = self._tx_summaries.setdefault(tak_server.id, _TxSummary())
+
             # Transmit all events in the batch
             batch_success = True
             for i, event in enumerate(batch):
                 try:
-                    # Log the exact bytes being sent so a TAK-side reject
-                    # can be matched against the payload that triggered it
-                    logger.info(
+                    logger.debug(
                         f"TX -> {tak_server.name} (event {i + 1}/{len(batch)}, "
-                        f"{len(event)} bytes): {event.decode('utf-8', errors='replace')}"
+                        f"{len(event)} bytes): {_summarise_cot_for_log(event)}"
                     )
+                    logger.debug(
+                        f"TX payload -> {tak_server.name}: "
+                        f"{event.decode('utf-8', errors='replace')}"
+                    )
+                    sent = False
                     # Send the event using the appropriate method
                     if use_writer and writer:
                         # Use writer for TCP connections
                         writer.write(event)
                         await writer.drain()
+                        sent = True
                     elif hasattr(reader, "send"):
                         # Use reader.send for other connection types
                         await reader.send(event)
+                        sent = True
                     else:
                         logger.error(
                             f"No suitable send method found for TAK server '{tak_server.name}'. "
                             f"Event {i + 1} not transmitted."
                         )
                         batch_success = False
+
+                    # Only record after a confirmed write so the diagnostic
+                    # counters reflect bytes actually committed to the socket.
+                    if sent:
+                        summary.record(_extract_callsign(event))
+                        self._bump_tx_written_uid(tak_server.id, event)
 
                 except (ConnectionError, OSError, ssl.SSLError) as e:
                     logger.error(
@@ -2356,6 +2639,7 @@ class QueuedCOTService:
         """
         # Get TAK server name for better logging
         from models.tak_server import TakServer
+
         tak_server_name = "Unknown"
         try:
             tak_server = TakServer.query.get(tak_server_id)
@@ -2441,8 +2725,10 @@ class QueuedCOTService:
                 db.session.refresh(tak_server_orm)
 
                 # Check if server is enabled
-                if not getattr(tak_server_orm, 'enabled', True):
-                    logger.info(f"TAK server {tak_server_id} is disabled, not restarting worker")
+                if not getattr(tak_server_orm, "enabled", True):
+                    logger.info(
+                        f"TAK server {tak_server_id} is disabled, not restarting worker"
+                    )
                     return False
 
                 # Log the values we're loading for debugging
@@ -2471,14 +2757,21 @@ class QueuedCOTService:
             success = await self.start_worker(tak_server)
 
             if success:
-                logger.info(f"Successfully restarted worker for TAK server {tak_server_id}")
+                logger.info(
+                    f"Successfully restarted worker for TAK server {tak_server_id}"
+                )
             else:
-                logger.warning(f"Failed to restart worker for TAK server {tak_server_id}")
+                logger.warning(
+                    f"Failed to restart worker for TAK server {tak_server_id}"
+                )
 
             return success
 
         except Exception as e:
-            logger.error(f"Error restarting worker for TAK server {tak_server_id}: {e}", exc_info=True)
+            logger.error(
+                f"Error restarting worker for TAK server {tak_server_id}: {e}",
+                exc_info=True,
+            )
             return False
 
     def extract_uid_from_cot_event(self, event: bytes) -> Optional[str]:
@@ -2654,18 +2947,24 @@ class QueuedCOTService:
             if stream_id in self._output_plugin_cache:
                 plugin = self._output_plugin_cache[stream_id]
                 try:
-                    if hasattr(plugin, 'cleanup') and callable(getattr(plugin, 'cleanup')):
+                    if hasattr(plugin, "cleanup") and callable(
+                        getattr(plugin, "cleanup")
+                    ):
                         await plugin.cleanup()
                         logger.debug(f"Cleaned up plugin for stream {stream_id}")
                 except Exception as e:
-                    logger.error(f"Error cleaning up plugin for stream {stream_id}: {e}")
+                    logger.error(
+                        f"Error cleaning up plugin for stream {stream_id}: {e}"
+                    )
                 del self._output_plugin_cache[stream_id]
                 logger.info(f"Invalidated plugin cache for stream {stream_id}")
         else:
             # Invalidate all
             for sid, plugin in list(self._output_plugin_cache.items()):
                 try:
-                    if hasattr(plugin, 'cleanup') and callable(getattr(plugin, 'cleanup')):
+                    if hasattr(plugin, "cleanup") and callable(
+                        getattr(plugin, "cleanup")
+                    ):
                         await plugin.cleanup()
                 except Exception as e:
                     logger.error(f"Error cleaning up plugin for stream {sid}: {e}")
@@ -2684,8 +2983,7 @@ class QueuedCOTService:
         if self.loop and self.loop.is_running():
             # Event loop is running, use run_coroutine_threadsafe
             future = asyncio.run_coroutine_threadsafe(
-                self.invalidate_plugin_cache(stream_id),
-                self.loop
+                self.invalidate_plugin_cache(stream_id), self.loop
             )
             # Wait for completion with timeout
             try:
@@ -2697,10 +2995,14 @@ class QueuedCOTService:
             if stream_id is not None:
                 if stream_id in self._output_plugin_cache:
                     del self._output_plugin_cache[stream_id]
-                    logger.warning(f"Invalidated plugin cache for stream {stream_id} without cleanup (no event loop)")
+                    logger.warning(
+                        f"Invalidated plugin cache for stream {stream_id} without cleanup (no event loop)"
+                    )
             else:
                 self._output_plugin_cache.clear()
-                logger.warning("Invalidated all plugin caches without cleanup (no event loop)")
+                logger.warning(
+                    "Invalidated all plugin caches without cleanup (no event loop)"
+                )
 
     async def shutdown(self):
         """Shutdown the COT service and all workers"""
@@ -2714,11 +3016,15 @@ class QueuedCOTService:
             # Cleanup output plugin instances (call cleanup if available)
             for stream_id, plugin in list(self._output_plugin_cache.items()):
                 try:
-                    if hasattr(plugin, 'cleanup') and callable(getattr(plugin, 'cleanup')):
+                    if hasattr(plugin, "cleanup") and callable(
+                        getattr(plugin, "cleanup")
+                    ):
                         await plugin.cleanup()
                         logger.debug(f"Cleaned up plugin for stream {stream_id}")
                 except Exception as e:
-                    logger.error(f"Error cleaning up plugin for stream {stream_id}: {e}")
+                    logger.error(
+                        f"Error cleaning up plugin for stream {stream_id}: {e}"
+                    )
             self._output_plugin_cache.clear()
             logger.debug("All output plugin instances cleaned up")
 
@@ -2949,7 +3255,9 @@ class QueuedCOTService:
                 if "course" in event_data:
                     track.set("course", f"{event_data['course']:.2f}")
                 elif is_team_member:
-                    track.set("course", "335.92489054527624")  # Default course as per spec
+                    track.set(
+                        "course", "335.92489054527624"
+                    )  # Default course as per spec
 
             # Add remarks if available
             if "remarks" in event_data:
@@ -2962,8 +3270,12 @@ class QueuedCOTService:
                     cot_event, detail, event_data["custom_cot_attrib"]
                 )
 
-            cot_bytes = etree.tostring(cot_event, pretty_print=False, xml_declaration=False)
-            logger.debug(f"Generated CoT XML for {event_data.get('uid', 'unknown')}: {cot_bytes.decode('utf-8', errors='replace')}")
+            cot_bytes = etree.tostring(
+                cot_event, pretty_print=False, xml_declaration=False
+            )
+            logger.debug(
+                f"Generated CoT XML for {event_data.get('uid', 'unknown')}: {cot_bytes.decode('utf-8', errors='replace')}"
+            )
             return cot_bytes
 
         except Exception as e:
@@ -3005,8 +3317,17 @@ class QueuedCOTService:
         # Protected element names that cannot be overridden
         PROTECTED_ELEMENTS = {
             "event": {"version", "uid", "type", "time", "start", "stale", "how"},
-            "detail": {"contact", "uid", "precisionlocation", "__group", 
-                       "status", "track", "speed", "course", "remarks"},
+            "detail": {
+                "contact",
+                "uid",
+                "precisionlocation",
+                "__group",
+                "status",
+                "track",
+                "speed",
+                "course",
+                "remarks",
+            },
         }
 
         try:
@@ -3016,7 +3337,9 @@ class QueuedCOTService:
                 if isinstance(event_attribs, dict):
                     # Handle XML attributes
                     if "_attributes" in event_attribs:
-                        for attr_name, attr_value in event_attribs["_attributes"].items():
+                        for attr_name, attr_value in event_attribs[
+                            "_attributes"
+                        ].items():
                             if attr_name not in PROTECTED_ELEMENTS["event"]:
                                 event_element.set(attr_name, str(attr_value))
                             else:
@@ -3052,7 +3375,9 @@ class QueuedCOTService:
 
                             # Handle XML attributes
                             if "_attributes" in elem_data:
-                                for attr_name, attr_value in elem_data["_attributes"].items():
+                                for attr_name, attr_value in elem_data[
+                                    "_attributes"
+                                ].items():
                                     if QueuedCOTService._is_valid_xml_name(attr_name):
                                         custom_elem.set(attr_name, str(attr_value))
 
@@ -3060,10 +3385,15 @@ class QueuedCOTService:
                             for sub_name, sub_value in elem_data.items():
                                 if sub_name not in ("_text", "_attributes"):
                                     if QueuedCOTService._is_valid_xml_name(sub_name):
-                                        sub_elem = etree.SubElement(custom_elem, sub_name)
+                                        sub_elem = etree.SubElement(
+                                            custom_elem, sub_name
+                                        )
                                         if isinstance(sub_value, str):
                                             sub_elem.text = sub_value
-                                        elif isinstance(sub_value, dict) and "_text" in sub_value:
+                                        elif (
+                                            isinstance(sub_value, dict)
+                                            and "_text" in sub_value
+                                        ):
                                             sub_elem.text = str(sub_value["_text"])
                         elif isinstance(elem_data, str):
                             # Simple string value becomes text content
@@ -3095,7 +3425,7 @@ class QueuedCOTService:
         import random
 
         # Check if identity is explicitly enabled
-        if not getattr(tak_server, 'identity_enabled', False):
+        if not getattr(tak_server, "identity_enabled", False):
             return None
 
         # Callsign is required when identity is enabled
@@ -3108,7 +3438,10 @@ class QueuedCOTService:
 
         # Use UID suffix from server object, in-memory cache, or generate a new one
         # Persisting ensures the UID remains consistent across restarts and reconnections
-        uid_suffix = tak_server.identity_uid_suffix or QueuedCOTService._identity_uid_suffixes.get(tak_server.id)
+        uid_suffix = (
+            tak_server.identity_uid_suffix
+            or QueuedCOTService._identity_uid_suffixes.get(tak_server.id)
+        )
         if not uid_suffix:
             # Generate random 6-digit suffix, cache it, and persist to the database
             uid_suffix = str(random.randint(0, 999999)).zfill(6)
@@ -3122,6 +3455,7 @@ class QueuedCOTService:
                 import app as flask_app
                 from database import db
                 from models.tak_server import TakServer
+
                 with flask_app.app.app_context():
                     db_server = db.session.get(TakServer, tak_server.id)
                     if db_server and not db_server.identity_uid_suffix:
@@ -3235,11 +3569,13 @@ class QueuedCOTService:
         # (TAK Server closes the connection if an XML declaration is present)
         xml_bytes = etree.tostring(cot_event, pretty_print=False, xml_declaration=False)
 
-        logger.info(
+        logger.debug(
             f"Generated TrakBridge identity CoT for {tak_server.name}: "
             f"uid={uid}, type={cot_type}, location={'yes' if has_location else 'no'}"
         )
-        logger.debug(f"Identity CoT XML for {tak_server.name}:\n{xml_bytes.decode('utf-8')}")
+        logger.debug(
+            f"Identity CoT XML for {tak_server.name}:\n{xml_bytes.decode('utf-8')}"
+        )
 
         return xml_bytes
 
@@ -3434,8 +3770,12 @@ class QueuedCOTService:
                         cot_event, detail, location["custom_cot_attrib"]
                     )
 
-                cot_bytes = etree.tostring(cot_event, pretty_print=False, xml_declaration=False)
-                logger.debug(f"Generated custom CoT XML for {uid}: {cot_bytes.decode('utf-8', errors='replace')}")
+                cot_bytes = etree.tostring(
+                    cot_event, pretty_print=False, xml_declaration=False
+                )
+                logger.debug(
+                    f"Generated custom CoT XML for {uid}: {cot_bytes.decode('utf-8', errors='replace')}"
+                )
                 cot_events.append(cot_bytes)
 
             except Exception as e:
@@ -3470,8 +3810,10 @@ class QueuedCOTService:
 
                 if tak_server.cert_p12 and len(tak_server.cert_p12) > 0:
                     try:
-                        cert_pem, key_pem, ca_pem = QueuedCOTService._extract_p12_certificate(
-                            tak_server.cert_p12, tak_server.get_cert_password()
+                        cert_pem, key_pem, ca_pem = (
+                            QueuedCOTService._extract_p12_certificate(
+                                tak_server.cert_p12, tak_server.get_cert_password()
+                            )
                         )
                         cert_path, key_path = QueuedCOTService._create_temp_cert_files(
                             cert_pem, key_pem
@@ -3481,7 +3823,9 @@ class QueuedCOTService:
                         )
                         # Load CA certificate for server verification if present
                         if ca_pem:
-                            ca_fd, ca_path = tempfile.mkstemp(suffix=".pem", prefix="tak_ca_")
+                            ca_fd, ca_path = tempfile.mkstemp(
+                                suffix=".pem", prefix="tak_ca_"
+                            )
                             with os.fdopen(ca_fd, "wb") as ca_file:
                                 ca_file.write(ca_pem)
                             ssl_context.load_verify_locations(cafile=ca_path)
@@ -3635,7 +3979,7 @@ _queued_service = None
 
 
 def get_queued_cot_service(
-    queue_config: Optional[Dict[str, Any]] = None
+    queue_config: Optional[Dict[str, Any]] = None,
 ) -> QueuedCOTService:
     """
     Get the global queued COT service instance (singleton pattern).

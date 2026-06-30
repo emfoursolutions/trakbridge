@@ -32,27 +32,42 @@ def upgrade():
     safe_add_column(
         "streams",
         "stream_mode",
-        sa.Column(sa.String(20), nullable=False, server_default="poll"),
+        sa.Column(
+            "stream_mode",
+            sa.String(20),
+            nullable=False,
+            server_default="poll",
+        ),
     )
     safe_add_column(
         "streams",
         "inbound_api_key",
-        sa.Column(sa.String(500), nullable=True),
+        sa.Column("inbound_api_key", sa.String(500), nullable=True),
     )
     safe_add_column(
         "streams",
         "inbound_rate_limit",
-        sa.Column(sa.Integer, nullable=True, server_default="60"),
+        sa.Column(
+            "inbound_rate_limit",
+            sa.Integer,
+            nullable=True,
+            server_default="60",
+        ),
     )
     safe_add_column(
         "streams",
         "inbound_ip_allowlist",
-        sa.Column(sa.Text, nullable=True),
+        sa.Column("inbound_ip_allowlist", sa.Text, nullable=True),
     )
     safe_add_column(
         "streams",
         "inbound_preview_mode",
-        sa.Column(sa.Boolean, nullable=False, server_default="1"),
+        sa.Column(
+            "inbound_preview_mode",
+            sa.Boolean,
+            nullable=False,
+            server_default="1",
+        ),
     )
 
     # Indexes for inbound columns
