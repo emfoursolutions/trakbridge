@@ -35,8 +35,20 @@ class DevelopmentConfig(BaseConfig):
 
     @property
     def SQLALCHEMY_RECORD_QUERIES(self) -> bool:
-        """Enable query recording in development."""
-        return True
+        """
+        Enable query recording in development when explicitly requested.
+
+        Previously hardcoded to True, which forced SQLAlchemy engine logs to
+        INFO in every development-mode deployment (including containers that
+        happen to run under FLASK_ENV=development). Match the staging
+        property: default off, opt in via SQLALCHEMY_RECORD_QUERIES=true.
+        """
+        return (
+            self.secret_manager.get_secret(
+                "SQLALCHEMY_RECORD_QUERIES", "false"
+            ).lower()
+            == "true"
+        )
 
     @property
     def LOG_LEVEL(self) -> str:
