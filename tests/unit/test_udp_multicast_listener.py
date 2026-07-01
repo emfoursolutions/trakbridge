@@ -298,8 +298,38 @@ class TestSocketSetup:
             and c[2] == socket.inet_aton("239.2.3.1") + socket.inet_aton("0.0.0.0")
             for c in calls
         )
-        fake_sock.bind.assert_called_once_with(("0.0.0.0", 6969))
+        # bind() to INADDR_ANY (""), not bind_interface. Multicast frames
+        # arrive with destination = group IP, so a socket bound to a
+        # specific unicast IP filters them out even after IP_ADD_MEMBERSHIP
+        # succeeds. See _open_socket's rationale comment.
+        fake_sock.bind.assert_called_once_with(("", 6969))
         fake_sock.setblocking.assert_called_once_with(False)
+
+    def test_bind_does_not_use_bind_interface_when_iface_is_specific(self):
+        """
+        Regression: binding to bind_interface (e.g. 10.0.30.65) silently
+        blocks all multicast delivery — the destination address of an
+        incoming multicast frame is the group IP (e.g. 239.2.3.1), not
+        the interface IP, so the kernel filters it. This test locks in
+        that even a specific bind_interface leaves the socket bound to
+        INADDR_ANY; the interface hint is used only for IP_ADD_MEMBERSHIP.
+        """
+        plugin = _make_plugin({"bind_interface": "10.0.30.65"})
+        fake_sock = MagicMock()
+        with patch("socket.socket", return_value=fake_sock):
+            plugin._open_socket(plugin.config)
+
+        fake_sock.bind.assert_called_once_with(("", 6969))
+
+        # The mreq for IGMP still uses the specific IP so the kernel joins
+        # on the right interface.
+        calls = [c.args for c in fake_sock.setsockopt.call_args_list]
+        assert any(
+            c[1] == socket.IP_ADD_MEMBERSHIP
+            and c[2] == socket.inet_aton("239.2.3.1")
+            + socket.inet_aton("10.0.30.65")
+            for c in calls
+        )
 
     def test_open_socket_uses_source_membership_when_filter_set(self):
         plugin = _make_plugin({"source_filter": "10.0.0.5, 10.0.0.6"})

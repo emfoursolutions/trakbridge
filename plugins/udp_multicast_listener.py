@@ -252,8 +252,12 @@ class UdpMulticastListener(BaseInboundPlugin):
                     required=False,
                     placeholder="0.0.0.0",
                     help_text=(
-                        "Local interface IP for the IGMP join. Use 0.0.0.0 to "
-                        "join on the default route interface."
+                        "Local IP of the interface to join the multicast "
+                        "group on. Set this explicitly on multi-homed hosts "
+                        "or in Docker containers with multiple networks — "
+                        "0.0.0.0 tells the kernel to pick via the default "
+                        "route, which in a container is usually the Docker "
+                        "bridge (wrong interface for LAN multicast)."
                     ),
                     default_value="0.0.0.0",
                 ),
@@ -460,7 +464,15 @@ class UdpMulticastListener(BaseInboundPlugin):
             except (AttributeError, OSError):
                 pass
 
-        sock.bind((bind_iface, port))
+        # Bind to INADDR_ANY (not `bind_iface`). A socket bound to a specific
+        # unicast IP filters incoming datagrams by destination address, and
+        # multicast frames are destined for the group IP (239.x.x.x), not the
+        # interface IP — so binding to `bind_iface` silently drops all
+        # multicast delivery even though the IGMP join succeeds. Instead, use
+        # `bind_iface` only to hint which interface receives the IGMP report:
+        # the kernel uses the IP in `mreq` to pick the interface, and delivers
+        # multicast frames received on that interface up to this socket.
+        sock.bind(("", port))
         sock.setblocking(False)
 
         group_packed = socket.inet_aton(group)
