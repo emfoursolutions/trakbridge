@@ -206,7 +206,12 @@ class QueueManager:
             True if event was successfully enqueued
         """
         if queue_id not in self.queues:
-            logger.error(f"Queue {queue_id} does not exist")
+            # Expected during stream restart: the queue is removed by
+            # stop_worker briefly before the new worker installs a fresh
+            # one, and any in-flight enqueue attempts in that window
+            # produce ~20 identical log lines at 10Hz. Callers still see
+            # the False return; DEBUG is the right level for the message.
+            logger.debug(f"Queue {queue_id} does not exist")
             return False
 
         try:

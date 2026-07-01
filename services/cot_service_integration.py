@@ -1256,6 +1256,11 @@ class QueuedCOTService:
         reconnect_delay = RECONNECT_INITIAL
 
         while True:
+            # Initialise the per-iteration connection to None so the finally
+            # block below can safely reason about "did we successfully create
+            # a connection this iteration" without an UnboundLocalError when
+            # _create_pytak_connection raises before assigning it.
+            connection = None
             try:
                 logger.info(
                     f"Enhanced transmission worker started for TAK server {tak_server.name}"
@@ -1340,18 +1345,31 @@ class QueuedCOTService:
                 )
 
             finally:
-                # Cleanup connection before reconnect or exit
-                if tak_server_id in self.connections:
+                # Cleanup only the connection *this iteration* created.
+                # Reading self.connections[tak_server_id] here would risk
+                # closing a connection installed by a subsequently-started
+                # worker (restart_worker races with our late cancellation),
+                # which trips the circuit breaker on a healthy fresh socket.
+                # Similarly, only clear the dict entry if it still points at
+                # our connection — otherwise we'd orphan the new worker.
+                if connection is not None:
                     try:
-                        await self._cleanup_connection(self.connections[tak_server_id])
+                        await self._cleanup_connection(connection)
                     except Exception as e:
                         logger.error(
                             f"Failed to cleanup connection for {tak_server_id}: {e}"
                         )
-                    del self.connections[tak_server_id]
-                    logger.debug(
-                        f"Connection cleanup completed for TAK server {tak_server_id}"
-                    )
+                    if self.connections.get(tak_server_id) is connection:
+                        del self.connections[tak_server_id]
+                        logger.debug(
+                            f"Connection cleanup completed for TAK server {tak_server_id}"
+                        )
+                    else:
+                        logger.debug(
+                            f"Skipping connection dict-entry removal for TAK "
+                            f"server {tak_server_id}: entry now points at a "
+                            f"newer worker's connection"
+                        )
 
             # Wait before reconnecting (outside try so CancelledError during
             # sleep exits the while loop cleanly)

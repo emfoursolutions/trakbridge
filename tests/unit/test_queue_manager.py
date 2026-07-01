@@ -132,6 +132,37 @@ class TestEnqueueEvent:
         assert result is False
 
     @pytest.mark.asyncio
+    async def test_enqueue_to_nonexistent_queue_logs_at_debug_not_error(self, caplog):
+        """
+        During a stream restart the queue is removed briefly before the new
+        worker installs a fresh one. Any in-flight enqueue attempts in that
+        window are expected — logging them at ERROR floods the log (~20
+        errors per restart at 10Hz). Debug is the right level: callers still
+        see the False return.
+        """
+        qm = QueueManager()
+        with caplog.at_level("DEBUG", logger="services.queue_manager"):
+            await qm.enqueue_event(999, b"data")
+
+        # No ERROR-level records for the missing queue.
+        errors = [
+            r
+            for r in caplog.records
+            if r.levelname == "ERROR" and "does not exist" in r.message
+        ]
+        assert not errors, (
+            f"'Queue does not exist' must not log at ERROR; got: "
+            f"{[r.message for r in errors]}"
+        )
+        # And DEBUG carries the same info for anyone who cares.
+        debugs = [
+            r
+            for r in caplog.records
+            if r.levelname == "DEBUG" and "does not exist" in r.message
+        ]
+        assert debugs, "Expected DEBUG log for missing queue"
+
+    @pytest.mark.asyncio
     async def test_enqueue_event_success(self):
         """Basic enqueue adds event to queue and returns True."""
         qm = QueueManager(config={"max_size": 10})
@@ -253,7 +284,9 @@ class TestBatchRetrieval:
     @pytest.mark.asyncio
     async def test_get_batch_full_batch(self):
         """get_batch returns up to batch_size events."""
-        qm = QueueManager(config={"max_size": 100, "batch_size": 3, "batch_timeout_ms": 500})
+        qm = QueueManager(
+            config={"max_size": 100, "batch_size": 3, "batch_timeout_ms": 500}
+        )
         await qm.create_queue(1)
 
         for i in range(5):
@@ -266,7 +299,9 @@ class TestBatchRetrieval:
     @pytest.mark.asyncio
     async def test_get_batch_partial_batch_on_timeout(self):
         """get_batch returns a partial batch when timeout occurs before batch_size is reached."""
-        qm = QueueManager(config={"max_size": 100, "batch_size": 10, "batch_timeout_ms": 50})
+        qm = QueueManager(
+            config={"max_size": 100, "batch_size": 10, "batch_timeout_ms": 50}
+        )
         await qm.create_queue(1)
 
         # Only add 2 events, batch_size is 10
@@ -280,7 +315,9 @@ class TestBatchRetrieval:
     @pytest.mark.asyncio
     async def test_get_batch_stops_on_shutdown_signal(self):
         """None event in queue acts as shutdown signal, stopping batch collection."""
-        qm = QueueManager(config={"max_size": 100, "batch_size": 10, "batch_timeout_ms": 500})
+        qm = QueueManager(
+            config={"max_size": 100, "batch_size": 10, "batch_timeout_ms": 500}
+        )
         await qm.create_queue(1)
 
         await qm.enqueue_event(1, b"event1")
@@ -303,7 +340,9 @@ class TestBatchRetrieval:
     @pytest.mark.asyncio
     async def test_get_batch_updates_metrics(self):
         """get_batch updates total_batches_sent and average_batch_size."""
-        qm = QueueManager(config={"max_size": 100, "batch_size": 3, "batch_timeout_ms": 500})
+        qm = QueueManager(
+            config={"max_size": 100, "batch_size": 3, "batch_timeout_ms": 500}
+        )
         await qm.create_queue(1)
 
         for i in range(6):
@@ -322,7 +361,9 @@ class TestBatchRetrieval:
     @pytest.mark.asyncio
     async def test_get_batch_empty_queue_returns_empty(self):
         """get_batch on an empty queue returns empty list after timeout."""
-        qm = QueueManager(config={"max_size": 100, "batch_size": 5, "batch_timeout_ms": 50})
+        qm = QueueManager(
+            config={"max_size": 100, "batch_size": 5, "batch_timeout_ms": 50}
+        )
         await qm.create_queue(1)
 
         batch = await qm.get_batch(1)
@@ -563,12 +604,14 @@ class TestMetricsTracking:
     @pytest.mark.asyncio
     async def test_metrics_across_overflow_and_batch(self):
         """Metrics accumulate correctly through enqueue overflows and batch retrieval."""
-        qm = QueueManager(config={
-            "max_size": 3,
-            "batch_size": 2,
-            "overflow_strategy": "drop_oldest",
-            "batch_timeout_ms": 500,
-        })
+        qm = QueueManager(
+            config={
+                "max_size": 3,
+                "batch_size": 2,
+                "overflow_strategy": "drop_oldest",
+                "batch_timeout_ms": 500,
+            }
+        )
         await qm.create_queue(1)
 
         # Fill and overflow
@@ -605,11 +648,13 @@ class TestMetricsTracking:
     @pytest.mark.asyncio
     async def test_average_batch_size_calculation(self):
         """average_batch_size correctly computes running average across batches."""
-        qm = QueueManager(config={
-            "max_size": 100,
-            "batch_size": 5,
-            "batch_timeout_ms": 50,
-        })
+        qm = QueueManager(
+            config={
+                "max_size": 100,
+                "batch_size": 5,
+                "batch_timeout_ms": 50,
+            }
+        )
         await qm.create_queue(1)
 
         # First batch: 4 events
