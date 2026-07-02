@@ -162,9 +162,27 @@ class StreamDisplayService:
 
     @staticmethod
     def _add_cot_type_info(stream: Stream) -> None:
-        """Add COT type information including icon data"""
+        """Add COT type information including icon data.
+
+        For inbound streams the plugin config's cot_type takes precedence
+        over the stream column, matching the value the plugin actually
+        emits at runtime.
+        """
+        effective_cot_type = stream.cot_type
         try:
-            cot_type = cot_type_service.get_cot_type_by_value(stream.cot_type)
+            if getattr(stream, "stream_mode", None) == "inbound":
+                plugin_config = stream.get_plugin_config() or {}
+                plugin_cot_type = plugin_config.get("cot_type")
+                if plugin_cot_type:
+                    effective_cot_type = plugin_cot_type
+        except Exception:
+            pass
+
+        # Expose the resolved value so the template renders the right code
+        stream.cot_type = effective_cot_type
+
+        try:
+            cot_type = cot_type_service.get_cot_type_by_value(effective_cot_type)
             if cot_type:
                 # Store the CotType object for potential future use
                 stream.cot_type_info = cot_type

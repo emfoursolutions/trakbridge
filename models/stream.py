@@ -74,6 +74,27 @@ class Stream(db.Model, TimestampMixin):
         db.Boolean, default=False
     )  # Feature toggle
 
+    # CA certificate for output plugin TLS verification (upload source)
+    ca_cert = db.Column(db.LargeBinary, nullable=True)
+    ca_cert_filename = db.Column(db.String(255), nullable=True)
+
+    # Inbound stream fields
+    stream_mode = db.Column(
+        db.String(20), default="poll", nullable=False, index=True
+    )  # "poll" or "inbound"
+    inbound_api_key = db.Column(
+        db.String(500), nullable=True
+    )  # Encrypted via EncryptionService
+    inbound_rate_limit = db.Column(
+        db.Integer, nullable=True, default=60
+    )  # Requests per minute
+    inbound_ip_allowlist = db.Column(
+        db.Text, nullable=True
+    )  # JSON list of allowed CIDRs, null = allow all
+    inbound_preview_mode = db.Column(
+        db.Boolean, default=True
+    )  # New inbound streams start in preview
+
     # Worker coordination version tracking removed for single worker deployment
 
     # Relationships
@@ -105,6 +126,11 @@ class Stream(db.Model, TimestampMixin):
         callsign_identifier_field: str = None,
         callsign_error_handling: str = "fallback",
         enable_per_callsign_cot_types: bool = False,
+        stream_mode: str = "poll",
+        inbound_api_key: str = None,
+        inbound_rate_limit: int = 60,
+        inbound_ip_allowlist: str = None,
+        inbound_preview_mode: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -119,6 +145,11 @@ class Stream(db.Model, TimestampMixin):
         self.callsign_identifier_field = callsign_identifier_field
         self.callsign_error_handling = callsign_error_handling
         self.enable_per_callsign_cot_types = enable_per_callsign_cot_types
+        self.stream_mode = stream_mode
+        self.inbound_api_key = inbound_api_key
+        self.inbound_rate_limit = inbound_rate_limit
+        self.inbound_ip_allowlist = inbound_ip_allowlist
+        self.inbound_preview_mode = inbound_preview_mode
 
     def __repr__(self):
         return f"<Stream {self.name}>"
@@ -254,6 +285,9 @@ class Stream(db.Model, TimestampMixin):
             "total_messages_sent": self.total_messages_sent,
             "tak_server_id": self.tak_server_id,
             "tak_server_name": self.tak_server.name if self.tak_server else None,
+            "stream_mode": self.stream_mode,
+            "inbound_rate_limit": self.inbound_rate_limit,
+            "inbound_preview_mode": self.inbound_preview_mode,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
@@ -314,6 +348,10 @@ class Stream(db.Model, TimestampMixin):
                 servers.append(server)
 
         return servers
+
+    def get_active_tak_servers(self):
+        """Alias used by the inbound pipeline — same as get_all_tak_servers."""
+        return self.get_all_tak_servers()
 
     def get_tak_server_count(self):
         """Get total count of TAK servers configured for this stream"""

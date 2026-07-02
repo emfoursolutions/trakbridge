@@ -24,6 +24,8 @@ Welcome to the comprehensive documentation for TrakBridge, a professional GPS tr
 - [Plugin Categories](PLUGIN_DEVELOPMENT.md#plugin-categories) - Understanding OSINT, Tracker, and EMS categories
 - [External Plugins](DOCKER_PLUGINS.md) - Loading and managing external plugins
 - [Stream Configuration](USER_GUIDE.md#stream-configuration) - Detailed stream setup procedures
+- [Inbound Streams Guide](INBOUND_STREAMS_GUIDE.md) - Receiving CoT into TrakBridge (HTTP push, MQTT/WebSocket active-connect, UDP multicast bridge)
+- [UDP Multicast CoT Bridge](INBOUND_STREAMS_GUIDE.md#built-in-plugin-udp-multicast-cot-bridge) - Bridge LAN multicast Mesh SA (XML or TAK Protocol v1 protobuf) to TAK servers across VPN/WAN
 
 ## Administration
 

@@ -496,6 +496,10 @@ class StreamConfigService:
                 else:
                     logger.warning(f"Unexpected field type: {type(field)}")
 
+            # Pass through inbound transport discriminator if present
+            if "inbound_transport" in metadata:
+                serialized["inbound_transport"] = metadata["inbound_transport"]
+
             # Serialize boolean metadata flags
             if metadata.get("hide_cot_type"):
                 serialized["hide_cot_type"] = True
@@ -503,6 +507,10 @@ class StreamConfigService:
             # Serialize poll interval override if plugin specifies one
             if "min_poll_interval" in metadata:
                 serialized["min_poll_interval"] = metadata["min_poll_interval"]
+
+            # Serialize field groups for conditional visibility/grouping
+            if "field_groups" in metadata:
+                serialized["field_groups"] = metadata["field_groups"]
 
             # Serialize help sections
             if "help_sections" in metadata:

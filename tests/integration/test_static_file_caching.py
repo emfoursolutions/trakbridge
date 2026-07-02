@@ -184,6 +184,10 @@ class TestStaticFileCaching:
         # Check that none of the hooks have suspicious patterns
         # This is a static analysis check, not a runtime check
         for func in after_request_funcs:
+            # Skip wrapped callables (e.g. functools.partial) that
+            # don't expose bytecode for static inspection.
+            if not hasattr(func, "__code__"):
+                continue
             func_source = func.__code__.co_names
 
             # Check for dangerous patterns

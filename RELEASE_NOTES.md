@@ -1,5 +1,171 @@
 # TrakBridge Release Notes
 
+## Version 1.3.0 - Inbound Streams, Outbound Plugins & Multicast Bridge
+
+**Release Date:** July 2, 2026
+**Focus: Push-Based Inbound Streams, New Outbound Plugins, UDP Multicast CoT Bridge, TAK Worker Stability**
+
+---
+
+### NEW FEATURES
+
+#### Inbound Stream Architecture
+**Receive Data from External Sources**
+
+TrakBridge can now accept push-based data from external systems via a dedicated inbound stream pipeline.
+
+- **HTTP push endpoint** — `POST /api/inbound/<stream_id>/data` receives location payloads and routes them through the CoT pipeline to configured TAK servers. Security controls include anti-enumeration responses (consistent timing regardless of stream existence), IP allowlist enforcement, coordinate validation, payload size limits, per-stream rate limiting, and API key masking in logs.
+- **Capture buffer & preview mode** — Inbound streams can capture received payloads into a bounded buffer for inspection via the stream detail page before committing to live routing. Useful for validating field mappings against real data.
+- **`InboundStreamWorker`** — Dedicated worker class manages the lifecycle of push-based streams inside `StreamManager`, with the same health monitoring and registry cleanup as outbound workers.
+- **Inbound stream UI** — Stream detail and create/edit pages surface inbound-specific configuration: API key (with generate button), rate limiting, IP allowlist, and Preview Mode badge.
+
+#### Active-Connect Inbound Plugins
+**TrakBridge Connects Out to Pull Data In**
+
+- **MQTT active-connect** — TrakBridge connects to an MQTT broker, subscribes to a configurable topic, and forwards received CoT to TAK servers. Supports plain and TLS/mTLS connections via the existing certificate infrastructure (`cert_utils.build_ssl_context()`).
+- **WebSocket active-connect** — TrakBridge connects to a WebSocket server and forwards received CoT messages.
+- **Generic inbound plugins** — `generic_xml_inbound` and `generic_inbound` provide a baseline push-receive implementation registered in the plugin manager, available for all stream types.
+- **CA cert upload** — Inbound streams now support uploading a CA certificate bundle for TLS verification of upstream sources.
+
+#### UDP Multicast CoT Bridge
+**Bridge LAN Multicast Across VPN/WAN Links**
+
+The `udp_multicast_listener` inbound plugin joins a UDP multicast group and forwards every received CoT event to all TAK servers configured on the stream — bridging ATAK Mesh SA traffic across network segments where IP multicast does not route.
+
+**Wire format support:**
+- **CoT XML** — forwarded verbatim to the TAK output queue
+- **TAK Protocol v1 Mesh SA protobuf** — detected by magic bytes (`0xbf 0x01 0xbf`), decoded via `takproto` to CoT XML, then forwarded through the standard TAK output path
+
+**Network configuration:**
+- Joins IGMPv2 by default; IGMPv3 source-specific multicast available via `source_filter`
+- Configurable bind interface for multi-homed hosts
+- Per-source token-bucket rate limiting; first five dropped datagrams per stream sampled into logs with source IP and 200-byte hex preview for triage
+
+**Docker guidance:**
+- `macvlan` network (recommended): container gets a LAN IP, keeps reverse-proxy reachability
+- `network_mode: host` (simplest): no proxy/reverse-proxy required
+
+> **Note:** ATAK Mesh SA AES encryption is intentionally not yet implemented — wire layout needs verification against ATAK-CIV source before any crypto is written.
+
+#### Outbound Plugins
+**Forward CoT to External Systems**
+
+Three focused outbound plugins replace the legacy `webhook_handler`:
+
+**OutboundHTTP** — POSTs or PUTs CoT events to any HTTP/HTTPS endpoint:
+- Payload formats: JSON, raw XML, or custom template
+- Full message rules, UID filtering, geofence, and deduplication pipeline
+- Scheme allow-listing (http/https only) prevents non-HTTP URLs reaching network I/O
+- CRLF injection prevention in custom headers at the field level
+
+**OutboundMQTT** — Publishes CoT events to an MQTT broker topic:
+- Persistent paho-mqtt connection with `loop_start`/`loop_stop`
+- TLS/mTLS via `cert_utils.build_ssl_context()` for `mqtts://` URLs
+- Bounded queue with oldest-drop semantics; every drop increments `events_dropped`
+- Bad-auth detection: plugin stays disconnected and logs clearly when credentials are wrong
+
+**OutboundWebSocket** — Maintains a persistent WebSocket connection and streams CoT events:
+- Exponential backoff reconnect (cap 30s) with background reader for proactive server-close detection
+- Bounded queue with oldest-drop semantics
+- URL credential redaction in all log statements
+- Scheme allow-listing (ws/wss only)
+
+**Shared output-plugin helpers** (`services/output_plugin_helpers.py`):
+- CoT variable extraction, template formatting, message rule filtering, geofence evaluation, deduplication, rate limiting, and payload building extracted into a reusable module
+- All three new plugins compose against this module; no logic duplication
+
+The legacy `webhook_handler.py` plugin and its test files have been removed. Documentation updated throughout.
+
+#### CoT Identity Heartbeat Improvements
+
+- `how` attribute set to `h-e` (human-entered) for team-member CoT types — TAK Server was rejecting machine-generated `m-g` for these events
+- `precisionlocation` element added to team-member heartbeats for well-formed XML acceptance
+- `__group` always emitted with sensible team colour/role defaults when identity is enabled
+- Identity CoT now sent **before** draining the event queue at TX start — TAK Server sees TrakBridge in the roster before any event stream begins
+
+---
+
+### BUG FIXES
+
+#### TAK Worker Task Leak on Stream Save (Critical)
+
+Saving a stream configuration triggered `restart_worker`, which stopped the old worker and started a new one. The old `_enhanced_transmission_worker` caught `CancelledError` and broke out of its loop — but did **not** cancel the inner `_tx_loop`/`_rx_worker` child tasks it had spawned. Those orphaned tasks continued running against the now-removed queue and stale writer for 2+ seconds after `stop_worker` returned.
+
+**What operators saw:** ~20 `Queue N does not exist` ERROR logs at 10Hz after every stream save, followed by the orphaned loop's writer failing — each failure charged to the circuit breaker for the TAK server ID the new healthy worker was also using. After three failures the breaker opened, locking operators out of the fresh connection for 60 seconds.
+
+**Fix:** Child tasks are now hoisted to a local list at the top of each iteration. Both `except CancelledError` and `except Exception` handlers cancel and await all child tasks with `asyncio.gather(return_exceptions=True)` before breaking or sleeping. Also: `get_batch`'s `Queue N does not exist` log demoted from ERROR to DEBUG (callers handle the empty return; the log was pure noise during the 2s restart window).
+
+#### New Worker Connection Closed on Stream Save
+
+The old worker's `finally` block read `self.connections[tak_server_id]` at finally-execution time, not the connection that particular iteration owned. If the new worker had already stored its own connection under the same key (routine when `wait_for(timeout=5.0)` allows the old task to finish late), the old finally closed the new worker's socket — causing `Connection lost`, three circuit-breaker charges, and a 60-second lockout on a healthy connection.
+
+**Fix:** Each `while True` iteration captures its connection as a local (initialised to `None`). The `finally` closes only that specific connection object and only clears the dict entry when it still points at the same object.
+
+#### Stale Worker Entries Not Reaped
+
+Workers whose streams were disabled without going through `stop_stream` (e.g. a Slack handler whose poll task exited cleanly) remained in `StreamManager.workers` forever, producing a WARNING every 60 seconds indefinitely.
+
+**Fix:** `stop_stream` removes the worker in a `finally` block regardless of whether `worker.stop()` succeeds. `_periodic_health_check` now cross-references the database: workers for gone/inactive streams are reaped at INFO; workers for genuinely active streams still surface as WARNING so real bugs aren't silently swallowed.
+
+#### StreamWriter Not Closed on Stop
+
+`stop_worker` deleted the connection dict entry but relied on the cancelled TX loop's `finally` to close the underlying `StreamWriter`. That `finally` does not deterministically complete within the 5-second `wait_for` window, so the old socket stayed half-open and TAK Server kept the previous subscription alive (duplicate identity heartbeats and event traffic) until its ~60s stale timeout.
+
+**Fix:** `stop_worker` now explicitly awaits `_cleanup_connection()` (`writer.close()` + `writer.wait_closed()`) after task cancellation, sending TCP FIN synchronously before returning.
+
+#### Migration Column Name Missing
+
+`add_inbound_stream_fields` called `sa.Column()` without the column name as the first positional argument, producing `Column` objects with blank `.name`. Alembic's `batch_op.add_column()` raised `ArgumentError: Column must be constructed with a non-blank name`, halting the migration chain and leaving the downstream `ca_cert` column unapplied — causing `column streams.ca_cert does not exist` errors on every query.
+
+**Fix:** Column name added as first positional argument to each `sa.Column()` call.
+
+#### Entrypoint Script Bugs
+
+- `validate_schema()` called `return validate_schema_optimized` — bash returned the function name as a string, not its exit code. Validation was silently a no-op. Fixed to call the function and `return $?`.
+- Dead `trap` on SIGTERM/SIGINT removed: `exec hypercorn` replaces the shell as PID 1; the trap could never fire. Hypercorn handles signals directly.
+- ANSI colour codes in log output gated on `[[ -t 2 ]]` so `docker logs` and CI capture see plain text instead of raw escape sequences.
+
+---
+
+### INFRASTRUCTURE
+
+#### Development Container
+- Dev container now runs Hypercorn instead of `flask run --debug`. Werkzeug's reloader spawned a child process that opened a second TAK connection with the same UID and callsign, causing doubled subscriptions and doubled cleanup work on every restart. All environments now use a single Hypercorn worker — matches production topology so dev-environment bugs are the same class as production bugs.
+
+#### Configuration
+- `DevelopmentConfig.SQLALCHEMY_RECORD_QUERIES` now reads from the `SQLALCHEMY_RECORD_QUERIES` environment variable (default `false`) instead of hardcoding `True`. The env var overriding the compose setting was silently ignored before this fix.
+- Werkzeug per-request access log level demoted to WARNING — the reverse proxy already records access logs; the per-static-asset lines were pure noise.
+
+#### CI/CD
+- Mosquitto and mosquitto-clients installed in all three integration-test jobs (SQLite, PostgreSQL, MySQL) to support real-broker MQTT integration tests
+- Mosquitto CI fixture: duplicate `allow_anonymous` directive removed (broke older mosquitto); stderr now captured and included in `RuntimeError` message; passwd file/temp dir permissions relaxed to 0644/0755 for CI non-root mosquitto process
+
+---
+
+### UPGRADE INSTRUCTIONS
+
+#### For New Installations
+1. Deploy normally — all features available immediately
+2. Create inbound streams via the new "Inbound" stream type option
+3. Configure UDP multicast bridge if you have ATAK Mesh SA traffic to bridge
+4. Create outbound streams for HTTP, MQTT, or WebSocket forwarding as needed
+
+#### For Existing Deployments
+1. **Automatic migration** — `add_inbound_stream_fields` and `add_ca_cert_to_streams` migrations apply automatically on startup (migration fix included)
+2. **Zero configuration changes** — existing outbound streams continue operating unchanged
+3. **New features opt-in** — inbound streams, multicast bridge, and new outbound plugins available when creating new streams
+4. **Legacy webhook_handler** — if you have custom streams using `webhook_handler`, migrate them to `outbound_http`, `outbound_mqtt`, or `outbound_websocket` as appropriate
+5. **Dev container** — `FLASK_ENV=development` containers now run Hypercorn; the duplicate TAK connection issue is resolved automatically
+
+#### Validation Steps
+1. Verify existing outbound streams operate normally after upgrade
+2. Confirm database migrations applied cleanly (check startup logs for migration errors)
+3. Test an inbound stream with the preview mode capture buffer before routing live
+4. If using multicast bridge: verify `bind_interface` is set to your LAN NIC IP (not left as default in Docker without macvlan/host networking)
+5. If migrating from webhook_handler: validate message rules and geofence configuration in the new plugin
+
+---
+
 ## Version 1.2.3 - TAK Connection Auto-Recovery
 
 **Release Date:** March 23, 2026

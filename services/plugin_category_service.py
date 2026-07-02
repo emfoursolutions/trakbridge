@@ -60,6 +60,7 @@ class PluginCategoryService:
             "ems": "EMS",
             "output": "Output",
             "bidirectional": "Bidirectional",
+            "inbound": "Inbound",
         }
 
         # Category display information
@@ -93,6 +94,12 @@ class PluginCategoryService:
                 display_name="Bidirectional",
                 description="Plugins that both send and receive TAK messages",
                 icon="fas fa-exchange-alt",
+            ),
+            "Inbound": CategoryInfo(
+                key="Inbound",
+                display_name="Inbound",
+                description="Receive push data from external devices and systems",
+                icon="fas fa-arrow-circle-down",
             ),
         }
 

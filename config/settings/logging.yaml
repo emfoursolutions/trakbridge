@@ -70,7 +70,9 @@ environments:
       app:
         level: DEBUG
       sqlalchemy.engine:
-        level: INFO  # Show SQL queries in development
+        level: WARNING  # SQL queries available via SQLALCHEMY_RECORD_QUERIES=true
+      werkzeug:
+        level: WARNING  # Per-request access log; bump to INFO only for debug
       workers:
         level: DEBUG
 

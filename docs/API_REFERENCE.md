@@ -535,6 +535,137 @@ async function getStreamStatus() {
 }
 ```
 
+## Inbound Streams API
+
+The inbound API allows external devices and systems to push location data to TrakBridge via HTTP POST. Data is converted to CoT XML and distributed to TAK servers.
+
+### Push Data
+**POST** `/api/inbound/<stream_id>/data`
+
+Push location data to an inbound stream.
+
+**Authentication:** Per-stream API key via `Authorization: Bearer <key>` header (when auth mode is `api_key`).
+
+**Headers:**
+
+| Header | Required | Description |
+| --- | --- | --- |
+| Content-Type | Yes | Must match plugin's accepted types (e.g., `application/json`) |
+| Authorization | Depends | `Bearer <api_key>` (required when auth mode is `api_key`) |
+
+**Example:**
+```bash
+curl -X POST http://localhost:8080/api/inbound/5/data \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{"id": "drone-1", "name": "Alpha", "lat": 38.897, "lon": -77.036}'
+```
+
+**Response (202 Accepted):**
+```json
+{
+  "status": "accepted",
+  "locations_received": 1,
+  "events_created": 1,
+  "servers": {
+    "TAK1": {"success": true, "events_enqueued": 1}
+  }
+}
+```
+
+**Response (202 Preview Mode):**
+```json
+{
+  "status": "preview",
+  "locations_received": 1,
+  "mapped_result": {
+    "uid": "drone-1",
+    "lat": 38.897,
+    "lon": -77.036,
+    "callsign": "Alpha"
+  }
+}
+```
+
+**Error Responses:**
+
+| Status | Condition |
+| --- | --- |
+| 400 | Invalid payload, bad coordinates, no locations extracted |
+| 404 | Stream not found, inactive, wrong mode, or auth failed (identical response for anti-enumeration) |
+| 413 | Payload exceeds 1 MB |
+| 429 | Rate limit exceeded |
+| 500 | Processing failure |
+
+**Limits:**
+
+| Limit | Default |
+| --- | --- |
+| Payload size | 1 MB |
+| Locations per request | 100 |
+| Rate limit | 60 requests/minute (per-stream, configurable) |
+| Latitude | ±90 degrees |
+| Longitude | ±180 degrees |
+
+### Get Preview Data
+**GET** `/api/inbound/<stream_id>/preview`
+
+Return captured payloads and their mapped results for a stream in preview mode.
+
+**Authentication:** Requires `streams:read` permission.
+
+**Response:**
+```json
+{
+  "stream_id": 5,
+  "payloads": [
+    {
+      "received_at": "2026-04-12T10:00:00Z",
+      "content_type": "application/json",
+      "raw_body": "{\"id\": \"drone-1\", ...}",
+      "mapped_result": {"uid": "drone-1", "lat": 38.897, "lon": -77.036}
+    }
+  ]
+}
+```
+
+### Remap Preview Data
+**POST** `/api/inbound/<stream_id>/preview/remap`
+
+Re-run `transform_payload()` against captured payloads with alternate field config. Does not save config changes.
+
+**Authentication:** Requires `streams:write` permission.
+
+**Request Body:**
+```json
+{
+  "lat_field": "position.latitude",
+  "lon_field": "position.longitude",
+  "uid_field": "device.id"
+}
+```
+
+### Clear Preview Buffer
+**DELETE** `/api/inbound/<stream_id>/preview`
+
+Clear the capture buffer for an inbound stream.
+
+**Authentication:** Requires `streams:write` permission.
+
+### Generate API Key
+**POST** `/api/inbound/generate-api-key`
+
+Generate a cryptographically secure API key for use with inbound streams.
+
+**Authentication:** Requires `streams:write` permission.
+
+**Response:**
+```json
+{
+  "api_key": "tb_abc123...xyz"
+}
+```
+
 ## Integration Notes
 
 ### Monitoring Systems
@@ -546,8 +677,11 @@ The plugin category API enables dynamic UI generation where users first select a
 ### External Plugin Support
 External plugins loaded via Docker volumes are automatically included in category responses when properly configured in `plugins.yaml`.
 
+### Inbound Streams
+The inbound API enables push-based data ingestion from external devices. See the [Inbound Streams Guide](INBOUND_STREAMS_GUIDE.md) for architecture details and plugin development.
+
 ---
 
-**API Version:** 1.2.0  
-**Last Updated:** 2025-08-08  
+**API Version:** 1.3.0  
+**Last Updated:** 2026-07-02  
 **Base URL:** `/api`

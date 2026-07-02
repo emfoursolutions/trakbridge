@@ -199,7 +199,9 @@ services:
 
     # Networks
     networks:
-      - frontend     # External for Traefik
+      frontend: {}     # External for Traefik
+      lan_multicast:
+        ipv4_address: 10.0.30.65
 
   # PostgreSQL database (optional)
   postgres:
@@ -337,7 +339,15 @@ networks:
   frontend:
     external: true
     name: frontend
-
+  lan_multicast:
+    driver: macvlan
+    driver_opts:
+      parent: eth0            # host's LAN NIC (eth0, en0, enp3s0, ens18, ...)
+    ipam:
+      config:
+        - subnet: 10.0.30.0/24       # match your real LAN subnet
+          gateway: 10.0.30.254         # match your real LAN gateway
+          ip_range: 10.0.30.64/29   # 10.0.30.64–.71; .65–.70 usable for containers
 # Volumes
 volumes:
   postgres_data:
