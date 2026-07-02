@@ -386,7 +386,12 @@ class QueueManager:
             List of events (may be partial batch if timeout occurs)
         """
         if queue_id not in self.queues:
-            logger.error(f"Queue {queue_id} does not exist")
+            # Expected during stream restart: the queue is removed by
+            # stop_worker briefly before the new worker installs a fresh
+            # one, and a running TX loop keeps calling get_batch every
+            # ~100ms in that window (~20 log lines per restart). Callers
+            # already handle the empty return; DEBUG is the right level.
+            logger.debug(f"Queue {queue_id} does not exist")
             return []
 
         try:

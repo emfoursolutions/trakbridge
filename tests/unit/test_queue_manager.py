@@ -163,6 +163,37 @@ class TestEnqueueEvent:
         assert debugs, "Expected DEBUG log for missing queue"
 
     @pytest.mark.asyncio
+    async def test_get_batch_from_nonexistent_queue_logs_at_debug_not_error(
+        self, caplog
+    ):
+        """
+        A running TX loop calls get_batch every ~100ms. During a stream
+        restart the queue is briefly gone before the new worker installs
+        one — 20 ERROR lines per second is pure noise, callers already
+        handle the empty return.
+        """
+        qm = QueueManager()
+        with caplog.at_level("DEBUG", logger="services.queue_manager"):
+            batch = await qm.get_batch(999)
+
+        assert batch == []
+        errors = [
+            r
+            for r in caplog.records
+            if r.levelname == "ERROR" and "does not exist" in r.message
+        ]
+        assert not errors, (
+            f"get_batch missing-queue must not log at ERROR; got: "
+            f"{[r.message for r in errors]}"
+        )
+        debugs = [
+            r
+            for r in caplog.records
+            if r.levelname == "DEBUG" and "does not exist" in r.message
+        ]
+        assert debugs, "Expected DEBUG log for missing queue in get_batch"
+
+    @pytest.mark.asyncio
     async def test_enqueue_event_success(self):
         """Basic enqueue adds event to queue and returns True."""
         qm = QueueManager(config={"max_size": 10})

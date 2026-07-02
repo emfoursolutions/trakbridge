@@ -209,3 +209,95 @@ class TestFinallyClosesOwnConnection:
         assert (
             tak_server_id not in service.connections
         ), "finally did not clear its own dict entry"
+
+
+class TestOuterCancelStopsInnerTasks:
+    """
+    Regression: cancelling the outer _enhanced_transmission_worker task must
+    also cancel its inner TX/RX child tasks. Previously the outer's
+    `except asyncio.CancelledError: break` propagated up without touching the
+    child tasks it had spawned into `tasks = [...]`. The orphaned _tx_loop
+    kept calling queue_manager.get_batch() every 100ms (logging ERROR
+    because the queue was gone), and its writes on the *old* writer racked
+    up circuit-breaker failures charged against the shared tak_server_id
+    even after the new worker was already running on a fresh connection.
+    """
+
+    @pytest.mark.asyncio
+    async def test_outer_cancel_cancels_inner_tx_task(self, service):
+        tak_server = _make_tak_server(enable_rx=False)
+        tak_server_id = tak_server.id
+        connection = (Mock(), Mock())
+
+        tx_started = asyncio.Event()
+        tx_cancelled = asyncio.Event()
+
+        async def real_tx_loop(sid, writer, ts):
+            tx_started.set()
+            try:
+                # Simulate a TX loop hanging on get_batch/sleep — the shape
+                # of the real inner loop when the queue's been removed.
+                while True:
+                    await asyncio.sleep(0.05)
+            except asyncio.CancelledError:
+                tx_cancelled.set()
+                raise
+
+        with (
+            patch.object(service, "_create_pytak_connection", return_value=connection),
+            patch.object(service, "_tx_loop", side_effect=real_tx_loop),
+            patch.object(service, "_cleanup_connection", new_callable=AsyncMock),
+            patch.object(service, "_get_tak_circuit_breaker", return_value=None),
+        ):
+            task = asyncio.create_task(
+                service._enhanced_transmission_worker(tak_server_id, tak_server)
+            )
+
+            # Wait for the inner TX loop to be up.
+            await asyncio.wait_for(tx_started.wait(), timeout=1.0)
+
+            # Cancel the OUTER worker (equivalent of stop_worker's cancel).
+            task.cancel()
+            await task
+
+            # The inner TX task must have been cancelled too, promptly.
+            await asyncio.wait_for(tx_cancelled.wait(), timeout=1.0)
+
+    @pytest.mark.asyncio
+    async def test_outer_cancel_cancels_inner_rx_task_when_enabled(self, service):
+        tak_server = _make_tak_server(enable_rx=True)
+        tak_server_id = tak_server.id
+        connection = (Mock(), Mock())
+
+        rx_started = asyncio.Event()
+        rx_cancelled = asyncio.Event()
+
+        async def real_tx_loop(sid, writer, ts):
+            while True:
+                await asyncio.sleep(0.05)
+
+        async def real_rx_worker(sid, reader):
+            rx_started.set()
+            try:
+                while True:
+                    await asyncio.sleep(0.05)
+            except asyncio.CancelledError:
+                rx_cancelled.set()
+                raise
+
+        with (
+            patch.object(service, "_create_pytak_connection", return_value=connection),
+            patch.object(service, "_tx_loop", side_effect=real_tx_loop),
+            patch.object(service, "_rx_worker", side_effect=real_rx_worker),
+            patch.object(service, "_cleanup_connection", new_callable=AsyncMock),
+            patch.object(service, "_get_tak_circuit_breaker", return_value=None),
+        ):
+            task = asyncio.create_task(
+                service._enhanced_transmission_worker(tak_server_id, tak_server)
+            )
+            await asyncio.wait_for(rx_started.wait(), timeout=1.0)
+
+            task.cancel()
+            await task
+
+            await asyncio.wait_for(rx_cancelled.wait(), timeout=1.0)

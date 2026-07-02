@@ -1261,6 +1261,14 @@ class QueuedCOTService:
             # a connection this iteration" without an UnboundLocalError when
             # _create_pytak_connection raises before assigning it.
             connection = None
+            # `tasks` must be visible to the except CancelledError handler so
+            # it can cancel the inner tx/rx child tasks when the outer worker
+            # is cancelled (e.g. by stop_worker during a stream save). Without
+            # this hoist, an outer cancel just breaks and the child tasks
+            # keep running against the now-stale writer/queue, spamming
+            # get_batch errors and charging Connection-lost failures to the
+            # shared circuit breaker for tak_server_id.
+            tasks: List[asyncio.Task] = []
             try:
                 logger.info(
                     f"Enhanced transmission worker started for TAK server {tak_server.name}"
@@ -1302,13 +1310,15 @@ class QueuedCOTService:
                 # Extract reader and writer from connection
                 reader, writer = connection
 
-                # TX always runs
+                # TX always runs. Append to the hoisted `tasks` list so the
+                # outer except handler can cancel it if we're cancelled
+                # before asyncio.wait() below.
                 tx_task = asyncio.create_task(
                     self._tx_loop(tak_server_id, writer, tak_server)
                 )
+                tasks.append(tx_task)
 
                 # RX only runs if enabled for this TAK server
-                tasks = [tx_task]
                 if getattr(tak_server, "enable_rx", True):  # Default True
                     rx_task = asyncio.create_task(
                         self._rx_worker(tak_server_id, reader)
@@ -1337,12 +1347,30 @@ class QueuedCOTService:
                 logger.info(
                     f"Transmission worker cancelled for TAK server {tak_server_id}"
                 )
+                # Cancel any child tasks that were still running. Without
+                # this, the inner _tx_loop/_rx_worker keep executing against
+                # the (now-orphaned) writer and queue for several seconds
+                # after stop_worker returns, spamming get_batch errors and
+                # charging Connection-lost failures to the shared circuit
+                # breaker even after a new worker has taken over.
+                for t in tasks:
+                    if not t.done():
+                        t.cancel()
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
                 break
 
             except Exception as e:
                 logger.error(
                     f"Enhanced transmission worker error for TAK server {tak_server_id}: {e}"
                 )
+                # Same reasoning as the CancelledError handler: don't leave
+                # orphaned child tasks running after this iteration exits.
+                for t in tasks:
+                    if not t.done():
+                        t.cancel()
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
 
             finally:
                 # Cleanup only the connection *this iteration* created.
