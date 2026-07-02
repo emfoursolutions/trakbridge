@@ -142,6 +142,51 @@ The `transform_payload()` method must return a list of dictionaries with these f
 
 Inbound plugins are auto-discovered by `PluginManager` — no manual registration needed. Place your plugin file in `plugins/` and it will be detected on startup.
 
+## Built-in Plugin: Active-Connect (MQTT / WebSocket)
+
+The `inbound_active` plugin (`plugins/inbound_active.py`) is an **active-connect** plugin — TrakBridge dials out to a remote MQTT broker or WebSocket server, subscribes, and forwards received CoT events to the stream's configured TAK servers.
+
+This is the mirror of `OutboundMQTT` / `OutboundWebSocket`: where those *send* CoT from TAK to an external system, `inbound_active` *receives* CoT from an external system and delivers it to TAK.
+
+### Transport Modes
+
+Set `transport` in the plugin config to select the mode:
+
+| Value | Description |
+| --- | --- |
+| `mqtt` | Connect to an MQTT broker; subscribe to `topic` |
+| `websocket` | Connect to a WebSocket server; forward received messages |
+
+### Configuration Fields
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `transport` | `mqtt` | `mqtt` or `websocket` |
+| `broker_url` | — | `mqtt://host:1883`, `mqtts://host:8883`, `ws://host`, or `wss://host` |
+| `topic` | — | MQTT topic to subscribe to (MQTT mode only) |
+| `username` | — | Broker/server username (optional) |
+| `password` | — | Broker/server password (encrypted, optional) |
+| `ca_cert_file` | — | Path to CA cert bundle for TLS verification |
+| `client_cert_file` | — | Path to client certificate for mTLS |
+| `client_key_file` | — | Path to client key for mTLS |
+| `qos` | `1` | MQTT QoS level (`0`, `1`, or `2`) |
+
+### CA Certificate Upload
+
+Inbound streams support uploading a CA certificate bundle for TLS verification of upstream MQTT/WebSocket sources. To configure:
+
+1. Open the stream's edit page
+2. Under **TLS Settings**, upload your CA certificate file (PEM format)
+3. The cert is stored encrypted and passed to `cert_utils.build_ssl_context()` when the connection is established
+
+This is required when your MQTT broker or WebSocket server uses a certificate signed by a private CA (common in enterprise and tactical deployments).
+
+### Forwarding Path
+
+Received CoT bytes are passed directly to `QueuedCOTService.enqueue_event(bytes, tak_server_id)` for each configured TAK server — the same path used by the UDP multicast bridge. There is no parse-and-re-emit round-trip, so the CoT bytes arrive at TAK servers bit-identical to what was received.
+
+---
+
 ## Built-in Plugin: Generic JSON Inbound
 
 The `GenericInboundPlugin` (`plugins/generic_inbound_plugin.py`) handles JSON payloads with configurable field mapping via dot-notation paths.

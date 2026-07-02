@@ -683,5 +683,5 @@ The inbound API enables push-based data ingestion from external devices. See the
 ---
 
 **API Version:** 1.3.0  
-**Last Updated:** 2026-04-12  
+**Last Updated:** 2026-07-02  
 **Base URL:** `/api`
