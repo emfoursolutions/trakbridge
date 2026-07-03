@@ -55,6 +55,7 @@ from services.auth import (
     logout_user,
     require_auth,
 )
+from services.auth.base_provider import AuthenticationResult
 
 # Module-level logger
 from services.logging_service import get_module_logger
@@ -171,6 +172,16 @@ def _handle_local_login(auth_manager: AuthenticationManager):
         # Redirect to next URL or dashboard
         next_url = session.pop("next_url", url_for("main.index"))
         return redirect(next_url)
+    elif response.result == AuthenticationResult.PASSWORD_EXPIRED:
+        session["password_change_user_id"] = response.user.id
+        logger.info(
+            f"User {response.user.username} has an expired password, redirecting to force_password_change"
+        )
+        flash(
+            "Your password has expired. Please set a new password to continue.",
+            "warning",
+        )
+        return redirect(url_for("auth.force_password_change"))
     else:
         flash(response.message, "error")
         return redirect(url_for("auth.login"))
@@ -786,9 +797,12 @@ def admin_reset_password(user_id):
         alphabet = string.ascii_letters + string.digits + "!@#$%&*"
         temp_password = "".join(secrets.choice(alphabet) for _ in range(12))
 
-        # Reset password
+        # Reset password and flag that a change is required on next login.
+        # We keep password_changed_at as a real timestamp (set by set_password)
+        # rather than None so that the expiry check does not immediately expire
+        # the account if password-age enforcement is enabled.
         user.set_password(temp_password)
-        user.password_changed_at = None  # Force password change on next login
+        user.must_change_password = True
 
         from database import db
 
@@ -863,9 +877,9 @@ def force_password_change():
             flash("Current password is incorrect", "error")
             return render_template("auth/force_password_change.html", user=user)
 
-        # Change password
+        # Change password and clear any forced-change flag
         user.set_password(new_password)
-        user.password_changed_at = datetime.now(timezone.utc)
+        user.must_change_password = False
 
         from database import db
 
