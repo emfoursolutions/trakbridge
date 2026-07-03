@@ -54,6 +54,7 @@ class StreamWorker:
         self._tak_worker_ensured = (
             False  # Track if we've ensured the persistent worker exists
         )
+        self._is_output_plugin = False  # Set when _run_loop detects an output plugin
 
         # Adaptive polling optimization metrics
         self._last_data_volumes = []  # Track last 10 poll data volumes
@@ -475,12 +476,12 @@ class StreamWorker:
 
         # Type guard: Prevent output plugins from being used in StreamWorker
         if isinstance(self.plugin, BaseOutputPlugin):
-            self.logger.warning(
-                f"Stream {self.stream.id} ('{self.stream.name}') uses output plugin '{self.plugin.plugin_name}'. "
-                f"Output plugins should be invoked by RX Worker, not StreamWorker. "
-                f"Skipping this stream."
+            self.logger.debug(
+                f"Stream {self.stream.id} ('{self.stream.name}') uses output plugin "
+                f"'{self.plugin.plugin_name}' — driven by RX worker, no poll loop needed."
             )
-            return  # Exit gracefully
+            self._is_output_plugin = True
+            return  # Exit gracefully — not an error
 
         if not isinstance(self.plugin, BaseGPSPlugin):
             self.logger.error(
@@ -859,6 +860,7 @@ class StreamWorker:
             "tak_worker_ensured": self._tak_worker_ensured,
             "task_done": self.task.done() if self.task else None,
             "task_cancelled": self.task.cancelled() if self.task else None,
+            "is_output_plugin": self._is_output_plugin,
             "persistent_worker_status": persistent_worker_status,
             "total_persistent_workers": len(get_cot_service().workers),
             "total_persistent_queues": len(get_cot_service().queues),
