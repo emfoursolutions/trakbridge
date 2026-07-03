@@ -6,8 +6,6 @@ import socket
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
-
-_STATS_FLUSH_INTERVAL = 30
 from xml.sax.saxutils import quoteattr
 
 import takproto
@@ -16,6 +14,8 @@ from google.protobuf.message import DecodeError
 
 from plugins.base_plugin import BaseInboundPlugin, PluginConfigField
 from services.cot_service_integration import get_queued_cot_service
+
+_STATS_FLUSH_INTERVAL = 30
 
 _logger_instance = None
 
@@ -636,9 +636,16 @@ class UdpMulticastListener(BaseInboundPlugin):
         if self._pending_stats == 0 or self.stream is None:
             return
         try:
-            self.stream.update_stats(messages_sent=self._pending_stats)
             from database import db
-            db.session.commit()
+            from models.stream import Stream
+
+            stream_id = getattr(self.stream, "id", None)
+            if stream_id is None:
+                return
+            stream = db.session.get(Stream, stream_id)
+            if stream:
+                stream.update_stats(messages_sent=self._pending_stats)
+                db.session.commit()
         except Exception as exc:
             logger.warning(f"UDP multicast: failed to flush stats: {exc}")
             try:
