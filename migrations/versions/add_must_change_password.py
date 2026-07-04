@@ -1,6 +1,7 @@
 """
 ABOUTME: Alembic migration adding must_change_password flag to the user table.
-ABOUTME: Enables admin-initiated forced password change without nulling password_changed_at.
+ABOUTME: Enables admin-initiated forced password change without nulling
+ABOUTME: password_changed_at.
 
 Add must_change_password flag to users
 
@@ -30,7 +31,8 @@ def upgrade():
     expiry check to treat the account as immediately expired.
     """
     safe_add_column(
-        "user",
+        "users",
+        "must_change_password",
         sa.Column(
             "must_change_password",
             sa.Boolean(),
@@ -41,5 +43,5 @@ def upgrade():
 
 
 def downgrade():
-    with op.batch_alter_table("user") as batch_op:
+    with op.batch_alter_table("users") as batch_op:
         batch_op.drop_column("must_change_password")
