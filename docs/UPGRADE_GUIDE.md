@@ -639,7 +639,7 @@ If you encounter issues during the upgrade:
 5. **Seek help**: 
    - GitHub Issues: [Report Problems](../../issues)
    - Discussions: [Community Support](../../discussions)
-   - Email: support@emfoursolutions.com.au
+   - Email: support@trakbridge.net
 
 ## Summary
 

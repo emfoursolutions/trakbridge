@@ -9,7 +9,7 @@ integration, plugin system, encryption services, and deployment.
 
 Author: Emfour Solutions
 Created: 18-Jul-2025
-License: GNU General Public License v3.0 (GPLv3)
+License: Apache License 2.0 (Apache-2.0)
 """
 
 # Standard library imports
