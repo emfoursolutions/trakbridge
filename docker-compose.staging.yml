@@ -198,6 +198,7 @@ services:
     # Networks
     networks:
       frontend: {}     # External for Traefik
+      backend: {}      # Project-scoped network for database access
       lan_multicast:
         ipv4_address: ${MACVLAN_CONTAINER_IP:-10.0.0.1}
     
@@ -264,7 +265,7 @@ services:
       start_period: 45s
     
     networks:
-      - frontend            # External for Traefik
+      - backend
 
     deploy:
       resources:
@@ -328,7 +329,7 @@ services:
       start_period: 45s
     
     networks:
-      - frontend 
+      - backend
 
     deploy:
       resources:
@@ -346,6 +347,11 @@ networks:
   frontend:
     external: true
     name: frontend
+  backend:
+    # Project-scoped (compose prefixes the project name), so dev/staging DBs
+    # cannot collide on the shared "postgres" DNS alias. internal: no egress.
+    driver: bridge
+    internal: true
   lan_multicast:
     driver: macvlan
     driver_opts:
