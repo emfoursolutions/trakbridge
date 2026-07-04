@@ -5,7 +5,7 @@ ABOUTME: Enables admin-initiated forced password change without nulling password
 Add must_change_password flag to users
 
 Revision ID: add_must_change_password
-Revises: add_inbound_stream_fields
+Revises: 54faa293e582
 Create Date: 2026-07-03
 
 """
@@ -16,7 +16,7 @@ from migrations.migration_utils import safe_add_column
 
 # revision identifiers, used by Alembic.
 revision = "add_must_change_password"
-down_revision = "add_inbound_stream_fields"
+down_revision = "54faa293e582"
 branch_labels = None
 depends_on = None
 
