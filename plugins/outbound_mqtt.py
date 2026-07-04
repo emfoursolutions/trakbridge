@@ -72,7 +72,7 @@ class OutboundMQTT(BaseOutputPlugin):
                 "Maintains a persistent connection with a bounded send queue."
             ),
             "icon": "fas fa-broadcast-tower",
-            "category": "output",
+            "category": "forwarding",
             "config_fields": [
                 PluginConfigField(
                     name="broker_url",

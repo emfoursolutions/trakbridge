@@ -73,7 +73,7 @@ class IRCHandler(BaseOutputPlugin):
             "display_name": "IRC CoT Handler",
             "description": "Receive CoT messages from TAK and post to IRC",
             "icon": "fa-comments",
-            "category": "output",
+            "category": "notification",
             "help_sections": [
                 {
                     "title": "Template Variables",

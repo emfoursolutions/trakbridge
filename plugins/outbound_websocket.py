@@ -105,7 +105,7 @@ class OutboundWebSocket(BaseOutputPlugin):
                 "Maintains a persistent connection with automatic reconnect and a bounded send queue."
             ),
             "icon": "fas fa-plug",
-            "category": "output",
+            "category": "forwarding",
             "config_fields": [
                 PluginConfigField(
                     name="endpoint_url",

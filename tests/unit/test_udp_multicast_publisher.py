@@ -58,7 +58,7 @@ class TestMetadata:
 
     def test_category_is_output(self):
         plugin = _make_plugin()
-        assert plugin.plugin_metadata["category"] == "output"
+        assert plugin.plugin_metadata["category"] == "forwarding"
 
     def test_has_display_name(self):
         plugin = _make_plugin()

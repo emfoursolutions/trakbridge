@@ -125,7 +125,8 @@ class TestPluginCategoryService:
             "platform": "Tracker",
             "tracker": "Tracker",
             "ems": "EMS",
-            "output": "Output",
+            "forwarding": "CoT Forwarding",
+            "notification": "Notifications",
             "bidirectional": "Bidirectional",
             "inbound": "Inbound",
         }

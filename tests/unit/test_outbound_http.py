@@ -62,9 +62,9 @@ class TestOutboundHTTPMetadata:
         plugin = _make_plugin()
         assert plugin.plugin_name == "outbound_http"
 
-    def test_plugin_category_is_output(self):
+    def test_plugin_category_is_forwarding(self):
         plugin = _make_plugin()
-        assert plugin.plugin_metadata["category"] == "output"
+        assert plugin.plugin_metadata["category"] == "forwarding"
 
     def test_plugin_has_display_name(self):
         plugin = _make_plugin()

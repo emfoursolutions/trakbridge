@@ -277,7 +277,7 @@ class TestDiscordHandlerEdgeCases:
         """Plugin metadata should have required fields"""
         metadata = self.handler.plugin_metadata
         assert metadata["display_name"] == "Discord CoT Handler"
-        assert metadata["category"] == "output"
+        assert metadata["category"] == "notification"
         assert metadata["icon"] == "fa-discord"
         assert "config_fields" in metadata
         assert "custom_components" in metadata

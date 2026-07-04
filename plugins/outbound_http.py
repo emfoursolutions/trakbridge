@@ -70,7 +70,7 @@ class OutboundHTTP(BaseOutputPlugin):
                 "Supports JSON, raw XML, and custom template output formats."
             ),
             "icon": "fas fa-paper-plane",
-            "category": "output",
+            "category": "forwarding",
             "config_fields": [
                 PluginConfigField(
                     name="endpoint_url",

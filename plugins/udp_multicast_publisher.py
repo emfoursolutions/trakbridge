@@ -80,7 +80,7 @@ class UdpMulticastPublisher(BaseOutputPlugin):
                 "inbound plugin for bidirectional bridging."
             ),
             "icon": "fa-broadcast-tower",
-            "category": "output",
+            "category": "forwarding",
             "config_fields": [
                 PluginConfigField(
                     name="multicast_group",

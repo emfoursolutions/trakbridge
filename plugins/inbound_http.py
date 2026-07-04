@@ -46,7 +46,7 @@ class InboundHTTP(BaseInboundPlugin):
     @property
     def plugin_metadata(self) -> Dict[str, Any]:
         return {
-            "display_name": "Inbound HTTP",
+            "display_name": "HTTP Location Endpoint",
             "description": (
                 "Receive JSON location data via HTTP POST. "
                 "External devices push position data to a TrakBridge endpoint."
