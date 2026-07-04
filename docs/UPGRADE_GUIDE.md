@@ -10,10 +10,83 @@ This guide covers upgrading TrakBridge between versions, including major version
 
 | Upgrade From | Upgrade To | Compatibility | Notes |
 |--------------|------------|---------------|-------|
-| v1.0.0-beta.4 | Current | Major upgrade | Requires authentication setup |
+| v1.2.x | v1.3.0 | Compatible | DB migrations auto-apply; webhook_handler removed |
+| v1.1.x | v1.3.0 | Compatible | Authentication required; DB migrations auto-apply |
+| v1.0.x | v1.3.0 | Compatible | DB migrations auto-apply |
+| v1.0.0-beta.4 | v1.3.0 | Major upgrade | Requires authentication setup (see below) |
 | Development | Any release | Variable | Check migration requirements |
 
-## Current Version Features
+## v1.2.x to v1.3.0 Upgrade Notes
+
+### Database Migrations
+
+Two new migrations apply automatically on startup:
+
+- `add_inbound_stream_fields` — adds `stream_mode`, `inbound_api_key`, `inbound_rate_limit`, `inbound_ip_allowlist`, `inbound_preview_mode` columns to the `streams` table
+- `add_ca_cert_to_streams` — adds `ca_cert` column to the `streams` table
+
+Both are safe to apply to existing databases. Existing rows receive `NULL` defaults for the new columns — existing streams continue operating unchanged.
+
+**Verify migrations applied cleanly** by checking startup logs:
+```bash
+docker compose logs trakbridge | grep -i migration
+```
+
+### webhook_handler Plugin Removed
+
+The legacy `webhook_handler` plugin has been removed. If you have streams using it:
+
+1. Note your existing message type filters, webhook URL, and any geofence settings
+2. Create a new stream using the `outbound_http` plugin
+3. Re-enter your endpoint URL, message rules, and geofence in the new plugin UI
+4. Disable and delete the old `webhook_handler` stream
+
+The `outbound_http` plugin provides all the same functionality with a cleaner configuration UI.
+
+### New Outbound Plugins
+
+Three new outbound plugins are available for forwarding CoT to external systems:
+
+- **`outbound_http`** — POST/PUT to any HTTP/HTTPS endpoint (JSON, XML, or template)
+- **`outbound_mqtt`** — publish to an MQTT broker topic (plain or TLS)
+- **`outbound_websocket`** — stream to a WebSocket server
+
+See [Output Plugins Guide](OUTPUT_PLUGINS_GUIDE.md) for configuration details.
+
+### New Inbound Stream Support
+
+Inbound streams allow external devices to push location data to TrakBridge via HTTP POST, or TrakBridge to actively connect to MQTT/WebSocket sources. These are entirely new stream types — no existing configuration is affected.
+
+To create an inbound stream: **Streams → Create Stream → Stream Type: Inbound**.
+
+See [Inbound Streams Guide](INBOUND_STREAMS_GUIDE.md) for details.
+
+### UDP Multicast CoT Bridge
+
+A new `udp_multicast_listener` inbound plugin bridges LAN multicast (e.g. ATAK Mesh SA) to TAK servers across VPN/WAN links. Requires Docker macvlan or host networking — see [INBOUND_STREAMS_GUIDE.md](INBOUND_STREAMS_GUIDE.md) for Docker networking guidance.
+
+### Development Container Change
+
+If you run the dev container (`FLASK_ENV=development`), the entrypoint now starts Hypercorn instead of `flask run --debug`. This eliminates the duplicate TAK connection caused by Werkzeug's reloader spawning a child process. No configuration change needed — it happens automatically.
+
+### TAK Worker Stability Fixes
+
+Several TAK connection bugs that caused 60-second circuit-breaker lockouts after stream saves have been fixed. No operator action required — these fixes are transparent.
+
+## Current Version Features (v1.3.0)
+
+### Inbound Streams
+- **HTTP Push**: External devices POST location data to `/api/inbound/<stream_id>/data`
+- **Active-Connect**: TrakBridge connects out to MQTT brokers or WebSocket servers
+- **UDP Multicast Bridge**: Join a multicast group and forward ATAK Mesh SA to TAK servers
+- **Preview Mode**: Capture payloads for field-mapping verification before going live
+- **Security**: Per-stream API keys, IP allowlisting, rate limiting, anti-enumeration
+
+### Outbound Plugins
+- **OutboundHTTP**: POST/PUT CoT to HTTP/HTTPS endpoints
+- **OutboundMQTT**: Publish CoT to MQTT broker topics
+- **OutboundWebSocket**: Stream CoT to WebSocket servers
+- **Shared pipeline**: Message rules, geofence, deduplication, rate limiting across all three
 
 ### Authentication System
 - **Multi-Provider Support**: Local database, LDAP/Active Directory, OIDC/SSO
@@ -21,22 +94,27 @@ This guide covers upgrading TrakBridge between versions, including major version
 - **Automatic Bootstrap**: Initial admin user created on first startup
 - **Web-Only Management**: All user administration through secure web interface
 
-### Plugin Categorization
-- **OSINT Category**: Open source intelligence platforms (Deepstate)
+### Plugin Categorisation
+- **OSINT Category**: Open source intelligence platforms (Deepstate, LiveUAMap)
 - **Tracker Category**: GPS and satellite tracking devices (Garmin, SPOT, Traccar)
 - **EMS Category**: Emergency management systems (future expansion)
+- **Output Category**: Outbound CoT forwarders (HTTP, MQTT, WebSocket)
+- **Inbound Category**: Push-based and active-connect inbound plugins
 - **Category API**: RESTful endpoints for category-based plugin discovery
 
 ### Security Hardening
 - **Field-Level Encryption**: Sensitive configuration data encrypted at rest
+- **CSRF Protection**: All HTML forms protected via Flask-WTF
+- **HTTP Security Headers**: HSTS, CSP, frame-ancestors via flask-talisman
 - **JSON Validation**: Comprehensive input validation and DoS protection
 - **Container Security**: Non-root execution and secure defaults
 - **Session Management**: Secure session handling with automatic cleanup
 
 ### UI Enhancements
-- **Categorized Plugin Selection**: Organized data source selection by category
+- **Categorised Plugin Selection**: Organised data source selection by category
 - **Role-Based UI**: Buttons and features shown based on user permissions
 - **External Plugin Support**: Docker volume mounting for custom plugins
+- **Geofence Map**: Interactive Leaflet map visualisation for output plugin geofence bounds
 
 ## General Upgrade Process
 
@@ -561,7 +639,7 @@ If you encounter issues during the upgrade:
 5. **Seek help**: 
    - GitHub Issues: [Report Problems](../../issues)
    - Discussions: [Community Support](../../discussions)
-   - Email: support@emfoursolutions.com.au
+   - Email: support@trakbridge.net
 
 ## Summary
 

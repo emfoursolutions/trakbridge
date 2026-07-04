@@ -40,6 +40,7 @@ pycparser
 pygeoif
 PyMySQL
 pytak
+takproto>=3.0.0,<4.0.0
 python-dateutil
 python-dotenv
 PyYAML

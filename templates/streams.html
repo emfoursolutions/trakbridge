@@ -55,14 +55,21 @@
                         <td>
                             <div class="d-flex flex-column">
                                 <strong>
-                                    <a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}" 
+                                    <a href="{{ url_for('streams.view_stream', stream_id=stream.id) }}"
                                        class="text-decoration-none">
                                         {{ stream.name }}
                                     </a>
                                 </strong>
                                 <small class="text-muted">
-                                    <i class="fas fa-clock me-1"></i>
-                                    {{ stream.poll_interval }}s interval
+                                    {% if stream.stream_mode == 'inbound' %}
+                                        <span class="badge bg-info text-dark me-1">
+                                            <i class="fas fa-arrow-circle-down me-1"></i>Inbound
+                                        </span>
+                                        Push
+                                    {% else %}
+                                        <i class="fas fa-clock me-1"></i>
+                                        {{ stream.poll_interval }}s interval
+                                    {% endif %}
                                 </small>
                             </div>
                         </td>

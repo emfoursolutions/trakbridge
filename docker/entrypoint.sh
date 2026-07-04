@@ -5,12 +5,17 @@
 
 set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# Colors for output. Emit ANSI escapes only when stderr is a TTY, so
+# `docker logs` and CI capture see plain text instead of raw escape codes.
+if [[ -t 2 ]]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m'
+else
+    RED='' GREEN='' YELLOW='' BLUE='' NC=''
+fi
 
 # Logging functions
 log_info() {
@@ -405,14 +410,18 @@ validate_schema() {
         return 0
     fi
 
-    # For fast mode, use optimized validation
+    # For fast mode, use optimized validation. `return validate_schema_optimized`
+    # is a bug — bash treats the identifier as a literal string, not a function
+    # call — so the call() + return $? pattern here is deliberate.
     if [[ "$validation_mode" == "fast" ]]; then
-        return validate_schema_optimized
+        validate_schema_optimized
+        return $?
     fi
 
     # For other modes, fall back to basic checks to avoid connection overhead
     log_info "Using basic validation mode (optimized for container startup)"
-    return validate_schema_optimized
+    validate_schema_optimized
+    return $?
 }
 
 run_migrations() {
@@ -853,16 +862,10 @@ install_config_files() {
     return 0
 }
 
-# Function to handle shutdown signals
-cleanup() {
-    log_info "Received shutdown signal, cleaning up..."
-
-    # Kill any background processes
-    jobs -p | xargs -r kill
-
-    log_info "Cleanup completed"
-    exit 0
-}
+# Signal handling: intentionally not trap'd here. `start_server` uses
+# `exec hypercorn ...`, which replaces this shell with Hypercorn as PID 1;
+# a trap on this shell can never fire once exec has run. Signals go
+# directly to Hypercorn, which handles graceful shutdown itself.
 
 # Setup External Plugins
 setup_plugins(){
@@ -881,30 +884,34 @@ setup_plugins(){
     chmod 644 /app/external_config/*.yaml 2>/dev/null || log_debug "Could not set pluing config file permissions"
 }
 
-# Set up signal handlers
-trap cleanup SIGTERM SIGINT
-
 # Function to start the appropriate server (replaces eval-based approach)
 start_server() {
     # Ensure we're in the correct directory
     cd /app
 
     case "$FLASK_ENV" in
-        "development")
-            log_info "Using Flask development server"
-            exec python -m flask run --host=0.0.0.0 --port=5000 --debug
-            ;;
-        "production"|"staging")
+        "development"|"production"|"staging")
             # Sanitize and validate environment variables
             local workers=1
             local worker_class=${HYPERCORN_WORKER_CLASS:-asyncio}
             local bind=${HYPERCORN_BIND:-0.0.0.0:5000}
             local keep_alive=${HYPERCORN_KEEP_ALIVE:-5}
-            local log_level=${HYPERCORN_LOG_LEVEL:-warning}
+            # Development gets info-level Hypercorn logging by default so
+            # request/error traces are visible; production defaults to warning.
+            # `flask run --debug` (the previous development server) spawned a
+            # reloader child process whose duplicate app instance opened its
+            # own set of TAK connections — visible on TAK Server as ghost
+            # subscriptions. Hypercorn with a single worker matches the
+            # production topology and avoids that class of bug.
+            local default_log_level="warning"
+            if [[ "$FLASK_ENV" == "development" ]]; then
+                default_log_level="info"
+            fi
+            local log_level=${HYPERCORN_LOG_LEVEL:-$default_log_level}
             local graceful_timeout=${HYPERCORN_GRACEFUL_TIMEOUT:-30}
             local max_requests=${HYPERCORN_MAX_REQUESTS:-1000}
 
-            log_info "Using Hypercorn production server with inline configuration"
+            log_info "Using Hypercorn ASGI server (FLASK_ENV=$FLASK_ENV)"
 
             # SQLite concurrency check: Force single worker for SQLite to avoid file locking issues
             if [[ "${DB_TYPE:-}" == "sqlite" ]] || [[ -z "${DB_TYPE:-}" && -z "${DATABASE_URL:-}" ]]; then
@@ -1048,7 +1055,7 @@ main() {
     if [[ "${RUN_MIGRATIONS:-true}" == "true" ]]; then
         log_info "=== Running Database Migrations (Required for Startup) ==="
         if ! run_migrations; then
-            log_error "❌ Database migrations failed - cannot start application"
+            log_error "Database migrations failed - cannot start application"
             log_error "Application startup blocked until migrations complete successfully"
             log_error "Check database connectivity and migration files"
             exit 1

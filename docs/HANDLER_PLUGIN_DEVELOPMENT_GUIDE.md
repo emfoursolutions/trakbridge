@@ -1884,28 +1884,68 @@ class MonitoredHandler(BaseOutputPlugin):
         return {'status': 'healthy'}
 ```
 
+## Built-in Output Plugins (v1.3.0+)
+
+TrakBridge ships three production-ready output plugins. Study these as the reference architecture before writing a custom handler:
+
+### OutboundHTTP (`plugins/outbound_http.py`)
+
+POSTs or PUTs CoT events to an HTTP/HTTPS endpoint. Supports JSON, raw XML, and custom templates. Key patterns to borrow:
+
+- Scheme allow-listing — rejects non-http/https URLs before any network I/O
+- CRLF injection prevention in custom headers via `parse_custom_headers()`
+- Composes against `services/output_plugin_helpers.py` for dedup, rate limiting, and payload building
+
+### OutboundMQTT (`plugins/outbound_mqtt.py`)
+
+Publishes CoT to an MQTT broker with persistent paho connection, TLS via `cert_utils.build_ssl_context()`, bounded queue with oldest-drop semantics, and bad-auth detection. Good reference for plugins that maintain a long-lived connection.
+
+### OutboundWebSocket (`plugins/outbound_websocket.py`)
+
+Streams CoT to a WebSocket server with exponential backoff reconnect, background reader for server-close detection, and URL credential redaction in logs. Good reference for plugins that use `asyncio` background tasks.
+
+### Shared Helpers (`services/output_plugin_helpers.py`)
+
+All three built-in plugins compose against this module. Prefer using it over rolling your own:
+
+```python
+from services.output_plugin_helpers import (
+    extract_cot_variables,   # parse CoT XML into a variables dict
+    Deduplicator,            # TTL-based UID deduplication
+    RateLimiter,             # per-minute token bucket
+    is_within_geofence,      # bounding-box check
+    build_payload,           # JSON / XML / template payload builder
+)
+```
+
+See [Output Plugins Guide](OUTPUT_PLUGINS_GUIDE.md) for full API details.
+
+---
+
 ## Summary
 
 **Key Takeaways:**
 
-1. **Inherit from `BaseOutputPlugin`** - Use the output base class, not GPS
-2. **Implement `handle_cot_message()`** - Core method called for every CoT message
-3. **Use `defusedxml` for parsing** - Never use standard xml.etree (security risk)
-4. **Filter in the plugin** - Core doesn't filter, that's YOUR job
-5. **Never raise exceptions** - Always catch and log, never crash RX worker
-6. **Use async I/O** - Non-blocking operations only
-7. **Timeout protection** - Always set timeouts on external calls
-8. **Encryption is automatic** - Mark fields `sensitive=True` for auto-encryption
-9. **Test thoroughly** - Unit tests, integration tests, load tests
-10. **Monitor performance** - Track latency, errors, throughput
+1. **Inherit from `BaseOutputPlugin`** — use the output base class, not GPS
+2. **Implement `handle_cot_message()`** — core method called for every CoT message
+3. **Use `defusedxml` for parsing** — never use standard `xml.etree` (XXE risk)
+4. **Filter in the plugin** — core doesn't filter; that's the plugin's job
+5. **Never re-raise from `handle_cot_message`** — log and return; one failing plugin must not stop others
+6. **Use async I/O** — non-blocking operations only; `await asyncio.sleep()` not `time.sleep()`
+7. **Set timeouts on all external calls** — always pass `aiohttp.ClientTimeout`
+8. **Encryption is automatic** — mark fields `sensitive=True` for auto-encryption
+9. **Compose against `output_plugin_helpers`** — don't re-implement dedup, rate limiting, or payload building
+10. **Test thoroughly** — unit, integration, and E2E tests; see built-in plugins for examples
 
 **Resources:**
 
-- Example Plugins: `plugins/slack_handler.py`, `plugins/irc_handler.py`
-- Base Class: `plugins/base_plugin.py` (BaseOutputPlugin)
-- RX Worker: `services/cot_service_integration.py` (_rx_worker method)
-- CoT Spec: https://github.com/TAK-Product-Center/Server/tree/main/src/docs/COT
-- defusedxml docs: https://github.com/tiran/defusedxml
+- Built-in plugins: `plugins/outbound_http.py`, `plugins/outbound_mqtt.py`, `plugins/outbound_websocket.py`
+- Shared helpers: `services/output_plugin_helpers.py`
+- Base class: `plugins/base_plugin.py` (`BaseOutputPlugin`)
+- RX worker: `services/cot_service_integration.py` (`_rx_worker`)
+- Reference implementation: `docs/example_external_plugins/sample_custom_handler.py`
+- CoT spec: https://github.com/TAK-Product-Center/Server/tree/main/src/docs/COT
+- defusedxml: https://github.com/tiran/defusedxml
 
 **Need Help?**
 

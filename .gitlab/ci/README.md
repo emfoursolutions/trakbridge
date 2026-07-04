@@ -23,8 +23,11 @@ Contains all testing-related jobs:
 - **integration-tests-mysql** - Integration tests with MySQL/MariaDB backend
 - **database-compatibility-tests** - Database configuration switching and precedence tests
 
+All three integration-test jobs install `mosquitto` and `mosquitto-clients` in their `before_script`
+so that the outbound MQTT plugin integration tests can start a real broker fixture.
+
 Includes shared templates:
-- `.install_packages` - Cross-platform package installation script
+- `.install_packages` - Cross-platform package installation script (includes mosquitto)
 - `.postgres_service` - PostgreSQL service configuration
 - `.sqlite_service` - SQLite service configuration
 - `.mysql_service` - MySQL/MariaDB service configuration

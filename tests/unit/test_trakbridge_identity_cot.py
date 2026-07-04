@@ -161,7 +161,7 @@ class TestTrakBridgeIdentityCOT:
 
             # Verify event attributes
             assert root.get("version") == "2.0"
-            assert root.get("how") == "m-g"
+            assert root.get("how") == "h-e"  # team-member types require human-entered how
             assert root.get("time") is not None
             assert root.get("start") is not None
             assert root.get("stale") is not None

@@ -2,7 +2,8 @@
 name = "trakbridge"
 dynamic = ["version"]
 description = "TrakBridge Feed Streaming Platform"
-authors = [{ name = "Emfour Solutions", email = "support@emfoursolutions.com.au" }]
+authors = [{ name = "Trakbridge", email = "support@trakbridge.net" }]
+license = { text = "Apache-2.0" }
 readme = "README.md"
 requires-python = ">=3.12"
 
@@ -52,6 +53,7 @@ dependencies = [
     "PyJWT>=2.8.0",
     "PyMySQL",
     "pytak",
+    "takproto>=3.0.0,<4.0.0",
     "requests>=2.31.0",
     "python-dateutil",
     "python-dotenv",

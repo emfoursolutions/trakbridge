@@ -23,6 +23,7 @@ This directory contains example external plugins that can be mounted into a Trak
 
 - `sample_custom_tracker.py` - Example custom GPS tracker plugin (input)
 - `sample_custom_handler.py` - Example custom CoT handler plugin (output)
+- `sample_inbound_plugin.py` - Example custom inbound plugin (push-based)
 - `README.md` - This file
 
 ## Plugin Types
@@ -48,6 +49,17 @@ Output plugins receive CoT messages from TAK servers and process them (send aler
 - Implements `handle_cot_message()` to process incoming CoT
 - Filters messages by type, UID, location, etc.
 - Sends formatted alerts to external webhook
+
+### Inbound Plugins (Push-Based)
+
+Inbound plugins receive data PUSHED to TrakBridge via HTTP POST and convert it to location dicts for CoT generation.
+
+**Example: `sample_inbound_plugin.py`**
+
+- Inherits from `BaseInboundPlugin`
+- Implements `transform_payload()` to parse incoming data (JSON, binary, etc.)
+- Optionally overrides `validate_inbound_request()` for custom auth (HMAC example)
+- Receives data at `POST /api/inbound/<stream_id>/data`
 
 ## Development Guide
 
@@ -92,6 +104,43 @@ Output plugins receive CoT messages from TAK servers and process them (send aler
 - Implement deduplication to prevent duplicate messages
 - Mark sensitive fields with `sensitive=True` for automatic encryption
 - Add comprehensive help sections in `plugin_metadata`
+
+### Creating an Inbound Plugin (Push-Based)
+
+1. Copy `sample_inbound_plugin.py` as a template
+2. Modify the class name and `plugin_name` property
+3. Implement your payload parsing in `transform_payload()`
+4. Optionally override `validate_inbound_request()` for custom auth
+5. Update the configuration fields in `plugin_metadata`
+6. Set `accepted_content_types` in metadata to match your payload format
+7. Test your plugin before deployment
+
+**Key Methods:**
+
+- `transform_payload(raw_body, content_type, headers)` - Parse raw bytes into location dicts
+- `validate_inbound_request(headers)` - Authenticate requests (override for custom auth)
+- `get_accepted_content_types()` - Returns list of MIME types from metadata
+- `validate_config()` - Validate plugin configuration (inherited)
+
+**Location Dict Format (returned by transform_payload):**
+
+- `uid` (str, required) - Unique device identifier
+- `name` (str, required) - Device display name / callsign
+- `lat` (float, required) - Latitude
+- `lon` (float, required) - Longitude
+- `timestamp` (datetime, optional) - UTC timestamp
+- `speed` (float, optional) - Speed in m/s
+- `course` (float, optional) - Heading in degrees
+- `altitude` (float, optional) - Altitude in meters
+
+**Best Practices:**
+
+- Always validate and sanitize incoming data in `transform_payload()`
+- Use `defusedxml` if parsing XML (never standard `xml.etree`)
+- Mark API keys and secrets as `sensitive=True` for automatic encryption
+- Raise `ValueError` for invalid payloads — the framework returns 400
+- Support both single objects and arrays when accepting JSON
+- Use `hmac.compare_digest()` for constant-time secret comparison
 
 ### Sample Handler Features Demonstrated
 

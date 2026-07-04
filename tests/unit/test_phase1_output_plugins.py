@@ -22,7 +22,7 @@ class MockOutputPlugin(BaseOutputPlugin):
             "display_name": "Mock Output Plugin",
             "description": "Test plugin for output",
             "icon": "fa-test",
-            "category": "output",
+            "category": "forwarding",
             "config_fields": [
                 PluginConfigField(
                     name="webhook_url",
@@ -70,7 +70,7 @@ class TestBaseOutputPlugin:
         metadata = plugin.plugin_metadata
 
         assert metadata["display_name"] == "Mock Output Plugin"
-        assert metadata["category"] == "output"
+        assert metadata["category"] == "forwarding"
         assert metadata["icon"] == "fa-test"
         assert len(metadata["config_fields"]) == 2
 
@@ -218,7 +218,7 @@ class TestPluginManagerOutputSupport:
         metadata = manager.get_plugin_metadata("mock_output")
 
         assert metadata is not None
-        assert metadata["category"] == "output"
+        assert metadata["category"] == "forwarding"
         assert metadata["display_name"] == "Mock Output Plugin"
 
     def test_plugin_manager_validates_output_plugin_config(self):
@@ -252,13 +252,13 @@ class TestPluginManagerOutputSupport:
         assert "mock_output" in plugins
 
     def test_plugin_manager_get_categories_includes_output(self):
-        """Test that get_plugin_categories includes output category"""
+        """Test that get_plugin_categories includes forwarding category"""
         manager = PluginManager()
         manager.register_plugin(MockOutputPlugin)
 
         categories = manager.get_plugin_categories()
 
-        assert "output" in categories
+        assert "forwarding" in categories
 
 
 class TestBackwardCompatibility:

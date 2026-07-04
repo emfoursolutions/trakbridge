@@ -132,6 +132,11 @@ def setup_logging(app):
     # Suppress noisy watchdog inotify debug logging
     logging.getLogger("watchdog").setLevel(logging.WARNING)
 
+    # Suppress Werkzeug's per-request access log (one INFO line per static
+    # asset request fills the log without adding signal). The reverse proxy
+    # already records access logs for ops; bump to DEBUG only when needed.
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)
+
     app.logger.info(f"Logging Service Started - Version: {version}")
 
 

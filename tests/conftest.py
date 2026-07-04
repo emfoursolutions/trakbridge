@@ -30,6 +30,18 @@ from models.user import AuthProvider, User, UserRole, UserSession
 from services.auth.auth_manager import AuthenticationManager
 
 
+@pytest.fixture(scope="session", autouse=True)
+def suppress_stream_manager_background_loop():
+    """
+    Prevent StreamManager from starting its background thread during tests.
+
+    Without this, the manager dials real TAK servers, crashes with missing
+    cert errors, and those uncaught exceptions corrupt later test responses.
+    """
+    with patch("services.stream_manager.StreamManager._start_background_loop"):
+        yield
+
+
 @pytest.fixture(scope="session")
 def app():
     """Create test Flask application using the actual app factory"""
