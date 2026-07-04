@@ -1,4 +1,4 @@
-## [v1.3.0] - 2026-07-02
+## [v1.3.0] - 2026-07-03
 
 ### Added
 - **Inbound Stream Architecture**
@@ -6,7 +6,13 @@
   - `InboundStreamWorker` and `StreamManager` routing for push-based streams
   - Capture buffer and preview mode for inbound streams to inspect payloads before routing
   - Inbound stream UI integration with stream detail and configuration pages; Preview Mode badge rendered for inbound streams
-  - Generic inbound plugins (`generic_xml_inbound`, `generic_inbound`) registered in plugin manager
+  - Generic inbound plugins registered in plugin manager — display names updated for clarity:
+
+    - `generic_inbound` → **JSON Receiver**
+    - `generic_xml_inbound` → **XML Receiver**
+    - `inbound_http` → **HTTP Location Endpoint**
+    - `inbound_active` → **MQTT / WebSocket Client**
+
   - CA cert upload support for inbound streams
   - Inbound Receiver plugin for active-connect inbound sources
 
@@ -21,12 +27,16 @@
   - Configurable bind interface; per-source token-bucket rate limiting; first five dropped datagrams sampled into logs with source IP and hex preview
   - `bind_interface` now correctly binds to `INADDR_ANY` for multicast delivery while using the interface only for the IGMP join, fixing silent packet drops on specific-IP binds
 
-- **Outbound Plugins**
+- **CoT Forwarding Plugins** (category: `forwarding`)
   - `OutboundHTTP` plugin — POSTs or PUTs CoT events to an HTTP/HTTPS endpoint as JSON, raw XML, or custom template; scheme allow-listing prevents non-http/https URLs reaching network I/O
   - `OutboundMQTT` plugin — publishes CoT events to an MQTT broker with persistent paho connection, bounded queue with oldest-drop semantics, mqtts:// TLS via `cert_utils.build_ssl_context()`, and bad-auth detection
   - `OutboundWebSocket` plugin — persistent aiohttp WebSocket output with exponential backoff reconnect (cap 30s), background reader for proactive server-close detection, URL credential redaction in logs, and scheme allow-listing for ws/wss
+  - `udp_multicast_publisher` — publishes CoT events to a UDP multicast group; forwarded event counts now persisted to the stream DB record via a batched flush every 30 seconds
   - Shared `services/output_plugin_helpers.py` — CoT extraction, formatting, geofence, dedup, rate-limit, and payload building extracted from legacy `webhook_handler` into a reusable module
   - Legacy `webhook_handler` plugin removed; documentation and dev guides updated to reference the three dedicated plugins
+
+- **Notification Plugins** (category: `notification`)
+  - `discord_handler`, `slack_handler`, `irc_handler` moved from the generic "Output" category to the dedicated **Notifications** display category; no behaviour changes
 
 - **CoT Identity Heartbeat Improvements**
   - `how` attribute switched to `h-e` (human-entered) for team-member types so TAK Server accepts them
@@ -46,6 +56,10 @@
 - Mosquitto installed in all three integration-test CI jobs for outbound MQTT test coverage
 
 ### Fixed
+- **Expired-password redirect** — Users with an expired password are now redirected to the change-password flow on login instead of being dropped into the application with an inconsistent state. Admins triggering a force-reset via the new `must_change_password` flag are likewise redirected on their next login
+- **Admin password reset lockout** — Admin-initiated password resets no longer set `password_changed_at` to `None`, which previously caused the expiry check to treat the account as immediately expired and lock the user in a redirect loop. The new `must_change_password` boolean flag decouples forced-change from expiry state
+- **`add_must_change_password` migration** — Fixed three defects introduced when the migration was originally merged: incorrect `down_revision` (`"add_inbound_stream_fields"` → `"54faa293e582"`); wrong table name (`"user"` → `"users"`) in both `upgrade()` and `downgrade()`; missing column name argument in `safe_add_column()` call
+- **False-positive unhealthy warnings for output plugin workers** — Stream manager health checks no longer emit WARNING-level logs for output plugin workers (Discord, Slack, IRC, HTTP, MQTT, WebSocket, UDP multicast) that are operating normally; these workers lack a persistent TAK connection by design and are now recognised as healthy without one
 - **TAK output worker task leak on stream save** — `_enhanced_transmission_worker` now cancels and awaits child `_tx_loop`/`_rx_worker` tasks in both `CancelledError` and `Exception` handlers, preventing orphaned tasks from spamming `Queue N does not exist` errors and tripping the circuit breaker on the freshly started worker
 - **New worker connection closed on stream save** — `stop_worker` finally block now captures the connection as a local at the top of each iteration and only closes that specific connection, leaving a newer worker's registration intact
 - **Stale worker entries never reaped** — `stop_stream` removes the worker in a `finally` block; `_periodic_health_check` now cross-references the DB and reaps workers for gone/inactive streams (INFO) instead of warning indefinitely

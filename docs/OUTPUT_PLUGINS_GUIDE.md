@@ -2,34 +2,39 @@
 
 ## Overview
 
-Output plugins receive CoT messages from TAK servers (via the RX worker) and forward them to external systems — chat platforms, HTTP endpoints, MQTT brokers, WebSocket servers, databases, and custom integrations.
+Output plugins receive CoT messages from TAK servers (via the RX worker) and forward them to external systems — HTTP endpoints, MQTT brokers, WebSocket servers, UDP multicast groups, and messaging platforms.
 
 Unlike GPS input plugins that *fetch* location data and *send* it to TAK, output plugins work in the opposite direction: TAK → TrakBridge → external system.
+
+Plugins appear under one of two categories in the stream creation UI:
+
+- **CoT Forwarding** (`forwarding`) — forward raw CoT events to external systems: `outbound_http`, `outbound_mqtt`, `outbound_websocket`, `udp_multicast_publisher`
+- **Notifications** (`notification`) — post human-readable alerts to messaging platforms: `discord_handler`, `slack_handler`, `irc_handler`
 
 ## Architecture
 
 ```text
 TAK Server → RX Worker → cot_service_integration.py
                               │
-                    ┌─────────┼─────────┐
-                    ▼         ▼         ▼
-             OutboundHTTP  OutboundMQTT  OutboundWebSocket
-             (or any       (or any       (or any custom
-             BaseOutputPlugin subclass)  BaseOutputPlugin)
-                    │         │         │
-                 HTTP      MQTT       WebSocket
-               endpoint   broker      server
+          ┌───────────────────┼───────────────────┐
+          ▼                   ▼                   ▼
+   OutboundHTTP         OutboundMQTT       OutboundWebSocket
+   UdpMulticastPublisher                  DiscordHandler
+   (or any BaseOutputPlugin subclass)     SlackHandler / IRCHandler
+          │                   │                   │
+       HTTP/S              MQTT               WebSocket /
+      endpoint             broker          messaging platform
 ```
 
 ### Key Principles
 
 1. **Plugin-Driven Filtering** — Each plugin decides which messages to handle via message rules, UID regex, and geofence filters
-2. **Shared Helper Module** — `services/output_plugin_helpers.py` provides CoT extraction, formatting, dedup, rate-limiting, and payload building that all three built-in plugins compose against
+2. **Shared Helper Module** — `services/output_plugin_helpers.py` provides CoT extraction, formatting, dedup, rate-limiting, and payload building that all forwarding plugins compose against
 3. **Bounded Queues** — Each plugin maintains a bounded async queue with configurable overflow strategy (oldest-drop by default) to prevent memory growth under bursty traffic
 4. **Encrypted Secrets** — Sensitive fields (URLs, passwords, tokens) are automatically encrypted at rest
 5. **Secure XML Parsing** — All CoT XML is parsed via `defusedxml` to prevent XXE attacks
 
-## Built-in Output Plugins
+## CoT Forwarding Plugins
 
 ### OutboundHTTP (`outbound_http`)
 
@@ -151,6 +156,28 @@ Plus `message_rules` and `global_geofence` custom components.
 **Bounded queue**: Same oldest-drop semantics as OutboundMQTT.
 
 ---
+
+### UdpMulticastPublisher (`udp_multicast_publisher`)
+
+Publishes CoT events to a UDP multicast group. Intended for bridging CoT from a TAK server onto a LAN segment where ATAK clients listen on a multicast address.
+
+#### Configuration Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `multicast_group` | Text | Yes | IPv4 multicast address (e.g. `239.2.3.1`) |
+| `multicast_port` | Number | Yes | UDP port (e.g. `6969`) |
+| `bind_interface` | Text | No | Local IP to bind; leave blank for `0.0.0.0` |
+| `ttl` | Number | No | Multicast TTL (default `1` — LAN only) |
+| `payload_format` | Select | No | `xml` (default) or `json` |
+
+Plus `message_rules` and `global_geofence` custom components.
+
+**Metrics**: Forwarded event counts are persisted to the stream DB record via a batched flush every 30 seconds and on plugin stop. This means the "Messages Sent" counter on the stream detail page reflects actual delivery.
+
+---
+
+## Notification Plugins
 
 ### SlackHandler (`slack_handler`)
 
@@ -378,7 +405,7 @@ class MyHandler(BaseOutputPlugin):
             "display_name": "My Custom Handler",
             "description": "Routes CoT messages to my external system",
             "icon": "fa-rocket",
-            "category": "output",
+            "category": "forwarding",  # or "notification" for messaging plugins
             "config_fields": [
                 PluginConfigField(
                     name="api_url",
@@ -510,7 +537,7 @@ Returns plugin metadata for UI generation. Minimum required keys:
     "display_name": "Human-Readable Name",
     "description": "What this plugin does",
     "icon": "fa-icon-name",
-    "category": "output",  # or "bidirectional"
+    "category": "forwarding",  # "forwarding", "notification", or "bidirectional"
     "config_fields": [...],
     # Optional custom components:
     "custom_components": [

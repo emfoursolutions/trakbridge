@@ -10,8 +10,9 @@ A web application for bridging tracking devices and services to TAK (Team Awaren
 - **Multi-Source Integration**: Support for GPS trackers, OSINT platforms, and emergency management systems
 - **Inbound Streams**: Receive CoT into TrakBridge via HTTP push (JSON/XML) or active-connect transports (MQTT, WebSocket, UDP multicast)
 - **UDP Multicast → TAK Bridge**: Forward LAN multicast Mesh SA (CoT XML and TAK Protocol v1 protobuf, auto-detected) to TAK servers across VPN/WAN where multicast does not route
-- **Outbound Plugins**: Forward CoT from connected TAK servers to external systems via HTTP, MQTT, or WebSocket
-- **Plugin Categorisation**: Organised plugin system with OSINT, Tracker, and EMS categories
+- **CoT Forwarding Plugins**: Forward CoT from connected TAK servers to external systems via HTTP, MQTT, WebSocket, or UDP multicast
+- **Notification Plugins**: Post CoT alerts to messaging platforms — Discord, Slack, IRC
+- **Plugin Categorisation**: Organised plugin system with OSINT, Tracker, EMS, CoT Forwarding, Notifications, Inbound, and Bidirectional categories
 - **Callsign Mapping**: Custom callsign assignment with per-tracker COT type overrides and team member configuration
 - **Authentication System**: Multi-provider authentication (Local, LDAP, OIDC) with role-based access control
 - **TAK Server Management**: Configure multiple TAK server connections with certificate support
@@ -168,6 +169,8 @@ hypercorn app.py  # Single worker deployment for optimal performance
 - [Authentication Guide](docs/AUTHENTICATION.md) - Multi-provider authentication setup
 - [Security Documentation](docs/SECURITY.md) - Comprehensive security guide
 - [Plugin Development](docs/PLUGIN_DEVELOPMENT.md) - Creating custom plugins
+- [Inbound Streams Guide](docs/INBOUND_STREAMS_GUIDE.md) - Push-based and active-connect inbound plugins, UDP multicast bridge
+- [Output Plugins Guide](docs/OUTPUT_PLUGINS_GUIDE.md) - CoT forwarding and notification plugins, custom plugin development
 - [API Reference](docs/API_REFERENCE.md) - Complete API documentation
 - [Upgrade Guide](docs/UPGRADE_GUIDE.md) - Version upgrade procedures
 - [Performance Guide](docs/PERFORMANCE_CONFIGURATION.md) - Performance Tuning Guide
@@ -177,6 +180,7 @@ hypercorn app.py  # Single worker deployment for optimal performance
 
 ### OSINT Platforms
 - **Deepstate** - OSINT platform for battlefield intelligence and situational awareness
+- **LiveMapUA** - OSINT platform for independent global news and information
 
 ### GPS Trackers
 - **Garmin InReach** - Satellite communicators and GPS tracking devices
@@ -185,17 +189,24 @@ hypercorn app.py  # Single worker deployment for optimal performance
 
 ### Inbound Plugins (receive data into TrakBridge)
 
-- **Generic JSON Inbound** - HTTP push with configurable dot-notation field mapping
-- **Generic XML Inbound** - HTTP push with XPath-based field extraction
-- **Inbound HTTP Receiver** - Lightweight HTTP push for ad-hoc devices
-- **Inbound Active** - Active-connect MQTT broker or WebSocket source
+- **JSON Receiver** - HTTP push with configurable dot-notation field mapping
+- **XML Receiver** - HTTP push with XPath-based field extraction
+- **HTTP Location Endpoint** - Lightweight HTTP push for ad-hoc devices
+- **MQTT / WebSocket Client** - Active-connect MQTT broker or WebSocket source
 - **UDP Multicast CoT Bridge** - Joins a multicast group and forwards CoT XML or TAK Protocol v1 (Mesh SA protobuf) to TAK servers; bridges LAN multicast over VPN/WAN
 
-### Outbound Plugins (forward CoT from TAK to external systems)
+### CoT Forwarding Plugins (forward CoT from TAK to external systems)
 
 - **OutboundHTTP** - POST/PUT JSON, XML, or template payloads to an endpoint
 - **OutboundMQTT** - Publish CoT to an MQTT broker topic with TLS support
 - **OutboundWebSocket** - Push CoT to a WebSocket server with automatic reconnect
+- **UDP Multicast Publisher** - Publish CoT to a UDP multicast group on the LAN
+
+### Notification Plugins (post CoT alerts to messaging platforms)
+
+- **Discord** - Rich embeds or plain text via incoming webhook
+- **Slack** - Block Kit formatted messages via incoming webhook
+- **IRC** - Plain text or templated messages to an IRC channel
 
 ### External Plugin Support
 - Docker volume mount support for custom plugins
@@ -240,4 +251,4 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 
 ---
 
-**TrakBridge v1.1.0** - Production-ready GPS tracking data bridge for TAK servers with ATAK team member support, enterprise performance, monitoring, and reliability features.
+**TrakBridge v1.3.0** - Production-ready GPS tracking data bridge for TAK servers with inbound streams, CoT forwarding, notifications, UDP multicast bridging, enterprise performance, monitoring, and reliability features.

@@ -45,8 +45,8 @@ Inbound plugins themselves use one of two transports, distinguished by the `inbo
 
 | Transport | Driver | Plugin examples |
 | --- | --- | --- |
-| HTTP push | External device POSTs to `/api/inbound/...`; `transform_payload()` parses the body | `generic_inbound_plugin`, `generic_xml_inbound_plugin`, `inbound_http` |
-| Active-connect | Plugin's `start()` dials out, opens a socket, or joins a multicast group; `transform_payload()` is not used | `inbound_active` (MQTT / WebSocket), `udp_multicast_listener` |
+| HTTP push | External device POSTs to `/api/inbound/...`; `transform_payload()` parses the body | `generic_inbound_plugin` (JSON Receiver), `generic_xml_inbound_plugin` (XML Receiver), `inbound_http` (HTTP Location Endpoint) |
+| Active-connect | Plugin's `start()` dials out, opens a socket, or joins a multicast group; `transform_payload()` is not used | `inbound_active` (MQTT / WebSocket Client), `udp_multicast_listener` (UDP Multicast CoT Bridge) |
 
 ## Inbound Plugin Development
 
@@ -142,7 +142,7 @@ The `transform_payload()` method must return a list of dictionaries with these f
 
 Inbound plugins are auto-discovered by `PluginManager` — no manual registration needed. Place your plugin file in `plugins/` and it will be detected on startup.
 
-## Built-in Plugin: Active-Connect (MQTT / WebSocket)
+## Built-in Plugin: MQTT / WebSocket Client (`inbound_active`)
 
 The `inbound_active` plugin (`plugins/inbound_active.py`) is an **active-connect** plugin — TrakBridge dials out to a remote MQTT broker or WebSocket server, subscribes, and forwards received CoT events to the stream's configured TAK servers.
 
@@ -187,7 +187,7 @@ Received CoT bytes are passed directly to `QueuedCOTService.enqueue_event(bytes,
 
 ---
 
-## Built-in Plugin: Generic JSON Inbound
+## Built-in Plugin: JSON Receiver (`generic_inbound`)
 
 The `GenericInboundPlugin` (`plugins/generic_inbound_plugin.py`) handles JSON payloads with configurable field mapping via dot-notation paths.
 
@@ -458,15 +458,24 @@ The `InboundStreamWorker` (`services/inbound_stream_worker.py`) manages the life
 - Registers in the active stream registry for fast HTTP endpoint lookup
 - Maintains a capture buffer (ring buffer, last 10 payloads) for preview mode
 
-## Outbound Plugins
+## CoT Forwarding & Notification Plugins
 
-Three focused outbound plugins forward CoT from TAK servers to external systems. Each plugs into the existing RX worker routing in `cot_service_integration.py`.
+These plugins receive CoT from TAK servers (via the RX worker) and forward them to external systems. They appear under the **CoT Forwarding** or **Notifications** category in the stream creation UI. Each plugs into the existing RX worker routing in `cot_service_integration.py`.
 
-- `plugins/outbound_http.py` — Outbound HTTP plugin (POST/PUT JSON/XML/template to an HTTP endpoint).
-- `plugins/outbound_mqtt.py` — Outbound MQTT plugin (publish CoT to an MQTT broker topic).
-- `plugins/outbound_websocket.py` — Outbound WebSocket plugin (push CoT to a WebSocket endpoint).
+**CoT Forwarding** (category `forwarding`):
 
-Users wanting inbound and outbound on the same transport should combine an inbound stream (e.g. `inbound_active` or `udp_multicast_listener`) with the matching outbound plugin.
+- `plugins/outbound_http.py` — POST/PUT CoT events to an HTTP/HTTPS endpoint as JSON, XML, or template
+- `plugins/outbound_mqtt.py` — Publish CoT events to an MQTT broker topic
+- `plugins/outbound_websocket.py` — Stream CoT events over a persistent WebSocket connection
+- `plugins/udp_multicast_publisher.py` — Publish CoT events to a UDP multicast group
+
+**Notifications** (category `notification`):
+
+- `plugins/discord_handler.py` — Post CoT alerts to a Discord channel via incoming webhook
+- `plugins/slack_handler.py` — Post CoT alerts to a Slack channel via incoming webhook
+- `plugins/irc_handler.py` — Post CoT alerts to an IRC channel
+
+Users wanting inbound and outbound on the same transport should combine an inbound stream (e.g. `inbound_active` or `udp_multicast_listener`) with the matching outbound plugin. See the [Output Plugins Guide](OUTPUT_PLUGINS_GUIDE.md) for full configuration details.
 
 ### Conditional Field Visibility
 
