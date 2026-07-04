@@ -195,8 +195,12 @@ services:
         condition: service_healthy
         required: false
 
+    # Networks
     networks:
-      - frontend            # External for Traefik
+      frontend: {}     # External for Traefik
+      backend: {}      # Project-scoped network for database access
+      lan_multicast:
+        ipv4_address: ${MACVLAN_CONTAINER_IP:-10.0.0.1}
     
   # =============================================================================
   # PostgreSQL Database - Staging Configuration
@@ -261,7 +265,7 @@ services:
       start_period: 45s
     
     networks:
-      - frontend 
+      - backend
 
     deploy:
       resources:
@@ -325,7 +329,7 @@ services:
       start_period: 45s
     
     networks:
-      - frontend 
+      - backend
 
     deploy:
       resources:
@@ -343,6 +347,20 @@ networks:
   frontend:
     external: true
     name: frontend
+  backend:
+    # Project-scoped (compose prefixes the project name), so dev/staging DBs
+    # cannot collide on the shared "postgres" DNS alias. internal: no egress.
+    driver: bridge
+    internal: true
+  lan_multicast:
+    driver: macvlan
+    driver_opts:
+      parent: ${MACVLAN_PARENT_INTERFACE:-eth0}
+    ipam:
+      config:
+        - subnet: ${MACVLAN_SUBNET:-10.0.0.0/24}
+          gateway: ${MACVLAN_GATEWAY:-10.0.0.254}
+          ip_range: ${MACVLAN_IP_RANGE:-10.0.0.2/29}
 
 volumes:
   postgres_staging_data:

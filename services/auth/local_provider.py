@@ -157,6 +157,7 @@ class LocalAuthProvider(BaseAuthenticationProvider):
                 return AuthenticationResponse(
                     result=AuthenticationResult.PASSWORD_EXPIRED,
                     message="Password has expired",
+                    user=user,
                     details={
                         "password_changed_at": (
                             user.password_changed_at.isoformat()

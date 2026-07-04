@@ -883,6 +883,10 @@ class BootstrapService:
             True if password change is required
         """
         try:
+            # Force password change if admin explicitly flagged it
+            if getattr(user, "must_change_password", False):
+                return True
+
             # Force password change if:
             # 1. User has never changed password (password_changed_at is None)
             # 2. User is the initial admin with default password

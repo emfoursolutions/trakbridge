@@ -34,7 +34,7 @@ class GenericXMLInboundPlugin(BaseInboundPlugin):
     @property
     def plugin_metadata(self) -> Dict[str, Any]:
         return {
-            "display_name": "Generic XML Inbound",
+            "display_name": "XML Receiver",
             "description": (
                 "Receive XML location data via HTTP POST with configurable "
                 "XPath field mapping. Uses defusedxml for safe parsing."

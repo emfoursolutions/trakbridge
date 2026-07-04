@@ -56,7 +56,7 @@ class GenericInboundPlugin(BaseInboundPlugin):
     @property
     def plugin_metadata(self) -> Dict[str, Any]:
         return {
-            "display_name": "Generic JSON Inbound",
+            "display_name": "JSON Receiver",
             "description": (
                 "Receive JSON location data via HTTP POST with configurable "
                 "field mapping. Supports flat and nested JSON structures."

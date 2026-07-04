@@ -66,7 +66,7 @@ class InboundActive(BaseInboundPlugin):
     @property
     def plugin_metadata(self) -> Dict[str, Any]:
         return {
-            "display_name": "Inbound Active",
+            "display_name": "MQTT / WebSocket Client",
             "description": (
                 "Connect to an MQTT broker or WebSocket and receive position data, "
                 "converting it to CoT for TAK servers"

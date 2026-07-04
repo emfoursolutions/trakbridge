@@ -105,6 +105,7 @@ class User(db.Model, TimestampMixin):
     failed_login_attempts = Column(Integer, default=0)
     locked_until = Column(DateTime, nullable=True)
     password_changed_at = Column(DateTime, nullable=True)
+    must_change_password = Column(Boolean, nullable=False, default=False)
 
     # User preferences
     timezone = Column(String(50), default="UTC")

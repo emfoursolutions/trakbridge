@@ -51,9 +51,9 @@ class TestOutboundWebSocketMetadata:
         from plugins.outbound_websocket import OutboundWebSocket
         assert OutboundWebSocket.get_plugin_name() == "outbound_websocket"
 
-    def test_category_is_output(self):
+    def test_category_is_forwarding(self):
         plugin = _make_plugin()
-        assert plugin.plugin_metadata["category"] == "output"
+        assert plugin.plugin_metadata["category"] == "forwarding"
 
     def test_exactly_11_config_fields(self):
         """Spec mandates exactly 11 PluginConfigField entries."""

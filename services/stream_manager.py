@@ -822,6 +822,13 @@ class StreamManager:
 
     @staticmethod
     def _is_worker_unhealthy(health: dict) -> bool:
+        # Output plugin workers have no poll loop — their task exits immediately
+        # by design and is driven by the RX worker instead. task_done is expected.
+        if health.get("is_output_plugin"):
+            return (
+                not health.get("running")
+                or health.get("consecutive_errors", 0) >= 3
+            )
         return (
             not health.get("running")
             or (health.get("task_done") and not health.get("task_cancelled"))
@@ -1571,11 +1578,7 @@ class StreamManager:
             health_status = worker.get_health_status()
 
             # Check if worker is unhealthy
-            if (
-                not health_status["running"]
-                or (health_status["task_done"] and not health_status["task_cancelled"])
-                or health_status.get("consecutive_errors", 0) >= 3
-            ):
+            if self._is_worker_unhealthy(health_status):
                 unhealthy_streams.append(stream_id)
                 logger.warning(f"Stream {stream_id} appears unhealthy: {health_status}")
 

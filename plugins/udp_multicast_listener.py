@@ -15,6 +15,8 @@ from google.protobuf.message import DecodeError
 from plugins.base_plugin import BaseInboundPlugin, PluginConfigField
 from services.cot_service_integration import get_queued_cot_service
 
+_STATS_FLUSH_INTERVAL = 30
+
 _logger_instance = None
 
 
@@ -204,6 +206,8 @@ class UdpMulticastListener(BaseInboundPlugin):
         # Capped to bound memory if the multicast group has many distinct UIDs.
         self._forwarded_by_uid: Dict[str, int] = {}
         self._diagnostic_samples_logged = 0
+        self._pending_stats = 0
+        self._stats_last_flush: Optional[float] = None
 
     @property
     def plugin_name(self) -> str:
@@ -419,6 +423,7 @@ class UdpMulticastListener(BaseInboundPlugin):
                 logger.debug(f"UDP multicast: transport close error: {exc}")
             self._transport = None
         self._socket = None
+        self._flush_stats()
         logger.info(
             f"UDP multicast listener stopped — received={self._received}, "
             f"forwarded={self._forwarded}, dropped_validation="
@@ -597,6 +602,7 @@ class UdpMulticastListener(BaseInboundPlugin):
                 ok = await self._cot_service.enqueue_event(outbound, server.id)
                 if ok:
                     self._forwarded += 1
+                    self._pending_stats += 1
                     if uid:
                         self._bump_uid_counter(uid)
             except Exception as exc:
@@ -604,6 +610,8 @@ class UdpMulticastListener(BaseInboundPlugin):
                     f"UDP multicast: enqueue failed for TAK server "
                     f"{getattr(server, 'name', '?')}: {exc}"
                 )
+
+        self._flush_stats_if_needed()
 
     def _extract_uid(self, event: bytes) -> str:
         """Pull the event UID for per-UID diagnostics. Returns '' on failure."""
@@ -622,6 +630,37 @@ class UdpMulticastListener(BaseInboundPlugin):
             # Evict an arbitrary entry; this counter is diagnostic, not exact.
             self._forwarded_by_uid.pop(next(iter(self._forwarded_by_uid)))
         self._forwarded_by_uid[uid] = 1
+
+    def _flush_stats(self) -> None:
+        """Persist accumulated forwarded count to the stream's DB record."""
+        if self._pending_stats == 0 or self.stream is None:
+            return
+        try:
+            from database import db
+            from models.stream import Stream
+
+            stream_id = getattr(self.stream, "id", None)
+            if stream_id is None:
+                return
+            stream = db.session.get(Stream, stream_id)
+            if stream:
+                stream.update_stats(messages_sent=self._pending_stats)
+                db.session.commit()
+        except Exception as exc:
+            logger.warning(f"UDP multicast: failed to flush stats: {exc}")
+            try:
+                from database import db
+                db.session.rollback()
+            except Exception:
+                pass
+        finally:
+            self._pending_stats = 0
+            self._stats_last_flush = time.monotonic()
+
+    def _flush_stats_if_needed(self) -> None:
+        now = time.monotonic()
+        if self._stats_last_flush is None or (now - self._stats_last_flush) >= _STATS_FLUSH_INTERVAL:
+            self._flush_stats()
 
 
 class _Protocol(asyncio.DatagramProtocol):

@@ -566,7 +566,7 @@ function updatePluginConfig() {
     configSection.style.display = 'block';
 
     // Hide input-specific settings for output and inbound plugins
-    const isOutputPlugin = pluginMeta.category?.toLowerCase() === 'output';
+    const isOutputPlugin = ['forwarding', 'notification'].includes(pluginMeta.category?.toLowerCase());
     const isInboundPlugin = pluginMeta.category?.toLowerCase() === 'inbound';
     inputPluginSettings.style.display = (isOutputPlugin || isInboundPlugin) ? 'none' : 'block';
 
@@ -1116,7 +1116,8 @@ function getCategoryMapping(pluginCategory) {
         'platform': 'Tracker',
         'tracker': 'Tracker',
         'ems': 'EMS',
-        'output': 'Output',
+        'forwarding': 'CoT Forwarding',
+        'notification': 'Notifications',
         'bidirectional': 'Bidirectional',
         'inbound': 'Inbound'
     };

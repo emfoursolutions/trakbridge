@@ -2,8 +2,8 @@
 
 ## Version 1.3.0 - Inbound Streams, Outbound Plugins & Multicast Bridge
 
-**Release Date:** July 2, 2026
-**Focus: Push-Based Inbound Streams, New Outbound Plugins, UDP Multicast CoT Bridge, TAK Worker Stability**
+**Release Date:** July 3, 2026
+**Focus: Push-Based Inbound Streams, New Outbound Plugins, UDP Multicast CoT Bridge, TAK Worker Stability, Auth Hardening**
 
 ---
 
@@ -27,6 +27,17 @@ TrakBridge can now accept push-based data from external systems via a dedicated 
 - **Generic inbound plugins** — `generic_xml_inbound` and `generic_inbound` provide a baseline push-receive implementation registered in the plugin manager, available for all stream types.
 - **CA cert upload** — Inbound streams now support uploading a CA certificate bundle for TLS verification of upstream sources.
 
+#### Inbound Plugin Display Names
+
+Inbound plugin display names have been updated to be more descriptive and consistent:
+
+| Plugin | Previous name | New name |
+| ------ | ------------- | -------- |
+| `generic_inbound` | Generic Inbound | **JSON Receiver** |
+| `generic_xml_inbound` | Generic XML Inbound | **XML Receiver** |
+| `inbound_http` | Inbound HTTP | **HTTP Location Endpoint** |
+| `inbound_active` | Inbound Active | **MQTT / WebSocket Client** |
+
 #### UDP Multicast CoT Bridge
 **Bridge LAN Multicast Across VPN/WAN Links**
 
@@ -47,10 +58,23 @@ The `udp_multicast_listener` inbound plugin joins a UDP multicast group and forw
 
 > **Note:** ATAK Mesh SA AES encryption is intentionally not yet implemented — wire layout needs verification against ATAK-CIV source before any crypto is written.
 
-#### Outbound Plugins
+#### Plugin Category Split: CoT Forwarding & Notifications
+
+Output plugins are now organised into two distinct categories in the stream creation UI:
+
+**CoT Forwarding** — plugins that forward raw CoT events to external systems:
+`outbound_http`, `outbound_mqtt`, `outbound_websocket`, `udp_multicast_publisher`
+
+**Notifications** — plugins that post human-readable alerts to messaging platforms:
+`discord_handler`, `slack_handler`, `irc_handler`
+
+Previously all seven appeared under a single "Output Handlers" category. Splitting them makes it easier to find the right plugin for the job.
+
+#### CoT Forwarding Plugins
+
 **Forward CoT to External Systems**
 
-Three focused outbound plugins replace the legacy `webhook_handler`:
+Three focused forwarding plugins replace the legacy `webhook_handler`:
 
 **OutboundHTTP** — POSTs or PUTs CoT events to any HTTP/HTTPS endpoint:
 - Payload formats: JSON, raw XML, or custom template
@@ -70,9 +94,12 @@ Three focused outbound plugins replace the legacy `webhook_handler`:
 - URL credential redaction in all log statements
 - Scheme allow-listing (ws/wss only)
 
+**UDP Multicast Publisher** — publishes CoT events to a UDP multicast group.
+Forwarded event counts are now persisted to the stream DB record via a batched flush (every 30 seconds or on plugin stop), fixing the "0 Messages Sent" display on the stream detail page.
+
 **Shared output-plugin helpers** (`services/output_plugin_helpers.py`):
 - CoT variable extraction, template formatting, message rule filtering, geofence evaluation, deduplication, rate limiting, and payload building extracted into a reusable module
-- All three new plugins compose against this module; no logic duplication
+- All forwarding plugins compose against this module; no logic duplication
 
 The legacy `webhook_handler.py` plugin and its test files have been removed. Documentation updated throughout.
 
@@ -86,6 +113,22 @@ The legacy `webhook_handler.py` plugin and its test files have been removed. Doc
 ---
 
 ### BUG FIXES
+
+#### Expired Password Redirect & Admin Reset Lockout
+
+Users with an expired password were previously dropped into the application with an inconsistent session state instead of being redirected to the change-password flow. Admins triggering a force-reset were similarly affected.
+
+The root cause was that admin-initiated resets set `password_changed_at` to `None`, which the expiry check treated as "never changed" — immediately expired. This locked the user in a redirect loop on next login.
+
+**Fix:** A new `must_change_password` boolean column on the users table decouples forced-change from expiry state. Setting this flag redirects the user to the change-password page on their next login without touching `password_changed_at`. The expiry check only fires for genuinely expired passwords; the forced-change flag fires independently.
+
+A database migration (`add_must_change_password`) adds the column automatically on startup.
+
+#### False-Positive Unhealthy Warnings for Output Plugin Workers
+
+The stream manager's periodic health check emitted WARNING-level logs for output plugin workers (Discord, Slack, IRC, HTTP, MQTT, WebSocket, UDP Multicast Publisher) that were operating normally. These plugins do not hold a persistent TAK connection — they receive dispatched CoT events rather than maintaining a long-lived socket — so the absence of a connection is expected behaviour, not a fault.
+
+**Fix:** Output plugin workers are now recognised as healthy when their task is running, regardless of TAK connection state. Genuine failures (task exited, plugin crashed) still surface as WARNING.
 
 #### TAK Worker Task Leak on Stream Save (Critical)
 
@@ -151,11 +194,13 @@ Workers whose streams were disabled without going through `stop_stream` (e.g. a 
 4. Create outbound streams for HTTP, MQTT, or WebSocket forwarding as needed
 
 #### For Existing Deployments
-1. **Automatic migration** — `add_inbound_stream_fields` and `add_ca_cert_to_streams` migrations apply automatically on startup (migration fix included)
+
+1. **Automatic migration** — `add_inbound_stream_fields`, `add_ca_cert_to_streams`, and `add_must_change_password` migrations apply automatically on startup
 2. **Zero configuration changes** — existing outbound streams continue operating unchanged
 3. **New features opt-in** — inbound streams, multicast bridge, and new outbound plugins available when creating new streams
 4. **Legacy webhook_handler** — if you have custom streams using `webhook_handler`, migrate them to `outbound_http`, `outbound_mqtt`, or `outbound_websocket` as appropriate
 5. **Dev container** — `FLASK_ENV=development` containers now run Hypercorn; the duplicate TAK connection issue is resolved automatically
+6. **Plugin categories** — existing streams are unaffected; the category split only changes how plugins are grouped in the stream creation UI
 
 #### Validation Steps
 1. Verify existing outbound streams operate normally after upgrade
