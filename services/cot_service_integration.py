@@ -44,11 +44,16 @@ from cryptography.hazmat.primitives.serialization import pkcs12
 
 class _TxSummary:
     """
-    Rolling per-TAK-server stats for periodic INFO-level TX summaries.
+    Rolling per-TAK-server TX stats at two cadences.
 
     The TX loop calls record() for every forwarded event (cheap), then
     should_flush() each iteration. When true, render() produces a one-line
-    summary suitable for INFO and reset() rearms the window.
+    summary suitable for DEBUG and reset() folds the window into the rollup
+    accumulators and rearms the window. should_flush_rollup()/render_rollup()
+    provide the lower-frequency INFO summary so steady-state transmission
+    does not produce a log line every window. record() also flags
+    resumed_after_silence when transmission restarts after a quiet period
+    of at least the rollup interval.
     """
 
     _CALLSIGN_DISPLAY_CAP = 8
@@ -57,6 +62,7 @@ class _TxSummary:
         self,
         interval_seconds: float = 30.0,
         max_events: int = 100,
+        rollup_interval_seconds: float = 600.0,
         now=None,
     ):
         import time as _time
@@ -67,8 +73,21 @@ class _TxSummary:
         self._window_start = self._now()
         self.event_count = 0
         self.callsigns: set = set()
+        self._rollup_interval = rollup_interval_seconds
+        self._rollup_start = self._now()
+        self.rollup_event_count = 0
+        self.rollup_callsigns: set = set()
+        self._last_record: Optional[float] = None
+        self.resumed_after_silence = False
 
     def record(self, callsign: str) -> None:
+        now = self._now()
+        if (
+            self._last_record is not None
+            and (now - self._last_record) >= self._rollup_interval
+        ):
+            self.resumed_after_silence = True
+        self._last_record = now
         self.event_count += 1
         if callsign:
             self.callsigns.add(callsign)
@@ -80,26 +99,52 @@ class _TxSummary:
             return True
         return (self._now() - self._window_start) >= self._interval
 
+    @classmethod
+    def _format_callsigns(cls, callsigns: set) -> str:
+        callsigns_sorted = sorted(callsigns)
+        if len(callsigns_sorted) <= cls._CALLSIGN_DISPLAY_CAP:
+            return ", ".join(callsigns_sorted)
+        head = ", ".join(callsigns_sorted[: cls._CALLSIGN_DISPLAY_CAP])
+        remaining = len(callsigns_sorted) - cls._CALLSIGN_DISPLAY_CAP
+        return f"{head} (+{remaining} more)"
+
     def render(self, duration_seconds: float) -> str:
-        callsigns_sorted = sorted(self.callsigns)
-        if len(callsigns_sorted) <= self._CALLSIGN_DISPLAY_CAP:
-            cs_str = ", ".join(callsigns_sorted)
-        else:
-            head = ", ".join(callsigns_sorted[: self._CALLSIGN_DISPLAY_CAP])
-            remaining = len(callsigns_sorted) - self._CALLSIGN_DISPLAY_CAP
-            cs_str = f"{head} (+{remaining} more)"
         return (
             f"{self.event_count} events in {duration_seconds:.0f}s "
-            f"from {len(self.callsigns)} unique [{cs_str}]"
+            f"from {len(self.callsigns)} unique "
+            f"[{self._format_callsigns(self.callsigns)}]"
         )
 
     def window_seconds(self) -> float:
         return self._now() - self._window_start
 
     def reset(self) -> None:
+        # Fold the window into the rollup so the periodic INFO summary
+        # covers everything the DEBUG windows reported.
+        self.rollup_event_count += self.event_count
+        self.rollup_callsigns |= self.callsigns
         self.event_count = 0
         self.callsigns = set()
         self._window_start = self._now()
+
+    def should_flush_rollup(self) -> bool:
+        if self.rollup_event_count == 0:
+            return False
+        return (self._now() - self._rollup_start) >= self._rollup_interval
+
+    def render_rollup(self) -> str:
+        duration = self._now() - self._rollup_start
+        return (
+            f"{self.rollup_event_count} events "
+            f"from {len(self.rollup_callsigns)} unique "
+            f"in last {duration:.0f}s "
+            f"[{self._format_callsigns(self.rollup_callsigns)}]"
+        )
+
+    def reset_rollup(self) -> None:
+        self.rollup_event_count = 0
+        self.rollup_callsigns = set()
+        self._rollup_start = self._now()
 
 
 def _extract_callsign(event: bytes) -> str:
@@ -214,8 +259,9 @@ class QueuedCOTService:
         # Device state managers for queue replacement functionality
         self.device_state_managers: Dict[int, DeviceStateManager] = {}
 
-        # Per-TAK-server rolling TX stats; flushed to INFO periodically by the
-        # TX loop so we don't write one INFO line per forwarded CoT event.
+        # Per-TAK-server rolling TX stats; short windows flush to DEBUG and a
+        # periodic rollup flushes to INFO, so steady-state transmission does
+        # not write an INFO line every window.
         self._tx_summaries: Dict[int, "_TxSummary"] = {}
 
         # Per-TAK-server, per-UID written counter. Diagnostic only — compared
@@ -1493,14 +1539,25 @@ class QueuedCOTService:
         counters[uid] = 1
 
     def _flush_tx_summary(self, tak_server_id: int, tak_server_name: str) -> None:
-        """Emit an INFO TX summary for this server if the window is due."""
+        """
+        Flush TX stats for this server: the short window at DEBUG, the
+        periodic rollup and resume-after-silence transitions at INFO.
+        """
         summary = self._tx_summaries.get(tak_server_id)
-        if summary is None or not summary.should_flush():
+        if summary is None:
             return
-        logger.info(
-            f"TX -> {tak_server_name}: " f"{summary.render(summary.window_seconds())}"
-        )
-        summary.reset()
+        if summary.resumed_after_silence:
+            summary.resumed_after_silence = False
+            logger.info(f"TX resumed -> {tak_server_name} after quiet period")
+        if summary.should_flush():
+            logger.debug(
+                f"TX -> {tak_server_name}: "
+                f"{summary.render(summary.window_seconds())}"
+            )
+            summary.reset()
+        if summary.should_flush_rollup():
+            logger.info(f"TX -> {tak_server_name}: {summary.render_rollup()}")
+            summary.reset_rollup()
 
     async def _tx_loop(self, tak_server_id: int, writer, tak_server):
         """
@@ -1605,14 +1662,16 @@ class QueuedCOTService:
                 logger.error(f"Error in TX loop for {tak_server.name}: {e}")
                 await asyncio.sleep(1)  # Brief pause before retry
 
-        # Flush any pending TX summary on loop exit so we don't lose tail stats.
+        # Flush any pending TX stats on loop exit so we don't lose tail stats.
         summary = self._tx_summaries.get(tak_server_id)
-        if summary is not None and summary.event_count > 0:
-            logger.info(
-                f"TX -> {tak_server.name}: "
-                f"{summary.render(summary.window_seconds())} (final)"
-            )
-            summary.reset()
+        if summary is not None:
+            if summary.event_count > 0:
+                summary.reset()  # fold the open window into the rollup
+            if summary.rollup_event_count > 0:
+                logger.info(
+                    f"TX -> {tak_server.name}: {summary.render_rollup()} (final)"
+                )
+                summary.reset_rollup()
 
         # Per-UID written totals — compare against the inbound plugin's
         # _forwarded_by_uid to locate silent drops between enqueue and write.
