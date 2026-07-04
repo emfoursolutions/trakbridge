@@ -346,14 +346,12 @@ networks:
     driver: bridge
     internal: true
   lan_multicast:
-    driver: macvlan
-    driver_opts:
-      parent: ${MACVLAN_PARENT_INTERFACE:-eth0}
-    ipam:
-      config:
-        - subnet: ${MACVLAN_SUBNET:-10.0.0.0/24}
-          gateway: ${MACVLAN_GATEWAY:-10.0.0.254}
-          ip_range: ${MACVLAN_IP_RANGE:-10.0.0.2/29}
+    # Shared host-level macvlan: Docker forbids two macvlan networks with
+    # overlapping subnets, so dev and staging must reference one external
+    # network created once on the host (see docs/): each stack needs a
+    # distinct MACVLAN_CONTAINER_IP in its .env.
+    external: true
+    name: lan_multicast
 # Volumes
 volumes:
   postgres_data:
