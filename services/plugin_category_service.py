@@ -58,8 +58,10 @@ class PluginCategoryService:
             "platform": "Tracker",
             "tracker": "Tracker",
             "ems": "EMS",
-            "output": "Output",
+            "forwarding": "CoT Forwarding",
+            "notification": "Notifications",
             "bidirectional": "Bidirectional",
+            "inbound": "Inbound",
         }
 
         # Category display information
@@ -82,17 +84,29 @@ class PluginCategoryService:
                 description="Emergency Management Systems and services",
                 icon="fas fa-ambulance",
             ),
-            "Output": CategoryInfo(
-                key="Output",
-                display_name="Output Handlers",
-                description="Receive and process CoT messages from TAK servers",
-                icon="fas fa-download",
+            "CoT Forwarding": CategoryInfo(
+                key="CoT Forwarding",
+                display_name="CoT Forwarding",
+                description="Forward CoT events from TAK servers to external systems",
+                icon="fas fa-share-alt",
+            ),
+            "Notifications": CategoryInfo(
+                key="Notifications",
+                display_name="Notifications",
+                description="Post CoT event alerts to messaging and chat platforms",
+                icon="fas fa-bell",
             ),
             "Bidirectional": CategoryInfo(
                 key="Bidirectional",
                 display_name="Bidirectional",
                 description="Plugins that both send and receive TAK messages",
                 icon="fas fa-exchange-alt",
+            ),
+            "Inbound": CategoryInfo(
+                key="Inbound",
+                display_name="Inbound",
+                description="Receive push data from external devices and systems",
+                icon="fas fa-arrow-circle-down",
             ),
         }
 

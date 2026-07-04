@@ -199,7 +199,10 @@ services:
 
     # Networks
     networks:
-      - frontend     # External for Traefik
+      frontend: {}     # External for Traefik
+      backend: {}      # Project-scoped network for database access
+      lan_multicast:
+        ipv4_address: ${MACVLAN_CONTAINER_IP:-10.0.0.1}
 
   # PostgreSQL database (optional)
   postgres:
@@ -238,7 +241,7 @@ services:
       POSTGRES_DB: "trakbridge_dev"
       POSTGRES_USER: "trakbridge_dev"
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password
-      POSTGRES_INITDB_ARGS: "--auth-host=trust"
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
 
     secrets:
       - db_password
@@ -258,7 +261,7 @@ services:
       retries: 3
 
     networks:
-      - frontend
+      - backend
 
     deploy:
       resources:
@@ -321,7 +324,7 @@ services:
       retries: 3
 
     networks:
-      - frontend
+      - backend
 
     deploy:
       resources:
@@ -337,7 +340,18 @@ networks:
   frontend:
     external: true
     name: frontend
-
+  backend:
+    # Project-scoped (compose prefixes the project name), so dev/staging DBs
+    # cannot collide on the shared "postgres" DNS alias. internal: no egress.
+    driver: bridge
+    internal: true
+  lan_multicast:
+    # Shared host-level macvlan: Docker forbids two macvlan networks with
+    # overlapping subnets, so dev and staging must reference one external
+    # network created once on the host (see docs/): each stack needs a
+    # distinct MACVLAN_CONTAINER_IP in its .env.
+    external: true
+    name: lan_multicast
 # Volumes
 volumes:
   postgres_data:

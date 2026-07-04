@@ -63,6 +63,35 @@ logger = get_module_logger(__name__)
 bp = Blueprint("streams", __name__)
 
 
+def _validate_and_read_ca_cert(file_storage):
+    """Read and validate a CA cert file upload.
+
+    Accepts PEM or DER encoded X.509 certificates. Returns (cert_bytes, filename)
+    or raises ValueError with a user-friendly message.
+    """
+    from cryptography import x509
+    from cryptography.hazmat.backends import default_backend
+
+    data = file_storage.read()
+    if not data:
+        raise ValueError("Uploaded CA certificate file is empty")
+    if len(data) > 50 * 1024:
+        raise ValueError("CA certificate file is too large (max 50 KB)")
+
+    # Try PEM first, then DER
+    try:
+        x509.load_pem_x509_certificate(data, default_backend())
+        return data, file_storage.filename
+    except Exception:
+        pass
+    try:
+        x509.load_der_x509_certificate(data, default_backend())
+        return data, file_storage.filename
+    except Exception:
+        pass
+    raise ValueError("Uploaded file is not a valid PEM or DER X.509 certificate")
+
+
 def get_display_service():
     """Get the display service with current app context"""
     return StreamDisplayService(get_plugin_manager())
@@ -139,6 +168,25 @@ def create_stream():
                 data["tak_servers"] = request.form.getlist("tak_servers[]")
 
         result = operations_service.create_stream(data)
+
+        # Process CA cert upload after stream is created (form POST only)
+        if result.get("success") and not request.is_json:
+            ca_cert_file = request.files.get("ca_cert_file")
+            if ca_cert_file and ca_cert_file.filename:
+                try:
+                    from models.stream import Stream
+                    cert_bytes, cert_filename = _validate_and_read_ca_cert(ca_cert_file)
+                    stream = Stream.query.get(result["stream_id"])
+                    if stream:
+                        stream.ca_cert = cert_bytes
+                        stream.ca_cert_filename = cert_filename
+                        db.session.commit()
+                        logger.info(f"Saved CA cert '{cert_filename}' for stream {stream.id}")
+                except ValueError as e:
+                    flash(f"CA certificate warning: {e}", "warning")
+                except Exception as e:
+                    logger.error(f"Error saving CA cert for stream: {e}")
+                    flash("CA certificate could not be saved", "warning")
 
         if request.is_json:
             return jsonify(result)
@@ -335,6 +383,25 @@ def edit_stream(stream_id):
 
         result = operations_service.update_stream_safely(stream_id, data)
 
+        # Process CA cert upload after stream is updated (form POST only)
+        if result.get("success") and not request.is_json:
+            ca_cert_file = request.files.get("ca_cert_file")
+            if ca_cert_file and ca_cert_file.filename:
+                try:
+                    from models.stream import Stream
+                    cert_bytes, cert_filename = _validate_and_read_ca_cert(ca_cert_file)
+                    stream = Stream.query.get(stream_id)
+                    if stream:
+                        stream.ca_cert = cert_bytes
+                        stream.ca_cert_filename = cert_filename
+                        db.session.commit()
+                        logger.info(f"Saved CA cert '{cert_filename}' for stream {stream_id}")
+                except ValueError as e:
+                    flash(f"CA certificate warning: {e}", "warning")
+                except Exception as e:
+                    logger.error(f"Error saving CA cert for stream {stream_id}: {e}")
+                    flash("CA certificate could not be saved", "warning")
+
         if request.is_json:
             return jsonify(result), 200 if result["success"] else 400
         else:
@@ -486,3 +553,29 @@ def test_stream_config():
     except Exception as e:
         logger.error(f"Test config failed with exception: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/<int:stream_id>/remove-ca-cert", methods=["POST"])
+@require_permission("streams", "write")
+def remove_ca_cert(stream_id):
+    """Remove the uploaded CA certificate from a stream"""
+    from models.stream import Stream
+
+    try:
+        stream = Stream.query.get_or_404(stream_id)
+        stream.ca_cert = None
+        stream.ca_cert_filename = None
+        db.session.commit()
+        logger.info(f"Removed CA cert from stream {stream_id}")
+
+        if request.is_json:
+            return jsonify({"success": True, "message": "CA certificate removed"})
+        flash("CA certificate removed", "success")
+        return redirect(url_for("streams.edit_stream", stream_id=stream_id))
+
+    except Exception as e:
+        logger.error(f"Error removing CA cert from stream {stream_id}: {e}")
+        if request.is_json:
+            return jsonify({"success": False, "error": str(e)}), 500
+        flash(f"Error removing CA certificate: {e}", "error")
+        return redirect(url_for("streams.edit_stream", stream_id=stream_id))

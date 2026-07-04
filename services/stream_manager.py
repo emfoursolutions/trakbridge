@@ -57,6 +57,7 @@ from services.logging_service import get_module_logger
 from services.queue_monitoring import get_queue_monitoring_service
 from services.queue_performance_optimizer import get_performance_optimizer
 from services.session_manager import SessionManager
+from services.inbound_stream_worker import InboundStreamWorker
 from services.stream_worker import StreamWorker
 
 # Worker coordination import removed for single worker deployment
@@ -127,7 +128,7 @@ class StreamManager:
         if hasattr(stream, "tak_servers"):
             try:
                 # Check if it's a Stream model with get_tak_server_count method
-                if hasattr(stream, 'get_tak_server_count'):
+                if hasattr(stream, "get_tak_server_count"):
                     count = stream.get_tak_server_count()
                 else:
                     # Fallback for StreamDTO objects - count the tak_servers list
@@ -191,11 +192,13 @@ class StreamManager:
             if hasattr(stream, "tak_servers"):
                 try:
                     # Check if it's a Stream model with get_tak_server_count method
-                    if hasattr(stream, 'get_tak_server_count'):
+                    if hasattr(stream, "get_tak_server_count"):
                         server_count = stream.get_tak_server_count()
                     else:
                         # Fallback for StreamDTO objects - count the tak_servers list
-                        server_count = len(stream.tak_servers) if stream.tak_servers else 0
+                        server_count = (
+                            len(stream.tak_servers) if stream.tak_servers else 0
+                        )
 
                     if server_count > 0:
                         if server_count == 1:
@@ -817,34 +820,71 @@ class StreamManager:
             # Re-raise as StreamManagerError for consistency
             raise StreamManagerError(f"Background loop error: {e}") from e
 
+    @staticmethod
+    def _is_worker_unhealthy(health: dict) -> bool:
+        # Output plugin workers have no poll loop — their task exits immediately
+        # by design and is driven by the RX worker instead. task_done is expected.
+        if health.get("is_output_plugin"):
+            return (
+                not health.get("running")
+                or health.get("consecutive_errors", 0) >= 3
+            )
+        return (
+            not health.get("running")
+            or (health.get("task_done") and not health.get("task_cancelled"))
+            or health.get("consecutive_errors", 0) >= 3
+        )
+
+    async def _reap_or_warn_unhealthy(self) -> None:
+        """
+        Walk self.workers, reap ghosts (workers for inactive/deleted streams),
+        warn on the rest. Extracted from _periodic_health_check so it is
+        independently testable.
+        """
+        if not self.workers:
+            return
+
+        logger.debug(f"Performing health check on {len(self.workers)} workers")
+        unhealthy_workers = []
+        for stream_id, worker in list(self.workers.items()):
+            health = worker.get_health_status()
+            if not self._is_worker_unhealthy(health):
+                continue
+
+            # Before warning, check if the stream is still meant to be
+            # running. If the DB row is gone or marked inactive, this
+            # is a stale registry entry from a stop/restart that didn't
+            # finish cleanly. Reap it instead of warning forever.
+            try:
+                stream = self.db_manager.get_stream(stream_id)
+            except Exception as exc:
+                logger.debug(
+                    f"Health check: could not look up stream {stream_id}: {exc}"
+                )
+                stream = None
+
+            stream_active = bool(stream and getattr(stream, "is_active", False))
+            if not stream_active:
+                logger.info(
+                    f"Reaped stale worker for stream {stream_id} "
+                    f"(stream {'inactive' if stream else 'no longer exists'})"
+                )
+                self.workers.pop(stream_id, None)
+                continue
+
+            unhealthy_workers.append((stream_id, health))
+
+        if unhealthy_workers:
+            logger.warning(f"Found {len(unhealthy_workers)} unhealthy workers")
+            for stream_id, health in unhealthy_workers:
+                logger.warning(f"Worker {stream_id} unhealthy: {health}")
+
     async def _periodic_health_check(self):
         """Perform periodic health checks on workers"""
         while not self._shutdown_event.is_set():
             try:
                 await asyncio.sleep(60)  # Health check every minute
-
-                if not self.workers:
-                    continue
-
-                logger.debug(f"Performing health check on {len(self.workers)} workers")
-
-                unhealthy_workers = []
-                for stream_id, worker in self.workers.items():
-                    health = worker.get_health_status()
-
-                    # Check if worker is unhealthy
-                    if (
-                        not health["running"]
-                        or (health["task_done"] and not health["task_cancelled"])
-                        or health["consecutive_errors"] >= 3
-                    ):
-                        unhealthy_workers.append((stream_id, health))
-
-                if unhealthy_workers:
-                    logger.warning(f"Found {len(unhealthy_workers)} unhealthy workers")
-                    for stream_id, health in unhealthy_workers:
-                        logger.warning(f"Worker {stream_id} unhealthy: {health}")
-
+                await self._reap_or_warn_unhealthy()
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -921,9 +961,14 @@ class StreamManager:
                 logger.error(f"Stream {stream_id} has no TAK server configured")
                 return False
 
-            # Create worker
+            # Create worker — route by stream_mode
             logger.debug(f"Creating worker for stream {stream_id} ({stream.name})")
-            worker = StreamWorker(stream, self.session_manager, self.db_manager)
+            if getattr(stream, "stream_mode", "poll") == "inbound":
+                worker = InboundStreamWorker(
+                    stream, self.session_manager, self.db_manager
+                )
+            else:
+                worker = StreamWorker(stream, self.session_manager, self.db_manager)
 
             # Start worker with timeout
             try:
@@ -973,17 +1018,15 @@ class StreamManager:
 
     async def stop_stream(self, stream_id: int, skip_db_update=False) -> bool:
         """Stop a specific stream"""
-        try:
-            if stream_id not in self.workers:
-                logger.info(f"Stream {stream_id} not running")
-                return True
+        if stream_id not in self.workers:
+            logger.info(f"Stream {stream_id} not running")
+            return True
 
-            worker = self.workers[stream_id]
+        worker = self.workers[stream_id]
+        try:
             await asyncio.wait_for(
                 worker.stop(skip_db_update=skip_db_update), timeout=20
             )
-            del self.workers[stream_id]
-
             logger.info(f"Successfully stopped stream {stream_id}")
             return True
 
@@ -1000,6 +1043,11 @@ class StreamManager:
                 f"Unexpected error stopping stream {stream_id}: {e}", exc_info=True
             )
             return False
+        finally:
+            # Always drop the registry entry. A half-stopped worker that
+            # stays in self.workers presents as perpetually unhealthy and
+            # can never be recreated cleanly.
+            self.workers.pop(stream_id, None)
 
     async def restart_stream(self, stream_id: int) -> bool:
         """Enhanced restart with comprehensive worker cleanup"""
@@ -1530,11 +1578,7 @@ class StreamManager:
             health_status = worker.get_health_status()
 
             # Check if worker is unhealthy
-            if (
-                not health_status["running"]
-                or (health_status["task_done"] and not health_status["task_cancelled"])
-                or health_status["consecutive_errors"] >= 3
-            ):
+            if self._is_worker_unhealthy(health_status):
                 unhealthy_streams.append(stream_id)
                 logger.warning(f"Stream {stream_id} appears unhealthy: {health_status}")
 

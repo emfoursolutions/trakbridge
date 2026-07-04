@@ -60,7 +60,7 @@ class SlackHandler(BaseOutputPlugin):
             "display_name": "Slack CoT Handler",
             "description": "Receive CoT messages from TAK and post to Slack",
             "icon": "fa-slack",
-            "category": "output",
+            "category": "notification",
             "help_sections": [
                 {
                     "title": "Template Variables",

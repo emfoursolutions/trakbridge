@@ -195,8 +195,12 @@ services:
         condition: service_healthy
         required: false
 
+    # Networks
     networks:
-      - frontend            # External for Traefik
+      frontend: {}     # External for Traefik
+      backend: {}      # Project-scoped network for database access
+      lan_multicast:
+        ipv4_address: ${MACVLAN_CONTAINER_IP:-10.0.0.1}
     
   # =============================================================================
   # PostgreSQL Database - Staging Configuration
@@ -261,7 +265,7 @@ services:
       start_period: 45s
     
     networks:
-      - frontend 
+      - backend
 
     deploy:
       resources:
@@ -325,7 +329,7 @@ services:
       start_period: 45s
     
     networks:
-      - frontend 
+      - backend
 
     deploy:
       resources:
@@ -343,6 +347,18 @@ networks:
   frontend:
     external: true
     name: frontend
+  backend:
+    # Project-scoped (compose prefixes the project name), so dev/staging DBs
+    # cannot collide on the shared "postgres" DNS alias. internal: no egress.
+    driver: bridge
+    internal: true
+  lan_multicast:
+    # Shared host-level macvlan: Docker forbids two macvlan networks with
+    # overlapping subnets, so dev and staging must reference one external
+    # network created once on the host (see docs/): each stack needs a
+    # distinct MACVLAN_CONTAINER_IP in its .env.
+    external: true
+    name: lan_multicast
 
 volumes:
   postgres_staging_data:

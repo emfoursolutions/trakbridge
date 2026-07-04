@@ -463,7 +463,7 @@ After successful installation:
 - **Documentation**: [GitHub Wiki](../../wiki)
 - **Issues**: [Report Problems](../../issues)  
 - **Discussions**: [Community Forum](../../discussions)
-- **Email Support**: support@emfoursolutions.com.au
+- **Email Support**: support@trakbridge.net
 
 ---
 

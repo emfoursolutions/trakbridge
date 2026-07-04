@@ -1730,22 +1730,149 @@ docker compose --profiles postgres --porfiles nginx up -d
 - **Version Compatibility**: Maintain backward compatibility when possible
 - **Documentation**: Keep documentation current with code changes
 
-## Support and Resources
+## Output Plugins (BaseOutputPlugin)
 
-### Development Resources
-- **Base Plugin Source**: `plugins/base_plugin.py` - Reference implementation
-- **Example Plugins**: Study existing plugins for patterns and best practices
-- **Plugin Manager**: `plugins/plugin_manager.py` - Plugin loading and management
-- **Testing Utilities**: `plugins/tests/` - Testing helpers and fixtures
+Output plugins receive CoT messages from TAK servers and forward them to external systems. They are the reverse of GPS input plugins.
 
-### Community Support
-- **GitHub Issues**: Report bugs and request features
-- **Documentation**: Comprehensive guides and API references
-- **Code Reviews**: Community code review and feedback
-- **Best Practices**: Shared knowledge and implementation patterns
+### Base Class
+
+```python
+from plugins.base_plugin import BaseOutputPlugin, PluginConfigField
+```
+
+### Required Methods
+
+| Method | Description |
+| --- | --- |
+| `plugin_name` (property) | Unique identifier, lowercase underscores |
+| `plugin_metadata` (property) | Metadata dict with `category: "output"` |
+| `handle_cot_message(cot_xml, tak_server_id)` | Called by RX worker for each received CoT event |
+
+### Plugin Category
+
+Set `"category": "output"` (or `"bidirectional"` for plugins that both send and receive).
+
+### Lifecycle
+
+```
+1. Discovery  — PluginManager scans plugins/ on startup
+2. Config     — User configures via web UI (create output stream)
+3. Message    — RX worker calls handle_cot_message() per event (10s timeout)
+```
+
+### Key Rules
+
+- **Never re-raise** from `handle_cot_message` — catch all exceptions and log; one plugin crashing must not stop others receiving the same event
+- **Always use `defusedxml`** for XML parsing — standard `xml.etree` is vulnerable to XXE
+- **Set timeouts** on all external calls (`aiohttp.ClientTimeout`, etc.)
+- **Mark sensitive fields** `sensitive=True` — auto-encrypted at rest
+
+### Shared Helpers
+
+`services/output_plugin_helpers.py` provides dedup, rate limiting, geofence filtering, CoT variable extraction, and payload building. Compose against it rather than re-implementing:
+
+```python
+from services.output_plugin_helpers import (
+    extract_cot_variables,
+    Deduplicator,
+    RateLimiter,
+    is_within_geofence,
+    build_payload,
+)
+```
+
+### Built-in Output Plugins
+
+Study these as reference implementations before writing a custom output plugin:
+
+| Plugin | File | Description |
+| --- | --- | --- |
+| `outbound_http` | `plugins/outbound_http.py` | POST/PUT CoT to HTTP/HTTPS endpoint |
+| `outbound_mqtt` | `plugins/outbound_mqtt.py` | Publish CoT to MQTT broker |
+| `outbound_websocket` | `plugins/outbound_websocket.py` | Stream CoT to WebSocket server |
+
+See [Output Plugins Guide](OUTPUT_PLUGINS_GUIDE.md) and [Handler Plugin Development Guide](HANDLER_PLUGIN_DEVELOPMENT_GUIDE.md) for full details.
 
 ---
 
-**Plugin Development Guide Version**: 1.4.0
+## Inbound Plugins (BaseInboundPlugin)
+
+Inbound plugins receive data from external sources and route it through the CoT pipeline to TAK servers. There are two transport patterns:
+
+| Transport | Description |
+| --- | --- |
+| HTTP push | External device POSTs to `/api/inbound/<stream_id>/data`; plugin implements `transform_payload()` |
+| Active-connect | Plugin's `start()` dials out (MQTT, WebSocket, multicast); `transform_payload()` not used |
+
+### Base Class
+
+```python
+from plugins.base_plugin import BaseInboundPlugin, PluginConfigField
+```
+
+### Required Methods
+
+| Method | Description |
+| --- | --- |
+| `plugin_name` (property) | Unique identifier |
+| `plugin_metadata` (property) | Metadata dict with `category: "inbound"` and `inbound_transport: "http_push"` or `"active_connect"` |
+| `transform_payload(raw_body, content_type, headers)` | HTTP push only — parse bytes into list of location dicts |
+| `validate_inbound_request(headers)` | Authenticate request; return `(True, None)` or `(False, "reason")` |
+
+### Location Dict Schema
+
+`transform_payload()` must return a list of dicts:
+
+| Field | Type | Required |
+| --- | --- | --- |
+| `uid` | str | Yes |
+| `lat` | float | Yes |
+| `lon` | float | Yes |
+| `callsign` | str | No |
+| `speed` | float | No |
+| `course` | float | No |
+| `timestamp` | str/datetime | No |
+
+### Plugin Category
+
+Set `"category": "inbound"` in `plugin_metadata`.
+
+### Built-in Inbound Plugins
+
+| Plugin | File | Description |
+| --- | --- | --- |
+| `generic_inbound_plugin` | `plugins/generic_inbound_plugin.py` | JSON push with configurable field mapping |
+| `generic_xml_inbound_plugin` | `plugins/generic_xml_inbound_plugin.py` | XML push with configurable field mapping |
+| `inbound_active` | `plugins/inbound_active.py` | Active-connect MQTT / WebSocket |
+| `udp_multicast_listener` | `plugins/udp_multicast_listener.py` | UDP multicast CoT bridge (XML + TAK Protocol v1) |
+
+See [Inbound Streams Guide](INBOUND_STREAMS_GUIDE.md) for full details.
+
+---
+
+## Support and Resources
+
+### Development Resources
+
+- **Base Plugin Source**: `plugins/base_plugin.py` — `BaseGPSPlugin`, `BaseOutputPlugin`, `BaseInboundPlugin`
+- **Shared Output Helpers**: `services/output_plugin_helpers.py` — dedup, rate limiting, geofence, payload building
+- **Example Plugins**: `docs/example_external_plugins/` — reference implementations for all three plugin types
+- **Plugin Manager**: `plugins/plugin_manager.py` — plugin loading and management
+- **Testing Utilities**: `tests/` — unit, integration, and E2E test patterns
+
+### Related Guides
+
+- [Output Plugins Guide](OUTPUT_PLUGINS_GUIDE.md) — built-in output plugins and custom output plugin development
+- [Handler Plugin Development Guide](HANDLER_PLUGIN_DEVELOPMENT_GUIDE.md) — detailed walkthrough with examples
+- [Inbound Streams Guide](INBOUND_STREAMS_GUIDE.md) — inbound plugin architecture, HTTP push, active-connect, and UDP multicast
+
+### Community Support
+
+- **GitHub Issues**: Report bugs and request features
+- **Documentation**: Comprehensive guides and API references
+
+---
+
+**Plugin Development Guide Version**: 1.5.0
 **Last Updated**: 2026-03-19
 **Compatible with**: TrakBridge v1.2.0+

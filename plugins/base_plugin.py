@@ -1,18 +1,13 @@
 """
-File: plugins/base_plugin.py
-
-Description:
-    Defines the abstract base class for GPS tracking plugins, providing a standard
-    interface, common configuration validation, encryption support for sensitive fields,
-    and integration with the persistent COT event system. Includes helper classes and
-    methods to support plugin metadata, dynamic configuration UI generation, and
-    asynchronous communication with TAK servers.
+ABOUTME: Defines abstract base classes for all TrakBridge plugins (GPS, Output, Inbound).
+ABOUTME: Provides shared config/encryption via PluginConfigMixin, plus plugin metadata and UI generation helpers.
 
 Author: Emfour Solutions
 Created: 2025-07-05
 """
 
 # Standard library imports
+import hmac
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -108,6 +103,10 @@ class PluginConfigField:
         min_value: Optional[int] = None,
         max_value: Optional[int] = None,
         sensitive: bool = False,
+        depends_on: Optional[Any] = None,
+        group: Optional[str] = None,
+        row_group: Optional[str] = None,
+        allowed_schemes: Optional[tuple] = None,
     ):
         self.name = name
         self.label = label
@@ -120,10 +119,14 @@ class PluginConfigField:
         self.min_value = min_value
         self.max_value = max_value
         self.sensitive = sensitive  # For password fields and other sensitive data
+        self.depends_on = depends_on  # Visibility condition(s): dict or list of dicts
+        self.group = group  # Field group ID for section grouping
+        self.row_group = row_group  # Fields with same row_group render side-by-side
+        self.allowed_schemes = allowed_schemes  # URL scheme whitelist; defaults to http(s)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
-        return {
+        result = {
             "name": self.name,
             "label": self.label,
             "type": self.field_type,
@@ -136,6 +139,13 @@ class PluginConfigField:
             "max": self.max_value,
             "sensitive": self.sensitive,
         }
+        if self.depends_on is not None:
+            result["depends_on"] = self.depends_on
+        if self.group is not None:
+            result["group"] = self.group
+        if self.row_group is not None:
+            result["row_group"] = self.row_group
+        return result
 
 
 @dataclass
@@ -170,46 +180,16 @@ class PluginCustomComponent:
         }
 
 
-class BaseGPSPlugin(ABC):
-    """Enhanced base class for GPS tracking plugins with persistent COT support and circuit breaker protection"""
+class PluginConfigMixin:
+    """
+    Mixin providing shared configuration, encryption, and validation logic
+    for all plugin base classes (GPS, Output, Inbound).
 
-    def __init__(self, config: Dict[str, Any]):
-        self.config = config
-        from services.encryption_service import EncryptionService
-
-        self.encryption_service = EncryptionService()
-        # Initialize stream reference as None - will be set by StreamWorker if in production
-        self.stream = None
-        self._in_production_context = False
-
-        # Circuit breaker integration for fault tolerance
-        self._circuit_breaker = None
-        self._circuit_breaker_initialized = False
-
-    @property
-    @abstractmethod
-    def plugin_name(self) -> str:
-        """Return the name of this plugin"""
-        pass
-
-    @property
-    @abstractmethod
-    def plugin_metadata(self) -> Dict[str, Any]:
-        """
-        Return plugin metadata for UI generation
-
-        Returns:
-            Dictionary containing:
-            - display_name: Human-readable plugin name
-            - description: Plugin description
-            - icon: FontAwesome icon class
-            - category: Plugin category
-            - help_sections: List of help content sections
-            - config_fields: List of PluginConfigField objects
-            - custom_components: List of PluginCustomComponent objects (optional)
-            - min_poll_interval: Minimum poll interval in seconds (optional, default 30)
-        """
-        pass
+    Requires the consuming class to have:
+    - self.config: Dict[str, Any]
+    - self.encryption_service: EncryptionService instance
+    - self.plugin_metadata: property returning metadata dict with config_fields
+    """
 
     @property
     def required_config_fields(self) -> List[str]:
@@ -334,6 +314,101 @@ class BaseGPSPlugin(ABC):
             return encryption_service.decrypt_config(config, sensitive_fields)
 
         return config
+
+    def validate_config(self) -> bool:
+        """Enhanced validation using plugin metadata"""
+        config_fields = self.get_config_fields()
+
+        # Use decrypted config for validation
+        config_to_validate = self.get_decrypted_config()
+
+        for field in config_fields:
+            field_name = field.name
+            field_value = config_to_validate.get(field_name)
+
+            # Check required fields
+            if field.required and (field_value is None or field_value == ""):
+                get_logger().error(
+                    f"Missing required configuration field: {field_name}"
+                )
+                return False
+
+            # Type-specific validation
+            if field_value is not None and field_value != "":
+                if field.field_type in ["url"]:
+                    schemes = field.allowed_schemes if field.allowed_schemes else ("http://", "https://")
+                    if not str(field_value).startswith(schemes):
+                        get_logger().error(f"Field '{field_name}' must be a valid URL")
+                        return False
+
+                if field.field_type == "number":
+                    try:
+                        num_value = float(field_value)
+                        if field.min_value is not None and num_value < field.min_value:
+                            get_logger().error(
+                                f"Field '{field_name}' must be at least {field.min_value}"
+                            )
+                            return False
+                        if field.max_value is not None and num_value > field.max_value:
+                            get_logger().error(
+                                f"Field '{field_name}' must be at most {field.max_value}"
+                            )
+                            return False
+                    except (ValueError, TypeError):
+                        get_logger().error(
+                            f"Field '{field_name}' must be a valid number"
+                        )
+                        return False
+
+                if field.field_type == "email" and "@" not in str(field_value):
+                    get_logger().error(
+                        f"Field '{field_name}' must be a valid email address"
+                    )
+                    return False
+
+        return True
+
+
+class BaseGPSPlugin(PluginConfigMixin, ABC):
+    """Enhanced base class for GPS tracking plugins with persistent COT support and circuit breaker protection"""
+
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        from services.encryption_service import EncryptionService
+
+        self.encryption_service = EncryptionService()
+        # Initialize stream reference as None - will be set by StreamWorker if in production
+        self.stream = None
+        self._in_production_context = False
+
+        # Circuit breaker integration for fault tolerance
+        self._circuit_breaker = None
+        self._circuit_breaker_initialized = False
+
+    @property
+    @abstractmethod
+    def plugin_name(self) -> str:
+        """Return the name of this plugin"""
+        pass
+
+    @property
+    @abstractmethod
+    def plugin_metadata(self) -> Dict[str, Any]:
+        """
+        Return plugin metadata for UI generation
+
+        Returns:
+            Dictionary containing:
+            - display_name: Human-readable plugin name
+            - description: Plugin description
+            - icon: FontAwesome icon class
+            - category: Plugin category
+            - help_sections: List of help content sections
+            - config_fields: List of PluginConfigField objects
+            - custom_components: List of PluginCustomComponent objects (optional)
+            - min_poll_interval: Minimum poll interval in seconds (optional, default 30)
+        """
+        pass
 
     def supports_callsign_mapping(self) -> bool:
         """
@@ -646,59 +721,6 @@ class BaseGPSPlugin(ABC):
                 exc_info=True,
             )
 
-    def validate_config(self) -> bool:
-        """Enhanced validation using plugin metadata"""
-        config_fields = self.get_config_fields()
-
-        # Use decrypted config for validation
-        config_to_validate = self.get_decrypted_config()
-
-        for field in config_fields:
-            field_name = field.name
-            field_value = config_to_validate.get(field_name)
-
-            # Check required fields
-            if field.required and (field_value is None or field_value == ""):
-                get_logger().error(
-                    f"Missing required configuration field: {field_name}"
-                )
-                return False
-
-            # Type-specific validation
-            if field_value is not None and field_value != "":
-                if field.field_type in ["url"] and not str(field_value).startswith(
-                    ("http://", "https://")
-                ):
-                    get_logger().error(f"Field '{field_name}' must be a valid URL")
-                    return False
-
-                if field.field_type == "number":
-                    try:
-                        num_value = float(field_value)
-                        if field.min_value is not None and num_value < field.min_value:
-                            get_logger().error(
-                                f"Field '{field_name}' must be at least {field.min_value}"
-                            )
-                            return False
-                        if field.max_value is not None and num_value > field.max_value:
-                            get_logger().error(
-                                f"Field '{field_name}' must be at most {field.max_value}"
-                            )
-                            return False
-                    except (ValueError, TypeError):
-                        get_logger().error(
-                            f"Field '{field_name}' must be a valid number"
-                        )
-                        return False
-
-                if field.field_type == "email" and "@" not in str(field_value):
-                    get_logger().error(
-                        f"Field '{field_name}' must be a valid email address"
-                    )
-                    return False
-
-        return True
-
     def get_stream_config_value(self, key: str, default_value: Any = None) -> Any:
         """
         Get configuration value from stream object with fallback to plugin config.
@@ -886,12 +908,12 @@ class BaseGPSPlugin(ABC):
             }
 
 
-class BaseOutputPlugin(ABC):
+class BaseOutputPlugin(PluginConfigMixin, ABC):
     """
     Base class for output plugins that handle received CoT messages.
 
     Mirrors BaseGPSPlugin architecture but for CoT reception instead of GPS fetching.
-    Reuses all existing infrastructure: encryption, validation, health checks, etc.
+    Reuses shared configuration infrastructure via PluginConfigMixin.
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -941,174 +963,153 @@ class BaseOutputPlugin(ABC):
         """
         pass
 
-    def get_decrypted_config(self) -> Dict[str, Any]:
-        """Get plugin configuration with sensitive fields decrypted for use"""
-        sensitive_fields = self.get_sensitive_fields()
-        if not sensitive_fields:
-            return self.config.copy()
 
-        decrypted_config = self.config.copy()
+class BaseInboundPlugin(PluginConfigMixin, ABC):
+    """
+    Base class for inbound plugins that receive data from external sources
+    and convert it to location dicts for CoT generation.
 
-        for field_name in sensitive_fields:
-            if field_name in decrypted_config:
-                value = decrypted_config[field_name]
-                if value:
-                    try:
-                        decrypted_config[field_name] = (
-                            self.encryption_service.decrypt_value(str(value))
-                        )
-                    except Exception as e:
-                        get_logger().error(
-                            f"Failed to decrypt field '{field_name}': {e}"
-                        )
-                        # Keep original value if decryption fails
+    Two patterns are supported:
+    - HTTP push: external devices POST to TrakBridge; transform_payload()
+      parses the raw body and returns locations. start()/cleanup() are no-ops.
+    - Active connect: TrakBridge dials out to MQTT/WebSocket; override start()
+      to establish the connection and cleanup() to tear it down. transform_payload()
+      is not used and raises NotImplementedError by default.
+    """
 
-        return decrypted_config
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        from services.encryption_service import EncryptionService
 
-    def get_config_fields(self) -> List[PluginConfigField]:
-        """Get configuration fields from plugin metadata"""
+        self.encryption_service = EncryptionService()
+        self.stream = None  # Set by framework
+
+    @property
+    @abstractmethod
+    def plugin_name(self) -> str:
+        """Return the unique identifier for this plugin"""
+        pass
+
+    @property
+    @abstractmethod
+    def plugin_metadata(self) -> Dict[str, Any]:
+        """
+        Return plugin metadata for UI generation.
+
+        Returns:
+            Dictionary containing:
+            - display_name: Human-readable plugin name
+            - description: Plugin description
+            - icon: FontAwesome icon class
+            - category: Must be "inbound"
+            - config_fields: List of PluginConfigField objects
+            - accepted_content_types: List of MIME types this plugin handles
+              (e.g., ["application/json"], ["application/xml", "text/xml"])
+            - custom_components: List of PluginCustomComponent objects (optional)
+        """
+        pass
+
+    def transform_payload(
+        self, raw_body: bytes, content_type: str, headers: Dict[str, str]
+    ) -> List[Dict[str, Any]]:
+        """
+        Transform a raw inbound payload into standard location dictionaries.
+
+        HTTP-push plugins must override this. Active-connect plugins (MQTT/WebSocket)
+        drive data via start()/cleanup() and never call this method.
+
+        Args:
+            raw_body: Raw request body bytes
+            content_type: Content-Type header value
+            headers: Request headers (API key already validated, but available
+                     for plugins that need other headers like HMAC signatures)
+
+        Returns:
+            List of location dictionaries, each containing:
+            - uid: Unique device identifier (str, required)
+            - name: Device/callsign name (str, required)
+            - lat: Latitude (float, required)
+            - lon: Longitude (float, required)
+            - timestamp: UTC timestamp (datetime, optional)
+            - speed: Speed in m/s (float, optional)
+            - course: Heading in degrees (float, optional)
+            - altitude: Altitude in meters (float, optional)
+            - description: Optional description (str, optional)
+            - additional_data: Dict of any additional data (optional)
+            - cot_type: Per-point CoT type override (optional)
+
+        Raises:
+            NotImplementedError: If the plugin uses active-connect transport
+            ValueError: If payload cannot be parsed or contains no valid locations
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support HTTP push payloads"
+        )
+
+    async def start(self) -> None:
+        """Optional lifecycle hook called when the stream starts.
+
+        Override in active-connect plugins (MQTT, WebSocket) to establish
+        the outbound connection. HTTP-push plugins leave this as a no-op.
+        """
+        pass
+
+    async def cleanup(self) -> None:
+        """Optional lifecycle hook called when the stream stops.
+
+        Override in active-connect plugins to close connections and cancel
+        tasks. HTTP-push plugins leave this as a no-op.
+        """
+        pass
+
+    def validate_inbound_request(
+        self, headers: Dict[str, str]
+    ) -> tuple:
+        """
+        Validate an inbound request before processing the body.
+
+        Called before transform_payload() to authenticate the request.
+        The default implementation checks for a Bearer token matching the
+        stream's configured API key. Plugins can override for custom auth
+        (HMAC signatures, OAuth tokens, client certificates, etc.).
+
+        Args:
+            headers: Request headers dictionary
+
+        Returns:
+            Tuple of (is_valid: bool, error_message: Optional[str])
+            - (True, None) if request is authorized
+            - (False, "reason") if request should be rejected
+        """
+        config = self.get_decrypted_config()
+        auth_mode = config.get("auth_mode", "api_key")
+
+        if auth_mode == "none":
+            stream_id = getattr(self.stream, "id", "unknown")
+            get_logger().warning(
+                f"Inbound stream {stream_id} has auth_mode='none' — "
+                f"requests are unauthenticated"
+            )
+            return (True, None)
+
+        # Default: Bearer token auth
+        expected_key = config.get("api_key", "")
+        if not expected_key:
+            return (False, "No API key configured for this stream")
+
+        auth_header = headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return (False, "Missing or invalid Authorization header")
+
+        provided_key = auth_header[7:]  # Strip "Bearer " prefix
+        if not hmac.compare_digest(
+            provided_key.encode("utf-8"), expected_key.encode("utf-8")
+        ):
+            return (False, "Invalid API key")
+
+        return (True, None)
+
+    def get_accepted_content_types(self) -> List[str]:
+        """Get list of accepted Content-Type values from plugin metadata."""
         metadata = self.plugin_metadata
-        fields = []
-
-        for field_data in metadata.get("config_fields", []):
-            if isinstance(field_data, PluginConfigField):
-                fields.append(field_data)
-            elif isinstance(field_data, dict):
-                # Convert dict to PluginConfigField
-                fields.append(PluginConfigField(**field_data))
-
-        return fields
-
-    def get_sensitive_fields(self) -> List[str]:
-        """Get list of sensitive field names from plugin metadata"""
-        sensitive_fields = []
-        config_fields = self.get_config_fields()
-
-        for field in config_fields:
-            if field.sensitive:
-                sensitive_fields.append(field.name)
-
-        return sensitive_fields
-
-    @staticmethod
-    def encrypt_config_for_storage(
-        plugin_type: str, config: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Encrypt sensitive fields in configuration before storing in database
-
-        Args:
-            plugin_type: The plugin type name
-            config: Configuration dictionary
-
-        Returns:
-            Configuration with sensitive fields encrypted
-        """
-        from plugins.plugin_manager import get_plugin_manager
-        from services.encryption_service import EncryptionService
-
-        plugin_manager = get_plugin_manager()
-        metadata = plugin_manager.get_plugin_metadata(plugin_type)
-        if not metadata:
-            return config
-
-        sensitive_fields = []
-        for field_data in metadata.get("config_fields", []):
-            if isinstance(field_data, dict) and field_data.get("sensitive"):
-                sensitive_fields.append(field_data["name"])
-            elif hasattr(field_data, "sensitive") and field_data.sensitive:
-                sensitive_fields.append(field_data.name)
-
-        if sensitive_fields:
-            encryption_service = EncryptionService()
-            return encryption_service.encrypt_config(config, sensitive_fields)
-
-        return config
-
-    @staticmethod
-    def decrypt_config_from_storage(
-        plugin_type: str, config: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Decrypt sensitive fields in configuration after loading from database
-
-        Args:
-            plugin_type: The plugin type name
-            config: Configuration dictionary with encrypted fields
-
-        Returns:
-            Configuration with sensitive fields decrypted
-        """
-        from plugins.plugin_manager import get_plugin_manager
-        from services.encryption_service import EncryptionService
-
-        plugin_manager = get_plugin_manager()
-        metadata = plugin_manager.get_plugin_metadata(plugin_type)
-        if not metadata:
-            return config
-
-        sensitive_fields = []
-        for field_data in metadata.get("config_fields", []):
-            if isinstance(field_data, dict) and field_data.get("sensitive"):
-                sensitive_fields.append(field_data["name"])
-            elif hasattr(field_data, "sensitive") and field_data.sensitive:
-                sensitive_fields.append(field_data.name)
-
-        if sensitive_fields:
-            encryption_service = EncryptionService()
-            return encryption_service.decrypt_config(config, sensitive_fields)
-
-        return config
-
-    def validate_config(self) -> bool:
-        """Enhanced validation using plugin metadata"""
-        config_fields = self.get_config_fields()
-
-        # Use decrypted config for validation
-        config_to_validate = self.get_decrypted_config()
-
-        for field in config_fields:
-            field_name = field.name
-            field_value = config_to_validate.get(field_name)
-
-            # Check required fields
-            if field.required and (field_value is None or field_value == ""):
-                get_logger().error(
-                    f"Missing required configuration field: {field_name}"
-                )
-                return False
-
-            # Type-specific validation
-            if field_value is not None and field_value != "":
-                if field.field_type in ["url"] and not str(field_value).startswith(
-                    ("http://", "https://")
-                ):
-                    get_logger().error(f"Field '{field_name}' must be a valid URL")
-                    return False
-
-                if field.field_type == "number":
-                    try:
-                        num_value = float(field_value)
-                        if field.min_value is not None and num_value < field.min_value:
-                            get_logger().error(
-                                f"Field '{field_name}' must be at least {field.min_value}"
-                            )
-                            return False
-                        if field.max_value is not None and num_value > field.max_value:
-                            get_logger().error(
-                                f"Field '{field_name}' must be at most {field.max_value}"
-                            )
-                            return False
-                    except (ValueError, TypeError):
-                        get_logger().error(
-                            f"Field '{field_name}' must be a valid number"
-                        )
-                        return False
-
-                if field.field_type == "email" and "@" not in str(field_value):
-                    get_logger().error(
-                        f"Field '{field_name}' must be a valid email address"
-                    )
-                    return False
-
-        return True
+        return metadata.get("accepted_content_types", ["application/json"])

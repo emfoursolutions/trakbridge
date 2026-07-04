@@ -81,6 +81,11 @@ deploy-dev-postgres:
         export IMAGE_TAG=$IMAGE_TAG && \
         export COMPOSE_PROJECT_NAME=tb-dev && \
         export DOMAIN=$DOMAIN && \
+        export MACVLAN_PARENT_INTERFACE=$MACVLAN_PARENT_INTERFACE && \
+        export MACVLAN_SUBNET=$MACVLAN_SUBNET && \
+        export MACVLAN_GATEWAY=$MACVLAN_GATEWAY && \
+        export MACVLAN_IP_RANGE=$MACVLAN_IP_RANGE && \
+        export MACVLAN_CONTAINER_IP=$MACVLAN_CONTAINER_IP && \
         docker compose -f docker-compose.yml --profile $DB_PROFILE down && \
         docker compose -f docker-compose.yml --profile $DB_PROFILE up -d"
 
@@ -142,6 +147,11 @@ deploy-dev-mysql:
         export DB_PORT=3306 && \
         export DB_NAME=trakbridge_db && \
         export DB_USER=trakbridge && \
+        export MACVLAN_PARENT_INTERFACE=$MACVLAN_PARENT_INTERFACE && \
+        export MACVLAN_SUBNET=$MACVLAN_SUBNET && \
+        export MACVLAN_GATEWAY=$MACVLAN_GATEWAY && \
+        export MACVLAN_IP_RANGE=$MACVLAN_IP_RANGE && \
+        export MACVLAN_CONTAINER_IP=$MACVLAN_CONTAINER_IP && \
         docker compose -f docker-compose.yml --profile $DB_PROFILE down && \
         docker compose -f docker-compose.yml --profile $DB_PROFILE up -d"
 
@@ -200,6 +210,11 @@ deploy-dev-sqlite:
         export COMPOSE_PROJECT_NAME=tb-dev-sqlite && \
         export DOMAIN=$DOMAIN && \
         export DB_TYPE=sqlite && \
+        export MACVLAN_PARENT_INTERFACE=$MACVLAN_PARENT_INTERFACE && \
+        export MACVLAN_SUBNET=$MACVLAN_SUBNET && \
+        export MACVLAN_GATEWAY=$MACVLAN_GATEWAY && \
+        export MACVLAN_IP_RANGE=$MACVLAN_IP_RANGE && \
+        export MACVLAN_CONTAINER_IP=$MACVLAN_CONTAINER_IP && \
         docker compose -f docker-compose.yml down && \
         docker compose -f docker-compose.yml up -d app"
 
@@ -314,6 +329,11 @@ deploy-staging:
         docker pull $CI_REGISTRY_IMAGE:$IMAGE_TAG && \
         export CI_REGISTRY_IMAGE=$CI_REGISTRY_IMAGE && \
         export IMAGE_TAG=$IMAGE_TAG && \
+        export MACVLAN_PARENT_INTERFACE=$MACVLAN_PARENT_INTERFACE && \
+        export MACVLAN_SUBNET=$MACVLAN_SUBNET && \
+        export MACVLAN_GATEWAY=$MACVLAN_GATEWAY && \
+        export MACVLAN_IP_RANGE=$MACVLAN_IP_RANGE && \
+        export MACVLAN_CONTAINER_IP=$MACVLAN_CONTAINER_IP && \
         docker compose -f docker-compose.yml --profile $DB_PROFILE down && \
         docker compose -f docker-compose.yml --profile $DB_PROFILE up -d"
 
@@ -398,6 +418,11 @@ deploy-prod:
         docker pull $CI_REGISTRY_IMAGE:$IMAGE_TAG && \
         export CI_REGISTRY_IMAGE=$CI_REGISTRY_IMAGE && \
         export IMAGE_TAG=$IMAGE_TAG && \
+        export MACVLAN_PARENT_INTERFACE=$MACVLAN_PARENT_INTERFACE && \
+        export MACVLAN_SUBNET=$MACVLAN_SUBNET && \
+        export MACVLAN_GATEWAY=$MACVLAN_GATEWAY && \
+        export MACVLAN_IP_RANGE=$MACVLAN_IP_RANGE && \
+        export MACVLAN_CONTAINER_IP=$MACVLAN_CONTAINER_IP && \
         docker compose -f docker-compose.yml --profile $DB_PROFILE down && \
         docker compose -f docker-compose.yml --profile $DB_PROFILE up -d"
 

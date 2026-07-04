@@ -1,227 +1,385 @@
-# TrakBridge Output Plugins - Developer Guide
+# TrakBridge Output Plugins Guide
 
 ## Overview
 
-Output plugins allow TrakBridge to receive and process CoT (Cursor on Target) messages from TAK servers. Unlike GPS input plugins that fetch location data and send it to TAK, output plugins **receive** CoT messages from TAK and route them to external systems like Slack, IRC, databases, or custom integrations.
+Output plugins receive CoT messages from TAK servers (via the RX worker) and forward them to external systems — HTTP endpoints, MQTT brokers, WebSocket servers, UDP multicast groups, and messaging platforms.
+
+Unlike GPS input plugins that *fetch* location data and *send* it to TAK, output plugins work in the opposite direction: TAK → TrakBridge → external system.
+
+Plugins appear under one of two categories in the stream creation UI:
+
+- **CoT Forwarding** (`forwarding`) — forward raw CoT events to external systems: `outbound_http`, `outbound_mqtt`, `outbound_websocket`, `udp_multicast_publisher`
+- **Notifications** (`notification`) — post human-readable alerts to messaging platforms: `discord_handler`, `slack_handler`, `irc_handler`
 
 ## Architecture
 
 ```text
-TAK Server → RX Worker → Output Plugins → External Systems
-                              ↓
-                    ┌─────────┴─────────┐
-                    │                   │
-              SlackHandler      IRCHandler      CotArchiver
-                    │                   │              │
-                  Slack               IRC          Database
+TAK Server → RX Worker → cot_service_integration.py
+                              │
+          ┌───────────────────┼───────────────────┐
+          ▼                   ▼                   ▼
+   OutboundHTTP         OutboundMQTT       OutboundWebSocket
+   UdpMulticastPublisher                  DiscordHandler
+   (or any BaseOutputPlugin subclass)     SlackHandler / IRCHandler
+          │                   │                   │
+       HTTP/S              MQTT               WebSocket /
+      endpoint             broker          messaging platform
 ```
 
 ### Key Principles
 
-1. **Zero Core Assumptions**: The RX worker delivers raw CoT XML to ALL output plugins
-2. **Plugin-Driven Filtering**: Each plugin decides which messages to handle
-3. **Secure Parsing**: Plugins use `defusedxml` for safe XML parsing
-4. **Flexible Configuration**: Dynamic UI generation from plugin metadata
-5. **Encrypted Secrets**: Sensitive fields (webhooks, passwords) are automatically encrypted
+1. **Plugin-Driven Filtering** — Each plugin decides which messages to handle via message rules, UID regex, and geofence filters
+2. **Shared Helper Module** — `services/output_plugin_helpers.py` provides CoT extraction, formatting, dedup, rate-limiting, and payload building that all forwarding plugins compose against
+3. **Bounded Queues** — Each plugin maintains a bounded async queue with configurable overflow strategy (oldest-drop by default) to prevent memory growth under bursty traffic
+4. **Encrypted Secrets** — Sensitive fields (URLs, passwords, tokens) are automatically encrypted at rest
+5. **Secure XML Parsing** — All CoT XML is parsed via `defusedxml` to prevent XXE attacks
 
-## Available Output Plugins
+## CoT Forwarding Plugins
 
-### 1. SlackHandler (`slack_handler`)
+### OutboundHTTP (`outbound_http`)
 
-Routes CoT messages to Slack channels via incoming webhooks.
+POSTs or PUTs CoT events to any HTTP/HTTPS endpoint.
 
-#### Use Cases
-- Team chat notifications for TAK events
-- Emergency alerts to Slack channels
-- Custom CoT message monitoring
-- Integration with Slack workflows
+#### Configuration Fields
 
-#### Configuration
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `endpoint_url` | URL | Yes | Destination URL (http:// or https:// only) |
+| `http_method` | Select | No | `POST` (default) or `PUT` |
+| `payload_format` | Select | No | `json`, `xml`, or `template` |
+| `template` | Text | No | Message template (used when `payload_format=template`) |
+| `custom_headers` | Text | No | `Header: value` lines; CRLF injection prevention applied |
+| `timeout_seconds` | Number | No | HTTP request timeout (default 10s) |
+| `dedup_ttl_seconds` | Number | No | Deduplication window; `0` disables (default 5s) |
+| `rate_limit_per_minute` | Number | No | Max events per minute; `0` disables |
+
+Plus `message_rules` and `global_geofence` custom components (see [Filtering](#filtering)).
+
+**Scheme allow-listing**: Non-http/https URLs are rejected with a log message before any network I/O.
+
+**CRLF injection prevention**: `parse_custom_headers()` strips any header value containing `\r` or `\n` before passing headers to aiohttp.
+
+#### Payload Formats
+
+**JSON** (default):
+```json
+{
+  "uid": "ANDROID-abc123",
+  "callsign": "Alpha-1",
+  "type": "a-f-G-U-C",
+  "lat": 38.897,
+  "lon": -77.036,
+  "hae": 100.0,
+  "speed": 2.5,
+  "course": 270.0,
+  "remarks": "On route",
+  "battery": 85,
+  "group_name": "Cyan",
+  "group_role": "Team Member",
+  "mgrs": "18SUJ2348306479",
+  "timestamp": "2026-07-02T10:00:00Z",
+  "tak_server_id": 1
+}
+```
+
+**XML**: Raw CoT XML bytes forwarded verbatim.
+
+**Template**: Use `{variable}` placeholders. Available variables:
+`{callsign}`, `{uid}`, `{type}`, `{lat}`, `{lon}`, `{hae}`, `{speed}`, `{course}`, `{remarks}`, `{battery}`, `{group_name}`, `{group_role}`, `{mgrs}`, `{timestamp}`
+
+#### Example
+
+```bash
+curl -X POST http://localhost:8080/api/inbound/5/data \
+  -H "Content-Type: application/json" \
+  -d '{"endpoint_url": "https://api.example.com/cot", "payload_format": "json"}'
+```
+
+---
+
+### OutboundMQTT (`outbound_mqtt`)
+
+Publishes CoT events to an MQTT broker topic with a persistent paho-mqtt connection.
+
+#### Configuration Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `broker_url` | Text | Yes | `mqtt://host:1883` or `mqtts://host:8883` |
+| `topic` | Text | Yes | MQTT topic to publish to |
+| `client_id` | Text | No | MQTT client ID (auto-generated if blank) |
+| `username` | Text | No | Broker username |
+| `password` | Password | No | Broker password (encrypted) |
+| `qos` | Select | No | QoS level: `0`, `1`, or `2` (default `1`) |
+| `payload_format` | Select | No | `json`, `xml`, or `template` |
+| `template` | Text | No | Message template |
+| `ca_cert_file` | Text | No | Path to CA cert for `mqtts://` |
+| `client_cert_file` | Text | No | Path to client cert for mTLS |
+| `client_key_file` | Text | No | Path to client key for mTLS |
+| `dedup_ttl_seconds` | Number | No | Deduplication window (default 5s) |
+| `rate_limit_per_minute` | Number | No | Max events per minute; `0` disables |
+
+Plus `message_rules` and `global_geofence` custom components.
+
+**TLS**: `mqtts://` URLs use `cert_utils.build_ssl_context()` (the same cert infrastructure as TAK server connections), not paho's `client.tls_set()` directly.
+
+**Reconnection**: paho auto-reconnect via `loop_start()`/`loop_stop()`. Bad-auth detection: plugin stays disconnected with a clear log message when credentials are rejected by the broker.
+
+**Bounded queue**: Oldest events are dropped when the queue fills. Every drop increments `events_dropped` in the plugin stats.
+
+---
+
+### OutboundWebSocket (`outbound_websocket`)
+
+Maintains a persistent aiohttp WebSocket connection and streams CoT events.
+
+#### Configuration Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `endpoint_url` | URL | Yes | WebSocket URL (ws:// or wss:// only) |
+| `payload_format` | Select | No | `json`, `xml`, or `template` |
+| `template` | Text | No | Message template |
+| `custom_headers` | Text | No | Extra HTTP headers for the WS upgrade request |
+| `reconnect_delay_seconds` | Number | No | Initial backoff delay (default 1s, caps at 30s) |
+| `dedup_ttl_seconds` | Number | No | Deduplication window (default 5s) |
+| `rate_limit_per_minute` | Number | No | Max events per minute; `0` disables |
+
+Plus `message_rules` and `global_geofence` custom components.
+
+**Scheme allow-listing**: Non-ws/wss URLs are rejected before any connection attempt.
+
+**URL credential redaction**: Username/password in the URL are stripped before any log statement in `_connect()`.
+
+**Reconnection**: Exponential backoff starting at `reconnect_delay_seconds`, capped at 30s. A background reader task detects server-side closes so reconnection begins immediately rather than waiting for the next send attempt.
+
+**Bounded queue**: Same oldest-drop semantics as OutboundMQTT.
+
+---
+
+### UdpMulticastPublisher (`udp_multicast_publisher`)
+
+Publishes CoT events to a UDP multicast group. Intended for bridging CoT from a TAK server onto a LAN segment where ATAK clients listen on a multicast address.
+
+#### Configuration Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `multicast_group` | Text | Yes | IPv4 multicast address (e.g. `239.2.3.1`) |
+| `multicast_port` | Number | Yes | UDP port (e.g. `6969`) |
+| `bind_interface` | Text | No | Local IP to bind; leave blank for `0.0.0.0` |
+| `ttl` | Number | No | Multicast TTL (default `1` — LAN only) |
+| `payload_format` | Select | No | `xml` (default) or `json` |
+
+Plus `message_rules` and `global_geofence` custom components.
+
+**Metrics**: Forwarded event counts are persisted to the stream DB record via a batched flush every 30 seconds and on plugin stop. This means the "Messages Sent" counter on the stream detail page reflects actual delivery.
+
+---
+
+## Notification Plugins
+
+### SlackHandler (`slack_handler`)
+
+Forwards CoT messages to a Slack channel via an incoming webhook using Block Kit formatting.
+
+#### Configuration Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `webhook_url` | URL | Yes | Slack incoming webhook URL (encrypted) |
-| `message_types` | Text | No | Comma-separated CoT types (e.g., `b-t-f,b-a-*`) |
-| `uid_filter` | Text | No | Regex pattern to filter by UID (e.g., `^ANDROID-.*`) |
+| `uid_filter` | Text | No | Global UID regex pre-filter applied before message rules |
 
-#### Message Type Examples
-- `b-t-f` - Chat messages (exact match)
-- `b-a-*` - All emergency alerts (wildcard)
-- `b-t-f,b-a-o-tbl` - Chat and specific emergency type
-
-#### Example Configuration
-```python
-{
-    "webhook_url": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
-    "message_types": "b-t-f,b-a-*",  # Chat and emergencies
-    "uid_filter": "^ANDROID-.*"      # Only Android devices
-}
-```
+Plus `message_rules` and `global_geofence` custom components.
 
 #### Message Formatting
-- **Chat** (b-t-f): 💬 **Callsign**: Message text
-- **Emergency** (b-a-*): 🚨 **EMERGENCY**: Callsign
-- **Position** (a-*): Filtered by default to avoid spam
-- **Custom**: 📡 **Callsign**: CoT Type
 
-#### Testing Connection
-Uses `test_connection()` to send a test message to the configured webhook.
+Slack messages use Block Kit rich formatting. Template variables available in message rules:
+
+`{type}`, `{uid}`, `{callsign}`, `{remarks}`, `{lat}`, `{lon}`, `{hae}`, `{mgrs}`, `{group_name}`, `{group_role}`, `{device}`, `{platform}`, `{battery}`, `{speed}`, `{course}`, `{time}`, `{stale}`, `{xmpp_username}`
+
+#### Example Message Rule Templates
+
+- Chat: `[CHAT] {callsign}: {remarks}`
+- Emergency: `[EMERGENCY] {callsign} at {mgrs}`
+- Friendly position: `[{group_name}] {callsign} ({group_role}) - Battery: {battery}%`
+
+#### Notes
+
+- At least one message rule is required for messages to be sent
+- Messages are deduplicated within a 5-second window
+- Webhook URL is masked on edit forms (stored encrypted)
 
 ---
 
-### 2. IRCHandler (`irc_handler`)
+### IRCHandler (`irc_handler`)
 
-Routes CoT messages to IRC channels for real-time team communication.
+Forwards CoT messages to an IRC channel over plain TCP or SSL.
 
-#### Use Cases
-- Bridge TAK to IRC operations channels
-- Chat relay between TAK and IRC teams
-- Emergency notifications to IRC ops channel
-- Integration with IRC bots and automation
-
-#### Configuration
+#### Configuration Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `server` | Text | Yes | IRC server hostname |
 | `port` | Number | Yes | IRC port (6667 plain, 6697 SSL) |
-| `use_ssl` | Select | Yes | Enable SSL/TLS encryption |
+| `use_ssl` | Select | Yes | Enable SSL/TLS (`true`/`false`) |
+| `verify_ssl` | Select | No | Verify SSL certificate (`true`/`false`, default `true`) |
 | `nickname` | Text | Yes | Bot nickname |
-| `channel` | Text | Yes | Channel to join (include #) |
-| `password` | Password | No | Server password (encrypted) |
-| `message_types` | Text | No | Comma-separated CoT types |
-| `uid_filter` | Text | No | Regex pattern to filter by UID |
+| `channel` | Text | Yes | Channel to join (include `#`) |
+| `password` | Password | No | Server/NickServ password (encrypted) |
+| `uid_filter` | Text | No | Global UID regex pre-filter |
 
-#### Example Configuration
-```python
-{
-    "server": "irc.libera.chat",
-    "port": 6697,
-    "use_ssl": "true",
-    "nickname": "TrakBridge",
-    "channel": "#tak-ops",
-    "message_types": "b-t-f,b-a-*",
-    "uid_filter": ""  # Optional
-}
-```
+Plus `message_rules` and `global_geofence` custom components.
 
-#### Message Formatting
-- **Chat**: `[CHAT] Callsign: Message text`
-- **Emergency**: `[EMERGENCY] Callsign`
-- **Custom**: `[cot-type] Callsign`
+#### Notes
 
-#### Connection Management
-- Persistent connection with auto-reconnect
-- Proper IRC handshake (NICK, USER, JOIN)
-- Long message splitting (400 char limit)
-- Graceful cleanup on shutdown (PART, QUIT)
-
-#### Testing Connection
-Connects to IRC server, joins channel, and sends test message.
+- Maintains a persistent connection with PING/PONG keepalive and async reader task
+- Messages longer than 400 characters are split automatically
+- At least one message rule required; 5-second deduplication window
 
 ---
 
-### 3. CotArchiver (`cot_archiver`)
+### DiscordHandler (`discord_handler`)
 
-Archives CoT messages to database for audit trail and replay.
+Forwards CoT messages to a Discord channel via an incoming webhook.
 
-#### Use Cases
-- Audit trail for compliance
-- Message replay and analysis
-- Historical data queries
-- Debugging and troubleshooting
-- Custom reporting and analytics
-
-#### Configuration
+#### Configuration Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `archive_all` | Select | Yes | Archive all messages or filter by type |
-| `message_types` | Text | No | Types to archive (if not archiving all) |
-| `include_position_updates` | Select | Yes | Archive position updates (high volume) |
-| `retention_days` | Number | No | Days to keep messages (0 = forever) |
+| `webhook_url` | URL | Yes | Discord incoming webhook URL (encrypted) |
+| `webhook_username` | Text | No | Override webhook display name |
+| `webhook_avatar_url` | URL | No | Override webhook avatar image URL |
+| `use_embeds` | Select | No | Use rich embed formatting (`true`/`false`, default `true`) |
+| `uid_filter` | Text | No | Global UID regex pre-filter |
 
-#### Example Configurations
+Plus `message_rules` and `global_geofence` custom components.
 
-**Archive Everything Except Positions:**
-```python
-{
-    "archive_all": "true",
-    "include_position_updates": "false",
-    "retention_days": 30
-}
-```
+#### Message Formatting
 
-**Archive Only Chat and Emergencies:**
-```python
-{
-    "archive_all": "false",
-    "message_types": "b-t-f,b-a-*",
-    "retention_days": 90
-}
-```
+When `use_embeds = true`, messages are posted as Discord embeds with colour-coded fields for MGRS location, battery, group/role, and remarks. When `false`, plain text template formatting is used.
 
-#### Database Schema
+Same template variables as SlackHandler.
 
-The `cot_messages` table stores:
-- `tak_server_id` - Source TAK server
-- `cot_xml` - Raw CoT XML
-- `cot_type` - CoT message type
-- `uid` - Device UID
-- `callsign` - Device callsign
-- `cot_time` - Original CoT timestamp
-- `received_at` - TrakBridge receive time
+#### Notes
 
-#### Indexes
-- `tak_server_id + received_at` - Server timeline queries
-- `cot_type + received_at` - Type-based queries
-- `uid + received_at` - Device history queries
-- Individual indexes on callsign, cot_type, uid
+- Webhook URL is masked on edit forms (stored encrypted)
+- 5-second deduplication window; at least one message rule required
 
-#### Querying Archived Messages
+---
+
+## Shared Output Plugin Helpers
+
+`services/output_plugin_helpers.py` provides the shared pipeline that all three built-in plugins compose against. You can import these in custom output plugins too.
+
+### CoT Variable Extraction
 
 ```python
-from models.cot_message import CotMessage
-from datetime import datetime, timedelta
+from services.output_plugin_helpers import extract_cot_variables
 
-# Get recent emergencies
-emergencies = CotMessage.query.filter(
-    CotMessage.cot_type.like('b-a-%'),
-    CotMessage.received_at >= datetime.utcnow() - timedelta(hours=24)
-).all()
-
-# Get all messages from a device
-device_history = CotMessage.query.filter_by(
-    uid='ANDROID-123'
-).order_by(CotMessage.received_at.desc()).limit(100).all()
-
-# Get messages by TAK server
-server_messages = CotMessage.query.filter_by(
-    tak_server_id=1
-).order_by(CotMessage.received_at.desc()).all()
+variables = extract_cot_variables(cot_xml)
+# Returns dict with: uid, callsign, type, lat, lon, hae, speed,
+# course, remarks, battery, group_name, group_role, mgrs, timestamp
 ```
+
+### Message Rule Filtering
+
+```python
+from services.output_plugin_helpers import should_handle_message, matches_message_rules
+
+# Check message rules config component
+if not matches_message_rules(variables, rules_config):
+    return  # filtered out
+```
+
+### Geofence Filtering
+
+```python
+from services.output_plugin_helpers import is_within_geofence
+
+if geofence_enabled and not is_within_geofence(lat, lon, geofence_config):
+    return  # outside bounds
+```
+
+### Deduplication
+
+```python
+from services.output_plugin_helpers import Deduplicator
+
+dedup = Deduplicator(ttl_seconds=5)
+if dedup.is_duplicate(uid, timestamp):
+    return  # already seen
+```
+
+### Rate Limiting
+
+```python
+from services.output_plugin_helpers import RateLimiter
+
+limiter = RateLimiter(per_minute=60)
+if not limiter.allow():
+    return  # rate limited
+```
+
+### Payload Building
+
+```python
+from services.output_plugin_helpers import build_payload
+
+payload = build_payload(variables, format="json", template=None)
+# Returns bytes (JSON-encoded) or str depending on format
+```
+
+---
+
+## Filtering
+
+All three built-in plugins share the same filtering pipeline via `PluginCustomComponent` entries in `plugin_metadata`. Filters are evaluated in order; a message is handled only if all enabled filters pass.
+
+### Message Rules
+
+Defined as a `message_rules` custom component. Each rule has:
+
+| Field | Description |
+|-------|-------------|
+| CoT type pattern | Wildcard-capable (e.g., `a-f-*`, `b-t-f`, `b-a-*`) |
+| UID regex | Optional regex applied to the event UID |
+
+A message passes if it matches **any** rule (OR logic across rules). If no rules are defined, all messages pass.
+
+**Examples:**
+- `a-f-*` — all friendly positions
+- `b-t-f` — chat messages (exact)
+- `b-a-*` with UID regex `^ANDROID-.*` — emergency alerts from Android devices only
+
+### Global Geofence
+
+Defined as a `global_geofence` custom component. When enabled, messages are only forwarded if the CoT event's `<point>` falls within the configured bounding box (lat/lon min/max).
+
+An interactive Leaflet map on the stream detail page shows the configured bounding box.
+
+### Deduplication
+
+When `dedup_ttl_seconds > 0`, a message with the same UID that arrives within the TTL window is dropped. This prevents double-posting when TAK server re-broadcasts the same event.
 
 ---
 
 ## Creating Custom Output Plugins
 
-### Step 1: Create Plugin File
-
-Create a new file in `plugins/` directory (e.g., `plugins/my_handler.py`):
+### Step 1: Create the Plugin File
 
 ```python
-# ABOUTME: MyHandler plugin for routing CoT messages to external system
-# ABOUTME: Implements BaseOutputPlugin for custom CoT message handling
+# ABOUTME: MyHandler plugin — receives CoT from TAK and forwards to an external system
+# ABOUTME: Extends BaseOutputPlugin; discovered automatically from plugins/ directory
 
 from plugins.base_plugin import BaseOutputPlugin, PluginConfigField
 from defusedxml import ElementTree as DefusedET
 from typing import Any, Dict
+import aiohttp
 
-# Lazy logger import
 _logger_instance = None
 
 def get_logger():
-    """Get the module logger, initializing lazily to avoid circular imports"""
     global _logger_instance
     if _logger_instance is None:
         from services.logging_service import get_module_logger
@@ -229,7 +387,6 @@ def get_logger():
     return _logger_instance
 
 class _LoggerProxy:
-    """Proxy that forwards all attribute access to the lazy logger"""
     def __getattr__(self, name):
         return getattr(get_logger(), name)
 
@@ -237,7 +394,6 @@ logger = _LoggerProxy()
 
 
 class MyHandler(BaseOutputPlugin):
-    """Custom handler for CoT messages"""
 
     @property
     def plugin_name(self) -> str:
@@ -248,51 +404,38 @@ class MyHandler(BaseOutputPlugin):
         return {
             "display_name": "My Custom Handler",
             "description": "Routes CoT messages to my external system",
-            "icon": "fa-rocket",  # FontAwesome icon
-            "category": "output",
+            "icon": "fa-rocket",
+            "category": "forwarding",  # or "notification" for messaging plugins
             "config_fields": [
                 PluginConfigField(
                     name="api_url",
                     label="API Endpoint URL",
                     field_type="url",
                     required=True,
-                    help_text="Your external API endpoint"
+                    help_text="Your external API endpoint (https:// recommended)"
                 ),
                 PluginConfigField(
                     name="api_key",
                     label="API Key",
                     field_type="password",
                     required=True,
-                    sensitive=True,  # Automatically encrypted
-                    help_text="Your API authentication key"
-                ),
-                PluginConfigField(
-                    name="message_types",
-                    label="Message Types to Handle",
-                    field_type="text",
-                    placeholder="b-t-f,b-a-*",
-                    help_text="Comma-separated CoT types"
+                    sensitive=True,
+                    help_text="API key — stored encrypted"
                 ),
             ]
         }
 
     async def handle_cot_message(self, cot_xml: bytes, tak_server_id: int) -> None:
-        """Process received CoT message"""
         config = self.get_decrypted_config()
-
         try:
-            # Parse XML securely
             root = DefusedET.fromstring(cot_xml)
-
-            # Extract fields
             cot_type = root.get("type", "")
             uid = root.get("uid", "")
 
-            # Apply filtering
-            if not self._should_handle(cot_type):
+            # Only handle position reports
+            if not cot_type.startswith("a-"):
                 return
 
-            # Extract message details
             detail = root.find("detail")
             callsign = "Unknown"
             if detail is not None:
@@ -300,122 +443,81 @@ class MyHandler(BaseOutputPlugin):
                 if contact is not None:
                     callsign = contact.get("callsign", "Unknown")
 
-            # Send to your external system
-            await self._send_to_external_api(cot_type, uid, callsign)
+            point = root.find("point")
+            if point is None:
+                return
+
+            await self._post_to_api(config, uid, callsign, point)
 
         except Exception as e:
-            logger.error(f"MyHandler failed to process CoT: {e}")
+            logger.error(f"MyHandler failed: {e}")
 
-    def _should_handle(self, cot_type: str) -> bool:
-        """Filter logic"""
-        config = self.get_decrypted_config()
-        type_filter = config.get("message_types", "")
-
-        if not type_filter:
-            return True  # Handle all if no filter
-
-        types = [t.strip() for t in type_filter.split(",")]
-        for t in types:
-            if t.endswith("*"):
-                if cot_type.startswith(t[:-1]):
-                    return True
-            elif cot_type == t:
-                return True
-
-        return False
-
-    async def _send_to_external_api(self, cot_type: str, uid: str, callsign: str):
-        """Send to your API"""
-        import aiohttp
-
-        config = self.get_decrypted_config()
-        api_url = config.get("api_url")
-        api_key = config.get("api_key")
-
-        payload = {
-            "type": cot_type,
-            "uid": uid,
-            "callsign": callsign
-        }
-
-        headers = {
-            "Authorization": f"Bearer {api_key}"
-        }
-
-        async with aiohttp.ClientSession() as session:
-            async with session.post(api_url, json=payload, headers=headers) as resp:
-                if resp.status != 200:
-                    logger.error(f"API call failed: {resp.status}")
+    async def _post_to_api(self, config, uid, callsign, point):
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                config["api_url"],
+                json={
+                    "uid": uid,
+                    "callsign": callsign,
+                    "lat": float(point.get("lat")),
+                    "lon": float(point.get("lon")),
+                },
+                headers={"Authorization": f"Bearer {config['api_key']}"},
+            ) as resp:
+                if resp.status >= 400:
+                    logger.warning(f"MyHandler API returned {resp.status}")
 
     async def test_connection(self) -> Dict[str, Any]:
-        """Test connection to external system"""
         config = self.get_decrypted_config()
-        api_url = config.get("api_url")
-
-        if not api_url:
-            return {
-                "success": False,
-                "error": "Missing API URL",
-                "message": "Please configure API endpoint"
-            }
-
+        if not config.get("api_url"):
+            return {"success": False, "error": "Missing API URL"}
         try:
-            # Test API connectivity
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                async with session.get(api_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    if resp.status == 200:
-                        return {
-                            "success": True,
-                            "message": "Successfully connected to API"
-                        }
-                    else:
-                        return {
-                            "success": False,
-                            "error": f"HTTP {resp.status}",
-                            "message": f"API returned error"
-                        }
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(config["api_url"]) as resp:
+                    return {"success": resp.status < 500, "message": f"HTTP {resp.status}"}
         except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "message": "Connection test failed"
-            }
+            return {"success": False, "error": str(e)}
 ```
 
 ### Step 2: Plugin Discovery
 
-Plugins are automatically discovered by the PluginManager. No registration needed!
+Place the file in `plugins/`. The `PluginManager` scans `plugins/` on startup — no manual registration needed.
 
-### Step 3: Test Your Plugin
+### Step 3: Compose with Shared Helpers (Recommended)
+
+For dedup, rate limiting, and geofence filtering, compose against `output_plugin_helpers` rather than re-implementing:
 
 ```python
-from plugins.my_handler import MyHandler
+from services.output_plugin_helpers import (
+    extract_cot_variables,
+    Deduplicator,
+    RateLimiter,
+    is_within_geofence,
+    build_payload,
+)
 
-# Create instance
-config = {
-    "api_url": "https://api.example.com/cot",
-    "api_key": "your-key",
-    "message_types": "b-t-f"
-}
+class MyHandler(BaseOutputPlugin):
 
-handler = MyHandler(config)
+    def __init__(self, config):
+        super().__init__(config)
+        self._dedup = Deduplicator(ttl_seconds=5)
+        self._rate_limiter = RateLimiter(per_minute=60)
 
-# Test connection
-result = await handler.test_connection()
-print(result)
+    async def handle_cot_message(self, cot_xml: bytes, tak_server_id: int) -> None:
+        variables = extract_cot_variables(cot_xml)
+        if not variables:
+            return
 
-# Test message handling
-cot_xml = b'''<?xml version="1.0"?>
-<event version="2.0" uid="TEST-123" type="b-t-f" time="2025-12-15T10:00:00Z" start="2025-12-15T10:00:00Z" stale="2025-12-15T10:05:00Z">
-  <point lat="34.5" lon="-118.2" hae="100" ce="10" le="10"/>
-  <detail>
-    <contact callsign="TestUser"/>
-    <remarks>Test message</remarks>
-  </detail>
-</event>'''
+        if self._dedup.is_duplicate(variables["uid"], variables["timestamp"]):
+            return
 
-await handler.handle_cot_message(cot_xml, tak_server_id=1)
+        if not self._rate_limiter.allow():
+            return
+
+        payload = build_payload(variables, format="json")
+        await self._send(payload)
 ```
 
 ---
@@ -425,612 +527,244 @@ await handler.handle_cot_message(cot_xml, tak_server_id=1)
 ### Required Methods
 
 #### `plugin_name` (property)
-Returns the unique plugin identifier (lowercase, underscores).
-
-```python
-@property
-def plugin_name(self) -> str:
-    return "my_handler"
-```
+Unique plugin identifier — lowercase, underscores. Must be unique across all plugins.
 
 #### `plugin_metadata` (property)
-Returns plugin metadata for UI generation.
+Returns plugin metadata for UI generation. Minimum required keys:
 
 ```python
-@property
-def plugin_metadata(self) -> Dict[str, Any]:
-    return {
-        "display_name": "Human-Readable Name",
-        "description": "What this plugin does",
-        "icon": "fa-icon-name",  # FontAwesome icon
-        "category": "output",     # or "bidirectional"
-        "config_fields": [...]    # List of PluginConfigField
-    }
+{
+    "display_name": "Human-Readable Name",
+    "description": "What this plugin does",
+    "icon": "fa-icon-name",
+    "category": "forwarding",  # "forwarding", "notification", or "bidirectional"
+    "config_fields": [...],
+    # Optional custom components:
+    "custom_components": [
+        {"type": "message_rules", ...},
+        {"type": "global_geofence", ...},
+    ]
+}
 ```
 
 #### `handle_cot_message(cot_xml, tak_server_id)`
-Process received CoT message.
+Process one CoT message. Called by the RX worker with a 10-second timeout.
 
 ```python
 async def handle_cot_message(self, cot_xml: bytes, tak_server_id: int) -> None:
-    """
-    Args:
-        cot_xml: Raw CoT XML bytes from TAK server
-        tak_server_id: ID of TAK server that sent this message
-    """
+    # cot_xml — raw CoT XML bytes from TAK server
+    # tak_server_id — DB ID of the TAK server that sent this message
     pass
 ```
 
+**Never re-raise exceptions** — one plugin raising will not stop other plugins from receiving the same message, but repeated exceptions will be logged.
+
 ### Inherited Helper Methods
 
-#### `get_decrypted_config()`
-Get configuration with sensitive fields decrypted.
-
-```python
-config = self.get_decrypted_config()
-api_key = config.get("api_key")  # Automatically decrypted
-```
-
-#### `get_config_fields()`
-Get list of PluginConfigField objects from metadata.
-
-```python
-fields = self.get_config_fields()
-for field in fields:
-    print(f"{field.name}: {field.field_type}")
-```
-
-#### `get_sensitive_fields()`
-Get list of sensitive field names for encryption.
-
-```python
-sensitive = self.get_sensitive_fields()
-# Returns: ["api_key", "password", "webhook_url", ...]
-```
-
-#### `validate_config()`
-Validate configuration against metadata requirements.
-
-```python
-if not self.validate_config():
-    logger.error("Invalid configuration")
-```
+| Method | Description |
+|--------|-------------|
+| `get_decrypted_config()` | Config dict with `sensitive=True` fields decrypted |
+| `get_config_fields()` | List of `PluginConfigField` from metadata |
+| `get_sensitive_fields()` | Names of fields marked `sensitive=True` |
+| `validate_config()` | Validate config against metadata requirements |
 
 ### Optional Methods
 
 #### `test_connection()`
-Test connectivity to external system.
+Test connectivity to external system. Called from UI "Test Connection" button.
 
 ```python
 async def test_connection(self) -> Dict[str, Any]:
     return {
-        "success": True,
-        "message": "Connection successful"
+        "success": True,      # bool
+        "message": "...",     # shown to user
+        # "error": "..."      # on failure
     }
 ```
 
 ---
 
-## Configuration Field Types
-
-### Field Types
-
-| Type | Description | Validation |
-|------|-------------|------------|
-| `text` | Single-line text | - |
-| `password` | Password input | Set `sensitive=True` |
-| `url` | URL input | Must start with http:// or https:// |
-| `email` | Email input | Must contain @ |
-| `number` | Numeric input | Optional min/max validation |
-| `select` | Dropdown | Requires `options` list |
+## Configuration Field Reference
 
 ### PluginConfigField Parameters
 
 ```python
 PluginConfigField(
-    name="field_name",              # Database field name
-    label="Field Label",            # UI display label
-    field_type="text",              # Field type (see above)
-    required=False,                 # Is field required?
-    placeholder="Enter value...",   # Placeholder text
-    help_text="Help description",   # Help text below field
-    default_value=None,             # Default value
-    options=[],                     # For select fields
-    min_value=None,                 # For number fields
-    max_value=None,                 # For number fields
-    sensitive=False                 # Auto-encrypt this field?
+    name="field_name",            # Internal identifier (DB key)
+    label="Field Label",          # UI display label
+    field_type="text",            # See types below
+    required=False,
+    placeholder="Enter value...",
+    help_text="Shown below field",
+    default_value=None,
+    options=[],                   # For select fields only
+    min_value=None,               # For number fields
+    max_value=None,               # For number fields
+    sensitive=False,              # Auto-encrypt this field
+    group=None,                   # Group header label
+    depends_on=None,              # {"field": "name", "value": "val"}
+    row_group=None,               # Side-by-side layout key
 )
 ```
 
-### Select Field Options
+### Field Types
 
-```python
-PluginConfigField(
-    name="level",
-    label="Alert Level",
-    field_type="select",
-    options=[
-        {"value": "low", "label": "Low Priority"},
-        {"value": "high", "label": "High Priority"},
-        {"value": "critical", "label": "Critical"}
-    ]
-)
-```
+| Type | Description |
+|------|-------------|
+| `text` | Single-line text |
+| `password` | Masked input — set `sensitive=True` |
+| `url` | URL input |
+| `email` | Email input |
+| `number` | Numeric input — optional `min_value`/`max_value` |
+| `select` | Dropdown — requires `options` list |
+| `api_key` | Text with "Generate" button |
+| `checkbox` | Boolean toggle |
+| `textarea` | Multi-line text |
 
 ---
 
 ## CoT Message Types Reference
 
-### Common CoT Types
-
-| Type Pattern | Description | Example |
-|--------------|-------------|---------|
-| `b-t-f*` | Chat messages | `b-t-f` (simple chat) |
-| `b-a-*` | Emergency alerts | `b-a-o-tbl` (troops in contact) |
-| `a-f-*` | Friendly positions | `a-f-G-U-C` (friendly ground) |
-| `a-h-*` | Hostile positions | `a-h-G` (hostile ground) |
-| `a-n-*` | Neutral positions | `a-n-G` (neutral ground) |
-| `a-u-*` | Unknown positions | `a-u-G` (unknown ground) |
-| `b-m-p-*` | Mission/planning | Various mission types |
-
-### Filtering Examples
-
-**Exact Match:**
-```python
-"message_types": "b-t-f"  # Only simple chat
-```
-
-**Wildcard Match:**
-```python
-"message_types": "b-a-*"  # All emergencies
-```
-
-**Multiple Types:**
-```python
-"message_types": "b-t-f,b-a-*,a-f-*"  # Chat, emergencies, friendlies
-```
+| Pattern | Description |
+|---------|-------------|
+| `a-f-*` | Friendly positions |
+| `a-h-*` | Hostile positions |
+| `a-n-*` | Neutral positions |
+| `a-u-*` | Unknown positions |
+| `b-t-f` | Chat messages |
+| `b-a-*` | Emergency alerts |
+| `b-m-p-*` | Mission/planning items |
 
 ---
 
 ## Parsing CoT XML
 
-### Basic Structure
-
-```xml
-<event version="2.0" uid="DEVICE-UID" type="cot-type" time="..." start="..." stale="...">
-  <point lat="34.5" lon="-118.2" hae="100" ce="10" le="10"/>
-  <detail>
-    <contact callsign="Device Name"/>
-    <remarks>Additional information</remarks>
-    <!-- Plugin-specific detail elements -->
-  </detail>
-</event>
-```
-
-### Parsing Example
+### Always Use defusedxml
 
 ```python
+# SAFE — protected from XXE
 from defusedxml import ElementTree as DefusedET
+root = DefusedET.fromstring(cot_xml)
 
+# NEVER use standard xml.etree — vulnerable to XXE
+# from xml.etree import ElementTree  # DON'T DO THIS
+```
+
+### Common Extraction Patterns
+
+```python
 root = DefusedET.fromstring(cot_xml)
 
 # Event attributes
 cot_type = root.get("type")
-uid = root.get("uid")
-time = root.get("time")
-start = root.get("start")
-stale = root.get("stale")
+uid      = root.get("uid")
+time     = root.get("time")
 
-# Point location
+# Location
 point = root.find("point")
 if point is not None:
     lat = float(point.get("lat"))
     lon = float(point.get("lon"))
-    hae = float(point.get("hae"))  # Height above ellipsoid
+    hae = float(point.get("hae", "0"))
 
-# Contact info
+# Callsign and remarks
 detail = root.find("detail")
 if detail is not None:
     contact = detail.find("contact")
-    if contact is not None:
-        callsign = contact.get("callsign")
-        endpoint = contact.get("endpoint")  # IP:PORT
+    callsign = contact.get("callsign", "Unknown") if contact is not None else "Unknown"
 
-    # Remarks (chat messages)
     remarks = detail.find("remarks")
-    if remarks is not None and remarks.text:
-        message_text = remarks.text
+    text = remarks.text if remarks is not None else ""
 
-    # Other detail elements
-    link = detail.find("link")
+    # Team colour/role
+    group = detail.find("__group")
+    if group is not None:
+        team_name = group.get("name", "")
+        team_role = group.get("role", "")
+
+    # Speed/course
     track = detail.find("track")
-    # ... etc
+    if track is not None:
+        speed  = float(track.get("speed", "0"))
+        course = float(track.get("course", "0"))
 ```
 
-### Security: Always Use defusedxml
-
-❌ **NEVER** use standard xml.etree:
-```python
-# DANGEROUS - vulnerable to XXE attacks
-from xml.etree import ElementTree
-root = ElementTree.fromstring(cot_xml)  # DON'T DO THIS
-```
-
-✅ **ALWAYS** use defusedxml:
-```python
-# SAFE - protected from XXE attacks
-from defusedxml import ElementTree as DefusedET
-root = DefusedET.fromstring(cot_xml)  # DO THIS
-```
+Use `extract_cot_variables()` from `output_plugin_helpers` to get all of the above in one call.
 
 ---
 
 ## Best Practices
 
-### 1. Filter Early
+### 1. Filter early
+Check message rules, UID, and geofence before any parsing or network I/O.
+
+### 2. Never re-raise from `handle_cot_message`
+Log and return. One plugin crashing must not stop others from receiving the same event.
+
+### 3. Set timeouts on all network calls
 ```python
-def _should_handle(self, cot_type: str, uid: str) -> bool:
-    """Filter before expensive operations"""
-    if not self._matches_type_filter(cot_type):
-        return False
-    if not self._matches_uid_filter(uid):
-        return False
-    return True
+timeout = aiohttp.ClientTimeout(total=10)
+async with aiohttp.ClientSession(timeout=timeout) as session:
+    ...
 ```
 
-### 2. Handle Errors Gracefully
-```python
-async def handle_cot_message(self, cot_xml: bytes, tak_server_id: int) -> None:
-    try:
-        # Process message
-        pass
-    except Exception as e:
-        logger.error(f"Failed to process CoT: {e}")
-        # Don't re-raise - prevents one plugin from crashing others
-```
+### 4. Use `await`, never `time.sleep()`
+`time.sleep()` blocks the event loop. Use `await asyncio.sleep()`.
 
-### 3. Use Timeouts
-```python
-async with aiohttp.ClientSession() as session:
-    timeout = aiohttp.ClientTimeout(total=10)
-    async with session.post(url, json=data, timeout=timeout) as resp:
-        # Process response
-        pass
-```
+### 5. Redact credentials from logs
+Never log webhook URLs, API keys, or passwords in plaintext.
 
-### 4. Avoid Blocking Operations
-```python
-# ❌ Bad - blocks other plugins
-time.sleep(5)
-
-# ✅ Good - allows concurrent processing
-await asyncio.sleep(5)
-```
-
-### 5. Log Important Events
-```python
-logger.info(f"Processed {cot_type} from {uid}")
-logger.warning(f"Failed to send to API: {error}")
-logger.error(f"Critical error: {error}", exc_info=True)
-```
-
-### 6. Test Your Plugin
-```python
-async def test_connection(self) -> Dict[str, Any]:
-    """Always implement connection testing"""
-    try:
-        # Test connectivity
-        # Validate credentials
-        # Check permissions
-        return {"success": True, "message": "All checks passed"}
-    except Exception as e:
-        return {"success": False, "error": str(e), "message": "Test failed"}
-```
+### 6. Mark sensitive fields with `sensitive=True`
+Fields with `sensitive=True` are encrypted at rest automatically and masked on edit forms.
 
 ---
 
 ## Troubleshooting
 
 ### Plugin Not Discovered
-- Ensure file is in `plugins/` directory
-- Verify class inherits from `BaseOutputPlugin`
-- Check for syntax errors in plugin file
-- Review plugin manager logs
+- File must be in `plugins/` directory
+- Class must inherit from `BaseOutputPlugin`
+- Check for syntax errors: `python -m py_compile plugins/my_handler.py`
+- Review startup logs for import errors
 
-### Configuration Not Saving
-- Verify all required fields are provided
-- Check field types match metadata
-- Ensure sensitive fields are marked with `sensitive=True`
-- Review validation errors in logs
+### Messages Not Arriving
+- Verify the TAK server has `enable_rx = true`
+- Check message rule filters are not too restrictive (try removing rules temporarily)
+- Confirm the stream is associated with the correct TAK server
+- Review plugin logs for filtering decisions
 
-### Messages Not Being Received
-- Verify TAK server has `enable_rx=True`
-- Check message type filters
-- Review UID filter regex
-- Check plugin logs for errors
+### Connection Failures
+- Use "Test Connection" button in the stream UI to validate credentials
+- Check firewall rules between TrakBridge container and target service
+- Verify TLS certificates are valid and trusted
+- Check for scheme allow-listing rejections in logs (`endpoint_url must use http/https`)
 
-### Connection Test Failing
-- Verify credentials are correct
-- Check network connectivity
-- Review firewall rules
-- Ensure external service is accessible
-
-### Performance Issues
-- Add indexes to database queries (CotArchiver)
-- Use connection pooling for HTTP clients
-- Implement rate limiting
-- Filter messages early in processing
+### High Memory / Queue Build-up
+- Lower `rate_limit_per_minute` to throttle output
+- Reduce message rules scope to fewer CoT types
+- Enable geofence to drop out-of-area events
+- Monitor `events_dropped` stat in the stream detail page
 
 ---
 
-## Examples
+## Migration from webhook_handler
 
-### Email Notifier Plugin
+The legacy `webhook_handler` plugin was removed in v1.3.0. Migrate existing streams:
 
-```python
-class EmailNotifier(BaseOutputPlugin):
-    """Send email notifications for critical CoT events"""
+| Old plugin | New plugin | Notes |
+|-----------|-----------|-------|
+| `webhook_handler` (HTTP) | `outbound_http` | Configure `endpoint_url`, `payload_format`; re-enter message rules in the new UI component |
+| `webhook_handler` (bidirectional) | `outbound_http` + inbound stream | Split into separate outbound and inbound streams |
 
-    @property
-    def plugin_name(self) -> str:
-        return "email_notifier"
-
-    @property
-    def plugin_metadata(self) -> Dict[str, Any]:
-        return {
-            "display_name": "Email Notifier",
-            "description": "Send email alerts for critical events",
-            "icon": "fa-envelope",
-            "category": "output",
-            "config_fields": [
-                PluginConfigField(
-                    name="smtp_server",
-                    label="SMTP Server",
-                    field_type="text",
-                    required=True
-                ),
-                PluginConfigField(
-                    name="smtp_password",
-                    label="SMTP Password",
-                    field_type="password",
-                    required=True,
-                    sensitive=True
-                ),
-                PluginConfigField(
-                    name="to_email",
-                    label="Recipient Email",
-                    field_type="email",
-                    required=True
-                ),
-                PluginConfigField(
-                    name="alert_types",
-                    label="Alert Types",
-                    field_type="text",
-                    default_value="b-a-*",
-                    help_text="CoT types to alert on"
-                ),
-            ]
-        }
-
-    async def handle_cot_message(self, cot_xml: bytes, tak_server_id: int) -> None:
-        config = self.get_decrypted_config()
-
-        try:
-            root = DefusedET.fromstring(cot_xml)
-            cot_type = root.get("type", "")
-
-            if not self._should_alert(cot_type):
-                return
-
-            # Extract details
-            uid = root.get("uid", "")
-            detail = root.find("detail")
-            callsign = "Unknown"
-            if detail is not None:
-                contact = detail.find("contact")
-                if contact is not None:
-                    callsign = contact.get("callsign", "Unknown")
-
-            # Send email
-            await self._send_email(
-                subject=f"TAK Alert: {cot_type}",
-                body=f"Alert from {callsign} (UID: {uid})\nType: {cot_type}"
-            )
-
-        except Exception as e:
-            logger.error(f"EmailNotifier failed: {e}")
-
-    def _should_alert(self, cot_type: str) -> bool:
-        config = self.get_decrypted_config()
-        alert_types = config.get("alert_types", "")
-
-        for pattern in alert_types.split(","):
-            pattern = pattern.strip()
-            if pattern.endswith("*"):
-                if cot_type.startswith(pattern[:-1]):
-                    return True
-            elif cot_type == pattern:
-                return True
-
-        return False
-
-    async def _send_email(self, subject: str, body: str):
-        import aiosmtplib
-        from email.message import EmailMessage
-
-        config = self.get_decrypted_config()
-
-        message = EmailMessage()
-        message["From"] = config.get("from_email", "trakbridge@localhost")
-        message["To"] = config.get("to_email")
-        message["Subject"] = subject
-        message.set_content(body)
-
-        await aiosmtplib.send(
-            message,
-            hostname=config.get("smtp_server"),
-            port=config.get("smtp_port", 587),
-            username=config.get("smtp_username"),
-            password=config.get("smtp_password"),
-            use_tls=True
-        )
-```
-
-### Geofence Filter Plugin
-
-```python
-class GeofenceFilter(BaseOutputPlugin):
-    """Only process messages within defined geographic area"""
-
-    @property
-    def plugin_name(self) -> str:
-        return "geofence_filter"
-
-    @property
-    def plugin_metadata(self) -> Dict[str, Any]:
-        return {
-            "display_name": "Geofence Filter",
-            "description": "Filter messages by geographic bounds",
-            "icon": "fa-map-marker",
-            "category": "output",
-            "config_fields": [
-                PluginConfigField(
-                    name="min_lat",
-                    label="Minimum Latitude",
-                    field_type="number",
-                    required=True
-                ),
-                PluginConfigField(
-                    name="max_lat",
-                    label="Maximum Latitude",
-                    field_type="number",
-                    required=True
-                ),
-                PluginConfigField(
-                    name="min_lon",
-                    label="Minimum Longitude",
-                    field_type="number",
-                    required=True
-                ),
-                PluginConfigField(
-                    name="max_lon",
-                    label="Maximum Longitude",
-                    field_type="number",
-                    required=True
-                ),
-                PluginConfigField(
-                    name="webhook_url",
-                    label="Alert Webhook URL",
-                    field_type="url",
-                    required=True,
-                    sensitive=True,
-                    help_text="Send alerts for messages in geofence"
-                ),
-            ]
-        }
-
-    async def handle_cot_message(self, cot_xml: bytes, tak_server_id: int) -> None:
-        config = self.get_decrypted_config()
-
-        try:
-            root = DefusedET.fromstring(cot_xml)
-
-            # Extract location
-            point = root.find("point")
-            if point is None:
-                return
-
-            lat = float(point.get("lat"))
-            lon = float(point.get("lon"))
-
-            # Check geofence
-            if not self._in_geofence(lat, lon):
-                return
-
-            # Inside geofence - send alert
-            uid = root.get("uid", "")
-            cot_type = root.get("type", "")
-
-            await self._send_alert(
-                f"Device {uid} entered geofence at ({lat}, {lon})"
-            )
-
-        except Exception as e:
-            logger.error(f"GeofenceFilter failed: {e}")
-
-    def _in_geofence(self, lat: float, lon: float) -> bool:
-        config = self.get_decrypted_config()
-
-        min_lat = float(config.get("min_lat"))
-        max_lat = float(config.get("max_lat"))
-        min_lon = float(config.get("min_lon"))
-        max_lon = float(config.get("max_lon"))
-
-        return (min_lat <= lat <= max_lat) and (min_lon <= lon <= max_lon)
-
-    async def _send_alert(self, message: str):
-        import aiohttp
-        config = self.get_decrypted_config()
-        webhook_url = config.get("webhook_url")
-
-        async with aiohttp.ClientSession() as session:
-            await session.post(webhook_url, json={"text": message})
-```
-
----
-
-## Migration Guide
-
-### From Phase 2 to Phase 3
-
-If you implemented custom output handling before Phase 3, here's how to migrate:
-
-**Before (custom code in cot_service):**
-```python
-# Custom handling in cot_service_integration.py
-async def _rx_worker(self, ...):
-    # Parse CoT
-    # Custom logic here
-    # Send to Slack/IRC/etc
-```
-
-**After (output plugin):**
-```python
-# Create plugins/my_handler.py
-class MyHandler(BaseOutputPlugin):
-    async def handle_cot_message(self, cot_xml, tak_server_id):
-        # Your logic here
-        pass
-```
-
-**Benefits:**
-- No core code changes needed
-- Configuration via UI
-- Automatic encryption of secrets
-- Reusable across projects
-- Testable in isolation
+Message rules and geofence config must be re-entered in the new `message_rules` and `global_geofence` UI components — they are not migrated automatically.
 
 ---
 
 ## Additional Resources
 
-- [TrakBridge Output Spec](../Plans/output_spec.md) - Full architectural specification
-- [BaseGPSPlugin Guide](../../README.md) - Input plugin development
-- [CoT XML Reference](https://github.com/TAK-Product-Center/Server/wiki/CoT-XML) - Official CoT documentation
-- [defusedxml Documentation](https://pypi.org/project/defusedxml/) - Secure XML parsing
-
----
-
-## Support
-
-For questions or issues with output plugins:
-
-1. Check plugin logs in TrakBridge console
-2. Verify configuration in UI
-3. Test connection using "Test Connection" button
-4. Review this guide for best practices
-5. Create GitHub issue with logs and configuration
-
----
-
-**Happy Plugin Development! 🚀**
+- [Inbound Streams Guide](INBOUND_STREAMS_GUIDE.md) — push-based and active-connect inbound plugins
+- [Handler Plugin Development Guide](HANDLER_PLUGIN_DEVELOPMENT_GUIDE.md) — detailed development walkthrough with examples
+- [Plugin Development Guide](PLUGIN_DEVELOPMENT.md) — GPS input plugin development
+- [CoT XML Reference](https://github.com/TAK-Product-Center/Server/wiki/CoT-XML) — official CoT schema
+- [defusedxml](https://pypi.org/project/defusedxml/) — secure XML parsing library
+- `docs/example_external_plugins/sample_custom_handler.py` — production-ready reference implementation

@@ -62,7 +62,7 @@ class DiscordHandler(BaseOutputPlugin):
             "display_name": "Discord CoT Handler",
             "description": "Receive CoT messages from TAK and post to Discord",
             "icon": "fa-discord",
-            "category": "output",
+            "category": "notification",
             "help_sections": [
                 {
                     "title": "Template Variables",
