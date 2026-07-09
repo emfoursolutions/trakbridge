@@ -71,3 +71,5 @@ docker/init-scripts/*/*.local.sql
 backups/
 config_backups/
 trakbridge.wiki/*.md
+
+.superpowers/
