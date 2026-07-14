@@ -24,9 +24,7 @@ class TestMakePluginCircuitBreaker:
         assert callable(breaker.call)
 
     def test_reads_top_level_circuit_breaker_config(self):
-        with patch(
-            "utils.config_manager.config_manager.load_config_safe"
-        ) as mock_load:
+        with patch("utils.config_manager.config_manager.load_config_safe") as mock_load:
             mock_load.return_value = {"circuit_breaker": {"failure_threshold": 7}}
             with patch(
                 "services.circuit_breaker.get_circuit_breaker_manager"
@@ -71,9 +69,7 @@ class TestMakePluginCircuitBreaker:
 
         class OpenInner:
             async def call(self, func, *args, **kwargs):
-                raise CoreCircuitOpenError(
-                    "plugin_garmin", datetime.now(timezone.utc)
-                )
+                raise CoreCircuitOpenError("plugin_garmin", datetime.now(timezone.utc))
 
             def set_health_check(self, hc):
                 pass
