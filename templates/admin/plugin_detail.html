@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}{{ plugin.display_name }} - Plugins - TrakBridge{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>{{ plugin.display_name }}</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('plugin_admin.plugin_list') }}">Plugins</a>
+                    </li>
+                    <li class="breadcrumb-item active">{{ plugin.plugin_id }}</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Metadata -->
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="fas fa-puzzle-piece"></i> Plugin Information</h5></div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p class="mb-2"><strong>ID:</strong> <code>{{ plugin.plugin_id }}</code></p>
+                        <p class="mb-2"><strong>Version:</strong> {{ plugin.version or "—" }}</p>
+                        <p class="mb-2"><strong>Author:</strong> {{ plugin.author or "—" }}</p>
+                        <p class="mb-2"><strong>Type:</strong> {{ plugin.plugin_type or "—" }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-2"><strong>Status:</strong>
+                            {% if plugin.is_enabled %}
+                            <span class="badge bg-success">Enabled</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Disabled</span>
+                            {% endif %}
+                        </p>
+                        <p class="mb-2"><strong>Signature:</strong>
+                            {% if plugin.is_verified %}
+                            <span class="badge bg-success"><i class="fas fa-shield-halved"></i> Verified</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">Unverified</span>
+                            {% endif %}
+                        </p>
+                        <p class="mb-2"><strong>Tier:</strong>
+                            <span class="badge {% if plugin.tier == 'enterprise' %}bg-primary{% elif plugin.tier == 'pro' %}bg-info text-dark{% else %}bg-secondary{% endif %}">
+                                {{ plugin.tier | title }}
+                            </span>
+                        </p>
+                        <p class="mb-2"><strong>Installed by:</strong> {{ plugin.installed_by or "—" }}
+                            {% if plugin.installed_at %} on {{ plugin.installed_at.strftime("%Y-%m-%d %H:%M") }}{% endif %}
+                        </p>
+                    </div>
+                </div>
+                {% if plugin.description %}<p class="mb-0 mt-2">{{ plugin.description }}</p>{% endif %}
+            </div>
+        </div>
+
+        {% if plugin.readme %}
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="fas fa-book"></i> README</h5></div>
+            <div class="card-body"><pre class="mb-0" style="white-space: pre-wrap;">{{ plugin.readme }}</pre></div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-lg-4">
+        <!-- Actions -->
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="fas fa-sliders"></i> Actions</h5></div>
+            <div class="card-body d-grid gap-2">
+                {% if plugin.is_enabled %}
+                <button class="btn btn-outline-warning plugin-action"
+                        data-plugin="{{ plugin.plugin_id }}" data-action="disable">Disable</button>
+                {% else %}
+                <button class="btn btn-outline-success plugin-action"
+                        data-plugin="{{ plugin.plugin_id }}" data-action="enable">Enable</button>
+                {% endif %}
+                <button class="btn btn-outline-danger plugin-action"
+                        data-plugin="{{ plugin.plugin_id }}" data-action="uninstall"
+                        data-confirm="Uninstall {{ plugin.plugin_id }}? Files will be removed.">
+                    Uninstall
+                </button>
+            </div>
+        </div>
+
+        <!-- Audit Log -->
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="fas fa-clipboard-list"></i> Recent Activity</h5></div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>Action</th><th>By</th><th>When</th></tr></thead>
+                    <tbody>
+                        {% for entry in plugin.audit_log %}
+                        <tr>
+                            <td>{{ entry.action }}</td>
+                            <td>{{ entry.performed_by }}</td>
+                            <td>{{ entry.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="3" class="text-muted">No activity recorded</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.querySelectorAll(".plugin-action").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+        var confirmMsg = btn.dataset.confirm;
+        if (confirmMsg && !window.confirm(confirmMsg)) return;
+        fetch("/admin/plugins/" + encodeURIComponent(btn.dataset.plugin) + "/" + btn.dataset.action, {
+            method: "POST",
+            headers: {"X-CSRFToken": "{{ csrf_token() }}"}
+        }).then(function (resp) { return resp.json(); }).then(function (data) {
+            if (data.success) {
+                if (btn.dataset.action === "uninstall") {
+                    window.location = "{{ url_for('plugin_admin.plugin_list') }}";
+                } else {
+                    window.location.reload();
+                }
+            } else { window.alert(data.error || "Action failed"); }
+        }).catch(function () { window.alert("Request failed"); });
+    });
+});
+</script>
+{% endblock %}

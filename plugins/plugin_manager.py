@@ -41,7 +41,10 @@ logger = logging.getLogger(__name__)
 class PluginManager:
     """Enhanced manager for GPS tracking plugins with metadata support"""
 
-    # Default built-in plugin modules (always allowed)
+    # Default built-in plugin modules (always allowed).
+    # NOTE: external plugins are NOT blanket-allowed — each one requires an
+    # explicit "external_plugins.<plugin_id>" entry in the whitelist
+    # (allowed_plugin_modules in plugins.yaml), managed by the plugin admin UI.
     BUILTIN_PLUGIN_MODULES = {
         "plugins.garmin_plugin",
         "plugins.spot_plugin",
@@ -49,13 +52,15 @@ class PluginManager:
         "plugins.deepstate_plugin",
         "plugins.liveuamap_plugin",
         "plugins",  # Allow the plugins package itself
-        "external_plugins",  # Allow external plugins namespace
     }
 
     def __init__(self):
         # Support GPS input plugins, output plugins, and inbound plugins
-        self.plugins: Dict[str, Type[Union["BaseGPSPlugin", "BaseOutputPlugin", "BaseInboundPlugin"]]] = {}
+        self.plugins: Dict[
+            str, Type[Union["BaseGPSPlugin", "BaseOutputPlugin", "BaseInboundPlugin"]]
+        ] = {}
         self._allowed_modules = self.BUILTIN_PLUGIN_MODULES.copy()
+        self._builtin_plugin_names: set = set()
         self._load_allowed_plugins_config()
 
     def _load_allowed_plugins_config(self):
@@ -190,9 +195,16 @@ class PluginManager:
         Uses file-based loading instead of package imports to avoid namespace conflicts.
         Supports GPS input, output, and inbound plugins.
         """
-        from plugins.base_plugin import BaseGPSPlugin, BaseInboundPlugin, BaseOutputPlugin
+        from plugins.base_plugin import (
+            BaseGPSPlugin,
+            BaseInboundPlugin,
+            BaseOutputPlugin,
+        )
 
         try:
+            # Package-format plugins (subdirectories with plugin.yaml) first
+            self._load_package_plugins(plugins_path)
+
             # Get all Python files in the external directory
             for filename in os.listdir(plugins_path):
                 if (
@@ -269,6 +281,130 @@ class PluginManager:
             logger.error(
                 f"Failed to scan external plugins directory {plugins_path}: {e}"
             )
+
+    def _load_package_plugins(self, plugins_path: str):
+        """
+        Load package-format plugins: subdirectories containing a plugin.yaml
+        manifest. Enforces the whitelist, the manifest-id/directory-name
+        identity rule, entry-point containment, and the licence tier gate
+        (so file-copy sideloading cannot bypass tier enforcement).
+        """
+        import yaml
+
+        from plugins.base_plugin import (
+            BaseGPSPlugin,
+            BaseInboundPlugin,
+            BaseOutputPlugin,
+        )
+
+        base_path = os.path.abspath(plugins_path)
+        try:
+            entries = sorted(os.listdir(base_path))
+        except OSError as e:
+            logger.error(f"Failed to scan package plugins directory {base_path}: {e}")
+            return
+
+        for entry in entries:
+            package_dir = os.path.join(base_path, entry)
+            if not os.path.isdir(package_dir) or entry.startswith("__"):
+                continue
+            manifest_path = os.path.join(package_dir, "plugin.yaml")
+            if not os.path.isfile(manifest_path):
+                continue
+
+            try:
+                with open(manifest_path, "r") as f:
+                    manifest = yaml.safe_load(f) or {}
+
+                plugin_id = manifest.get("id")
+                if plugin_id != entry:
+                    logger.warning(
+                        f"Skipping package plugin '{entry}': manifest id "
+                        f"'{plugin_id}' does not match directory name"
+                    )
+                    continue
+
+                module_name = f"external_plugins.{plugin_id}"
+                if not self._validate_module_name(module_name):
+                    logger.warning(
+                        f"Package plugin '{plugin_id}' not in allowed list, skipping"
+                    )
+                    continue
+
+                # Tier gate: sideloaded premium packages must not load below
+                # their declared tier
+                tier = manifest.get("tier", "community")
+                from services.license_service import get_license_service
+
+                if not get_license_service().is_tier_allowed(tier):
+                    logger.warning(
+                        f"Skipping package plugin '{plugin_id}': requires "
+                        f"'{tier}' tier, current licence is "
+                        f"'{get_license_service().get_tier()}'"
+                    )
+                    continue
+
+                entry_point = manifest.get("entry_point", "")
+                entry_path = os.path.abspath(os.path.join(package_dir, entry_point))
+                if not entry_path.startswith(os.path.abspath(package_dir) + os.sep):
+                    logger.warning(
+                        f"Skipping package plugin '{plugin_id}': entry_point "
+                        f"escapes package directory"
+                    )
+                    continue
+                if not os.path.isfile(entry_path):
+                    logger.warning(
+                        f"Skipping package plugin '{plugin_id}': entry_point "
+                        f"'{entry_point}' not found"
+                    )
+                    continue
+
+                spec = importlib.util.spec_from_file_location(module_name, entry_path)
+                if spec is None or spec.loader is None:
+                    logger.error(
+                        f"Failed to create spec for package plugin: {plugin_id}"
+                    )
+                    continue
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[module_name] = module
+                spec.loader.exec_module(module)
+
+                class_name = manifest.get("class_name", "")
+                plugin_class = getattr(module, class_name, None)
+                if plugin_class is None or not inspect.isclass(plugin_class):
+                    logger.warning(
+                        f"Skipping package plugin '{plugin_id}': class "
+                        f"'{class_name}' not found in entry point"
+                    )
+                    continue
+                if not (
+                    issubclass(plugin_class, BaseGPSPlugin)
+                    or issubclass(plugin_class, BaseOutputPlugin)
+                    or issubclass(plugin_class, BaseInboundPlugin)
+                ):
+                    logger.warning(
+                        f"Skipping package plugin '{plugin_id}': class does not "
+                        f"inherit a TrakBridge plugin base class"
+                    )
+                    continue
+
+                logger.info(f"Loading package plugin: {plugin_id} from {entry}/")
+                self.register_plugin(plugin_class)
+
+            except Exception as e:
+                logger.error(f"Failed to load package plugin '{entry}': {e}")
+
+    def unregister_plugin(self, plugin_name: str) -> bool:
+        """Remove a plugin from the registry. Returns True if it was present."""
+        if plugin_name in self.plugins:
+            del self.plugins[plugin_name]
+            logger.info(f"Unregistered plugin: {plugin_name}")
+            return True
+        return False
+
+    def is_builtin_plugin(self, plugin_name: str) -> bool:
+        """True when the plugin was loaded from the built-in plugins package."""
+        return plugin_name in self._builtin_plugin_names
 
     def load_external_plugins(self):
         """
@@ -351,7 +487,10 @@ class PluginManager:
         return False
 
     def register_plugin(
-        self, plugin_class: Type[Union["BaseGPSPlugin", "BaseOutputPlugin", "BaseInboundPlugin"]]
+        self,
+        plugin_class: Type[
+            Union["BaseGPSPlugin", "BaseOutputPlugin", "BaseInboundPlugin"]
+        ],
     ):
         """Register a plugin class (GPS input, output, or inbound plugin)"""
 
@@ -431,7 +570,9 @@ class PluginManager:
 
     def get_plugin_class(
         self, plugin_name: str
-    ) -> Optional[Type[Union["BaseGPSPlugin", "BaseOutputPlugin", "BaseInboundPlugin"]]]:
+    ) -> Optional[
+        Type[Union["BaseGPSPlugin", "BaseOutputPlugin", "BaseInboundPlugin"]]
+    ]:
         """
         Get a plugin class by name without instantiation.
 
@@ -727,7 +868,11 @@ class PluginManager:
         Supports GPS input, output, and inbound plugins.
         """
 
-        from plugins.base_plugin import BaseGPSPlugin, BaseInboundPlugin, BaseOutputPlugin
+        from plugins.base_plugin import (
+            BaseGPSPlugin,
+            BaseInboundPlugin,
+            BaseOutputPlugin,
+        )
 
         try:
             # Validate directory name for security (prevent path traversal)
@@ -823,6 +968,10 @@ class PluginManager:
                 except Exception as e:
                     logger.error(f"Failed to load plugin module {modname}: {e}")
 
+            # Snapshot the names loaded from the built-in package so the admin
+            # UI can mark them non-removable (externals load after this point)
+            self._builtin_plugin_names.update(self.plugins.keys())
+
         except Exception as e:
             logger.error(f"Failed to load plugins from directory {directory}: {e}")
 
@@ -832,7 +981,11 @@ class PluginManager:
         Supports both GPS input plugins and output plugins.
         """
 
-        from plugins.base_plugin import BaseGPSPlugin, BaseInboundPlugin, BaseOutputPlugin
+        from plugins.base_plugin import (
+            BaseGPSPlugin,
+            BaseInboundPlugin,
+            BaseOutputPlugin,
+        )
 
         try:
             plugins_path = os.path.abspath(directory)
@@ -884,7 +1037,11 @@ class PluginManager:
 
     def reload_plugin(self, plugin_name: str) -> bool:
         """Reload a specific plugin (useful for development)"""
-        from plugins.base_plugin import BaseGPSPlugin, BaseInboundPlugin, BaseOutputPlugin
+        from plugins.base_plugin import (
+            BaseGPSPlugin,
+            BaseInboundPlugin,
+            BaseOutputPlugin,
+        )
 
         if plugin_name not in self.plugins:
             logger.error(f"Cannot reload plugin '{plugin_name}': not found")
