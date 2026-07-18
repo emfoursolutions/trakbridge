@@ -54,6 +54,7 @@ dependencies = [
     "PyMySQL",
     "pytak",
     "takproto>=3.0.0,<4.0.0",
+    "trakbridge-plugin-sdk @ git+https://git.emfour.net/npoulter/trakbridge-plugin-sdk.git@v1.0.0",
     "requests>=2.31.0",
     "python-dateutil",
     "python-dotenv",

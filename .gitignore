@@ -71,3 +71,11 @@ docker/init-scripts/*/*.local.sql
 backups/
 config_backups/
 trakbridge.wiki/*.md
+
+.superpowers/
+secrets/
+
+# Per-deployment plugin manager state (whitelist, uploaded packages) — the
+# admin UI writes to these at runtime; each deployment's contents differ
+external_config/
+

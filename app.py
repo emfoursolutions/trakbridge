@@ -43,7 +43,6 @@ from services.logging_service import setup_logging
 from services.stream_manager import StreamManager
 from services.version import get_version, is_development_build
 
-
 # Initialize extensions
 migrate = Migrate()
 
@@ -339,7 +338,7 @@ def create_app(config_name=None):
 
         # Configure CSRF to skip checking by default
         # Protection will be enabled only for form submissions with tokens
-        app.config['WTF_CSRF_CHECK_DEFAULT'] = False
+        app.config["WTF_CSRF_CHECK_DEFAULT"] = False
 
         csrf = CSRFProtect()
         csrf.init_app(app)
@@ -350,7 +349,7 @@ def create_app(config_name=None):
         logger.info("CSRF protection configured (form-based validation enabled)")
 
         # Add security headers (production only)
-        if config_instance.environment == 'production':
+        if config_instance.environment == "production":
             try:
                 from flask_talisman import Talisman
             except ImportError:
@@ -363,32 +362,37 @@ def create_app(config_name=None):
             if Talisman:
                 # Configure Content Security Policy
                 csp = {
-                    'default-src': ["'self'"],
-                    'script-src': [
+                    "default-src": ["'self'"],
+                    "script-src": [
                         "'self'",
                         "'unsafe-inline'",  # Required for inline scripts
                         "https://cdn.jsdelivr.net",  # Bootstrap/Font CDN
                         "https://unpkg.com",  # Leaflet maps CDN
                     ],
-                    'style-src': [
+                    "style-src": [
                         "'self'",
                         "'unsafe-inline'",  # Required for inline styles
                         "https://cdn.jsdelivr.net",
                         "https://fonts.googleapis.com",
                         "https://unpkg.com",  # Leaflet maps CDN
                     ],
-                    'img-src': ["'self'", "data:", "https:"],
-                    'font-src': ["'self'", "https://cdn.jsdelivr.net", "https://fonts.gstatic.com"],
-                    'connect-src': ["'self'", "https://unpkg.com"],  # unpkg for Leaflet source maps
-                    'frame-ancestors': ["'none'"],  # Prevent clickjacking
+                    "img-src": ["'self'", "data:", "https:"],
+                    "font-src": [
+                        "'self'",
+                        "https://cdn.jsdelivr.net",
+                        "https://fonts.gstatic.com",
+                    ],
+                    "connect-src": [
+                        "'self'",
+                        "https://unpkg.com",
+                    ],  # unpkg for Leaflet source maps
+                    "frame-ancestors": ["'none'"],  # Prevent clickjacking
                 }
 
                 # Determine if we should force HTTPS:
                 # - If behind reverse proxy (nginx), it handles SSL termination
                 # - User can explicitly disable via FORCE_HTTPS=false
-                force_https_config = getattr(
-                    config_instance, "FORCE_HTTPS", True
-                )
+                force_https_config = getattr(config_instance, "FORCE_HTTPS", True)
                 force_https = force_https_config and not proxy_trusted
 
                 Talisman(
@@ -397,13 +401,13 @@ def create_app(config_name=None):
                     strict_transport_security=True,
                     strict_transport_security_preload=True,
                     content_security_policy=csp,
-                    frame_options='DENY',
-                    referrer_policy='strict-origin-when-cross-origin',
+                    frame_options="DENY",
+                    referrer_policy="strict-origin-when-cross-origin",
                     feature_policy={
-                        'geolocation': "'none'",
-                        'microphone': "'none'",
-                        'camera': "'none'",
-                    }
+                        "geolocation": "'none'",
+                        "microphone": "'none'",
+                        "camera": "'none'",
+                    },
                 )
 
                 if not force_https:
@@ -420,7 +424,9 @@ def create_app(config_name=None):
                     f"Security headers enabled (Talisman, force_https={force_https})"
                 )
         else:
-            logger.info(f"Security headers disabled in {config_instance.environment} environment")
+            logger.info(
+                f"Security headers disabled in {config_instance.environment} environment"
+            )
 
     except Exception as db_init_error:
         from utils.database_error_formatter import (
@@ -458,6 +464,18 @@ def create_app(config_name=None):
         app.plugin_manager = PluginManager()
         app.plugin_manager.load_plugins_from_directory()
         app.plugin_manager.load_external_plugins()
+
+        # Reconcile the installed-plugin registry with the filesystem
+        # (grandfathers manually placed plugins into whitelist + DB)
+        try:
+            with app.app_context():
+                from services.plugin_admin_service import sync_plugin_registry
+
+                sync_plugin_registry()
+                app.plugin_manager.reload_plugin_config()
+                app.plugin_manager.load_external_plugins()
+        except Exception as e:
+            logger.warning(f"Plugin registry sync failed (non-fatal): {e}")
 
         # Initialize encryption service and attach to Flask app
         from services.encryption_service import EncryptionService
@@ -515,6 +533,7 @@ def create_app(config_name=None):
     from routes.streams import bp as streams_bp
     from routes.tak_servers import bp as tak_servers_bp
     from routes.inbound import bp as inbound_bp
+    from routes.plugin_admin import bp as plugin_admin_bp
 
     # Apply rate limits to specific route groups
     limiter.limit("30 per minute")(api_bp)
@@ -525,6 +544,7 @@ def create_app(config_name=None):
     app.register_blueprint(streams_bp, url_prefix="/streams")
     app.register_blueprint(tak_servers_bp, url_prefix="/tak-servers")
     app.register_blueprint(admin_bp, url_prefix="/admin")
+    app.register_blueprint(plugin_admin_bp, url_prefix="/admin/plugins")
     app.register_blueprint(cot_types_bp, url_prefix="/admin")
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(auth_bp, url_prefix="/auth")
@@ -667,13 +687,18 @@ def configure_flask_app(app, config_instance):
 
     # Security settings
     app.config["PROXY_TRUSTED"] = getattr(config_instance, "PROXY_TRUSTED", False)
-    app.config["TRUSTED_PROXY_COUNT"] = getattr(config_instance, "TRUSTED_PROXY_COUNT", 0)
+    app.config["TRUSTED_PROXY_COUNT"] = getattr(
+        config_instance, "TRUSTED_PROXY_COUNT", 0
+    )
 
     # Rate limiting — disabled in testing to prevent cross-test pollution
-    app.config["RATELIMIT_ENABLED"] = getattr(config_instance, "RATELIMIT_ENABLED", True)
+    app.config["RATELIMIT_ENABLED"] = getattr(
+        config_instance, "RATELIMIT_ENABLED", True
+    )
 
-    # Global request size limit (1 MB) — defense-in-depth alongside per-route checks
-    app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024
+    # Global request size limit — backstop only; every upload route enforces
+    # its own tighter cap (licence 16KB, certs 5MB, plugin packages 10MB)
+    app.config["MAX_CONTENT_LENGTH"] = 12 * 1024 * 1024
 
     # Store the config instance for later use
     app.config_instance = config_instance
@@ -1135,7 +1160,9 @@ def setup_error_handlers(app):
             response = render_template("errors/500.html"), 500
             return response
         except Exception as template_error:
-            logger.error(f"Failed to render 500 template: {template_error}", exc_info=True)
+            logger.error(
+                f"Failed to render 500 template: {template_error}", exc_info=True
+            )
             # Return a plain text response as fallback
             return "Internal Server Error", 500
 

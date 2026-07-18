@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Plugin Manager - TrakBridge{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>Plugin Manager</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item active">Plugins</li>
+                </ol>
+            </nav>
+        </div>
+        <div>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                <i class="fas fa-upload me-2"></i>Install Plugin
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Plugin Cards -->
+<div class="row">
+    {% for plugin in plugins %}
+    <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">
+                    {% if plugin.icon %}<i class="{{ plugin.icon }}"></i>{% endif %}
+                    {{ plugin.display_name }}
+                    {% if plugin.version %}
+                    <span class="badge bg-light text-dark">v{{ plugin.version }}</span>
+                    {% endif %}
+                </h6>
+                {% if plugin.source == "builtin" %}
+                <i class="fas fa-lock text-muted" title="Built-in plugin"></i>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <p class="small text-muted mb-2">{{ plugin.description | truncate(120) }}</p>
+                <div class="mb-2">
+                    {% if plugin.source == "builtin" %}
+                    <span class="badge bg-primary">Built-in</span>
+                    {% elif plugin.package_format == "legacy" %}
+                    <span class="badge bg-secondary">Legacy</span>
+                    {% else %}
+                    <span class="badge" style="background-color: #fd7e14;">External</span>
+                    {% endif %}
+
+                    {% if plugin.source != "builtin" %}
+                        {% if plugin.is_verified %}
+                        <span class="badge bg-success" title="Signature verified against the Emfour signing key">
+                            <i class="fas fa-shield-halved"></i> Verified
+                        </span>
+                        {% else %}
+                        <span class="badge bg-warning text-dark" title="No valid Emfour signature">
+                            <i class="fas fa-triangle-exclamation"></i> Unverified
+                        </span>
+                        {% endif %}
+                    {% endif %}
+
+                    {% if plugin.tier and plugin.tier != "community" %}
+                    <span class="badge {% if plugin.tier == 'enterprise' %}bg-primary{% else %}bg-info text-dark{% endif %}">
+                        {{ plugin.tier | title }}
+                    </span>
+                    {% endif %}
+
+                    {% if not plugin.is_enabled %}
+                    <span class="badge bg-secondary">Disabled</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% if plugin.source != "builtin" %}
+            <div class="card-footer d-flex justify-content-between">
+                <a href="{{ url_for('plugin_admin.plugin_detail', plugin_id=plugin.plugin_id) }}"
+                   class="btn btn-sm btn-outline-secondary">Details</a>
+                <div>
+                    {% if plugin.is_enabled %}
+                    <button class="btn btn-sm btn-outline-warning plugin-action"
+                            data-plugin="{{ plugin.plugin_id }}" data-action="disable">Disable</button>
+                    {% else %}
+                    <button class="btn btn-sm btn-outline-success plugin-action"
+                            data-plugin="{{ plugin.plugin_id }}" data-action="enable">Enable</button>
+                    {% endif %}
+                    <button class="btn btn-sm btn-outline-danger plugin-action"
+                            data-plugin="{{ plugin.plugin_id }}" data-action="uninstall"
+                            data-confirm="Uninstall {{ plugin.plugin_id }}? Files will be removed.">
+                        Uninstall
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Upload Modal -->
+<div class="modal fade" id="uploadModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form method="post" action="{{ url_for('plugin_admin.upload_plugin') }}"
+              enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Install Plugin Package</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="plugin_file" class="form-label">Plugin package (.zip or .tar.gz, max 10MB)</label>
+                        <input class="form-control" type="file" id="plugin_file" name="plugin_file"
+                               accept=".zip,.tar.gz,.tgz" required>
+                    </div>
+                    <small class="text-muted">
+                        Packages are validated before installation: structure, code safety,
+                        signature, and licence tier. Signed Emfour packages show a
+                        <span class="badge bg-success">Verified</span> badge.
+                    </small>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-check me-2"></i>Verify &amp; Install
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.querySelectorAll(".plugin-action").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+        var confirmMsg = btn.dataset.confirm;
+        if (confirmMsg && !window.confirm(confirmMsg)) return;
+        fetch("/admin/plugins/" + encodeURIComponent(btn.dataset.plugin) + "/" + btn.dataset.action, {
+            method: "POST",
+            headers: {"X-CSRFToken": "{{ csrf_token() }}"}
+        }).then(function (resp) { return resp.json(); }).then(function (data) {
+            if (data.success) { window.location.reload(); }
+            else { window.alert(data.error || "Action failed"); }
+        }).catch(function () { window.alert("Request failed"); });
+    });
+});
+</script>
+{% endblock %}
