@@ -1,6 +1,107 @@
 # TrakBridge Release Notes
 
-## Version 1.3.0 - Inbound Streams, Outbound Plugins & Multicast Bridge
+## Version 2.0.0 - Plugin SDK, Tiered Licensing & Plugin Manager
+
+**Release Date:** July 18, 2026
+**Focus: Public Plugin SDK, Offline Licence Service, Admin Plugin Manager with Signature Verification and Tier Gating**
+
+TrakBridge 2.0 introduces the foundation for a tiered product model. Plugin base classes are now published as a standalone SDK on PyPI so third parties can build their own plugins. A new offline licence system maps deployments to Community, Pro, or Enterprise tiers. The admin UI gains a plugin manager that installs, verifies, and gates plugins by tier without touching the shell. Together these lay the groundwork for premium plugin distribution while keeping every existing Community capability free and unchanged.
+
+---
+
+### NEW FEATURES
+
+#### `trakbridge-plugin-sdk` — Public Plugin SDK on PyPI
+**Third parties can now write TrakBridge plugins without a fork**
+
+Plugin base classes (`BaseGPSPlugin`, `BaseOutputPlugin`, `BaseInboundPlugin`) and their supporting config/metadata infrastructure have been extracted from the core repository into a standalone Apache-2.0 licensed package: **[trakbridge-plugin-sdk](https://pypi.org/project/trakbridge-plugin-sdk/)** on PyPI.
+
+- **`pip install trakbridge-plugin-sdk`** and subclass the base class of your choice — a working plugin is 30-40 lines of Python
+- **Runtime provider registry** — core services (encryption, plugin metadata, circuit breaker, CoT delivery) are injected into the SDK at startup via `trakbridge_sdk.configure(...)`. Plugins never import core modules directly, so the SDK works standalone in unit tests
+- **Contract documentation and worked examples** for GPS, output, and inbound plugin types ship with the SDK
+- **17 built-in plugins now use the SDK** through a re-export shim at `plugins/base_plugin.py`; no behaviour change for existing installs
+
+#### Offline Licence Service
+**Ed25519-signed licence files, air-gap friendly, fail-secure**
+
+New `services/license_service.py` verifies signed licence files against an embedded Emfour public key. Zero network calls; no phone-home.
+
+- **Three tiers:** Community (default, no licence required), Pro, Enterprise
+- **Licence file location:** `secrets/tb_license.json` by default, overridable via `TRAKBRIDGE_LICENSE_FILE`
+- **Fails securely:** missing, tampered, expired, or malformed licences degrade to Community with a logged warning — the app never crashes over licensing
+- **Live expiry:** the tier is re-checked on every query, so a licence that lapses while the app is running downgrades in place without a restart
+- **Admin about page** shows current tier badge, licence status, customer, and expiry
+- **In-app licence installation** — admins upload signed licence files at `/admin/about`; the file is verified before anything is written, rejected uploads preserve the current licence, and installs take effect immediately with an audit log entry
+
+#### Admin Plugin Manager
+**Install, enable, disable, and uninstall plugins from the browser**
+
+New `/admin/plugins` blueprint replaces the previous "SSH in and place a `.py` file in `external_plugins/`" workflow.
+
+- **Package format:** plugins ship as `.zip` or `.tar.gz` archives containing a `plugin.yaml` manifest, an entry-point Python file, and any supporting modules
+- **12-step install validation chain:** archive safety (traversal, symlinks, decompression bomb caps), manifest structure, minimum TrakBridge version, **tier gate**, **signature verification**, AST code scan (rejects `exec`/`eval`/`os.system`/`subprocess`/`ctypes`), base-class inheritance verification, and identity-rule enforcement — a rejected package leaves no trace on disk, in the database, or in the whitelist
+- **Signature verification:** packages signed with the Emfour Ed25519 key show a green "Verified" badge; tampered signatures are rejected outright. Unsigned third-party packages install with an explicit "UNVERIFIED" warning
+- **Tier gating:** `plugin.yaml` gains an optional `tier` field enforced at BOTH install time and load time — a premium plugin cannot be loaded on a Community deployment even if the file is manually copied into `external_plugins/`
+- **Lifecycle actions:** enable/disable toggles the whitelist without deleting files; uninstall removes files, database record, and whitelist entry. Both block cleanly if any active stream references the plugin
+- **Audit logging** on every action (install accepted/rejected, enable/disable/uninstall) with admin username, plugin id, tier, and verification status
+- **Sidebar link:** admin users see a new "Plugins" entry alongside Key Rotation
+
+#### Whitelist Gating (Security Hardening)
+**External plugins now require explicit allow-listing**
+
+Previously, any Python file dropped into `external_plugins/` would be loaded automatically by the plugin manager. This release removes that blanket allowance: each external plugin now requires an explicit `external_plugins.<plugin_id>` entry in `plugins.yaml` — managed automatically by the plugin manager UI.
+
+**Backwards compatible:** on startup, the plugin manager auto-adds whitelist entries for any pre-existing external plugins so current deployments continue to work without manual intervention. See [Upgrade Notes](#upgrade-notes) below.
+
+---
+
+### DATABASE CHANGES
+
+New tables (added via Alembic migration `add_plugin_management_tables`):
+
+- **`installed_plugins`** — tracks packaged external plugins (id, version, tier, verified flag, enabled state, install metadata)
+- **`plugin_audit_log`** — records every plugin lifecycle action (install/enable/disable/uninstall) with admin username, licence id where applicable, and outcome
+
+Docker deployments run migrations automatically via `docker/entrypoint.sh`; source deployments need `flask db upgrade`.
+
+---
+
+### BUG FIXES
+
+- **`add_ca_cert_to_streams` migration** now uses `safe_add_column`/`safe_drop_column` and no longer crashes with `DuplicateColumn` on partially-populated Postgres schemas
+- **Plugin category display** in the stream edit UI correctly reflects the CoT Forwarding vs Notifications split introduced in 1.3.0
+
+---
+
+### UPGRADE NOTES
+
+**From 1.3.x → 2.0.0**
+
+- **Run `flask db upgrade`** to create the two new plugin management tables (Docker: automatic on startup; source: manual)
+- **External plugins:** anything currently loaded from `external_plugins/` will be auto-registered in the new whitelist on first startup — no action required
+- **Docker image size** increased by ~5MB due to new runtime dependencies for the plugin manager (`libpq5` was already present; no new system packages)
+- **Global request size limit** raised from 1MB to 12MB to accommodate plugin package uploads. Per-route caps remain the real enforcement (licence 16KB, cert 5MB, plugin 10MB)
+
+**No breaking changes for end users** — every 1.3 workflow continues to work identically. The changes affect plugin authors and administrators managing plugin installations.
+
+---
+
+### FOR PLUGIN DEVELOPERS
+
+The SDK is available now:
+
+```bash
+pip install trakbridge-plugin-sdk
+```
+
+- **[Plugin contract documentation](https://github.com/emfoursolutions/trakbridge-plugin-sdk/blob/main/docs/plugin_contract.md)** in the SDK repository
+- **Example plugins** for all three types (tracker, output, inbound) in `trakbridge-plugin-sdk/examples/`
+- **Repository:** [github.com/emfoursolutions/trakbridge-plugin-sdk](https://github.com/emfoursolutions/trakbridge-plugin-sdk) (Apache-2.0)
+- **PyPI:** [pypi.org/project/trakbridge-plugin-sdk](https://pypi.org/project/trakbridge-plugin-sdk/)
+
+---
+
+
 
 **Release Date:** July 3, 2026
 **Focus: Push-Based Inbound Streams, New Outbound Plugins, UDP Multicast CoT Bridge, TAK Worker Stability, Auth Hardening**
