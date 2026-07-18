@@ -80,11 +80,13 @@ COPY --from=builder /app/_version.py /app/
 # Install the application to ensure proper Python package resolution
 RUN pip install --no-cache-dir --force-reinstall .
 
-# Ensure proper permissions for runtime directories (after copy to avoid overwriting)
-RUN mkdir -p /app/logs /app/data /app/tmp /app/external_plugins && \
+# Ensure proper permissions for runtime directories (after copy to avoid overwriting).
+# external_config is per-deployment state written by the admin plugin manager;
+# gitignored so may not exist in the build context.
+RUN mkdir -p /app/logs /app/data /app/tmp /app/external_plugins /app/external_config && \
     chmod 755 /app && \
     chmod 777 /app/logs /app/data /app/tmp && \
-    chmod 755 /app/external_plugins
+    chmod 755 /app/external_plugins /app/external_config
 
 # Make entrypoint executable
 RUN chmod +x /app/entrypoint.sh
