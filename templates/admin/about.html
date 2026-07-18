@@ -41,33 +41,86 @@
             </div>
             <div class="card-body">
                 <p>
-                    <strong>TrakBridge</strong> is a stream management system designed to bridge multiple intelligence and tracking sources with TAK (Team Awareness Kit) systems.
-                    Built on a Flask-based architecture with multi-threaded stream processing, <strong>TrakBridge</strong> consolidates real-time positional data from GPS tracking services,
-                    open source intelligence feeds, and various location-based APIs into a unified operational picture.
+                    <strong>TrakBridge</strong> is a data bridge for TAK (Team Awareness Kit) environments, connecting tracking services,
+                    intelligence feeds, and tactical systems into a unified operational picture. It pulls real-time positional data from GPS
+                    tracking services, OSINT feeds, and location APIs. It also accepts data pushed from devices and external systems over HTTP, MQTT,
+                    WebSocket, and UDP multicast; and delivers Cursor-on-Target events both into and out of TAK servers.
                 </p>
                 <p>
-                    The platform features an extensible plugin system that enables seamless integration with diverse data sources, automated stream lifecycle management, and encrypted data handling for secure operations.
-                    Organizations can leverage <strong>TrakBridge</strong> to aggregate disparate location information streams—from vehicle tracking systems to OSINT feeds—and seamlessly present
-                    them within their TAK environment, enhancing situational awareness and operational coordination across teams and platforms.
+                    The platform is built around an extensible plugin system comprised of input, inbound, and output plugins that share a published SDK. This allows new
+                    integrations to be added without touching the core. Automated stream lifecycle management, encrypted credential handling,
+                    and fully offline operation make <strong>TrakBridge</strong> suited to everything from connected cloud deployments to
+                    air-gapped tactical networks.
                 </p>
             </div>
         </div>
 
-        <!-- Company Information -->
+        <!-- Licence -->
         <div class="card mb-4">
             <div class="card-header">
                 <h5 class="mb-0">
-                    <i class="fas fa-building"></i> About Emfour Solutions
+                    <i class="fas fa-certificate"></i> Licence
                 </h5>
             </div>
-            <div class="card-body text-center py-4">
-                <img src="{{ url_for('static', filename='es_logo.png') }}" alt="Emfour Solutions Logo" 
-                     style="height: 60px; margin-bottom: 1rem;">
-                <p class="mb-0">
-                    Dedicated to building highly reliable, mission-critical software platforms
-                    that empower organisations with advanced situational awareness, secure data management,
-                    and scalable infrastructure solutions.
-                </p>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p class="mb-2">
+                            <strong>Tier:</strong>
+                            {% if license_info.tier == "enterprise" %}
+                                <span class="badge bg-primary">Enterprise</span>
+                            {% elif license_info.tier == "pro" %}
+                                <span class="badge bg-success">Pro</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Community</span>
+                            {% endif %}
+                        </p>
+                        <p class="mb-2">
+                            <strong>Status:</strong>
+                            {% if license_info.status == "valid" %}
+                                <span class="badge bg-success">Valid</span>
+                            {% elif license_info.status == "expired" %}
+                                <span class="badge bg-warning text-dark">Expired</span>
+                            {% elif license_info.status == "missing" %}
+                                <span class="badge bg-secondary">No licence installed</span>
+                            {% else %}
+                                <span class="badge bg-danger">Invalid</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        {% if license_info.customer_id %}
+                        <p class="mb-2"><strong>Customer:</strong> {{ license_info.customer_id }}</p>
+                        {% endif %}
+                        {% if license_info.expires_at %}
+                        <p class="mb-2"><strong>Expires:</strong> {{ license_info.expires_at }}</p>
+                        {% endif %}
+                        {% if license_info.licence_id %}
+                        <p class="mb-2"><strong>Licence ID:</strong> <code>{{ license_info.licence_id }}</code></p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <hr>
+
+                <h6 class="mb-3"><i class="fas fa-file-import"></i> Install licence</h6>
+                <form method="post" action="{{ url_for('admin.install_license_route') }}"
+                      enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <div class="mb-3">
+                        <label for="license_file" class="form-label">Licence file</label>
+                        <input class="form-control" type="file" id="license_file"
+                               name="license_file" accept=".json,application/json" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-check me-2"></i>Verify &amp; Install
+                    </button>
+                    <small class="text-muted d-block mt-2">
+                        The licence is verified against the TrakBridge signing key before it is
+                        installed. An invalid or expired licence is rejected and the current
+                        licence is left unchanged.
+                    </small>
+                </form>
             </div>
         </div>
 

@@ -12,6 +12,7 @@ from database import TimestampMixin, db
 
 from .callsign_mapping import CallsignMapping
 from .cot_message import CotMessage
+from .installed_plugin import InstalledPlugin, PluginAuditLog
 from .stream import Stream
 
 # Local application imports
@@ -23,6 +24,8 @@ __all__ = [
     "TimestampMixin",
     "CallsignMapping",
     "CotMessage",
+    "InstalledPlugin",
+    "PluginAuditLog",
     "TakServer",
     "Stream",
     "User",

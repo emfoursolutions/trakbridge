@@ -1339,23 +1339,52 @@ class StreamManager:
                     )
 
     def _cleanup_persistent_cot_service(self):
-        """Clean up persistent COT service during shutdown"""
+        """Clean up persistent COT service during shutdown.
+
+        Drives the full QueuedCOTService.shutdown() coroutine so output plugin
+        cleanup() hooks run and any pending output stats are flushed. Falls back
+        to stopping workers directly if no event loop is available.
+        """
         try:
-            if hasattr(self, "cot_service") and self.cot_service:
-                # Get running workers directly from the service
-                running_workers = get_cot_service().workers
-                if running_workers:
-                    logger.info(
-                        f"Stopping {len(running_workers)} persistent COT workers"
+            if not (hasattr(self, "cot_service") and self.cot_service):
+                return
+
+            cot_service = get_cot_service()
+
+            if self._loop and not self._loop.is_closed():
+                try:
+                    future = asyncio.run_coroutine_threadsafe(
+                        cot_service.shutdown(), self._loop
                     )
-                    for worker in running_workers:
-                        if hasattr(worker, "stop"):
-                            worker.stop()
-                else:
-                    # Fallback: just log that we're cleaning up
+                    future.result(timeout=15)
                     logger.info(
-                        "Cleaning up persistent COT service (no running workers method)"
+                        "Persistent COT service shutdown completed "
+                        "(plugin cleanup + stats flush)"
                     )
+                    return
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "Timeout awaiting COT service shutdown; falling back to worker stop"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error awaiting COT service shutdown: {e}; falling back to worker stop"
+                    )
+
+            # Fallback: no loop available (or shutdown failed) — stop workers directly.
+            # Plugin cleanup() will NOT run in this path; log so it's visible.
+            running_workers = cot_service.workers
+            if running_workers:
+                logger.warning(
+                    f"Stopping {len(running_workers)} COT workers without plugin cleanup"
+                )
+                for worker in running_workers:
+                    if hasattr(worker, "stop"):
+                        worker.stop()
+            else:
+                logger.info(
+                    "Cleaning up persistent COT service (no running workers)"
+                )
 
         except Exception as e:
             logger.error(f"Error cleaning up persistent COT service: {e}")

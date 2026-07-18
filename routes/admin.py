@@ -95,7 +95,63 @@ def admin_dashboard():
 @bp.route("/about")
 @admin_required
 def admin_about():
-    return render_template("admin/about.html")
+    from services.license_service import get_license_service
+
+    return render_template(
+        "admin/about.html",
+        license_info=get_license_service().get_license_info(),
+    )
+
+
+# Uploaded licence documents are tiny JSON files; anything bigger is bogus
+MAX_LICENSE_UPLOAD_BYTES = 16 * 1024
+
+
+@bp.route("/license/install", methods=["POST"])
+@admin_required
+def install_license_route():
+    """Install a signed licence file supplied by paste or upload."""
+    from services.auth.decorators import get_current_user
+    from services.license_service import install_license
+
+    user = get_current_user()
+    username = getattr(user, "username", "unknown")
+
+    content = None
+    uploaded = request.files.get("license_file")
+    if uploaded and uploaded.filename:
+        raw = uploaded.read(MAX_LICENSE_UPLOAD_BYTES + 1)
+        content = raw.decode("utf-8", errors="replace")
+
+    if not content:
+        flash("No licence supplied — choose a licence file to upload", "error")
+        return redirect(url_for("admin.admin_about"))
+    if len(content) > MAX_LICENSE_UPLOAD_BYTES:
+        logger.warning(
+            f"AUDIT: licence install rejected user={username} reason=oversized upload"
+        )
+        flash("Licence rejected: file too large", "error")
+        return redirect(url_for("admin.admin_about"))
+
+    try:
+        license_data = install_license(content)
+    except ValueError as e:
+        logger.warning(f"AUDIT: licence install rejected user={username} reason={e}")
+        flash(f"Licence rejected: {e}", "error")
+        return redirect(url_for("admin.admin_about"))
+
+    logger.info(
+        f"AUDIT: licence install accepted user={username} "
+        f"licence_id={license_data.get('licence_id')} "
+        f"customer={license_data.get('customer_id')} "
+        f"tier={license_data.get('tier')}"
+    )
+    flash(
+        f"Licence installed: {license_data.get('tier')} tier for "
+        f"{license_data.get('customer_id')}",
+        "success",
+    )
+    return redirect(url_for("admin.admin_about"))
 
 
 @bp.route("/key-rotation")
