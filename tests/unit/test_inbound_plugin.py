@@ -291,7 +291,7 @@ class TestTimingSafeKeyComparison:
         plugin = ConcreteInboundPlugin({"api_key": "secret123", "auth_mode": "api_key"})
         with patch.object(plugin, "get_decrypted_config", return_value={
             "api_key": "secret123", "auth_mode": "api_key"
-        }), patch("plugins.base_plugin.hmac") as mock_hmac:
+        }), patch("trakbridge_sdk.base.hmac") as mock_hmac:
             mock_hmac.compare_digest.return_value = True
 
             is_valid, error = plugin.validate_inbound_request(
