@@ -36,9 +36,10 @@ class TestPhase4CoreValidation:
         cot_service = QueuedCOTService()
 
         # Defaults come from performance.yaml (max_size=600, batch_size=20)
-        assert cot_service.queue_manager.config["max_size"] > 0
-        assert cot_service.queue_manager.config["batch_size"] > 0
+        assert cot_service.queue_manager.config["max_size"] == 600
+        assert cot_service.queue_manager.config["batch_size"] == 20
         assert cot_service.queue_manager.config["overflow_strategy"] == "drop_oldest"
+        assert cot_service.queue_manager.config["flush_on_config_change"] == True
 
     def test_custom_queue_configuration_applied(self):
         """✅ Verify custom configuration is properly applied"""
