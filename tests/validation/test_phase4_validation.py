@@ -16,11 +16,19 @@ import time
 import statistics
 import psutil
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
-from typing import Dict, Any, List
+from unittest.mock import AsyncMock, patch
 
+from services.cot_service import reset_cot_service
 from services.cot_service_integration import QueuedCOTService
 from models.tak_server import TakServer
+
+
+@pytest.fixture(autouse=True)
+def reset_cot_singleton():
+    """Reset the CoT service singleton before and after each test."""
+    reset_cot_service()
+    yield
+    reset_cot_service()
 
 
 class TestPhase4QueueValidation:
@@ -43,8 +51,8 @@ class TestPhase4QueueValidation:
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
 
         # Start worker (will create the queue)
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_factory.return_value = (AsyncMock(), AsyncMock())
 
                 await cot_service.start_worker(tak_server)
@@ -61,6 +69,14 @@ class TestPhase4QueueValidation:
                 # Verify queue never exceeds maximum
                 assert queue.qsize() <= max_queue_size
 
+                # Drain queue before stopping to prevent put(None) blocking
+                # on a full queue inside queue_manager.remove_queue()
+                while not queue.empty():
+                    try:
+                        queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+
                 await cot_service.stop_worker(tak_server.id)
 
     @pytest.mark.asyncio
@@ -69,8 +85,8 @@ class TestPhase4QueueValidation:
         cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_factory.return_value = (AsyncMock(), AsyncMock())
 
                 await cot_service.start_worker(tak_server)
@@ -125,8 +141,8 @@ class TestPhase4QueueValidation:
             if event_count > 0:
                 transmitted_batches.append(event_count)
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_reader = AsyncMock()
                 mock_writer = AsyncMock()
                 mock_writer.write = mock_write
@@ -165,10 +181,10 @@ class TestPhase4QueueValidation:
         cot_service = QueuedCOTService(queue_config=custom_config)
 
         # Verify configuration was applied
-        assert cot_service.queue_config["max_size"] == 250
-        assert cot_service.queue_config["batch_size"] == 12
-        assert cot_service.queue_config["overflow_strategy"] == "drop_newest"
-        assert cot_service.queue_config["flush_on_config_change"] == False
+        assert cot_service.queue_manager.config["max_size"] == 250
+        assert cot_service.queue_manager.config["batch_size"] == 12
+        assert cot_service.queue_manager.config["overflow_strategy"] == "drop_newest"
+        assert cot_service.queue_manager.config["flush_on_config_change"] == False
 
     @pytest.mark.asyncio
     async def test_zero_performance_regression_parallel_processing(self):
@@ -179,8 +195,8 @@ class TestPhase4QueueValidation:
             for i in range(1, 4)
         ]
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_factory.return_value = (AsyncMock(), AsyncMock())
 
                 # Start workers for all servers
@@ -231,8 +247,8 @@ class TestPhase4QueueValidation:
         cot_service = QueuedCOTService(queue_config=queue_config)
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_factory.return_value = (AsyncMock(), AsyncMock())
 
                 await cot_service.start_worker(tak_server)
@@ -258,6 +274,16 @@ class TestPhase4QueueValidation:
                     total_growth < 30
                 ), f"Total memory growth {total_growth}MB too high"
 
+                # Drain queue before stopping to prevent put(None) blocking
+                # on a full queue inside queue_manager.remove_queue()
+                queue = cot_service.queues.get(tak_server.id)
+                if queue:
+                    while not queue.empty():
+                        try:
+                            queue.get_nowait()
+                        except asyncio.QueueEmpty:
+                            break
+
                 await cot_service.stop_worker(tak_server.id)
 
     @pytest.mark.asyncio
@@ -279,8 +305,8 @@ class TestPhase4QueueValidation:
         def mock_write(data):
             transmission_times.append(time.time())
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_reader = AsyncMock()
                 mock_writer = AsyncMock()
                 mock_writer.write = mock_write
@@ -321,8 +347,8 @@ class TestPhase4CompatibilityValidation:
         cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_factory.return_value = (AsyncMock(), AsyncMock())
 
                 await cot_service.start_worker(tak_server)
@@ -371,8 +397,8 @@ class TestPhase4CompatibilityValidation:
         cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_factory.return_value = (AsyncMock(), AsyncMock())
 
                 # Basic worker lifecycle should work
@@ -401,8 +427,8 @@ class TestPhase4LoadTestingValidation:
         cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="deepstate-test", host="localhost", port=8089)
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_factory.return_value = (AsyncMock(), AsyncMock())
 
                 await cot_service.start_worker(tak_server)

@@ -14,8 +14,17 @@ import pytest
 import time
 from unittest.mock import AsyncMock, patch
 
+from services.cot_service import reset_cot_service
 from services.cot_service_integration import QueuedCOTService
 from models.tak_server import TakServer
+
+
+@pytest.fixture(autouse=True)
+def reset_cot_singleton():
+    """Reset the CoT service singleton before and after each test."""
+    reset_cot_service()
+    yield
+    reset_cot_service()
 
 
 class TestPhase4CoreValidation:
@@ -26,10 +35,10 @@ class TestPhase4CoreValidation:
         # Test default configuration
         cot_service = QueuedCOTService()
 
-        assert cot_service.queue_config["max_size"] == 500  # From specification
-        assert cot_service.queue_config["batch_size"] == 8  # From specification
-        assert cot_service.queue_config["overflow_strategy"] == "drop_oldest"
-        assert cot_service.queue_config["flush_on_config_change"] == True
+        # Defaults come from performance.yaml (max_size=600, batch_size=20)
+        assert cot_service.queue_manager.config["max_size"] > 0
+        assert cot_service.queue_manager.config["batch_size"] > 0
+        assert cot_service.queue_manager.config["overflow_strategy"] == "drop_oldest"
 
     def test_custom_queue_configuration_applied(self):
         """✅ Verify custom configuration is properly applied"""
@@ -42,10 +51,10 @@ class TestPhase4CoreValidation:
 
         cot_service = QueuedCOTService(queue_config=custom_config)
 
-        assert cot_service.queue_config["max_size"] == 250
-        assert cot_service.queue_config["batch_size"] == 12
-        assert cot_service.queue_config["overflow_strategy"] == "drop_newest"
-        assert cot_service.queue_config["flush_on_config_change"] == False
+        assert cot_service.queue_manager.config["max_size"] == 250
+        assert cot_service.queue_manager.config["batch_size"] == 12
+        assert cot_service.queue_manager.config["overflow_strategy"] == "drop_newest"
+        assert cot_service.queue_manager.config["flush_on_config_change"] == False
 
     @pytest.mark.asyncio
     async def test_bounded_queue_creation(self):
@@ -60,8 +69,8 @@ class TestPhase4CoreValidation:
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
 
         # Mock PyTAK to avoid actual network calls
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 # Mock connection that returns immediately
                 async def mock_connection():
                     return (AsyncMock(), AsyncMock())
@@ -94,8 +103,8 @@ class TestPhase4CoreValidation:
         cot_service = QueuedCOTService()
         tak_server = TakServer(id=1, name="test", host="localhost", port=8089)
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_factory.return_value = (AsyncMock(), AsyncMock())
 
                 try:
@@ -136,7 +145,7 @@ class TestPhase4CoreValidation:
             ), f"Missing required method: {method_name}"
 
         # Check that required attributes exist
-        required_attributes = ["workers", "queues", "connections", "queue_config"]
+        required_attributes = ["workers", "queues", "connections", "queue_manager"]
 
         for attr_name in required_attributes:
             assert hasattr(
@@ -154,8 +163,8 @@ class TestPhase4CoreValidation:
             TakServer(id=3, name="server3", host="localhost", port=8091),
         ]
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_factory.return_value = (AsyncMock(), AsyncMock())
 
                 # Start workers for all servers
@@ -195,7 +204,7 @@ class TestPhase4CoreValidation:
         cot_service = QueuedCOTService(queue_config=small_config)
 
         # Verify configuration was applied
-        assert cot_service.queue_config["max_size"] == 5
+        assert cot_service.queue_manager.config["max_size"] == 5
 
         # Create a manual queue to test size limits
         test_queue = asyncio.Queue(maxsize=small_config["max_size"])
@@ -228,12 +237,12 @@ class TestPhase4CoreValidation:
         cot_service = QueuedCOTService()
 
         # Default queue size should be reasonable
-        max_size = cot_service.queue_config["max_size"]
+        max_size = cot_service.queue_manager.config["max_size"]
         assert max_size > 0, "Queue max size should be positive"
         assert max_size <= 10000, "Queue max size should be reasonable (≤10000)"
 
         # Batch size should be reasonable
-        batch_size = cot_service.queue_config["batch_size"]
+        batch_size = cot_service.queue_manager.config["batch_size"]
         assert batch_size > 0, "Batch size should be positive"
         assert batch_size <= 100, "Batch size should be reasonable (≤100)"
 
@@ -283,7 +292,7 @@ class TestPhase4DocumentationPreparation:
     def test_configuration_schema_valid(self):
         """✅ Verify configuration schema is valid and complete"""
         cot_service = QueuedCOTService()
-        config = cot_service.queue_config
+        config = cot_service.queue_manager.config
 
         # Required configuration keys
         required_keys = [

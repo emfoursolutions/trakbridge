@@ -167,7 +167,7 @@ authentication:
             config["authentication"]["providers"]["ldap"]["bind_password"], "ci-secret"
         )
 
-    @patch.dict(os.environ, {"LDAP_ENABLED": "false"}, clear=True)
+    @patch.dict(os.environ, {"LDAP_ENABLED": "false", "SKIP_DOTENV_FILE": "true"}, clear=True)
     def test_template_with_defaults(self):
         """Test template config uses default values when env vars not set."""
         self._create_template_file()

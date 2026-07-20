@@ -326,10 +326,12 @@ class TestCrossDatabaseCompatibility:
 
     def test_engine_options_by_database_type(self):
         """Test engine options are appropriate for each database type"""
-        config = get_config("testing")
-
         # Test SQLite options
-        with patch.object(config, "_get_database_type", return_value="sqlite"):
+        with (
+            clean_database_env(),
+            patch.dict(os.environ, {"DB_TYPE": "sqlite"}, clear=False),
+        ):
+            config = get_config("testing")
             options = config.SQLALCHEMY_ENGINE_OPTIONS
             if "connect_args" in options:
                 sqlite_args = options["connect_args"]
@@ -337,14 +339,43 @@ class TestCrossDatabaseCompatibility:
                 assert "timeout" in sqlite_args or len(sqlite_args) >= 0
 
         # Test PostgreSQL options
-        with patch.object(config, "_get_database_type", return_value="postgresql"):
+        with (
+            clean_database_env(),
+            patch.dict(
+                os.environ,
+                {
+                    "DB_TYPE": "postgresql",
+                    "DB_HOST": "localhost",
+                    "DB_USER": "trakbridge",
+                    "DB_PASSWORD": "password",
+                    "DB_NAME": "trakbridge",
+                },
+                clear=False,
+            ),
+        ):
+            config = get_config("testing")
             options = config.SQLALCHEMY_ENGINE_OPTIONS
             assert "pool_pre_ping" in options
+            assert options["pool_pre_ping"] is True
             # PostgreSQL should have proper pool settings
             assert options.get("pool_size", 5) > 0
 
         # Test MySQL options
-        with patch.object(config, "_get_database_type", return_value="mysql"):
+        with (
+            clean_database_env(),
+            patch.dict(
+                os.environ,
+                {
+                    "DB_TYPE": "mysql",
+                    "DB_HOST": "localhost",
+                    "DB_USER": "trakbridge",
+                    "DB_PASSWORD": "password",
+                    "DB_NAME": "trakbridge",
+                },
+                clear=False,
+            ),
+        ):
+            config = get_config("testing")
             options = config.SQLALCHEMY_ENGINE_OPTIONS
             if "pool_pre_ping" in options:
                 assert options["pool_pre_ping"] is True
@@ -394,7 +425,10 @@ class TestCrossDatabaseCompatibility:
         ]
 
         for db_config in database_configs:
-            with patch.dict(os.environ, db_config):
+            with (
+                clean_database_env(),
+                patch.dict(os.environ, db_config, clear=False),
+            ):
                 config = get_config("testing")
                 uri = config.SQLALCHEMY_DATABASE_URI
 

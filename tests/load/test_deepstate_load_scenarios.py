@@ -15,10 +15,18 @@ import time
 import statistics
 import random
 from unittest.mock import AsyncMock, patch
-from typing import List, Dict, Any
 
+from services.cot_service import reset_cot_service
 from services.cot_service_integration import QueuedCOTService
 from models.tak_server import TakServer
+
+
+@pytest.fixture(autouse=True)
+def reset_cot_singleton():
+    """Reset the CoT service singleton before and after each test."""
+    reset_cot_service()
+    yield
+    reset_cot_service()
 
 
 class TestDeepstateLoadScenarios:
@@ -49,8 +57,8 @@ class TestDeepstateLoadScenarios:
             transmitted_events.append(data)
             transmission_times.append(time.time())
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_reader = AsyncMock()
                 mock_writer = AsyncMock()
                 mock_writer.write = mock_write
@@ -124,8 +132,8 @@ class TestDeepstateLoadScenarios:
             nonlocal transmission_count
             transmission_count += data.count(b"<event>")
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_reader = AsyncMock()
                 mock_writer = AsyncMock()
                 mock_writer.write = mock_write
@@ -207,8 +215,8 @@ class TestDeepstateLoadScenarios:
 
             return mock_write
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
 
                 def mock_connection():
                     mock_reader = AsyncMock()
@@ -299,8 +307,8 @@ class TestDeepstateLoadScenarios:
         cot_service = QueuedCOTService(queue_config=queue_config)
         tak_server = TakServer(id=1, name="memory-test", host="localhost", port=8089)
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_factory.return_value = (AsyncMock(), AsyncMock())
 
                 await cot_service.start_worker(tak_server)
@@ -342,6 +350,16 @@ class TestDeepstateLoadScenarios:
                 print(
                     f"Memory test: processed 500 events, memory growth: {total_growth:.1f}MB"
                 )
+
+                # Drain queue before stopping to prevent put(None) blocking
+                # on a full queue inside queue_manager.remove_queue()
+                queue = cot_service.queues.get(tak_server.id)
+                if queue:
+                    while not queue.empty():
+                        try:
+                            queue.get_nowait()
+                        except asyncio.QueueEmpty:
+                            break
 
                 await cot_service.stop_worker(tak_server.id)
 
@@ -401,8 +419,8 @@ class TestDeepstateQueueBehavior:
         cot_service = QueuedCOTService(queue_config=queue_config)
         tak_server = TakServer(id=1, name="overflow-test", host="localhost", port=8089)
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_factory.return_value = (AsyncMock(), AsyncMock())
 
                 await cot_service.start_worker(tak_server)
@@ -421,6 +439,14 @@ class TestDeepstateQueueBehavior:
                 print(
                     f"Overflow test: added {overflow_events} events, queue size: {queue.qsize()}"
                 )
+
+                # Drain queue before stopping to prevent put(None) blocking
+                # on a full queue inside queue_manager.remove_queue()
+                while not queue.empty():
+                    try:
+                        queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
 
                 await cot_service.stop_worker(tak_server.id)
 
@@ -448,8 +474,8 @@ class TestDeepstateQueueBehavior:
             if event_count > 0:
                 transmission_batches.append(event_count)
 
-        with patch("services.cot_service.PYTAK_AVAILABLE", True):
-            with patch("services.cot_service.pytak.protocol_factory") as mock_factory:
+        with patch("services.cot_service_integration.PYTAK_AVAILABLE", True):
+            with patch("services.cot_service_integration.pytak.protocol_factory") as mock_factory:
                 mock_reader = AsyncMock()
                 mock_writer = AsyncMock()
                 mock_writer.write = mock_write
