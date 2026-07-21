@@ -104,11 +104,7 @@ class EncryptionService:
             "⚠️  Data encrypted with this key will be LOST if app restarts without setting the key!"
         )
 
-        # Only log in development/debug mode
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"Generated Master Key: {master_key}")
-        else:
-            logger.info("Master key generated (not logged for security)")
+        logger.info("Master key generated (not logged for security)")
 
         return master_key
 
