@@ -1847,6 +1847,7 @@ class QueuedCOTService:
         from plugins.plugin_manager import get_plugin_manager
         from plugins.base_plugin import BaseOutputPlugin
         from models.stream import Stream
+        from sqlalchemy import or_
         import app as flask_app
 
         try:
@@ -1865,8 +1866,18 @@ class QueuedCOTService:
             # Ensure we're in an app context for database access
             # Use the global app instance from app.py
             with flask_app.app.app_context():
-                # Find all streams configured for this TAK server
-                streams = Stream.query.filter_by(tak_server_id=tak_server_id).all()
+                # Match streams via either the legacy single-server FK or the
+                # stream_tak_servers junction table (2.0.0 many-to-many). Without
+                # the junction-side clause, multi-server streams drop every event
+                # from any TAK server that isn't referenced by the legacy FK.
+                streams = (
+                    Stream.query.filter(
+                        or_(
+                            Stream.tak_server_id == tak_server_id,
+                            Stream.tak_servers.any(id=tak_server_id),
+                        )
+                    ).all()
+                )
                 logger.debug(
                     f"Found {len(streams)} streams for TAK server {tak_server_id}"
                 )
