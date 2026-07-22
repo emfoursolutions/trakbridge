@@ -691,6 +691,19 @@ def configure_flask_app(app, config_instance):
         config_instance, "TRUSTED_PROXY_COUNT", 0
     )
 
+    # Session cookie security flags — set explicitly rather than relying on Flask defaults.
+    # HttpOnly and SameSite are unconditional; Secure follows the environment with an
+    # optional env-var override so operators can force HTTPS outside production.
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    _secure_override = os.environ.get("SESSION_COOKIE_SECURE", "").strip().lower()
+    _is_production = config_instance.environment == "production"
+    app.config["SESSION_COOKIE_SECURE"] = _is_production or _secure_override in (
+        "1",
+        "true",
+        "yes",
+    )
+
     # Rate limiting — disabled in testing to prevent cross-test pollution
     app.config["RATELIMIT_ENABLED"] = getattr(
         config_instance, "RATELIMIT_ENABLED", True
