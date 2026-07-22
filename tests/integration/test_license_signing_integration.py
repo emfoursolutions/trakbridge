@@ -51,6 +51,10 @@ class TestSignedLicenseEndToEnd:
             "7",
             "--output",
             str(license_path),
+            # Never contaminate the premium repo's authoritative issuance ledger
+            # (issued_licences.csv) from a test run — the CLI defaults to writing
+            # to it for real customer issuance.
+            "--no-register",
         )
 
         service = LicenseService(
@@ -86,6 +90,10 @@ class TestSignedLicenseEndToEnd:
             "7",
             "--output",
             str(license_path),
+            # Never contaminate the premium repo's authoritative issuance ledger
+            # (issued_licences.csv) from a test run — the CLI defaults to writing
+            # to it for real customer issuance.
+            "--no-register",
         )
 
         doc = json.loads(license_path.read_text())
