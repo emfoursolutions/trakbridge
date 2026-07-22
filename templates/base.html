@@ -817,7 +817,15 @@
                     const url = typeof input === 'string' ? input : input.url;
                     const isSameOrigin = url.startsWith('/') || url.startsWith(window.location.origin);
                     if (isSameOrigin) {
-                        init.headers = Object.assign({'X-CSRFToken': csrfToken}, init.headers || {});
+                        // fetch(new Request(...)) needs the header baked into the Request itself;
+                        // init.headers alone is ignored per Fetch spec
+                        if (input instanceof Request) {
+                            const headers = new Headers(input.headers);
+                            headers.set('X-CSRFToken', csrfToken);
+                            input = new Request(input, { headers });
+                        } else {
+                            init.headers = Object.assign({'X-CSRFToken': csrfToken}, init.headers || {});
+                        }
                     }
                 }
                 return _fetch.call(this, input, init);
