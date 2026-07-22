@@ -210,9 +210,10 @@ class TestRXWorkerPluginRouting:
 
         with (
             patch("models.stream.Stream") as mock_stream_class,
+            patch("sqlalchemy.or_"),
             patch("plugins.plugin_manager.get_plugin_manager") as mock_pm,
         ):
-            mock_stream_class.query.filter_by.return_value.all.return_value = [mock_stream]  # noqa: E501
+            mock_stream_class.query.filter.return_value.all.return_value = [mock_stream]  # noqa: E501
             mock_pm.return_value.get_plugin.return_value = mock_output_plugin
 
             await service._route_cot_to_plugins(cot_xml, tak_server_id)
@@ -235,9 +236,10 @@ class TestRXWorkerPluginRouting:
 
         with (
             patch("models.stream.Stream") as mock_stream_class,
+            patch("sqlalchemy.or_"),
             patch("plugins.plugin_manager.get_plugin_manager") as mock_pm,
         ):
-            mock_stream_class.query.filter_by.return_value.all.return_value = [
+            mock_stream_class.query.filter.return_value.all.return_value = [
                 mock_stream
             ]
             mock_pm.return_value.get_plugin.return_value = mock_gps_plugin
@@ -269,10 +271,11 @@ class TestRXWorkerPluginRouting:
 
         with (
             patch("models.stream.Stream") as mock_stream_class,
+            patch("sqlalchemy.or_"),
             patch("plugins.plugin_manager.get_plugin_manager") as mock_pm,
             patch("services.cot_service_integration.logger") as mock_logger,
         ):
-            mock_stream_class.query.filter_by.return_value.all.return_value = [
+            mock_stream_class.query.filter.return_value.all.return_value = [
                 mock_stream
             ]
             mock_pm.return_value.get_plugin.return_value = mock_output_plugin
@@ -305,10 +308,11 @@ class TestRXWorkerPluginRouting:
 
         with (
             patch("models.stream.Stream") as mock_stream_class,
+            patch("sqlalchemy.or_"),
             patch("plugins.plugin_manager.get_plugin_manager") as mock_pm,
             patch("services.cot_service_integration.logger") as mock_logger,
         ):
-            mock_stream_class.query.filter_by.return_value.all.return_value = [
+            mock_stream_class.query.filter.return_value.all.return_value = [
                 mock_stream
             ]
             mock_pm.return_value.get_plugin.return_value = mock_output_plugin

@@ -909,7 +909,12 @@ start_server() {
             fi
             local log_level=${HYPERCORN_LOG_LEVEL:-$default_log_level}
             local graceful_timeout=${HYPERCORN_GRACEFUL_TIMEOUT:-30}
-            local max_requests=${HYPERCORN_MAX_REQUESTS:-1000}
+
+            # NOTE: --max-requests is intentionally not set. TrakBridge workers
+            # own long-lived state (stream workers, TAK connections, plugin
+            # buffers); request-count recycling tears that down every N HTTP
+            # hits and interrupts CoT delivery. Rely on graceful shutdown +
+            # health checks for worker hygiene instead.
 
             log_info "Using Hypercorn ASGI server (FLASK_ENV=$FLASK_ENV)"
 
@@ -932,12 +937,7 @@ start_server() {
                 log_warn "Invalid HYPERCORN_KEEP_ALIVE value '$keep_alive', using default: 5"
                 keep_alive=5
             fi
-            
-            if ! [[ "$max_requests" =~ ^[0-9]+$ ]] || [[ "$max_requests" -lt 100 ]] || [[ "$max_requests" -gt 10000 ]]; then
-                log_warn "Invalid HYPERCORN_MAX_REQUESTS value '$max_requests', using default: 1000"
-                max_requests=1000
-            fi
-            
+
             # Validate worker class
             case "$worker_class" in
                 "asyncio"|"trio"|"uvloop") ;;
@@ -970,7 +970,6 @@ start_server() {
                 --keep-alive "$keep_alive" \
                 --log-level "$log_level" \
                 --graceful-timeout "$graceful_timeout" \
-                --max-requests "$max_requests" \
                 --access-logfile /app/logs/hypercorn-access.log \
                 --error-logfile /app/logs/hypercorn-error.log \
                 app:app
