@@ -12,6 +12,7 @@ from models.stream import Stream
 from models.user import User, UserRole, AuthProvider
 from models.tak_server import TakServer
 from database import db
+from tests.conftest import get_csrf_token
 
 
 @pytest.fixture
@@ -50,7 +51,7 @@ class TestDiscoverTrackersTeamMemberAPI:
     """Test discover-trackers endpoint with team member CoT type options"""
 
     def test_discover_trackers_includes_cot_type_options(
-        self, authenticated_client, mocker
+        self, authenticated_client, mocker, app
     ):
         """Test that discover-trackers response includes CoT type options"""
         client = authenticated_client("admin")
@@ -73,7 +74,9 @@ class TestDiscoverTrackersTeamMemberAPI:
             }
         }
 
-        response = client.post("/api/streams/discover-trackers", json=payload)
+        token = get_csrf_token(client, app)
+        response = client.post("/api/streams/discover-trackers", json=payload,
+                               headers={"X-CSRFToken": token})
 
         assert response.status_code == 200
         data = response.get_json()
@@ -85,7 +88,7 @@ class TestDiscoverTrackersTeamMemberAPI:
         assert "Team Member" in data["cot_type_options"]
 
     def test_discover_trackers_includes_team_member_options(
-        self, authenticated_client, mocker
+        self, authenticated_client, mocker, app
     ):
         """Test that discover-trackers response includes team member role and color options"""
         client = authenticated_client("admin")
@@ -108,7 +111,9 @@ class TestDiscoverTrackersTeamMemberAPI:
             }
         }
 
-        response = client.post("/api/streams/discover-trackers", json=payload)
+        token = get_csrf_token(client, app)
+        response = client.post("/api/streams/discover-trackers", json=payload,
+                               headers={"X-CSRFToken": token})
 
         assert response.status_code == 200
         data = response.get_json()
@@ -137,7 +142,7 @@ class TestCallsignMappingTeamMemberAPI:
     """Test callsign mapping endpoints with team member configuration"""
 
     def test_update_callsign_mappings_with_team_member_data(
-        self, authenticated_client, sample_stream
+        self, authenticated_client, sample_stream, app
     ):
         """Test POST callsign mappings with team member configuration"""
         client = authenticated_client("admin")
@@ -157,9 +162,11 @@ class TestCallsignMappingTeamMemberAPI:
             ]
         }
 
+        token = get_csrf_token(client, app)
         response = client.post(
             f"/api/streams/{sample_stream.id}/callsign-mappings",
-            json=payload
+            json=payload,
+            headers={"X-CSRFToken": token},
         )
 
         assert response.status_code == 200
@@ -173,7 +180,7 @@ class TestCallsignMappingTeamMemberAPI:
         assert mapping.team_color == "Blue"
 
     def test_update_callsign_mappings_team_member_validation(
-        self, authenticated_client, sample_stream
+        self, authenticated_client, sample_stream, app
     ):
         """Test that team member validation is enforced through API"""
         client = authenticated_client("admin")
@@ -194,9 +201,11 @@ class TestCallsignMappingTeamMemberAPI:
             ]
         }
 
+        token = get_csrf_token(client, app)
         response = client.post(
             f"/api/streams/{sample_stream.id}/callsign-mappings",
-            json=payload
+            json=payload,
+            headers={"X-CSRFToken": token},
         )
 
         # This should fail validation - THIS WILL FAIL INITIALLY UNTIL WE ADD VALIDATION
@@ -209,7 +218,7 @@ class TestCallsignMappingTeamMemberAPI:
 class TestTeamMemberAPIValidation:
     """Test API validation for team member fields"""
 
-    def test_invalid_team_role_validation(self, authenticated_client, sample_stream):
+    def test_invalid_team_role_validation(self, authenticated_client, sample_stream, app):
         """Test API validation rejects invalid team roles"""
         client = authenticated_client("admin")
 
@@ -228,9 +237,11 @@ class TestTeamMemberAPIValidation:
             ]
         }
 
+        token = get_csrf_token(client, app)
         response = client.post(
             f"/api/streams/{sample_stream.id}/callsign-mappings",
-            json=payload
+            json=payload,
+            headers={"X-CSRFToken": token},
         )
 
         # THIS WILL FAIL INITIALLY UNTIL WE ADD VALIDATION

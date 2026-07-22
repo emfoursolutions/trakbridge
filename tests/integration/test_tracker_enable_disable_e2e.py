@@ -24,6 +24,7 @@ from models.callsign_mapping import CallsignMapping
 from models.tak_server import TakServer
 from services.stream_worker import StreamWorker
 from services.stream_operations_service import StreamOperationsService
+from tests.conftest import get_csrf_token
 
 
 @pytest.mark.integration
@@ -79,6 +80,7 @@ class TestTrackerEnableDisableE2E:
                 "callsign_mapping_2_enabled": "on",  # Enabled
             }
 
+            create_data["csrf_token"] = get_csrf_token(client, app)
             response = client.post(
                 "/streams/create", data=create_data, follow_redirects=True
             )
@@ -202,7 +204,10 @@ class TestTrackerEnableDisableE2E:
                             "url": "https://test.example.com/feed.kml",
                         },
                     },
-                    headers={"Content-Type": "application/json"},
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": get_csrf_token(client, app),
+                    },
                 )
 
                 assert response.status_code == 200
@@ -272,7 +277,10 @@ class TestTrackerEnableDisableE2E:
                             "url": "https://test.example.com/feed.kml",
                         },
                     },
-                    headers={"Content-Type": "application/json"},
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": get_csrf_token(client, app),
+                    },
                 )
 
                 assert response.status_code == 200

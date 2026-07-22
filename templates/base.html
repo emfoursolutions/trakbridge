@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}TrakBridge{% endblock %}</title>
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
@@ -798,6 +799,30 @@
                 closeSidebar();
             }
         });
+    </script>
+    <script>
+        // Attach the CSRF token from the <meta> tag to all same-origin fetch()
+        // calls that use a state-changing HTTP method.  This keeps all AJAX forms
+        // protected without modifying each call site individually.
+        (function () {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            if (!csrfToken) return;
+
+            const _fetch = window.fetch;
+            window.fetch = function (input, init) {
+                init = init || {};
+                const method = (init.method || 'GET').toUpperCase();
+                if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+                    // Only inject for same-origin requests
+                    const url = typeof input === 'string' ? input : input.url;
+                    const isSameOrigin = url.startsWith('/') || url.startsWith(window.location.origin);
+                    if (isSameOrigin) {
+                        init.headers = Object.assign({'X-CSRFToken': csrfToken}, init.headers || {});
+                    }
+                }
+                return _fetch.call(this, input, init);
+            };
+        })();
     </script>
     {% block scripts %}{% endblock %}
 </body>
