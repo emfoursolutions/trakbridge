@@ -1,5 +1,382 @@
 # TrakBridge Release Notes
 
+## Version 2.0.1 - Multi-Server RX Dispatch & Worker Stability
+
+**Release Date:** July 23, 2026
+**Focus: Silent data-loss fix for multi-server streams and a long-standing worker-recycling bug that surfaced in 2.0.0**
+
+Two hotfixes for issues introduced or first observed in 2.0.0. The RX dispatch bug caused output plugins to silently miss traffic from every TAK server beyond the first when a stream was attached to multiple servers — the postgres archiver made this visible for the first time. The Hypercorn worker was silently recycling every ~1000 requests (roughly every 30 minutes on a healthy deployment), tearing down long-lived stream state and interrupting CoT delivery; this has been present since Hypercorn was introduced but only became observable in 2.0.0 because plugin whitelist gating and buffering output plugins now depend on continuous worker uptime.
+
+No schema changes. No new configuration. Straight upgrade from 2.0.0.
+
+---
+
+### BUG FIXES
+
+#### RX plugin dispatch now respects the multi-server junction table
+**Silent data loss for output plugins on multi-server streams — critical**
+
+The 2.0.0 many-to-many `stream_tak_servers` junction table was correctly consulted on the TX side and during worker startup, but the RX-side plugin dispatch query in `services/cot_service_integration.py` still filtered streams by the legacy single-server `tak_server_id` column. When a stream was attached to multiple TAK servers, every CoT event received from any server other than the one referenced by the legacy foreign key was silently discarded — the output plugin was never called.
+
+- **Symptom**: postgres archiver (or any output plugin) captured traffic from TAK server 1 only; server 2's events were missing entirely with no error log
+- **Blast radius**: every output plugin — archivers, forwarders, notifiers, external HTTP outputs — attached to any multi-server stream
+- **Fix**: the RX dispatch query now matches streams via either the legacy foreign key or membership in `stream_tak_servers`, mirroring the "multi-first, legacy-fallback" pattern already used elsewhere in the codebase. Backward compatible: single-server streams continue to work unchanged. No migration required.
+
+#### Hypercorn worker no longer recycles every ~1000 requests
+**Long-lived stream state and buffered plugin data preserved across worker lifetime**
+
+The Docker entrypoint launched Hypercorn with `--max-requests 1000`, a stateless-web-worker recycling pattern that fights TrakBridge's single-long-lived-worker architecture. Every recycle:
+
+- Tore down every stream worker and TAK server connection
+- Triggered graceful shutdown of the plugin cache (draining buffered state)
+- Interrupted CoT delivery for the ~1–2 second graceful-shutdown window
+- Re-triggered plugin whitelist reload — which in 2.0.0 became a fragile path
+
+The recycling was silent in earlier releases because output plugins had no buffered state and no whitelist gating existed. In 2.0.0 the combination surfaced the bug as observable data loss (buffered rows in the postgres archiver) and unrecoverable startup failures (whitelist reload permission errors on some deployments).
+
+`--max-requests` has been removed from the Hypercorn command line. The `HYPERCORN_MAX_REQUESTS` environment variable is no longer honoured; any override in existing compose files is silently ignored. Worker hygiene is now handled by graceful shutdown and container health checks alone.
+
+#### Full COT service shutdown on process teardown
+**Output plugin cleanup and pending output stats now flushed on SIGTERM**
+
+`_cleanup_persistent_cot_service()` in `services/stream_manager.py` only stopped in-flight workers on shutdown; it never awaited `QueuedCOTService.shutdown()`. That meant:
+
+- `cleanup()` hooks on cached output plugins were never called
+- Pending output-stat writes were never flushed to the database
+- Buffering plugins (like the postgres archiver) lost any in-memory queue on SIGTERM
+
+The teardown path now drives the full async shutdown via `run_coroutine_threadsafe` on the stream manager's event loop, matching the pattern already used for `stop_all()` and `_cleanup_monitoring_services()`. A worker-stop fallback remains for the edge case where no event loop is available, with a warning logged to make skipped plugin cleanup visible.
+
+---
+
+### PLUGIN SDK
+
+No SDK version bump. The lifecycle hooks (`start()`, `cleanup()`) documented in the 2.0.0 SDK are now correctly driven by core on every configured teardown path: stream reconfig, stream deletion, stream stop/restart, and clean process shutdown.
+
+---
+
+### UPGRADE NOTES
+
+Straight upgrade from 2.0.0. No schema migration, no configuration change required.
+
+**Behavioural change**: workers now stay up until the container is explicitly restarted. Health-check based hygiene continues as before. If you were relying on periodic worker recycling for any reason (memory cleanup, garbage collection, socket refresh), your Hypercorn worker will now behave like a genuinely long-lived process — plan container restart cadence accordingly.
+
+The `HYPERCORN_MAX_REQUESTS` environment variable is no longer read. Override entries in existing `docker-compose.yml` files can be removed at your convenience; leaving them in place is harmless.
+
+---
+
+## Version 2.0.0 - Plugin SDK, Tiered Licensing & Plugin Manager
+
+**Release Date:** July 18, 2026
+**Focus: Public Plugin SDK, Offline Licence Service, Admin Plugin Manager with Signature Verification and Tier Gating**
+
+TrakBridge 2.0 introduces the foundation for a tiered product model. Plugin base classes are now published as a standalone SDK on PyPI so third parties can build their own plugins. A new offline licence system maps deployments to Community, Pro, or Enterprise tiers. The admin UI gains a plugin manager that installs, verifies, and gates plugins by tier without touching the shell. Together these lay the groundwork for premium plugin distribution while keeping every existing Community capability free and unchanged.
+
+---
+
+### NEW FEATURES
+
+#### `trakbridge-plugin-sdk` — Public Plugin SDK on PyPI
+**Third parties can now write TrakBridge plugins without a fork**
+
+Plugin base classes (`BaseGPSPlugin`, `BaseOutputPlugin`, `BaseInboundPlugin`) and their supporting config/metadata infrastructure have been extracted from the core repository into a standalone Apache-2.0 licensed package: **[trakbridge-plugin-sdk](https://pypi.org/project/trakbridge-plugin-sdk/)** on PyPI.
+
+- **`pip install trakbridge-plugin-sdk`** and subclass the base class of your choice — a working plugin is 30-40 lines of Python
+- **Runtime provider registry** — core services (encryption, plugin metadata, circuit breaker, CoT delivery) are injected into the SDK at startup via `trakbridge_sdk.configure(...)`. Plugins never import core modules directly, so the SDK works standalone in unit tests
+- **Contract documentation and worked examples** for GPS, output, and inbound plugin types ship with the SDK
+- **17 built-in plugins now use the SDK** through a re-export shim at `plugins/base_plugin.py`; no behaviour change for existing installs
+
+#### Offline Licence Service
+**Ed25519-signed licence files, air-gap friendly, fail-secure**
+
+New `services/license_service.py` verifies signed licence files against an embedded Emfour public key. Zero network calls; no phone-home.
+
+- **Three tiers:** Community (default, no licence required), Pro, Enterprise
+- **Licence file location:** `secrets/tb_license.json` by default, overridable via `TRAKBRIDGE_LICENSE_FILE`
+- **Fails securely:** missing, tampered, expired, or malformed licences degrade to Community with a logged warning — the app never crashes over licensing
+- **Live expiry:** the tier is re-checked on every query, so a licence that lapses while the app is running downgrades in place without a restart
+- **Admin about page** shows current tier badge, licence status, customer, and expiry
+- **In-app licence installation** — admins upload signed licence files at `/admin/about`; the file is verified before anything is written, rejected uploads preserve the current licence, and installs take effect immediately with an audit log entry
+
+#### Admin Plugin Manager
+**Install, enable, disable, and uninstall plugins from the browser**
+
+New `/admin/plugins` blueprint replaces the previous "SSH in and place a `.py` file in `external_plugins/`" workflow.
+
+- **Package format:** plugins ship as `.zip` or `.tar.gz` archives containing a `plugin.yaml` manifest, an entry-point Python file, and any supporting modules
+- **12-step install validation chain:** archive safety (traversal, symlinks, decompression bomb caps), manifest structure, minimum TrakBridge version, **tier gate**, **signature verification**, AST code scan (rejects `exec`/`eval`/`os.system`/`subprocess`/`ctypes`), base-class inheritance verification, and identity-rule enforcement — a rejected package leaves no trace on disk, in the database, or in the whitelist
+- **Signature verification:** packages signed with the Emfour Ed25519 key show a green "Verified" badge; tampered signatures are rejected outright. Unsigned third-party packages install with an explicit "UNVERIFIED" warning
+- **Tier gating:** `plugin.yaml` gains an optional `tier` field enforced at BOTH install time and load time — a premium plugin cannot be loaded on a Community deployment even if the file is manually copied into `external_plugins/`
+- **Lifecycle actions:** enable/disable toggles the whitelist without deleting files; uninstall removes files, database record, and whitelist entry. Both block cleanly if any active stream references the plugin
+- **Audit logging** on every action (install accepted/rejected, enable/disable/uninstall) with admin username, plugin id, tier, and verification status
+- **Sidebar link:** admin users see a new "Plugins" entry alongside Key Rotation
+
+#### Whitelist Gating (Security Hardening)
+**External plugins now require explicit allow-listing**
+
+Previously, any Python file dropped into `external_plugins/` would be loaded automatically by the plugin manager. This release removes that blanket allowance: each external plugin now requires an explicit `external_plugins.<plugin_id>` entry in `plugins.yaml` — managed automatically by the plugin manager UI.
+
+**Backwards compatible:** on startup, the plugin manager auto-adds whitelist entries for any pre-existing external plugins so current deployments continue to work without manual intervention. See [Upgrade Notes](#upgrade-notes) below.
+
+---
+
+### DATABASE CHANGES
+
+New tables (added via Alembic migration `add_plugin_management_tables`):
+
+- **`installed_plugins`** — tracks packaged external plugins (id, version, tier, verified flag, enabled state, install metadata)
+- **`plugin_audit_log`** — records every plugin lifecycle action (install/enable/disable/uninstall) with admin username, licence id where applicable, and outcome
+
+Docker deployments run migrations automatically via `docker/entrypoint.sh`; source deployments need `flask db upgrade`.
+
+---
+
+### BUG FIXES
+
+- **`add_ca_cert_to_streams` migration** now uses `safe_add_column`/`safe_drop_column` and no longer crashes with `DuplicateColumn` on partially-populated Postgres schemas
+- **Plugin category display** in the stream edit UI correctly reflects the CoT Forwarding vs Notifications split introduced in 1.3.0
+
+---
+
+### UPGRADE NOTES
+
+**From 1.3.x → 2.0.0**
+
+- **Run `flask db upgrade`** to create the two new plugin management tables (Docker: automatic on startup; source: manual)
+- **External plugins:** anything currently loaded from `external_plugins/` will be auto-registered in the new whitelist on first startup — no action required
+- **Docker image size** increased by ~5MB due to new runtime dependencies for the plugin manager (`libpq5` was already present; no new system packages)
+- **Global request size limit** raised from 1MB to 12MB to accommodate plugin package uploads. Per-route caps remain the real enforcement (licence 16KB, cert 5MB, plugin 10MB)
+
+**No breaking changes for end users** — every 1.3 workflow continues to work identically. The changes affect plugin authors and administrators managing plugin installations.
+
+---
+
+### FOR PLUGIN DEVELOPERS
+
+The SDK is available now:
+
+```bash
+pip install trakbridge-plugin-sdk
+```
+
+- **[Plugin contract documentation](https://github.com/emfoursolutions/trakbridge-plugin-sdk/blob/main/docs/plugin_contract.md)** in the SDK repository
+- **Example plugins** for all three types (tracker, output, inbound) in `trakbridge-plugin-sdk/examples/`
+- **Repository:** [github.com/emfoursolutions/trakbridge-plugin-sdk](https://github.com/emfoursolutions/trakbridge-plugin-sdk) (Apache-2.0)
+- **PyPI:** [pypi.org/project/trakbridge-plugin-sdk](https://pypi.org/project/trakbridge-plugin-sdk/)
+
+---
+
+
+
+**Release Date:** July 3, 2026
+**Focus: Push-Based Inbound Streams, New Outbound Plugins, UDP Multicast CoT Bridge, TAK Worker Stability, Auth Hardening**
+
+---
+
+### NEW FEATURES
+
+#### Inbound Stream Architecture
+**Receive Data from External Sources**
+
+TrakBridge can now accept push-based data from external systems via a dedicated inbound stream pipeline.
+
+- **HTTP push endpoint** — `POST /api/inbound/<stream_id>/data` receives location payloads and routes them through the CoT pipeline to configured TAK servers. Security controls include anti-enumeration responses (consistent timing regardless of stream existence), IP allowlist enforcement, coordinate validation, payload size limits, per-stream rate limiting, and API key masking in logs.
+- **Capture buffer & preview mode** — Inbound streams can capture received payloads into a bounded buffer for inspection via the stream detail page before committing to live routing. Useful for validating field mappings against real data.
+- **`InboundStreamWorker`** — Dedicated worker class manages the lifecycle of push-based streams inside `StreamManager`, with the same health monitoring and registry cleanup as outbound workers.
+- **Inbound stream UI** — Stream detail and create/edit pages surface inbound-specific configuration: API key (with generate button), rate limiting, IP allowlist, and Preview Mode badge.
+
+#### Active-Connect Inbound Plugins
+**TrakBridge Connects Out to Pull Data In**
+
+- **MQTT active-connect** — TrakBridge connects to an MQTT broker, subscribes to a configurable topic, and forwards received CoT to TAK servers. Supports plain and TLS/mTLS connections via the existing certificate infrastructure (`cert_utils.build_ssl_context()`).
+- **WebSocket active-connect** — TrakBridge connects to a WebSocket server and forwards received CoT messages.
+- **Generic inbound plugins** — `generic_xml_inbound` and `generic_inbound` provide a baseline push-receive implementation registered in the plugin manager, available for all stream types.
+- **CA cert upload** — Inbound streams now support uploading a CA certificate bundle for TLS verification of upstream sources.
+
+#### Inbound Plugin Display Names
+
+Inbound plugin display names have been updated to be more descriptive and consistent:
+
+| Plugin | Previous name | New name |
+| ------ | ------------- | -------- |
+| `generic_inbound` | Generic Inbound | **JSON Receiver** |
+| `generic_xml_inbound` | Generic XML Inbound | **XML Receiver** |
+| `inbound_http` | Inbound HTTP | **HTTP Location Endpoint** |
+| `inbound_active` | Inbound Active | **MQTT / WebSocket Client** |
+
+#### UDP Multicast CoT Bridge
+**Bridge LAN Multicast Across VPN/WAN Links**
+
+The `udp_multicast_listener` inbound plugin joins a UDP multicast group and forwards every received CoT event to all TAK servers configured on the stream — bridging ATAK Mesh SA traffic across network segments where IP multicast does not route.
+
+**Wire format support:**
+- **CoT XML** — forwarded verbatim to the TAK output queue
+- **TAK Protocol v1 Mesh SA protobuf** — detected by magic bytes (`0xbf 0x01 0xbf`), decoded via `takproto` to CoT XML, then forwarded through the standard TAK output path
+
+**Network configuration:**
+- Joins IGMPv2 by default; IGMPv3 source-specific multicast available via `source_filter`
+- Configurable bind interface for multi-homed hosts
+- Per-source token-bucket rate limiting; first five dropped datagrams per stream sampled into logs with source IP and 200-byte hex preview for triage
+
+**Docker guidance:**
+- `macvlan` network (recommended): container gets a LAN IP, keeps reverse-proxy reachability
+- `network_mode: host` (simplest): no proxy/reverse-proxy required
+
+> **Note:** ATAK Mesh SA AES encryption is intentionally not yet implemented — wire layout needs verification against ATAK-CIV source before any crypto is written.
+
+#### Plugin Category Split: CoT Forwarding & Notifications
+
+Output plugins are now organised into two distinct categories in the stream creation UI:
+
+**CoT Forwarding** — plugins that forward raw CoT events to external systems:
+`outbound_http`, `outbound_mqtt`, `outbound_websocket`, `udp_multicast_publisher`
+
+**Notifications** — plugins that post human-readable alerts to messaging platforms:
+`discord_handler`, `slack_handler`, `irc_handler`
+
+Previously all seven appeared under a single "Output Handlers" category. Splitting them makes it easier to find the right plugin for the job.
+
+#### CoT Forwarding Plugins
+
+**Forward CoT to External Systems**
+
+Three focused forwarding plugins replace the legacy `webhook_handler`:
+
+**OutboundHTTP** — POSTs or PUTs CoT events to any HTTP/HTTPS endpoint:
+- Payload formats: JSON, raw XML, or custom template
+- Full message rules, UID filtering, geofence, and deduplication pipeline
+- Scheme allow-listing (http/https only) prevents non-HTTP URLs reaching network I/O
+- CRLF injection prevention in custom headers at the field level
+
+**OutboundMQTT** — Publishes CoT events to an MQTT broker topic:
+- Persistent paho-mqtt connection with `loop_start`/`loop_stop`
+- TLS/mTLS via `cert_utils.build_ssl_context()` for `mqtts://` URLs
+- Bounded queue with oldest-drop semantics; every drop increments `events_dropped`
+- Bad-auth detection: plugin stays disconnected and logs clearly when credentials are wrong
+
+**OutboundWebSocket** — Maintains a persistent WebSocket connection and streams CoT events:
+- Exponential backoff reconnect (cap 30s) with background reader for proactive server-close detection
+- Bounded queue with oldest-drop semantics
+- URL credential redaction in all log statements
+- Scheme allow-listing (ws/wss only)
+
+**UDP Multicast Publisher** — publishes CoT events to a UDP multicast group.
+Forwarded event counts are now persisted to the stream DB record via a batched flush (every 30 seconds or on plugin stop), fixing the "0 Messages Sent" display on the stream detail page.
+
+**Shared output-plugin helpers** (`services/output_plugin_helpers.py`):
+- CoT variable extraction, template formatting, message rule filtering, geofence evaluation, deduplication, rate limiting, and payload building extracted into a reusable module
+- All forwarding plugins compose against this module; no logic duplication
+
+The legacy `webhook_handler.py` plugin and its test files have been removed. Documentation updated throughout.
+
+#### CoT Identity Heartbeat Improvements
+
+- `how` attribute set to `h-e` (human-entered) for team-member CoT types — TAK Server was rejecting machine-generated `m-g` for these events
+- `precisionlocation` element added to team-member heartbeats for well-formed XML acceptance
+- `__group` always emitted with sensible team colour/role defaults when identity is enabled
+- Identity CoT now sent **before** draining the event queue at TX start — TAK Server sees TrakBridge in the roster before any event stream begins
+
+---
+
+### BUG FIXES
+
+#### Expired Password Redirect & Admin Reset Lockout
+
+Users with an expired password were previously dropped into the application with an inconsistent session state instead of being redirected to the change-password flow. Admins triggering a force-reset were similarly affected.
+
+The root cause was that admin-initiated resets set `password_changed_at` to `None`, which the expiry check treated as "never changed" — immediately expired. This locked the user in a redirect loop on next login.
+
+**Fix:** A new `must_change_password` boolean column on the users table decouples forced-change from expiry state. Setting this flag redirects the user to the change-password page on their next login without touching `password_changed_at`. The expiry check only fires for genuinely expired passwords; the forced-change flag fires independently.
+
+A database migration (`add_must_change_password`) adds the column automatically on startup.
+
+#### False-Positive Unhealthy Warnings for Output Plugin Workers
+
+The stream manager's periodic health check emitted WARNING-level logs for output plugin workers (Discord, Slack, IRC, HTTP, MQTT, WebSocket, UDP Multicast Publisher) that were operating normally. These plugins do not hold a persistent TAK connection — they receive dispatched CoT events rather than maintaining a long-lived socket — so the absence of a connection is expected behaviour, not a fault.
+
+**Fix:** Output plugin workers are now recognised as healthy when their task is running, regardless of TAK connection state. Genuine failures (task exited, plugin crashed) still surface as WARNING.
+
+#### TAK Worker Task Leak on Stream Save (Critical)
+
+Saving a stream configuration triggered `restart_worker`, which stopped the old worker and started a new one. The old `_enhanced_transmission_worker` caught `CancelledError` and broke out of its loop — but did **not** cancel the inner `_tx_loop`/`_rx_worker` child tasks it had spawned. Those orphaned tasks continued running against the now-removed queue and stale writer for 2+ seconds after `stop_worker` returned.
+
+**What operators saw:** ~20 `Queue N does not exist` ERROR logs at 10Hz after every stream save, followed by the orphaned loop's writer failing — each failure charged to the circuit breaker for the TAK server ID the new healthy worker was also using. After three failures the breaker opened, locking operators out of the fresh connection for 60 seconds.
+
+**Fix:** Child tasks are now hoisted to a local list at the top of each iteration. Both `except CancelledError` and `except Exception` handlers cancel and await all child tasks with `asyncio.gather(return_exceptions=True)` before breaking or sleeping. Also: `get_batch`'s `Queue N does not exist` log demoted from ERROR to DEBUG (callers handle the empty return; the log was pure noise during the 2s restart window).
+
+#### New Worker Connection Closed on Stream Save
+
+The old worker's `finally` block read `self.connections[tak_server_id]` at finally-execution time, not the connection that particular iteration owned. If the new worker had already stored its own connection under the same key (routine when `wait_for(timeout=5.0)` allows the old task to finish late), the old finally closed the new worker's socket — causing `Connection lost`, three circuit-breaker charges, and a 60-second lockout on a healthy connection.
+
+**Fix:** Each `while True` iteration captures its connection as a local (initialised to `None`). The `finally` closes only that specific connection object and only clears the dict entry when it still points at the same object.
+
+#### Stale Worker Entries Not Reaped
+
+Workers whose streams were disabled without going through `stop_stream` (e.g. a Slack handler whose poll task exited cleanly) remained in `StreamManager.workers` forever, producing a WARNING every 60 seconds indefinitely.
+
+**Fix:** `stop_stream` removes the worker in a `finally` block regardless of whether `worker.stop()` succeeds. `_periodic_health_check` now cross-references the database: workers for gone/inactive streams are reaped at INFO; workers for genuinely active streams still surface as WARNING so real bugs aren't silently swallowed.
+
+#### StreamWriter Not Closed on Stop
+
+`stop_worker` deleted the connection dict entry but relied on the cancelled TX loop's `finally` to close the underlying `StreamWriter`. That `finally` does not deterministically complete within the 5-second `wait_for` window, so the old socket stayed half-open and TAK Server kept the previous subscription alive (duplicate identity heartbeats and event traffic) until its ~60s stale timeout.
+
+**Fix:** `stop_worker` now explicitly awaits `_cleanup_connection()` (`writer.close()` + `writer.wait_closed()`) after task cancellation, sending TCP FIN synchronously before returning.
+
+#### Migration Column Name Missing
+
+`add_inbound_stream_fields` called `sa.Column()` without the column name as the first positional argument, producing `Column` objects with blank `.name`. Alembic's `batch_op.add_column()` raised `ArgumentError: Column must be constructed with a non-blank name`, halting the migration chain and leaving the downstream `ca_cert` column unapplied — causing `column streams.ca_cert does not exist` errors on every query.
+
+**Fix:** Column name added as first positional argument to each `sa.Column()` call.
+
+#### Entrypoint Script Bugs
+
+- `validate_schema()` called `return validate_schema_optimized` — bash returned the function name as a string, not its exit code. Validation was silently a no-op. Fixed to call the function and `return $?`.
+- Dead `trap` on SIGTERM/SIGINT removed: `exec hypercorn` replaces the shell as PID 1; the trap could never fire. Hypercorn handles signals directly.
+- ANSI colour codes in log output gated on `[[ -t 2 ]]` so `docker logs` and CI capture see plain text instead of raw escape sequences.
+
+---
+
+### INFRASTRUCTURE
+
+#### Development Container
+- Dev container now runs Hypercorn instead of `flask run --debug`. Werkzeug's reloader spawned a child process that opened a second TAK connection with the same UID and callsign, causing doubled subscriptions and doubled cleanup work on every restart. All environments now use a single Hypercorn worker — matches production topology so dev-environment bugs are the same class as production bugs.
+
+#### Configuration
+- `DevelopmentConfig.SQLALCHEMY_RECORD_QUERIES` now reads from the `SQLALCHEMY_RECORD_QUERIES` environment variable (default `false`) instead of hardcoding `True`. The env var overriding the compose setting was silently ignored before this fix.
+- Werkzeug per-request access log level demoted to WARNING — the reverse proxy already records access logs; the per-static-asset lines were pure noise.
+
+#### CI/CD
+- Mosquitto and mosquitto-clients installed in all three integration-test jobs (SQLite, PostgreSQL, MySQL) to support real-broker MQTT integration tests
+- Mosquitto CI fixture: duplicate `allow_anonymous` directive removed (broke older mosquitto); stderr now captured and included in `RuntimeError` message; passwd file/temp dir permissions relaxed to 0644/0755 for CI non-root mosquitto process
+
+---
+
+### UPGRADE INSTRUCTIONS
+
+#### For New Installations
+1. Deploy normally — all features available immediately
+2. Create inbound streams via the new "Inbound" stream type option
+3. Configure UDP multicast bridge if you have ATAK Mesh SA traffic to bridge
+4. Create outbound streams for HTTP, MQTT, or WebSocket forwarding as needed
+
+#### For Existing Deployments
+
+1. **Automatic migration** — `add_inbound_stream_fields`, `add_ca_cert_to_streams`, and `add_must_change_password` migrations apply automatically on startup
+2. **Zero configuration changes** — existing outbound streams continue operating unchanged
+3. **New features opt-in** — inbound streams, multicast bridge, and new outbound plugins available when creating new streams
+4. **Legacy webhook_handler** — if you have custom streams using `webhook_handler`, migrate them to `outbound_http`, `outbound_mqtt`, or `outbound_websocket` as appropriate
+5. **Dev container** — `FLASK_ENV=development` containers now run Hypercorn; the duplicate TAK connection issue is resolved automatically
+6. **Plugin categories** — existing streams are unaffected; the category split only changes how plugins are grouped in the stream creation UI
+
+#### Validation Steps
+1. Verify existing outbound streams operate normally after upgrade
+2. Confirm database migrations applied cleanly (check startup logs for migration errors)
+3. Test an inbound stream with the preview mode capture buffer before routing live
+4. If using multicast bridge: verify `bind_interface` is set to your LAN NIC IP (not left as default in Docker without macvlan/host networking)
+5. If migrating from webhook_handler: validate message rules and geofence configuration in the new plugin
+
+---
+
 ## Version 1.3.0 - Inbound Streams, Outbound Plugins & Multicast Bridge
 
 **Release Date:** July 3, 2026

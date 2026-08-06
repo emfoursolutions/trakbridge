@@ -259,7 +259,7 @@ export SSL_KEY_PATH="/app/certs/server.key"
 If you discover a security vulnerability in TrakBridge:
 
 1. **Do NOT** create a public GitHub issue
-2. **Email security concerns** to: security@trakbridge.net
+2. **Email security concerns** to: security@trakbridge.io
 3. **Include details** about the vulnerability and potential impact
 4. **Provide steps** to reproduce the issue if possible
 5. **Allow time** for assessment and patch development before disclosure
@@ -299,6 +299,6 @@ For specific security implementation details, consult the detailed security guid
 
 ---
 
-**Security Contact**: security@trakbridge.net
+**Security Contact**: security@trakbridge.io
 **Last Security Review**: 2025-08-08  
 **Next Review Scheduled**: 2025-11-08
