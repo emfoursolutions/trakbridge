@@ -181,18 +181,19 @@ class TestTierBadgeVisibility:
         client = authenticated_client("admin")
         response = client.get("/admin/plugins/")
         assert response.status_code == 200
-        body = response.data.lower()
-        assert b"community" in body
+        # Assert the badge itself, not just the word — proves the header badge rendered.
+        assert b"Licence: Community" in response.data
+        assert b"Licence: Pro" not in response.data
+        assert b"Licence: Enterprise" not in response.data
 
     def test_pro_tier_shown_in_header(self, authenticated_client, env, monkeypatch, app):
         self._mock_license_service(monkeypatch, "pro")
         client = authenticated_client("admin")
         response = client.get("/admin/plugins/")
         assert response.status_code == 200
-        body = response.data.lower()
-        assert b"pro" in body
-        # Community badge must NOT appear in the licence indicator area
-        assert b"licence: community" not in body
+        assert b"Licence: Pro" in response.data
+        assert b"Licence: Community" not in response.data
+        assert b"Licence: Enterprise" not in response.data
 
     def test_upload_modal_contains_tier_hint(self, authenticated_client, env, monkeypatch, app):
         self._mock_license_service(monkeypatch, "pro")
