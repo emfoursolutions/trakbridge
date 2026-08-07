@@ -4,6 +4,7 @@
 import io
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -163,3 +164,40 @@ class TestContentLength:
         client = authenticated_client("admin")
         response = upload(client, b"0" * (10 * 1024 * 1024 + 1), app=app)
         assert b"rejected" in response.data.lower() or b"large" in response.data.lower()
+
+
+class TestTierBadgeVisibility:
+    """Verify the plugin list page surfaces the current licence tier prominently."""
+
+    def _mock_license_service(self, monkeypatch, tier):
+        """Override the license service's get_tier return value for the duration of the test."""
+        monkeypatch.setattr(
+            "services.license_service.LicenseService.get_tier",
+            lambda self: tier,
+        )
+
+    def test_community_tier_shown_in_header(self, authenticated_client, env, monkeypatch, app):
+        self._mock_license_service(monkeypatch, "community")
+        client = authenticated_client("admin")
+        response = client.get("/admin/plugins/")
+        assert response.status_code == 200
+        body = response.data.lower()
+        assert b"community" in body
+
+    def test_pro_tier_shown_in_header(self, authenticated_client, env, monkeypatch, app):
+        self._mock_license_service(monkeypatch, "pro")
+        client = authenticated_client("admin")
+        response = client.get("/admin/plugins/")
+        assert response.status_code == 200
+        body = response.data.lower()
+        assert b"pro" in body
+        # Community badge must NOT appear in the licence indicator area
+        assert b"licence: community" not in body
+
+    def test_upload_modal_contains_tier_hint(self, authenticated_client, env, monkeypatch, app):
+        self._mock_license_service(monkeypatch, "pro")
+        client = authenticated_client("admin")
+        response = client.get("/admin/plugins/")
+        assert response.status_code == 200
+        assert b"This deployment is licensed as <strong>Pro</strong>" in response.data
+        assert b"require a higher tier" in response.data
