@@ -155,6 +155,28 @@ class TestLifecycleEndpoints:
         assert response.status_code == 400
         assert response.get_json()["success"] is False
 
+    def test_lifecycle_symlink_whitelist_returns_400_not_500(
+        self, authenticated_client, env, tmp_path, app
+    ):
+        """PermissionError from a symlinked whitelist path must surface as a
+        controlled 400, not an unhandled 500. Regression guard for the
+        Task 1.8 review finding."""
+        _, whitelist = env
+        # Replace the whitelist file with a symlink; enable_plugin triggers
+        # update_whitelist_file which now refuses to follow symlinks.
+        real_target = tmp_path / "real_yaml.yaml"
+        real_target.write_text("allowed_plugin_modules: []\n")
+        whitelist.unlink()
+        whitelist.symlink_to(real_target)
+
+        client = authenticated_client("admin")
+        token = get_csrf_token(client, app)
+        response = client.post(
+            "/admin/plugins/ghost/enable", headers={"X-CSRFToken": token}
+        )
+        assert response.status_code == 400
+        assert response.get_json()["success"] is False
+
 
 class TestContentLength:
     def test_global_limit_allows_plugin_sized_uploads(self, app):
