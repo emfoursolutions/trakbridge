@@ -292,6 +292,13 @@ def install_plugin(
                 "Package signature verification failed — the package may have "
                 "been tampered with"
             )
+        deployment_tier = license_service.get_tier()
+        if signature_status == "unsigned" and deployment_tier != "community":
+            raise PluginInstallError(
+                f"Unsigned plugin cannot be installed on a '{deployment_tier}' "
+                "tier deployment. Only Emfour-signed packages are permitted on "
+                "Pro or Enterprise tiers."
+            )
         verified = signature_status == "verified"
 
         # 8. entry point containment

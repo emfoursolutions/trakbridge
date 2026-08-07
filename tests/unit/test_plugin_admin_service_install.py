@@ -282,6 +282,57 @@ class TestInstallRejections:
         assert list(scratch.iterdir()) == []
 
 
+class TestSignatureTierEnforcement:
+    """Unsigned plugins must be rejected on Pro/Enterprise deployment tiers."""
+
+    def test_unsigned_rejected_on_pro_deployment(
+        self, app, db_session, install_dirs, tmp_path, signing_keypair, monkeypatch
+    ):
+        external, whitelist = install_dirs
+        monkeypatch.setattr(
+            "services.license_service.get_license_service",
+            lambda: type("_LS", (), {"is_tier_allowed": lambda self, t: True, "get_tier": lambda self: "pro"})(),
+        )
+        data = build_plugin_zip(tmp_path, "unsigned_pro")
+        with pytest.raises(PluginInstallError, match="[Uu]nsigned|signature"):
+            do_install(data, external, whitelist)
+        assert_no_trace(external, whitelist, app)
+
+    def test_unsigned_rejected_on_enterprise_deployment(
+        self, app, db_session, install_dirs, tmp_path, signing_keypair, monkeypatch
+    ):
+        external, whitelist = install_dirs
+        monkeypatch.setattr(
+            "services.license_service.get_license_service",
+            lambda: type("_LS", (), {"is_tier_allowed": lambda self, t: True, "get_tier": lambda self: "enterprise"})(),
+        )
+        data = build_plugin_zip(tmp_path, "unsigned_enterprise")
+        with pytest.raises(PluginInstallError, match="[Uu]nsigned|signature"):
+            do_install(data, external, whitelist)
+        assert_no_trace(external, whitelist, app)
+
+    def test_unsigned_allowed_on_community_deployment(
+        self, app, db_session, install_dirs, tmp_path, signing_keypair
+    ):
+        # Community tier: unsigned plugins install with a warning (existing behaviour).
+        external, whitelist = install_dirs
+        data = build_plugin_zip(tmp_path, "unsigned_community")
+        result = do_install(data, external, whitelist)
+        assert result["verified"] is False
+
+    def test_signed_allowed_on_pro_deployment(
+        self, app, db_session, install_dirs, tmp_path, signing_keypair, monkeypatch
+    ):
+        external, whitelist = install_dirs
+        monkeypatch.setattr(
+            "services.license_service.get_license_service",
+            lambda: type("_LS", (), {"is_tier_allowed": lambda self, t: True, "get_tier": lambda self: "pro"})(),
+        )
+        data = build_plugin_zip(tmp_path, "signed_pro", sign_key=signing_keypair)
+        result = do_install(data, external, whitelist)
+        assert result["verified"] is True
+
+
 class TestUpdateWhitelistFile:
     def test_add_and_remove(self, tmp_path):
         path = tmp_path / "plugins.yaml"
