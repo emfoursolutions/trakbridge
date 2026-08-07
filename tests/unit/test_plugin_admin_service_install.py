@@ -357,3 +357,50 @@ class TestUpdateWhitelistFile:
         update_whitelist_file(add=["external_plugins.a"], path=path)
         data = yaml.safe_load(path.read_text())
         assert data["allowed_plugin_modules"] == ["external_plugins.a"]
+
+    def test_file_mode_is_0600_after_write(self, tmp_path):
+        """Written whitelist file must be owner-read/write only (mode 0o600)."""
+        import os
+
+        path = tmp_path / "plugins.yaml"
+        path.write_text("allowed_plugin_modules: []\n")
+        update_whitelist_file(add=["external_plugins.a"], path=path)
+        mode = os.stat(path).st_mode & 0o777
+        assert mode == 0o600, f"Expected 0o600, got 0o{mode:o}"
+
+    def test_symlink_at_target_path_is_rejected(self, tmp_path):
+        """If the whitelist path is a symlink, update_whitelist_file must raise PermissionError."""
+        real_file = tmp_path / "real_plugins.yaml"
+        real_file.write_text("allowed_plugin_modules: []\n")
+        link_path = tmp_path / "plugins.yaml"
+        link_path.symlink_to(real_file)
+        original_content = real_file.read_text()
+
+        with pytest.raises(PermissionError):
+            update_whitelist_file(add=["external_plugins.a"], path=link_path)
+
+        # The pointed-to file must not be modified
+        assert real_file.read_text() == original_content
+
+    def test_symlink_at_parent_dir_is_rejected(self, tmp_path):
+        """If the parent directory of the whitelist path is a symlink, raise PermissionError."""
+        real_dir = tmp_path / "real_dir"
+        real_dir.mkdir()
+        link_dir = tmp_path / "link_dir"
+        link_dir.symlink_to(real_dir)
+        path_inside_link = link_dir / "plugins.yaml"
+
+        with pytest.raises(PermissionError):
+            update_whitelist_file(add=["external_plugins.a"], path=path_inside_link)
+
+    def test_regression_add_remove_non_symlink(self, tmp_path):
+        """Non-symlink path must still correctly add and remove entries."""
+        path = tmp_path / "plugins.yaml"
+        path.write_text("allowed_plugin_modules: []\n")
+        update_whitelist_file(add=["external_plugins.x"], path=path)
+        data = yaml.safe_load(path.read_text())
+        assert "external_plugins.x" in data["allowed_plugin_modules"]
+
+        update_whitelist_file(remove=["external_plugins.x"], path=path)
+        data = yaml.safe_load(path.read_text())
+        assert "external_plugins.x" not in data["allowed_plugin_modules"]
