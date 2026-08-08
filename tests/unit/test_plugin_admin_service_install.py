@@ -283,52 +283,74 @@ class TestInstallRejections:
 
 
 class TestSignatureTierEnforcement:
-    """Unsigned plugins must be rejected on Pro/Enterprise deployment tiers."""
+    """Unsigned plugins are rejected only when the PLUGIN'S declared tier is
+    pro/enterprise — the deployment tier does not restrict community plugins.
+    A Pro or Enterprise deployment can still install unsigned community plugins
+    with the UNVERIFIED warning; the signed-only guarantee applies only to
+    premium plugins that claim Pro/Enterprise capability."""
 
-    def test_unsigned_rejected_on_pro_deployment(
+    def test_unsigned_pro_plugin_rejected(
         self, app, db_session, install_dirs, tmp_path, signing_keypair, monkeypatch
     ):
+        """A plugin manifesting tier=pro without a valid signature is refused,
+        even if the deployment is Pro-licensed."""
         external, whitelist = install_dirs
         monkeypatch.setattr(
             "services.license_service.get_license_service",
             lambda: type("_LS", (), {"is_tier_allowed": lambda self, t: True, "get_tier": lambda self: "pro"})(),
         )
-        data = build_plugin_zip(tmp_path, "unsigned_pro")
+        data = build_plugin_zip(tmp_path, "unsigned_pro_plugin", tier="pro")
         with pytest.raises(PluginInstallError, match="[Uu]nsigned|signature"):
             do_install(data, external, whitelist)
         assert_no_trace(external, whitelist, app)
 
-    def test_unsigned_rejected_on_enterprise_deployment(
+    def test_unsigned_enterprise_plugin_rejected(
         self, app, db_session, install_dirs, tmp_path, signing_keypair, monkeypatch
     ):
+        """A plugin manifesting tier=enterprise without a valid signature is refused."""
         external, whitelist = install_dirs
         monkeypatch.setattr(
             "services.license_service.get_license_service",
             lambda: type("_LS", (), {"is_tier_allowed": lambda self, t: True, "get_tier": lambda self: "enterprise"})(),
         )
-        data = build_plugin_zip(tmp_path, "unsigned_enterprise")
+        data = build_plugin_zip(tmp_path, "unsigned_ent_plugin", tier="enterprise")
         with pytest.raises(PluginInstallError, match="[Uu]nsigned|signature"):
             do_install(data, external, whitelist)
         assert_no_trace(external, whitelist, app)
 
-    def test_unsigned_allowed_on_community_deployment(
-        self, app, db_session, install_dirs, tmp_path, signing_keypair
-    ):
-        # Community tier: unsigned plugins install with a warning (existing behaviour).
-        external, whitelist = install_dirs
-        data = build_plugin_zip(tmp_path, "unsigned_community")
-        result = do_install(data, external, whitelist)
-        assert result["verified"] is False
-
-    def test_signed_allowed_on_pro_deployment(
+    def test_unsigned_community_plugin_allowed_on_pro_deployment(
         self, app, db_session, install_dirs, tmp_path, signing_keypair, monkeypatch
     ):
+        """Regression: a Pro deployment can still install unsigned community
+        plugins. The signed-only rule binds premium plugins, not paying customers."""
         external, whitelist = install_dirs
         monkeypatch.setattr(
             "services.license_service.get_license_service",
             lambda: type("_LS", (), {"is_tier_allowed": lambda self, t: True, "get_tier": lambda self: "pro"})(),
         )
-        data = build_plugin_zip(tmp_path, "signed_pro", sign_key=signing_keypair)
+        data = build_plugin_zip(tmp_path, "community_on_pro")
+        result = do_install(data, external, whitelist)
+        assert result["verified"] is False
+
+    def test_unsigned_community_plugin_allowed_on_community_deployment(
+        self, app, db_session, install_dirs, tmp_path, signing_keypair
+    ):
+        """Regression: unchanged behaviour for community deployment + community plugin."""
+        external, whitelist = install_dirs
+        data = build_plugin_zip(tmp_path, "unsigned_community_plugin")
+        result = do_install(data, external, whitelist)
+        assert result["verified"] is False
+
+    def test_signed_pro_plugin_allowed_on_pro_deployment(
+        self, app, db_session, install_dirs, tmp_path, signing_keypair, monkeypatch
+    ):
+        """Sanity: a properly signed Pro plugin installs on a Pro deployment."""
+        external, whitelist = install_dirs
+        monkeypatch.setattr(
+            "services.license_service.get_license_service",
+            lambda: type("_LS", (), {"is_tier_allowed": lambda self, t: True, "get_tier": lambda self: "pro"})(),
+        )
+        data = build_plugin_zip(tmp_path, "signed_pro_plugin", tier="pro", sign_key=signing_keypair)
         result = do_install(data, external, whitelist)
         assert result["verified"] is True
 
