@@ -308,12 +308,15 @@ def install_plugin(
                 "Package signature verification failed — the package may have "
                 "been tampered with"
             )
-        deployment_tier = license_service.get_tier()
-        if signature_status == "unsigned" and deployment_tier != "community":
+        # Signed-only enforcement applies to the PLUGIN's declared tier, not the
+        # deployment tier. A Pro deployment may still install unsigned community
+        # plugins (with the UNVERIFIED warning) — the trust guarantee is only
+        # meaningful for premium plugins that claim Pro/Enterprise capability.
+        if signature_status == "unsigned" and tier != "community":
             raise PluginInstallError(
-                f"Unsigned plugin cannot be installed on a '{deployment_tier}' "
-                "tier deployment. Only Emfour-signed packages are permitted on "
-                "Pro or Enterprise tiers."
+                f"Unsigned '{tier}' tier plugin cannot be installed — plugins "
+                "declaring Pro or Enterprise tier must carry a valid Emfour "
+                "signature."
             )
         verified = signature_status == "verified"
 
