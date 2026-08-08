@@ -4,6 +4,7 @@
 import io
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -11,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "fixtures"))
 from plugin_package_builder import build_plugin_zip  # noqa: E402
 
 from services.license_service import reset_license_service  # noqa: E402
+from tests.conftest import get_csrf_token  # noqa: E402
 
 
 @pytest.fixture
@@ -31,12 +33,18 @@ def env(tmp_path, monkeypatch, app, db_session):
     reset_license_service()
 
 
-def upload(client, data, filename="pkg.zip"):
+def upload(client, data, filename="pkg.zip", app=None):
+    """Upload a plugin package. Includes CSRF token if app is provided."""
+    headers = {}
+    form_data = {"plugin_file": (io.BytesIO(data), filename)}
+    if app is not None:
+        form_data["csrf_token"] = get_csrf_token(client, app)
     return client.post(
         "/admin/plugins/upload",
-        data={"plugin_file": (io.BytesIO(data), filename)},
+        data=form_data,
         content_type="multipart/form-data",
         follow_redirects=True,
+        headers=headers,
     )
 
 
@@ -46,57 +54,64 @@ class TestAuth:
 
     def test_upload_requires_admin(self, client, env):
         response = client.post("/admin/plugins/upload", data={})
-        assert response.status_code in (302, 401, 403)
+        # CSRF now fires before auth check for unauthenticated POSTs, so 400 is acceptable
+        assert response.status_code in (302, 400, 401, 403)
 
 
 class TestListPage:
-    def test_list_shows_builtin_plugins(self, authenticated_client, env):
+    def test_list_shows_builtin_plugins(self, authenticated_client, env, app):
         client = authenticated_client("admin")
         response = client.get("/admin/plugins/")
         assert response.status_code == 200
         assert b"garmin" in response.data.lower()
 
     def test_detail_page_for_installed_plugin(
-        self, authenticated_client, env, tmp_path
+        self, authenticated_client, env, tmp_path, app
     ):
         external, whitelist = env
         client = authenticated_client("admin")
-        upload(client, build_plugin_zip(tmp_path, "detail_me"))
+        upload(client, build_plugin_zip(tmp_path, "detail_me"), app=app)
         response = client.get("/admin/plugins/detail_me")
         assert response.status_code == 200
         assert b"detail_me" in response.data
 
-    def test_detail_page_unknown_404(self, authenticated_client, env):
+    def test_detail_page_unknown_404(self, authenticated_client, env, app):
         client = authenticated_client("admin")
         assert client.get("/admin/plugins/ghost").status_code == 404
 
 
 class TestUpload:
-    def test_upload_installs_plugin(self, authenticated_client, env, tmp_path):
+    def test_upload_installs_plugin(self, authenticated_client, env, tmp_path, app):
         external, whitelist = env
         client = authenticated_client("admin")
-        response = upload(client, build_plugin_zip(tmp_path, "route_installed"))
+        response = upload(client, build_plugin_zip(tmp_path, "route_installed"), app=app)
         assert response.status_code == 200
         assert (external / "route_installed" / "plugin.yaml").is_file()
         assert b"route_installed" in response.data
 
     def test_unsigned_upload_flashes_unverified_warning(
-        self, authenticated_client, env, tmp_path
+        self, authenticated_client, env, tmp_path, app
     ):
         client = authenticated_client("admin")
-        response = upload(client, build_plugin_zip(tmp_path, "warn_me"))
+        response = upload(client, build_plugin_zip(tmp_path, "warn_me"), app=app)
         assert b"UNVERIFIED" in response.data or b"unverified" in response.data
 
-    def test_rejected_upload_flashes_error(self, authenticated_client, env, tmp_path):
+    def test_rejected_upload_flashes_error(self, authenticated_client, env, tmp_path, app):
         external, whitelist = env
         client = authenticated_client("admin")
-        response = upload(client, build_plugin_zip(tmp_path, "pro_only", tier="pro"))
+        response = upload(client, build_plugin_zip(tmp_path, "pro_only", tier="pro"), app=app)
         assert b"rejected" in response.data.lower()
         assert not (external / "pro_only").exists()
 
-    def test_missing_file_flashes_error(self, authenticated_client, env):
+    def test_missing_file_flashes_error(self, authenticated_client, env, app):
         client = authenticated_client("admin")
-        response = client.post("/admin/plugins/upload", data={}, follow_redirects=True)
+        token = get_csrf_token(client, app)
+        response = client.post(
+            "/admin/plugins/upload",
+            data={"csrf_token": token},
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
         assert response.status_code == 200
         assert (
             b"No plugin package" in response.data
@@ -105,30 +120,60 @@ class TestUpload:
 
 
 class TestLifecycleEndpoints:
-    def test_disable_enable_round_trip(self, authenticated_client, env, tmp_path):
+    def test_disable_enable_round_trip(self, authenticated_client, env, tmp_path, app):
         client = authenticated_client("admin")
-        upload(client, build_plugin_zip(tmp_path, "toggle_me"))
+        upload(client, build_plugin_zip(tmp_path, "toggle_me"), app=app)
 
-        response = client.post("/admin/plugins/toggle_me/disable")
+        token = get_csrf_token(client, app)
+        response = client.post("/admin/plugins/toggle_me/disable",
+                               headers={"X-CSRFToken": token})
         assert response.status_code == 200
         assert response.get_json()["success"] is True
 
-        response = client.post("/admin/plugins/toggle_me/enable")
+        token = get_csrf_token(client, app)
+        response = client.post("/admin/plugins/toggle_me/enable",
+                               headers={"X-CSRFToken": token})
         assert response.status_code == 200
         assert response.get_json()["success"] is True
 
-    def test_uninstall(self, authenticated_client, env, tmp_path):
+    def test_uninstall(self, authenticated_client, env, tmp_path, app):
         external, whitelist = env
         client = authenticated_client("admin")
-        upload(client, build_plugin_zip(tmp_path, "remove_me"))
-        response = client.post("/admin/plugins/remove_me/uninstall")
+        upload(client, build_plugin_zip(tmp_path, "remove_me"), app=app)
+        token = get_csrf_token(client, app)
+        response = client.post("/admin/plugins/remove_me/uninstall",
+                               headers={"X-CSRFToken": token})
         assert response.status_code == 200
         assert response.get_json()["success"] is True
         assert not (external / "remove_me").exists()
 
-    def test_lifecycle_error_returns_400(self, authenticated_client, env):
+    def test_lifecycle_error_returns_400(self, authenticated_client, env, app):
         client = authenticated_client("admin")
-        response = client.post("/admin/plugins/ghost/disable")
+        token = get_csrf_token(client, app)
+        response = client.post("/admin/plugins/ghost/disable",
+                               headers={"X-CSRFToken": token})
+        assert response.status_code == 400
+        assert response.get_json()["success"] is False
+
+    def test_lifecycle_symlink_whitelist_returns_400_not_500(
+        self, authenticated_client, env, tmp_path, app
+    ):
+        """PermissionError from a symlinked whitelist path must surface as a
+        controlled 400, not an unhandled 500. Regression guard for the
+        Task 1.8 review finding."""
+        _, whitelist = env
+        # Replace the whitelist file with a symlink; enable_plugin triggers
+        # update_whitelist_file which now refuses to follow symlinks.
+        real_target = tmp_path / "real_yaml.yaml"
+        real_target.write_text("allowed_plugin_modules: []\n")
+        whitelist.unlink()
+        whitelist.symlink_to(real_target)
+
+        client = authenticated_client("admin")
+        token = get_csrf_token(client, app)
+        response = client.post(
+            "/admin/plugins/ghost/enable", headers={"X-CSRFToken": token}
+        )
         assert response.status_code == 400
         assert response.get_json()["success"] is False
 
@@ -137,7 +182,45 @@ class TestContentLength:
     def test_global_limit_allows_plugin_sized_uploads(self, app):
         assert app.config["MAX_CONTENT_LENGTH"] == 12 * 1024 * 1024
 
-    def test_oversized_plugin_rejected_by_route_cap(self, authenticated_client, env):
+    def test_oversized_plugin_rejected_by_route_cap(self, authenticated_client, env, app):
         client = authenticated_client("admin")
-        response = upload(client, b"0" * (10 * 1024 * 1024 + 1))
+        response = upload(client, b"0" * (10 * 1024 * 1024 + 1), app=app)
         assert b"rejected" in response.data.lower() or b"large" in response.data.lower()
+
+
+class TestTierBadgeVisibility:
+    """Verify the plugin list page surfaces the current licence tier prominently."""
+
+    def _mock_license_service(self, monkeypatch, tier):
+        """Override the license service's get_tier return value for the duration of the test."""
+        monkeypatch.setattr(
+            "services.license_service.LicenseService.get_tier",
+            lambda self: tier,
+        )
+
+    def test_community_tier_shown_in_header(self, authenticated_client, env, monkeypatch, app):
+        self._mock_license_service(monkeypatch, "community")
+        client = authenticated_client("admin")
+        response = client.get("/admin/plugins/")
+        assert response.status_code == 200
+        # Assert the badge itself, not just the word — proves the header badge rendered.
+        assert b"Licence: Community" in response.data
+        assert b"Licence: Pro" not in response.data
+        assert b"Licence: Enterprise" not in response.data
+
+    def test_pro_tier_shown_in_header(self, authenticated_client, env, monkeypatch, app):
+        self._mock_license_service(monkeypatch, "pro")
+        client = authenticated_client("admin")
+        response = client.get("/admin/plugins/")
+        assert response.status_code == 200
+        assert b"Licence: Pro" in response.data
+        assert b"Licence: Community" not in response.data
+        assert b"Licence: Enterprise" not in response.data
+
+    def test_upload_modal_contains_tier_hint(self, authenticated_client, env, monkeypatch, app):
+        self._mock_license_service(monkeypatch, "pro")
+        client = authenticated_client("admin")
+        response = client.get("/admin/plugins/")
+        assert response.status_code == 200
+        assert b"This deployment is licensed as <strong>Pro</strong>" in response.data
+        assert b"require a higher tier" in response.data

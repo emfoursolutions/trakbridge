@@ -233,9 +233,6 @@ class TestParallelConfiguration:
             ), "Environment should override batch size"
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(
-        reason="TDD test - will pass when RC6 parallel config is implemented"
-    )
     async def test_max_concurrent_tasks_limit(self, cot_service, performance_datasets):
         """
         Test that max_concurrent_tasks configuration is respected

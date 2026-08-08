@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from models.stream import Stream
+from tests.conftest import get_csrf_token
 
 
 # ---------------------------------------------------------------------------
@@ -459,9 +460,11 @@ class TestApiKeyGeneration:
 
     def test_generate_api_key_endpoint_exists(self, authenticated_admin, app):
         """There must be an endpoint to generate a new API key."""
+        token = get_csrf_token(authenticated_admin, app)
         response = authenticated_admin.post(
             "/api/inbound/generate-api-key",
             content_type="application/json",
+            headers={"X-CSRFToken": token},
         )
         # Should not be 404 (endpoint exists) — 200 or auth redirect are acceptable
         assert response.status_code != 404, (
@@ -470,9 +473,11 @@ class TestApiKeyGeneration:
 
     def test_generate_api_key_returns_key(self, authenticated_admin, app):
         """The generate endpoint must return a new API key."""
+        token = get_csrf_token(authenticated_admin, app)
         response = authenticated_admin.post(
             "/api/inbound/generate-api-key",
             content_type="application/json",
+            headers={"X-CSRFToken": token},
         )
         if response.status_code == 200:
             data = response.get_json()
@@ -484,9 +489,10 @@ class TestApiKeyGeneration:
         response = client.post(
             "/api/inbound/generate-api-key",
             content_type="application/json",
+            # No CSRF token — unauthenticated requests are rejected before CSRF check
         )
-        # Should redirect to login or return 401/403
-        assert response.status_code in (302, 401, 403), (
+        # Should redirect to login or return 401/403 (or 400 for CSRF if auth check runs after)
+        assert response.status_code in (302, 400, 401, 403), (
             f"Unauthenticated API key generation returned {response.status_code}"
         )
 
@@ -507,9 +513,11 @@ class TestCreateInboundStreamFormPost:
         db_session.add(server)
         db_session.commit()
 
+        token = get_csrf_token(authenticated_admin, app)
         response = authenticated_admin.post(
             "/streams/create",
             data={
+                "csrf_token": token,
                 "name": "Form Inbound Stream",
                 "plugin_type": "generic_inbound",
                 "plugin_category": "inbound",

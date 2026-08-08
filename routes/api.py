@@ -253,7 +253,7 @@ def health_check():
 
 
 @bp.route("/health/detailed")
-@optional_auth
+@require_auth
 def detailed_health_check():
     """Detailed health check with all components"""
     start_time = time.time()
@@ -353,7 +353,7 @@ def liveness_check():
 
 
 @bp.route("/health/database")
-@optional_auth
+@require_auth
 def database_health():
     """Database-specific health check"""
     result = get_cached_health_check("database", health_service.run_all_database_checks)
@@ -463,7 +463,7 @@ def plugin_health():
 
 
 @bp.route("/health/configuration", methods=["GET"])
-@optional_auth
+@require_auth
 def configuration_health():
     """Configuration health check endpoint with detailed status"""
     result = check_configuration_health()
@@ -474,7 +474,7 @@ def configuration_health():
 
 
 @bp.route("/health/circuit-breakers", methods=["GET"])
-@optional_auth
+@require_auth
 def circuit_breaker_health():
     """Circuit breaker health and status monitoring"""
     try:
@@ -528,7 +528,7 @@ def circuit_breaker_health():
 
 
 @bp.route("/health/recovery", methods=["GET"])
-@optional_auth
+@require_auth
 def recovery_service_health():
     """Recovery service health and status monitoring"""
     try:
@@ -599,7 +599,7 @@ def recovery_service_health():
 
 
 @bp.route("/monitoring/dashboard", methods=["GET"])
-@optional_auth
+@require_auth
 def monitoring_dashboard():
     """Comprehensive monitoring dashboard data"""
     try:
@@ -1824,7 +1824,7 @@ def get_uptime_seconds():
 
 
 @bp.route("/convert-latlon-to-mgrs", methods=["POST"])
-@optional_auth
+@require_auth
 def convert_latlon_to_mgrs():
     """
     Convert latitude/longitude coordinates to MGRS format.
@@ -1885,7 +1885,7 @@ def convert_latlon_to_mgrs():
 
 
 @bp.route("/convert-mgrs-to-latlon", methods=["POST"])
-@optional_auth
+@require_auth
 def convert_mgrs_to_latlon():
     """
     Convert MGRS coordinate to latitude/longitude.

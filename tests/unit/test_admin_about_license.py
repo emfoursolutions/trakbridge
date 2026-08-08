@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from services.license_service import canonical_license_bytes, reset_license_service
+from tests.conftest import get_csrf_token
 
 
 @pytest.fixture(autouse=True)
@@ -88,19 +89,21 @@ class TestLicenseInstallRoute:
         return source, target
 
     def test_file_upload_install_activates_license(
-        self, authenticated_client, install_env
+        self, authenticated_client, install_env, app
     ):
         import io
 
         source, target = install_env
         client = authenticated_client("admin")
+        csrf_token = get_csrf_token(client, app)
         response = client.post(
             "/admin/license/install",
             data={
                 "license_file": (
                     io.BytesIO(source.read_bytes()),
                     "license.json",
-                )
+                ),
+                "csrf_token": csrf_token,
             },
             content_type="multipart/form-data",
             follow_redirects=True,
@@ -111,7 +114,7 @@ class TestLicenseInstallRoute:
         assert b"acme-corp" in response.data
 
     def test_tampered_license_rejected_with_error(
-        self, authenticated_client, install_env
+        self, authenticated_client, install_env, app
     ):
         import io
         import json as jsonlib
@@ -120,13 +123,15 @@ class TestLicenseInstallRoute:
         doc = jsonlib.loads(source.read_text())
         doc["license"]["tier"] = "enterprise"
         client = authenticated_client("admin")
+        csrf_token = get_csrf_token(client, app)
         response = client.post(
             "/admin/license/install",
             data={
                 "license_file": (
                     io.BytesIO(jsonlib.dumps(doc).encode()),
                     "license.json",
-                )
+                ),
+                "csrf_token": csrf_token,
             },
             content_type="multipart/form-data",
             follow_redirects=True,
@@ -135,25 +140,36 @@ class TestLicenseInstallRoute:
         assert not target.exists()
         assert b"rejected" in response.data.lower()
 
-    def test_empty_submission_rejected(self, authenticated_client, install_env):
+    def test_empty_submission_rejected(self, authenticated_client, install_env, app):
         client = authenticated_client("admin")
-        response = client.post("/admin/license/install", data={}, follow_redirects=True)
+        csrf_token = get_csrf_token(client, app)
+        response = client.post(
+            "/admin/license/install",
+            data={"csrf_token": csrf_token},
+            follow_redirects=True,
+        )
         assert response.status_code == 200
         assert b"rejected" in response.data.lower() or b"No licence" in response.data
 
     def test_install_requires_admin(self, client, install_env):
         response = client.post("/admin/license/install", data={})
-        assert response.status_code in (302, 401, 403)
+        assert response.status_code in (302, 400, 401, 403)
 
-    def test_install_writes_audit_log(self, authenticated_client, install_env, caplog):
+    def test_install_writes_audit_log(
+        self, authenticated_client, install_env, caplog, app
+    ):
         import io
 
         source, _ = install_env
         client = authenticated_client("admin")
+        csrf_token = get_csrf_token(client, app)
         with caplog.at_level("INFO"):
             client.post(
                 "/admin/license/install",
-                data={"license_file": (io.BytesIO(source.read_bytes()), "l.json")},
+                data={
+                    "license_file": (io.BytesIO(source.read_bytes()), "l.json"),
+                    "csrf_token": csrf_token,
+                },
                 content_type="multipart/form-data",
             )
         assert "licence install" in caplog.text.lower()

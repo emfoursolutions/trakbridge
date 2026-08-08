@@ -50,9 +50,22 @@ def update_whitelist_file(
     """Add/remove entries in allowed_plugin_modules in plugins.yaml.
 
     Rewrites the file via pyyaml (comments are not preserved). Atomic
-    (tmp file + os.replace in the same directory).
+    (tmp file + os.replace in the same directory). Raises PermissionError
+    if the target path or its parent directory is a symlink.
     """
     path = Path(path) if path is not None else _default_whitelist_path()
+
+    # Reject symlinks at the target path to prevent redirect attacks.
+    if path.is_symlink():
+        raise PermissionError(
+            f"Whitelist path {path} is a symlink — refusing to write"
+        )
+    # Reject symlinks at the parent directory to prevent traversal via linked dirs.
+    if path.parent.is_symlink():
+        raise PermissionError(
+            f"Whitelist parent directory {path.parent} is a symlink — refusing to write"
+        )
+
     data: Dict[str, Any] = {}
     if path.is_file():
         data = yaml.safe_load(path.read_text()) or {}
@@ -66,6 +79,9 @@ def update_whitelist_file(
 
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(yaml.safe_dump(data, default_flow_style=False, sort_keys=False))
+    # Set restrictive permissions before the atomic replace so the final file
+    # is owner read/write only, regardless of the process umask.
+    os.chmod(tmp, 0o600)
     os.replace(tmp, path)
     logger.info(f"Updated plugin whitelist ({path}): {modules}")
 
@@ -291,6 +307,13 @@ def install_plugin(
             raise PluginInstallError(
                 "Package signature verification failed — the package may have "
                 "been tampered with"
+            )
+        deployment_tier = license_service.get_tier()
+        if signature_status == "unsigned" and deployment_tier != "community":
+            raise PluginInstallError(
+                f"Unsigned plugin cannot be installed on a '{deployment_tier}' "
+                "tier deployment. Only Emfour-signed packages are permitted on "
+                "Pro or Enterprise tiers."
             )
         verified = signature_status == "verified"
 

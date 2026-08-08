@@ -105,3 +105,25 @@ class TestValidateAndReadCaCert:
         fs = _make_file_storage(b"-----BEGIN CERTIFICATE-----\ngarbage\n-----END CERTIFICATE-----\n", "ca.crt")
         with pytest.raises(ValueError, match="not a valid"):
             _validate_and_read_ca_cert(fs)
+
+    def test_traversal_filename_is_sanitized(self):
+        """A path-traversal filename like ../../etc/evil.pem must be sanitized."""
+        from routes.streams import _validate_and_read_ca_cert
+
+        pem = _generate_ca_pem()
+        fs = _make_file_storage(pem, "../../etc/evil.pem")
+        cert_bytes, filename = _validate_and_read_ca_cert(fs)
+        assert cert_bytes == pem
+        assert "/" not in filename
+        assert "\\" not in filename
+        assert ".." not in filename
+
+    def test_all_invalid_filename_is_rejected(self):
+        """A filename that reduces to empty after sanitization must raise ValueError."""
+        from routes.streams import _validate_and_read_ca_cert
+
+        pem = _generate_ca_pem()
+        # '..' sanitizes to '' with secure_filename; '///' also reduces to ''
+        fs = _make_file_storage(pem, "..")
+        with pytest.raises(ValueError, match="filename"):
+            _validate_and_read_ca_cert(fs)

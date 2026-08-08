@@ -100,15 +100,11 @@ class EncryptionService:
             "🔧 TO FIX THIS:\n"
             "1. Set environment variable: export TB_MASTER_KEY='your_key_here'\n"
             "2. Or create config file with your key\n"
-            "3. Use this generated key if starting fresh: (key logged below)\n"
+            "3. Persist a generated key BEFORE this warning appears — this session's key is not logged and will be lost on restart.\n"
             "⚠️  Data encrypted with this key will be LOST if app restarts without setting the key!"
         )
 
-        # Only log in development/debug mode
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"Generated Master Key: {master_key}")
-        else:
-            logger.info("Master key generated (not logged for security)")
+        logger.info("Master key generated (not logged for security)")
 
         return master_key
 
