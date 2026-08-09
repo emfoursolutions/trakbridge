@@ -24,6 +24,7 @@ from services.license_service import (
     canonical_license_bytes,
     reset_license_service,
 )  # noqa: E402
+from tests.conftest import get_csrf_token  # noqa: E402
 
 PREMIUM_TOOLS = (
     Path(__file__).resolve().parents[3] / "trakbridge-plugins-premium" / "tools"
@@ -82,10 +83,14 @@ def install_pro_license(tmp_path, key, monkeypatch):
     reset_license_service()
 
 
-def upload(client, data, filename="pkg.zip"):
+def upload(client, data, filename="pkg.zip", app=None):
+    """Upload a plugin package. Includes CSRF token if app is provided."""
+    form_data = {"plugin_file": (io.BytesIO(data), filename)}
+    if app is not None:
+        form_data["csrf_token"] = get_csrf_token(client, app)
     return client.post(
         "/admin/plugins/upload",
-        data={"plugin_file": (io.BytesIO(data), filename)},
+        data=form_data,
         content_type="multipart/form-data",
         follow_redirects=True,
     )
@@ -93,11 +98,11 @@ def upload(client, data, filename="pkg.zip"):
 
 class TestBadges:
     def test_signed_package_shows_verified_badge(
-        self, authenticated_client, env, tmp_path, keypair
+        self, authenticated_client, env, tmp_path, keypair, app
     ):
         key, _ = keypair
         client = authenticated_client("admin")
-        upload(client, build_plugin_zip(tmp_path, "signed_e2e", sign_key=key))
+        upload(client, build_plugin_zip(tmp_path, "signed_e2e", sign_key=key), app=app)
         page = client.get("/admin/plugins/")
         assert b"signed_e2e" in page.data
         assert b"Verified" in page.data
@@ -106,17 +111,17 @@ class TestBadges:
         assert b"Verified" in detail.data
 
     def test_unsigned_package_shows_unverified_badge(
-        self, authenticated_client, env, tmp_path, keypair
+        self, authenticated_client, env, tmp_path, keypair, app
     ):
         client = authenticated_client("admin")
-        upload(client, build_plugin_zip(tmp_path, "unsigned_e2e"))
+        upload(client, build_plugin_zip(tmp_path, "unsigned_e2e"), app=app)
         page = client.get("/admin/plugins/")
         assert b"Unverified" in page.data
 
 
 class TestTierGatingEndToEnd:
     def test_pro_plugin_refused_on_community_installs_on_pro(
-        self, authenticated_client, env, tmp_path, keypair, monkeypatch
+        self, authenticated_client, env, tmp_path, keypair, monkeypatch, app
     ):
         key, _ = keypair
         external, whitelist = env
@@ -124,13 +129,13 @@ class TestTierGatingEndToEnd:
         data = build_plugin_zip(tmp_path, "pro_e2e", tier="pro", sign_key=key)
 
         # Community: refused
-        response = upload(client, data)
+        response = upload(client, data, app=app)
         assert b"rejected" in response.data.lower()
         assert not (external / "pro_e2e").exists()
 
         # Install a real signed Pro licence, retry: accepted
         install_pro_license(tmp_path, key, monkeypatch)
-        response = upload(client, data)
+        response = upload(client, data, app=app)
         assert (external / "pro_e2e").exists()
         assert b"pro_e2e" in response.data
 
@@ -153,7 +158,7 @@ class TestTierGatingEndToEnd:
 )
 class TestCrossRepoSigning:
     def test_cli_signed_package_verifies_and_installs(
-        self, authenticated_client, env, tmp_path, keypair, monkeypatch
+        self, authenticated_client, env, tmp_path, keypair, monkeypatch, app
     ):
         """The premium repo's sign_plugin_package.py output must install
         as Verified through the real upload route — guards digest drift."""
@@ -188,7 +193,7 @@ class TestCrossRepoSigning:
 
         client = authenticated_client("admin")
         response = upload(
-            client, (tmp_path / "cli_signed.zip").read_bytes(), "cli_signed.zip"
+            client, (tmp_path / "cli_signed.zip").read_bytes(), "cli_signed.zip", app=app
         )
         assert b"signature verified" in response.data.lower()
 

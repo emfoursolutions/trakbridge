@@ -12,6 +12,7 @@ from models.stream import Stream
 from models.user import User, UserRole, AuthProvider
 from models.tak_server import TakServer
 from database import db
+from tests.conftest import get_csrf_token
 
 
 @pytest.fixture
@@ -49,75 +50,75 @@ def sample_stream(db_session):
 class TestDiscoverTrackersTeamMemberAPI:
     """Test discover-trackers endpoint with team member CoT type options"""
 
-    @patch('services.auth.require_permission')
-    @patch('services.connection_test_service.ConnectionTestService.discover_plugin_trackers_sync')
-    @patch('utils.app_helpers.get_plugin_manager')
-    def test_discover_trackers_includes_cot_type_options(self, mock_plugin_mgr, mock_discover, mock_auth, client):
+    def test_discover_trackers_includes_cot_type_options(
+        self, authenticated_client, mocker, app
+    ):
         """Test that discover-trackers response includes CoT type options"""
-        mock_auth.return_value = None  # Allow access
+        client = authenticated_client("admin")
 
-        # Mock plugin manager
-        mock_plugin = Mock()
-        mock_plugin_mgr.return_value.plugins = {"garmin_plugin": mock_plugin}
-
-        mock_discover.return_value = {
+        # Use real plugin manager (garmin plugin is registered as "garmin").
+        # Only mock the sync discovery call to avoid real network requests.
+        mocker.patch(
+            'services.connection_test_service.ConnectionTestService'
+            '.discover_plugin_trackers_sync'
+        ).return_value = {
             "success": True,
-            "tracker_data": [
-                {"identifier": "TEST123", "name": "Test Device"}
-            ]
+            "tracker_data": [{"identifier": "TEST123", "name": "Test Device"}]
         }
 
         payload = {
-            "plugin_type": "garmin_plugin",
+            "plugin_type": "garmin",
             "plugin_config": {
                 "username": "test@example.com",
                 "password": "testpass"
             }
         }
 
-        response = client.post("/api/streams/discover-trackers", json=payload)
+        token = get_csrf_token(client, app)
+        response = client.post("/api/streams/discover-trackers", json=payload,
+                               headers={"X-CSRFToken": token})
 
         assert response.status_code == 200
         data = response.get_json()
 
-        # Test that response includes CoT type options - THIS WILL FAIL INITIALLY
+        # Test that response includes CoT type options
         assert "cot_type_options" in data
         assert "Default" in data["cot_type_options"]
         assert "Standard Point" in data["cot_type_options"]
         assert "Team Member" in data["cot_type_options"]
 
-    @patch('services.auth.require_permission')
-    @patch('services.connection_test_service.ConnectionTestService.discover_plugin_trackers_sync')
-    @patch('utils.app_helpers.get_plugin_manager')
-    def test_discover_trackers_includes_team_member_options(self, mock_plugin_mgr, mock_discover, mock_auth, client):
+    def test_discover_trackers_includes_team_member_options(
+        self, authenticated_client, mocker, app
+    ):
         """Test that discover-trackers response includes team member role and color options"""
-        mock_auth.return_value = None  # Allow access
+        client = authenticated_client("admin")
 
-        # Mock plugin manager
-        mock_plugin = Mock()
-        mock_plugin_mgr.return_value.plugins = {"garmin_plugin": mock_plugin}
-
-        mock_discover.return_value = {
+        # Use real plugin manager (garmin plugin is registered as "garmin").
+        # Only mock the sync discovery call to avoid real network requests.
+        mocker.patch(
+            'services.connection_test_service.ConnectionTestService'
+            '.discover_plugin_trackers_sync'
+        ).return_value = {
             "success": True,
-            "tracker_data": [
-                {"identifier": "TEST123", "name": "Test Device"}
-            ]
+            "tracker_data": [{"identifier": "TEST123", "name": "Test Device"}]
         }
 
         payload = {
-            "plugin_type": "garmin_plugin",
+            "plugin_type": "garmin",
             "plugin_config": {
                 "username": "test@example.com",
                 "password": "testpass"
             }
         }
 
-        response = client.post("/api/streams/discover-trackers", json=payload)
+        token = get_csrf_token(client, app)
+        response = client.post("/api/streams/discover-trackers", json=payload,
+                               headers={"X-CSRFToken": token})
 
         assert response.status_code == 200
         data = response.get_json()
 
-        # Test that response includes team member role options - THIS WILL FAIL INITIALLY
+        # Test that response includes team member role options
         assert "team_role_options" in data
         expected_roles = [
             "Team Member", "Team Lead", "HQ", "Sniper", "Medic",
@@ -126,7 +127,7 @@ class TestDiscoverTrackersTeamMemberAPI:
         for role in expected_roles:
             assert role in data["team_role_options"]
 
-        # Test that response includes team member color options - THIS WILL FAIL INITIALLY
+        # Test that response includes team member color options
         assert "team_color_options" in data
         expected_colors = [
             "Teal", "Green", "Dark Green", "Brown", "White", "Yellow",
@@ -140,10 +141,11 @@ class TestDiscoverTrackersTeamMemberAPI:
 class TestCallsignMappingTeamMemberAPI:
     """Test callsign mapping endpoints with team member configuration"""
 
-    @patch('services.auth.require_permission')
-    def test_update_callsign_mappings_with_team_member_data(self, mock_auth, client, sample_stream):
+    def test_update_callsign_mappings_with_team_member_data(
+        self, authenticated_client, sample_stream, app
+    ):
         """Test POST callsign mappings with team member configuration"""
-        mock_auth.return_value = None  # Allow access
+        client = authenticated_client("admin")
 
         payload = {
             "enable_callsign_mapping": True,
@@ -160,9 +162,11 @@ class TestCallsignMappingTeamMemberAPI:
             ]
         }
 
+        token = get_csrf_token(client, app)
         response = client.post(
             f"/api/streams/{sample_stream.id}/callsign-mappings",
-            json=payload
+            json=payload,
+            headers={"X-CSRFToken": token},
         )
 
         assert response.status_code == 200
@@ -175,10 +179,11 @@ class TestCallsignMappingTeamMemberAPI:
         assert mapping.team_role == "Team Lead"
         assert mapping.team_color == "Blue"
 
-    @patch('services.auth.require_permission')
-    def test_update_callsign_mappings_team_member_validation(self, mock_auth, client, sample_stream):
+    def test_update_callsign_mappings_team_member_validation(
+        self, authenticated_client, sample_stream, app
+    ):
         """Test that team member validation is enforced through API"""
-        mock_auth.return_value = None  # Allow access
+        client = authenticated_client("admin")
 
         # Test missing team_role for team_member - THIS SHOULD FAIL VALIDATION
         payload = {
@@ -196,9 +201,11 @@ class TestCallsignMappingTeamMemberAPI:
             ]
         }
 
+        token = get_csrf_token(client, app)
         response = client.post(
             f"/api/streams/{sample_stream.id}/callsign-mappings",
-            json=payload
+            json=payload,
+            headers={"X-CSRFToken": token},
         )
 
         # This should fail validation - THIS WILL FAIL INITIALLY UNTIL WE ADD VALIDATION
@@ -211,10 +218,9 @@ class TestCallsignMappingTeamMemberAPI:
 class TestTeamMemberAPIValidation:
     """Test API validation for team member fields"""
 
-    @patch('services.auth.require_permission')
-    def test_invalid_team_role_validation(self, mock_auth, client, sample_stream):
+    def test_invalid_team_role_validation(self, authenticated_client, sample_stream, app):
         """Test API validation rejects invalid team roles"""
-        mock_auth.return_value = None  # Allow access
+        client = authenticated_client("admin")
 
         payload = {
             "enable_callsign_mapping": True,
@@ -231,9 +237,11 @@ class TestTeamMemberAPIValidation:
             ]
         }
 
+        token = get_csrf_token(client, app)
         response = client.post(
             f"/api/streams/{sample_stream.id}/callsign-mappings",
-            json=payload
+            json=payload,
+            headers={"X-CSRFToken": token},
         )
 
         # THIS WILL FAIL INITIALLY UNTIL WE ADD VALIDATION
@@ -246,10 +254,9 @@ class TestTeamMemberAPIValidation:
 class TestAPITeamMemberMetadata:
     """Test API endpoints that provide team member metadata"""
 
-    @patch('services.auth.require_permission')
-    def test_get_team_member_role_options_endpoint(self, mock_auth, client):
+    def test_get_team_member_role_options_endpoint(self, authenticated_client):
         """Test dedicated endpoint for getting team member role options"""
-        mock_auth.return_value = None  # Allow access
+        client = authenticated_client("admin")
 
         # THIS WILL FAIL INITIALLY - we need to create this endpoint
         response = client.get("/api/team-member/role-options")
@@ -264,10 +271,9 @@ class TestAPITeamMemberMetadata:
         ]
         assert data["roles"] == expected_roles
 
-    @patch('services.auth.require_permission')
-    def test_get_team_member_color_options_endpoint(self, mock_auth, client):
+    def test_get_team_member_color_options_endpoint(self, authenticated_client):
         """Test dedicated endpoint for getting team member color options"""
-        mock_auth.return_value = None  # Allow access
+        client = authenticated_client("admin")
 
         # THIS WILL FAIL INITIALLY - we need to create this endpoint
         response = client.get("/api/team-member/color-options")

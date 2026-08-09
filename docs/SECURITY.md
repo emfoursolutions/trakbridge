@@ -33,7 +33,8 @@ TrakBridge follows defense-in-depth principles with multiple layers of security:
 - **Comprehensive JSON Validation**: DoS protection through size, depth, and structure limits
 - **SQL Injection Prevention**: Parameterized queries and ORM usage throughout
 - **XSS Protection**: Output encoding and Content Security Policy headers
-- **CSRF Protection**: Cross-site request forgery tokens for all state-changing operations with smart API exemption
+- **CSRF Protection** (enforced by default since v2.1.0): tokens required on every session-authenticated state-changing request; bearer/identity-authenticated endpoints explicitly exempted with inline mechanism comments
+- **CA certificate upload sanitisation** (v2.1.0): uploaded filenames sanitised via `werkzeug.utils.secure_filename()` to block path-traversal names
 - **IP Spoofing Prevention**: Configurable proxy trust validation prevents rate limiting bypass
 - **Session Fixation Prevention**: Session IDs regenerated on authentication for all providers
 
@@ -83,16 +84,16 @@ TrakBridge follows defense-in-depth principles with multiple layers of security:
 #### Web Application
 - **Authentication**: Multi-provider with secure defaults
 - **Authorization**: Role-based with permission enforcement
-- **Session Security**: Secure cookies, timeout, cleanup, and session fixation prevention
-- **CSRF Protection**: Form-based tokens with smart API exemption (WTF_CSRF_CHECK_DEFAULT=False)
+- **Session Security**: Explicit cookie attributes (v2.1.0) — `SESSION_COOKIE_HTTPONLY=True`, `SESSION_COOKIE_SAMESITE="Lax"` in every environment; `SESSION_COOKIE_SECURE=True` in production (env-var override available). Session IDs regenerated on authentication for all providers
+- **CSRF Protection** (v2.1.0): `WTF_CSRF_CHECK_DEFAULT=True` — session-authenticated state-changing requests require a valid CSRF token in `csrf_token` form field or `X-CSRFToken` header. Bundled admin UI ships with a global `fetch()` interceptor in `base.html` that reads the token from a `<meta name="csrf-token">` tag and attaches it to same-origin fetches (both URL-string and `Request`-object forms). Bearer/API-key routes are explicitly exempted with inline mechanism comments
 - **Security Headers**: Comprehensive HTTP security headers (HSTS, CSP, X-Frame-Options, referrer policy)
 - **Proxy Security**: Configurable X-Forwarded-For validation prevents IP spoofing attacks
 
 #### API Security
-- **Authentication**: API key and session-based authentication
+- **Authentication**: API key and session-based authentication. Since v2.1.0, `GET /api/status` is the sole unauthenticated endpoint (used by container health-check probes); all other health, monitoring, and utility endpoints require authentication
 - **Rate Limiting**: Per-user and global rate limiting
 - **Input Validation**: Comprehensive request validation
-- **Error Handling**: Secure error responses without information disclosure
+- **Error Handling**: Secure error responses without information disclosure. A dedicated `CSRFError` handler returns clean 400 JSON/text rather than a 500 stack trace
 
 #### Database Security
 - **Connection Security**: Encrypted connections with certificate validation
@@ -102,9 +103,14 @@ TrakBridge follows defense-in-depth principles with multiple layers of security:
 
 #### Plugin Security
 - [Plugin Security Considerations](PLUGIN_SECURITY.md) - Security framework for plugin development
+- **Ed25519 signature verification** (v2.0.0+): plugin packages verified against an embedded Emfour public key at install and load time
+- **Signed-plugin gate for premium tiers** (v2.1.0): unsigned plugins declaring `tier: pro` or `tier: enterprise` are refused at install regardless of the deployment tier. Unsigned community plugins install everywhere with an "UNVERIFIED" warning
+- **Tier gating**: `plugin.yaml` tier field enforced at BOTH install and load time — premium plugins cannot be side-loaded onto a Community deployment by copying files into `external_plugins/`
+- **Plugin allow-list hardening** (v2.1.0): `plugins.yaml` written with file mode `0o600`; symlinks at the target path or its parent directory are refused
+- **AST code scan**: install-time scan rejects packages that use `exec`, `eval`, `os.system`, `subprocess`, or `ctypes`
+- **Plugin audit log**: every install/enable/disable/uninstall action recorded with admin username, plugin id, tier, and verification status
 - Input validation for plugin configurations
-- Sandboxed plugin execution environment
-- Secure external plugin loading mechanisms
+- Secure external plugin loading via explicit whitelist (`allowed_plugin_modules` in `plugins.yaml`)
 
 ## Security Configuration
 
@@ -112,7 +118,7 @@ TrakBridge follows defense-in-depth principles with multiple layers of security:
 
 #### Essential Security Setup
 1. **Change Default Credentials**: Modify admin password on first login
-2. **Generate Encryption Key**: Create strong 32-character encryption key
+2. **Set the Master Encryption Key**: Provide `TB_MASTER_KEY` via environment or `secrets/tb_master_key` — do NOT rely on runtime generation for a persistent deployment. **Rotation advisory:** if you are upgrading from a version older than v2.1.0 and previously ran at `LOG_LEVEL=DEBUG` with a runtime-generated key, rotate that key via Admin → Key Rotation. Prior versions logged the generated key value at DEBUG level
 3. **Enable HTTPS**: Configure TLS certificates for production
 4. **Configure Authentication**: Set up LDAP/OIDC if required
 5. **Review Firewall Rules**: Restrict access to necessary ports only
@@ -259,7 +265,7 @@ export SSL_KEY_PATH="/app/certs/server.key"
 If you discover a security vulnerability in TrakBridge:
 
 1. **Do NOT** create a public GitHub issue
-2. **Email security concerns** to: security@trakbridge.net
+2. **Email security concerns** to: security@trakbridge.io
 3. **Include details** about the vulnerability and potential impact
 4. **Provide steps** to reproduce the issue if possible
 5. **Allow time** for assessment and patch development before disclosure
@@ -299,6 +305,6 @@ For specific security implementation details, consult the detailed security guid
 
 ---
 
-**Security Contact**: security@trakbridge.net
+**Security Contact**: security@trakbridge.io
 **Last Security Review**: 2025-08-08  
 **Next Review Scheduled**: 2025-11-08

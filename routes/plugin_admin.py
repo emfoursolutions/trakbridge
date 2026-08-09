@@ -77,7 +77,7 @@ def upload_plugin():
             external_dir=EXTERNAL_DIR_OVERRIDE,
             whitelist_path=WHITELIST_OVERRIDE,
         )
-    except PluginInstallError as e:
+    except (PluginInstallError, PermissionError) as e:
         logger.warning(
             f"AUDIT: plugin install rejected user={username} "
             f"filename={uploaded.filename} reason={e}"
@@ -126,7 +126,7 @@ def _lifecycle_endpoint(plugin_id, action):
                 whitelist_path=WHITELIST_OVERRIDE,
                 external_dir=EXTERNAL_DIR_OVERRIDE,
             )
-    except PluginInstallError as e:
+    except (PluginInstallError, PermissionError) as e:
         logger.warning(
             f"AUDIT: plugin {action} rejected user={username} "
             f"plugin_id={plugin_id} reason={e}"

@@ -14,7 +14,10 @@
                 </ol>
             </nav>
         </div>
-        <div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge {% if current_tier == 'enterprise' %}bg-primary{% elif current_tier == 'pro' %}bg-info text-dark{% else %}bg-secondary{% endif %} fs-6">
+                Licence: {{ current_tier | title }}
+            </span>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
                 <i class="fas fa-upload me-2"></i>Install Plugin
             </button>
@@ -120,6 +123,10 @@
                         signature, and licence tier. Signed Emfour packages show a
                         <span class="badge bg-success">Verified</span> badge.
                     </small>
+                    <div class="alert alert-info mt-3 mb-0 py-2 small">
+                        This deployment is licensed as <strong>{{ current_tier | title }}</strong>.
+                        Plugins that require a higher tier will be rejected on install.
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>

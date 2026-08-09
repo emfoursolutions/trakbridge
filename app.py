@@ -336,17 +336,16 @@ def create_app(config_name=None):
         # Initialize CSRF protection globally
         from flask_wtf.csrf import CSRFProtect
 
-        # Configure CSRF to skip checking by default
-        # Protection will be enabled only for form submissions with tokens
-        app.config["WTF_CSRF_CHECK_DEFAULT"] = False
-
+        # CSRF is ON by default for all state-changing routes.
+        # Bearer-authenticated and unauthenticated utility routes are exempted
+        # individually below after blueprint registration.
         csrf = CSRFProtect()
         csrf.init_app(app)
 
         # Store CSRF instance
         app.csrf = csrf
 
-        logger.info("CSRF protection configured (form-based validation enabled)")
+        logger.info("CSRF protection enabled globally; bearer-auth routes exempted below")
 
         # Add security headers (production only)
         if config_instance.environment == "production":
@@ -550,6 +549,20 @@ def create_app(config_name=None):
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(inbound_bp, url_prefix="/api/inbound")
 
+    # Apply per-route CSRF exemptions for non-session-authenticated endpoints.
+    # Every exemption names the auth mechanism that replaces CSRF protection.
+    #
+    # routes/inbound.py — webhook endpoints use bearer-token auth
+    # (plugin.validate_inbound_request checks Authorization: Bearer header).
+    app.csrf.exempt(app.view_functions["inbound.receive_inbound_data"])  # CSRF exempt: bearer-token authenticated via plugin.validate_inbound_request
+    app.csrf.exempt(app.view_functions["inbound.clear_preview"])          # CSRF exempt: stream identity validated by _validate_inbound_stream (no session)
+    app.csrf.exempt(app.view_functions["inbound.remap_preview"])          # CSRF exempt: stream identity validated by _validate_inbound_stream (no session)
+    #
+    # routes/api.py — coordinate conversion utilities use @optional_auth
+    # (no session required; pure computation with no privileged state changes).
+    app.csrf.exempt(app.view_functions["api.convert_latlon_to_mgrs"])    # CSRF exempt: optional-auth utility; no authenticated state change
+    app.csrf.exempt(app.view_functions["api.convert_mgrs_to_latlon"])    # CSRF exempt: optional-auth utility; no authenticated state change
+
     # Add context processors and error handlers
     setup_template_helpers(app)
     setup_error_handlers(app)
@@ -689,6 +702,19 @@ def configure_flask_app(app, config_instance):
     app.config["PROXY_TRUSTED"] = getattr(config_instance, "PROXY_TRUSTED", False)
     app.config["TRUSTED_PROXY_COUNT"] = getattr(
         config_instance, "TRUSTED_PROXY_COUNT", 0
+    )
+
+    # Session cookie security flags — set explicitly rather than relying on Flask defaults.
+    # HttpOnly and SameSite are unconditional; Secure follows the environment with an
+    # optional env-var override so operators can force HTTPS outside production.
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    _secure_override = os.environ.get("SESSION_COOKIE_SECURE", "").strip().lower()
+    _is_production = config_instance.environment == "production"
+    app.config["SESSION_COOKIE_SECURE"] = _is_production or _secure_override in (
+        "1",
+        "true",
+        "yes",
     )
 
     # Rate limiting — disabled in testing to prevent cross-test pollution
@@ -1144,6 +1170,22 @@ def setup_error_handlers(app):
 
         error_response = format_error_response(error)
         return jsonify(error_response), 500
+
+    from flask import request as _request
+    from flask_wtf.csrf import CSRFError
+
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(error):
+        """Return 400 for CSRF validation failures with a clear error message."""
+        logger.warning(f"CSRF validation failed: {error.description}")
+        if _request.is_json or _request.content_type == "application/json":
+            return jsonify({"error": "CSRF token missing or invalid"}), 400
+        return "Bad Request: CSRF token missing or invalid", 400
+
+    @app.errorhandler(400)
+    def bad_request_error(error):
+        """Return 400 for bad requests."""
+        return jsonify({"error": str(error)}), 400
 
     @app.errorhandler(404)
     def not_found_error(error):

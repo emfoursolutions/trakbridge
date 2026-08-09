@@ -586,14 +586,18 @@ class TestSchemaMigration:
 
     def _run_with_timeout(self, func, timeout_seconds, fallback_func=None):
         """Run a function with timeout using threads (works in all CI environments)"""
+        from flask import current_app
+
+        app = current_app._get_current_object()
         result = [None]
         exception = [None]
 
         def target():
-            try:
-                result[0] = func()
-            except Exception as e:
-                exception[0] = e
+            with app.app_context():
+                try:
+                    result[0] = func()
+                except Exception as e:
+                    exception[0] = e
 
         thread = threading.Thread(target=target)
         thread.daemon = True

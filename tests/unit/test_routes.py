@@ -420,8 +420,8 @@ class TestStreamRoutesCallsignIntegration:
             response = client.post("/streams/create", data=form_data)
 
             # Assert: Should handle callsign form data properly
-            # May redirect (302) on success or return form with validation (200)
-            assert response.status_code in [200, 302, 401, 503]
+            # 400 is now acceptable — unauthenticated POST is rejected by CSRF before auth.
+            assert response.status_code in [200, 302, 400, 401, 503]
 
             # If successful, verify callsign mappings were created
             if response.status_code == 302:  # Redirect on success
@@ -483,6 +483,10 @@ class TestStreamRoutesCallsignIntegration:
             }
 
             # Act: Submit form to update stream
+            # Add CSRF token for the authenticated session-based POST
+            from tests.conftest import get_csrf_token
+            token = get_csrf_token(client, app)
+            form_data["csrf_token"] = token
             response = client.post(f"/streams/{stream.id}/edit", data=form_data)
 
             # Assert: Should handle callsign form updates properly
@@ -525,8 +529,9 @@ class TestStreamRoutesCallsignIntegration:
             # Act: Submit form to create stream
             response = client.post("/streams/create", data=form_data)
 
-            # Assert: Should create stream without callsign mapping
-            assert response.status_code in [200, 302, 401, 503]
+            # Assert: Should create stream without callsign mapping.
+            # 400 is now acceptable — unauthenticated POST is rejected by CSRF before auth.
+            assert response.status_code in [200, 302, 400, 401, 503]
 
             # If successful, verify no callsign mapping was enabled
             if response.status_code == 302:

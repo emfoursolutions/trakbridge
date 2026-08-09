@@ -282,6 +282,79 @@ class TestInstallRejections:
         assert list(scratch.iterdir()) == []
 
 
+class TestSignatureTierEnforcement:
+    """Unsigned plugins are rejected only when the PLUGIN'S declared tier is
+    pro/enterprise — the deployment tier does not restrict community plugins.
+    A Pro or Enterprise deployment can still install unsigned community plugins
+    with the UNVERIFIED warning; the signed-only guarantee applies only to
+    premium plugins that claim Pro/Enterprise capability."""
+
+    def test_unsigned_pro_plugin_rejected(
+        self, app, db_session, install_dirs, tmp_path, signing_keypair, monkeypatch
+    ):
+        """A plugin manifesting tier=pro without a valid signature is refused,
+        even if the deployment is Pro-licensed."""
+        external, whitelist = install_dirs
+        monkeypatch.setattr(
+            "services.license_service.get_license_service",
+            lambda: type("_LS", (), {"is_tier_allowed": lambda self, t: True, "get_tier": lambda self: "pro"})(),
+        )
+        data = build_plugin_zip(tmp_path, "unsigned_pro_plugin", tier="pro")
+        with pytest.raises(PluginInstallError, match="[Uu]nsigned|signature"):
+            do_install(data, external, whitelist)
+        assert_no_trace(external, whitelist, app)
+
+    def test_unsigned_enterprise_plugin_rejected(
+        self, app, db_session, install_dirs, tmp_path, signing_keypair, monkeypatch
+    ):
+        """A plugin manifesting tier=enterprise without a valid signature is refused."""
+        external, whitelist = install_dirs
+        monkeypatch.setattr(
+            "services.license_service.get_license_service",
+            lambda: type("_LS", (), {"is_tier_allowed": lambda self, t: True, "get_tier": lambda self: "enterprise"})(),
+        )
+        data = build_plugin_zip(tmp_path, "unsigned_ent_plugin", tier="enterprise")
+        with pytest.raises(PluginInstallError, match="[Uu]nsigned|signature"):
+            do_install(data, external, whitelist)
+        assert_no_trace(external, whitelist, app)
+
+    def test_unsigned_community_plugin_allowed_on_pro_deployment(
+        self, app, db_session, install_dirs, tmp_path, signing_keypair, monkeypatch
+    ):
+        """Regression: a Pro deployment can still install unsigned community
+        plugins. The signed-only rule binds premium plugins, not paying customers."""
+        external, whitelist = install_dirs
+        monkeypatch.setattr(
+            "services.license_service.get_license_service",
+            lambda: type("_LS", (), {"is_tier_allowed": lambda self, t: True, "get_tier": lambda self: "pro"})(),
+        )
+        data = build_plugin_zip(tmp_path, "community_on_pro")
+        result = do_install(data, external, whitelist)
+        assert result["verified"] is False
+
+    def test_unsigned_community_plugin_allowed_on_community_deployment(
+        self, app, db_session, install_dirs, tmp_path, signing_keypair
+    ):
+        """Regression: unchanged behaviour for community deployment + community plugin."""
+        external, whitelist = install_dirs
+        data = build_plugin_zip(tmp_path, "unsigned_community_plugin")
+        result = do_install(data, external, whitelist)
+        assert result["verified"] is False
+
+    def test_signed_pro_plugin_allowed_on_pro_deployment(
+        self, app, db_session, install_dirs, tmp_path, signing_keypair, monkeypatch
+    ):
+        """Sanity: a properly signed Pro plugin installs on a Pro deployment."""
+        external, whitelist = install_dirs
+        monkeypatch.setattr(
+            "services.license_service.get_license_service",
+            lambda: type("_LS", (), {"is_tier_allowed": lambda self, t: True, "get_tier": lambda self: "pro"})(),
+        )
+        data = build_plugin_zip(tmp_path, "signed_pro_plugin", tier="pro", sign_key=signing_keypair)
+        result = do_install(data, external, whitelist)
+        assert result["verified"] is True
+
+
 class TestUpdateWhitelistFile:
     def test_add_and_remove(self, tmp_path):
         path = tmp_path / "plugins.yaml"
@@ -306,3 +379,50 @@ class TestUpdateWhitelistFile:
         update_whitelist_file(add=["external_plugins.a"], path=path)
         data = yaml.safe_load(path.read_text())
         assert data["allowed_plugin_modules"] == ["external_plugins.a"]
+
+    def test_file_mode_is_0600_after_write(self, tmp_path):
+        """Written whitelist file must be owner-read/write only (mode 0o600)."""
+        import os
+
+        path = tmp_path / "plugins.yaml"
+        path.write_text("allowed_plugin_modules: []\n")
+        update_whitelist_file(add=["external_plugins.a"], path=path)
+        mode = os.stat(path).st_mode & 0o777
+        assert mode == 0o600, f"Expected 0o600, got 0o{mode:o}"
+
+    def test_symlink_at_target_path_is_rejected(self, tmp_path):
+        """If the whitelist path is a symlink, update_whitelist_file must raise PermissionError."""
+        real_file = tmp_path / "real_plugins.yaml"
+        real_file.write_text("allowed_plugin_modules: []\n")
+        link_path = tmp_path / "plugins.yaml"
+        link_path.symlink_to(real_file)
+        original_content = real_file.read_text()
+
+        with pytest.raises(PermissionError):
+            update_whitelist_file(add=["external_plugins.a"], path=link_path)
+
+        # The pointed-to file must not be modified
+        assert real_file.read_text() == original_content
+
+    def test_symlink_at_parent_dir_is_rejected(self, tmp_path):
+        """If the parent directory of the whitelist path is a symlink, raise PermissionError."""
+        real_dir = tmp_path / "real_dir"
+        real_dir.mkdir()
+        link_dir = tmp_path / "link_dir"
+        link_dir.symlink_to(real_dir)
+        path_inside_link = link_dir / "plugins.yaml"
+
+        with pytest.raises(PermissionError):
+            update_whitelist_file(add=["external_plugins.a"], path=path_inside_link)
+
+    def test_regression_add_remove_non_symlink(self, tmp_path):
+        """Non-symlink path must still correctly add and remove entries."""
+        path = tmp_path / "plugins.yaml"
+        path.write_text("allowed_plugin_modules: []\n")
+        update_whitelist_file(add=["external_plugins.x"], path=path)
+        data = yaml.safe_load(path.read_text())
+        assert "external_plugins.x" in data["allowed_plugin_modules"]
+
+        update_whitelist_file(remove=["external_plugins.x"], path=path)
+        data = yaml.safe_load(path.read_text())
+        assert "external_plugins.x" not in data["allowed_plugin_modules"]
