@@ -464,6 +464,37 @@ def authenticated_client(client, app, test_users, auth_manager):
     return _authenticate_as
 
 
+def get_csrf_token(client, app):
+    """
+    Generate a valid CSRF token for use in test requests.
+
+    Flask-WTF stores the raw token in session["csrf_token"] and expects the
+    signed version (URLSafeTimedSerializer, salt "wtf-csrf-token") in the
+    X-CSRFToken header or csrf_token form field.
+
+    Usage in tests::
+
+        token = get_csrf_token(client, app)
+        client.post("/some/route", headers={"X-CSRFToken": token}, ...)
+        # or for form submissions:
+        client.post("/some/route", data={"csrf_token": token, ...})
+    """
+    import hashlib
+
+    from itsdangerous import URLSafeTimedSerializer
+
+    # Ensure there is a raw token in the session
+    with client.session_transaction() as flask_sess:
+        raw_token = flask_sess.get("csrf_token")
+        if raw_token is None:
+            raw_token = hashlib.sha1(b"test-csrf-fixed-seed").hexdigest()
+            flask_sess["csrf_token"] = raw_token
+
+    # Sign it the same way generate_csrf() does
+    s = URLSafeTimedSerializer(app.secret_key, salt="wtf-csrf-token")
+    return s.dumps(raw_token)
+
+
 @pytest.fixture
 def temp_config_dir():
     """Create temporary configuration directory"""

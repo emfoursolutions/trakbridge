@@ -1,12 +1,15 @@
 # ABOUTME: Tests for plugin lifecycle functions — enable/disable/uninstall/sync/list.
 # ABOUTME: Covers stream-in-use blocking, tier re-checks, and filesystem/DB reconciliation.
 
+import base64
 import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 import yaml
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "fixtures"))
 from plugin_package_builder import build_package_dir, build_plugin_zip  # noqa: E402
@@ -23,6 +26,23 @@ from services.plugin_admin_service import (  # noqa: E402
     sync_plugin_registry,
     uninstall_plugin,
 )
+
+
+@pytest.fixture
+def signing_keypair(monkeypatch):
+    """Emfour signing keypair for tests that need to build a signed plugin
+    package (required for pro/enterprise tier plugins post-2.1.0)."""
+    key = Ed25519PrivateKey.generate()
+    public_b64 = base64.b64encode(
+        key.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+    ).decode("ascii")
+    monkeypatch.setattr(
+        "services.license_service.EMBEDDED_LICENSE_PUBLIC_KEY", public_b64
+    )
+    return key
 
 
 @pytest.fixture
@@ -85,13 +105,23 @@ class TestDisableEnable:
         with pytest.raises(PluginInstallError, match="stream"):
             disable_plugin("lifecycle_plugin", "admin", whitelist_path=whitelist)
 
-    def test_enable_refused_when_tier_above_licence(self, env, tmp_path):
+    def test_enable_refused_when_tier_above_licence(
+        self, env, tmp_path, signing_keypair
+    ):
         external, whitelist = env
         with patch(
             "services.license_service.LicenseService.is_tier_allowed",
             return_value=True,
         ):
-            install(tmp_path, external, whitelist, "premium_one", tier="pro")
+            # Pro-tier plugin must be signed post-2.1.0 — sign the setup package.
+            install(
+                tmp_path,
+                external,
+                whitelist,
+                "premium_one",
+                tier="pro",
+                sign_key=signing_keypair,
+            )
             disable_plugin("premium_one", "admin", whitelist_path=whitelist)
         # licence back to community now
         with pytest.raises(PluginInstallError, match="tier|licen"):

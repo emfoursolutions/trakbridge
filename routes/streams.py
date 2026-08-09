@@ -78,15 +78,21 @@ def _validate_and_read_ca_cert(file_storage):
     if len(data) > 50 * 1024:
         raise ValueError("CA certificate file is too large (max 50 KB)")
 
+    # Sanitize the filename to prevent path-traversal attacks
+    from werkzeug.utils import secure_filename
+    safe_filename = secure_filename(file_storage.filename)
+    if not safe_filename:
+        raise ValueError("CA certificate filename is invalid or unsafe")
+
     # Try PEM first, then DER
     try:
         x509.load_pem_x509_certificate(data, default_backend())
-        return data, file_storage.filename
+        return data, safe_filename
     except Exception:
         pass
     try:
         x509.load_der_x509_certificate(data, default_backend())
-        return data, file_storage.filename
+        return data, safe_filename
     except Exception:
         pass
     raise ValueError("Uploaded file is not a valid PEM or DER X.509 certificate")

@@ -2,7 +2,7 @@
 name = "trakbridge"
 dynamic = ["version"]
 description = "TrakBridge Feed Streaming Platform"
-authors = [{ name = "Trakbridge", email = "support@trakbridge.net" }]
+authors = [{ name = "Trakbridge", email = "support@trakbridge.io" }]
 license = { text = "Apache-2.0" }
 readme = "README.md"
 requires-python = ">=3.12"

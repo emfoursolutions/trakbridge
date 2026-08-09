@@ -19,6 +19,7 @@ from models.user import User, UserRole, AuthProvider, UserSession
 from plugins.garmin_plugin import GarminPlugin
 from services.cot_service_integration import QueuedCOTService
 from services.auth.auth_manager import AuthenticationManager
+from tests.conftest import get_csrf_token
 
 
 @pytest.fixture
@@ -126,9 +127,11 @@ class TestTeamMemberEndToEndWorkflow:
                 ]
             }
 
+            csrf_token = get_csrf_token(integration_client, integration_app)
             response = integration_client.post(
                 f"/api/streams/{team_member_stream.id}/callsign-mappings",
-                json=payload
+                json=payload,
+                headers={"X-CSRFToken": csrf_token},
             )
 
             assert response.status_code == 200
@@ -283,9 +286,11 @@ class TestTeamMemberEndToEndWorkflow:
                 ]
             }
 
+            csrf_token = get_csrf_token(integration_client, integration_app)
             response = integration_client.post(
                 f"/api/streams/{team_member_stream.id}/callsign-mappings",
-                json=payload
+                json=payload,
+                headers={"X-CSRFToken": csrf_token},
             )
 
             assert response.status_code == 200
@@ -433,9 +438,11 @@ class TestTeamMemberEndToEndWorkflow:
                 ]
             }
 
+            csrf_token = get_csrf_token(integration_client, integration_app)
             response = integration_client.post(
                 f"/api/streams/{team_member_stream.id}/callsign-mappings",
-                json=payload
+                json=payload,
+                headers={"X-CSRFToken": csrf_token},
             )
 
             assert response.status_code == 200
@@ -558,9 +565,11 @@ class TestTeamMemberPerformance:
                 "mappings": mappings
             }
 
+            csrf_token = get_csrf_token(integration_client, integration_app)
             response = integration_client.post(
                 f"/api/streams/{team_member_stream.id}/callsign-mappings",
-                json=payload
+                json=payload,
+                headers={"X-CSRFToken": csrf_token},
             )
 
             assert response.status_code == 200
@@ -747,9 +756,11 @@ class TestTeamMemberErrorHandling:
                 ]
             }
 
+            csrf_token = get_csrf_token(integration_client, integration_app)
             response = integration_client.post(
                 f"/api/streams/{team_member_stream.id}/callsign-mappings",
-                json=payload
+                json=payload,
+                headers={"X-CSRFToken": csrf_token},
             )
 
             assert response.status_code == 200
