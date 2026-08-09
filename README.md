@@ -4,9 +4,13 @@ A web application for bridging tracking devices and services to TAK (Team Awaren
 
 ## Features
 
-- **Team Member COT Support** (NEW in v1.1.0): Display GPS trackers as ATAK team members with role and color customization
-- **Custom CoT Attributes** (NEW in v1.1.0): Plugin-extensible system for adding military symbols, custom icons, and arbitrary XML to CoT messages
-- **Enhanced Tracker Data** (NEW in v1.1.0): Speed/course extraction from Garmin InReach and Traccar, dynamic battery state mapping for SPOT trackers
+- **Plugin SDK on PyPI** (v2.0.0): `pip install trakbridge-plugin-sdk` — build custom plugins in ~30-40 lines without forking core
+- **Admin Plugin Manager** (v2.0.0): Install, enable, disable, and uninstall packaged plugins from `/admin/plugins` with signature verification, tier gating, code safety scanning, and audit logging
+- **Offline Licence Service** (v2.0.0): Ed25519-signed licences map deployments to Community, Pro, or Enterprise tiers — no network calls, fail-secure defaults, live expiry re-check
+- **Security-Hardened by Default** (v2.1.0): CSRF on by default, explicit HttpOnly/SameSite/Secure session cookies, authenticated health/monitoring endpoints, sanitised uploads, signed premium plugins, hardened plugin allow-list
+- **Team Member COT Support**: Display GPS trackers as ATAK team members with role and color customisation
+- **Custom CoT Attributes**: Plugin-extensible system for adding military symbols, custom icons, and arbitrary XML to CoT messages
+- **Enhanced Tracker Data**: Speed/course extraction from Garmin InReach and Traccar, dynamic battery state mapping for SPOT trackers
 - **Multi-Source Integration**: Support for GPS trackers, OSINT platforms, and emergency management systems
 - **Inbound Streams**: Receive CoT into TrakBridge via HTTP push (JSON/XML) or active-connect transports (MQTT, WebSocket, UDP multicast)
 - **UDP Multicast → TAK Bridge**: Forward LAN multicast Mesh SA (CoT XML and TAK Protocol v1 protobuf, auto-detected) to TAK servers across VPN/WAN where multicast does not route
@@ -19,15 +23,13 @@ A web application for bridging tracking devices and services to TAK (Team Awaren
 - **Real-Time Streaming**: Continuous data forwarding with health monitoring and circuit breaker protection
 - **Web Interface**: Secure dashboard for stream management and monitoring with categorised plugin selection
 - **Role-Based Access**: Viewer, User, Operator, and Admin roles with appropriate UI controls
-- **Plugin Architecture**: Extensible system for adding new data sources with external plugin support
-- **Enterprise Ready**: Multi-database support, SSL/TLS, backup & recovery, audit logging
-- **Security Hardened**: Comprehensive security implementations including field-level encryption
-- **Performance Optimised**: uvloop integration, connection pooling, intelligent caching (2-3x performance boost)
-- **Single Worker Architecture**: Simplified deployment with single Hypercorn worker for improved efficiency and debugging
+- **Enterprise Ready**: Multi-database support, SSL/TLS, backup & recovery, audit logging, field-level encryption
+- **Performance Optimised**: uvloop integration, connection pooling, intelligent caching
+- **Single Worker Architecture**: Long-lived Hypercorn worker with graceful shutdown and full CoT service teardown on SIGTERM
 - **Real-Time Monitoring**: Integrated dashboard with queue metrics, stream health, and performance graphs
 - **Circuit Breaker Protection**: Automatic failure recovery with intelligent retry mechanisms
 - **Hot Configuration Reload**: Zero-downtime configuration changes with validation caching
-- **Resource Management**: Memory optimisation, leak prevention, and capacity monitoring
+- **Multi-Arch Container Images** (restored in v2.1.0): amd64 and arm64 published to GHCR and Docker Hub
 
 <img width="1900" height="690" alt="image" src="https://github.com/user-attachments/assets/d09d3e17-de62-4524-a0d6-d1990c827ac7" />
 
@@ -38,8 +40,8 @@ A web application for bridging tracking devices and services to TAK (Team Awaren
 
 ```bash
 # Download setup files
-wget https://raw.githubusercontent.com/emfoursolutions/trakbridge/main/docker-compose.yml
-wget https://raw.githubusercontent.com/emfoursolutions/trakbridge/refs/heads/main/scripts/setup.sh
+wget https://raw.githubusercontent.com/trakbridge/trakbridge/main/docker-compose.yml
+wget https://raw.githubusercontent.com/trakbridge/trakbridge/refs/heads/main/scripts/setup.sh
 
 # Setup and run
 chmod +x setup.sh
@@ -223,21 +225,6 @@ curl -f https://yourdomain.com/api/health
 curl https://yourdomain.com/api/monitoring/dashboard
 ```
 
-The v1.0.0 release includes comprehensive monitoring capabilities:
-- **Queue Metrics**: Real-time queue sizes, throughput, latency, and error rates
-- **Stream Health**: Plugin API response times and TAK connection status
-- **Performance Tracking**: Historical performance data with regression detection
-- **Resource Monitoring**: Memory usage tracking and leak detection
-- **Circuit Breaker Status**: External dependency health and failure recovery
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
 ## License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
@@ -251,4 +238,4 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ---
 
-**TrakBridge v1.3.0** - Production-ready GPS tracking data bridge for TAK servers with inbound streams, CoT forwarding, notifications, UDP multicast bridging, enterprise performance, monitoring, and reliability features.
+**TrakBridge v2.1.0** - Production-ready GPS tracking data bridge for TAK servers with a public plugin SDK, admin plugin manager with signature verification and tier gating, security-hardened defaults (CSRF, session cookies, authenticated telemetry), inbound streams, CoT forwarding, notifications, UDP multicast bridging, enterprise performance, monitoring, and reliability features.

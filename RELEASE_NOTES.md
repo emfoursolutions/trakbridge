@@ -1,5 +1,114 @@
 # TrakBridge Release Notes
 
+## Version 2.1.0 - Security Hardening
+
+**Release Date:** August 9, 2026
+**Focus: Security defaults tightened across the admin UI, session handling, plugin distribution, and multi-arch container publishing**
+
+TrakBridge 2.1 hardens the security posture across the entire deployment. CSRF protection is now on by default, session cookies carry explicit security attributes, unauthenticated API surface is trimmed, the plugin manager gates unsigned premium packages, and the whitelist writer resists symlink attacks. Container images once again publish for both amd64 and arm64. No schema changes, no new configuration required, straight upgrade from 2.0.1.
+
+---
+
+### SECURITY
+
+#### CSRF protection enabled by default
+**Session-authenticated POSTs now require a CSRF token**
+
+`WTF_CSRF_CHECK_DEFAULT` has been flipped from False to True. Every session-authenticated state-changing request (POST/PUT/PATCH/DELETE) now requires a valid CSRF token, either as `csrf_token` in the form body or `X-CSRFToken` in the request header.
+
+- All existing HTML forms in the admin UI already emit the token via Jinja's `{{ csrf_token() }}` helper — no template changes needed for the built-in UI.
+- A global `fetch()` interceptor in `base.html` automatically injects the token from a `<meta name="csrf-token">` tag on every same-origin fetch; both URL-string and `Request`-object call patterns are covered.
+- Five endpoints are explicitly exempted where session auth isn't the mechanism: the three inbound webhook endpoints (`POST /api/inbound/<stream_id>/data`, `DELETE /api/inbound/<stream_id>/preview`, `POST /api/inbound/<stream_id>/preview/remap`) and the two coordinate-conversion utility endpoints (`POST /api/convert-latlon-to-mgrs`, `POST /api/convert-mgrs-to-latlon`). Each exemption carries an inline comment naming the auth mechanism.
+- A dedicated `CSRFError` handler returns a clean `400` with a JSON or plain-text body rather than a `500` stack trace.
+
+CSRF-less session-authenticated POSTs from browsers were already blocked in practice by cross-origin policies; this change makes the rejection explicit and deterministic.
+
+#### Explicit session cookie security attributes
+**HttpOnly, SameSite=Lax always; Secure enforced in production**
+
+`SESSION_COOKIE_HTTPONLY=True` and `SESSION_COOKIE_SAMESITE="Lax"` are now set explicitly in every environment. `SESSION_COOKIE_SECURE=True` in production; in other environments it defaults False but can be forced on via the `SESSION_COOKIE_SECURE` environment variable.
+
+Previously these attributes relied on Flask's implicit defaults, which varied between browsers and left `SameSite` unset entirely. Existing user sessions retain their old cookies until expiry or logout; new logins immediately receive cookies with the new attributes.
+
+#### Unauthenticated API surface trimmed
+**Eight previously `@optional_auth` endpoints now require authentication**
+
+The following endpoints now return 401 to unauthenticated callers:
+
+- `GET /api/health/detailed`
+- `GET /api/health/database`
+- `GET /api/health/configuration`
+- `GET /api/health/circuit-breakers`
+- `GET /api/health/recovery`
+- `GET /api/monitoring/dashboard`
+- `POST /api/convert-latlon-to-mgrs`
+- `POST /api/convert-mgrs-to-latlon`
+
+`GET /api/status` remains unauthenticated for container health-check probes. Detailed operational telemetry that leaked stream and worker counts through the pre-2.1 endpoints is now behind an authenticated session.
+
+#### CA certificate upload filename sanitisation
+**Path-traversal filenames in uploaded certificates rejected**
+
+`routes/streams.py::_validate_and_read_ca_cert` now applies `werkzeug.utils.secure_filename()` to uploaded CA certificate filenames before returning them to the caller. Empty results are rejected. A crafted filename like `../../etc/evil.pem` is stripped to a safe basename or refused.
+
+#### Master key value no longer logged at DEBUG
+**Prior deployments running at DEBUG log level should rotate their master key**
+
+`services/encryption_service.py` previously emitted the generated master encryption key as a DEBUG log line, guarded only by `logger.isEnabledFor(DEBUG)` — which is not protection: anyone with DEBUG log capture (file, syslog, aggregator) received the key in cleartext. The line has been removed; the adjacent safe log ("Master key generated (not logged for security)") is retained.
+
+**Rotation advisory:** any TrakBridge deployment that ran at `LOG_LEVEL=DEBUG` prior to 2.1.0 and generated a master key at runtime (as opposed to loading one from `TB_MASTER_KEY` or `secrets/tb_master_key`) should treat that key as compromised and rotate it via the admin key-rotation UI or `services/key_rotation_service.py`.
+
+#### Plugin manager: tier badge and upload hint
+**Deployment licence tier surfaced up front in the admin UI**
+
+The plugin manager page header now shows a coloured badge with the current deployment tier ("Licence: Community" / "Pro" / "Enterprise"), and the upload modal body includes a hint noting which tier the deployment is licensed as. Tier-mismatch rejections at install time already carried a clear error message; making the current tier visible before upload reduces the surprise.
+
+#### Signed-plugin gate for premium tiers
+**Plugins declaring pro or enterprise tier must carry a valid Emfour signature**
+
+`install_plugin` now refuses unsigned plugins whose manifest declares `tier: pro` or `tier: enterprise`, regardless of the deployment tier. The trust guarantee applies to the plugin's claim of premium capability — a Pro deployment installing a plugin that claims to be Pro deserves the signature check.
+
+Unsigned community-tier plugins continue to install on any deployment tier with the existing "UNVERIFIED" warning. Signed plugins install verified as before.
+
+#### Whitelist file hardening
+**File mode 0600, symlink writes refused**
+
+`services/plugin_admin_service.py::update_whitelist_file` now sets file mode `0o600` on the plugin allow-list after atomic replace, and refuses to read or write if the target path or its parent directory is a symlink. `PermissionError` from either check is caught at the route layer and returned as a controlled `400` rather than an unhandled `500`.
+
+Prevents information disclosure of the allow-list on shared hosts and blocks a class of symlink redirection attacks against the whitelist writer.
+
+---
+
+### PACKAGING
+
+#### Multi-arch container images restored
+**Both amd64 and arm64 images published to GHCR and mirrored to Docker Hub**
+
+The release job previously used `docker pull/tag/push` to publish the release image, which flattens a multi-arch source manifest to whichever platform the runner pulled. In practice that dropped arm64 from every public release since 2.0.0. The publish job now preserves multi-arch manifests end-to-end.
+
+Anyone pulling on Apple Silicon or arm64 servers will no longer see amd64 emulation warnings and will run the native image directly.
+
+---
+
+### UPGRADE NOTES
+
+Straight upgrade from 2.0.1. No schema migration, no configuration change required.
+
+**Upgrade checklist:**
+
+1. Deploy the new image. All Phase 1 security changes take effect immediately for new sessions and requests.
+2. Verify admin UI login still works (confirms CSRF token flow is intact).
+3. If your deployment previously ran at `LOG_LEVEL=DEBUG` and generated its master key at runtime, rotate the master key via the admin key-rotation UI.
+4. Existing user sessions keep their pre-2.1 cookies until expiry or logout; no forced re-login required.
+
+**Known behavioural changes:**
+
+- **Any script or integration that posts to a session-authenticated TrakBridge endpoint using only a saved session cookie (no CSRF token) will now receive `400 Bad Request`.** Migrate such callers to bearer-token or API-key authentication (CSRF-exempt), or include the CSRF token via `X-CSRFToken` header. The bundled admin UI is unaffected.
+- The eight previously unauthenticated health/monitoring endpoints listed above now return `401` without a valid session. Any external monitoring probe hitting `/api/health/detailed` (or similar) will need to authenticate.
+- The `Set-Cookie` header on session cookies now carries `HttpOnly; SameSite=Lax` on every response, and `Secure` in production. Downstream cookie inspectors will see the new attributes.
+
+---
+
 ## Version 2.0.1 - Multi-Server RX Dispatch & Worker Stability
 
 **Release Date:** July 23, 2026

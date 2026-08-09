@@ -8,13 +8,100 @@ This guide covers upgrading TrakBridge between versions, including major version
 
 ## Version Compatibility Matrix
 
-| Upgrade From | Upgrade To | Compatibility | Notes |
-|--------------|------------|---------------|-------|
-| v1.2.x | v1.3.0 | Compatible | DB migrations auto-apply; webhook_handler removed |
-| v1.1.x | v1.3.0 | Compatible | Authentication required; DB migrations auto-apply |
-| v1.0.x | v1.3.0 | Compatible | DB migrations auto-apply |
-| v1.0.0-beta.4 | v1.3.0 | Major upgrade | Requires authentication setup (see below) |
-| Development | Any release | Variable | Check migration requirements |
+| Upgrade From   | Upgrade To  | Compatibility | Notes                                                                      |
+|----------------|-------------|---------------|----------------------------------------------------------------------------|
+| v2.0.x         | v2.1.0      | Compatible    | Behavioural change: CSRF on by default (see below); no schema migration    |
+| v1.3.x         | v2.1.0      | Compatible    | Plugin manager + tier gating + CSRF change (see 2.0.0 and 2.1.0 sections)  |
+| v1.2.x         | v1.3.0      | Compatible    | DB migrations auto-apply; webhook_handler removed                          |
+| v1.1.x         | v1.3.0      | Compatible    | Authentication required; DB migrations auto-apply                          |
+| v1.0.x         | v1.3.0      | Compatible    | DB migrations auto-apply                                                   |
+| v1.0.0-beta.4  | v1.3.0      | Major upgrade | Requires authentication setup (see below)                                  |
+| Development    | Any release | Variable      | Check migration requirements                                               |
+
+## v2.0.x to v2.1.0 Upgrade Notes
+
+Straight upgrade from 2.0.1. No schema migration, no configuration change required. All Phase 1 security defaults take effect immediately for new sessions and requests.
+
+### CSRF now on by default
+
+`WTF_CSRF_CHECK_DEFAULT` has been flipped from False to True. Every **session-authenticated** state-changing request (POST/PUT/PATCH/DELETE) now requires a valid CSRF token, either as `csrf_token` in the form body or `X-CSRFToken` in the request header.
+
+**No changes needed for:**
+
+- The built-in admin UI — every form template already emits `{{ csrf_token() }}`; a global `fetch()` interceptor in `base.html` injects the token from a `<meta name="csrf-token">` tag on every same-origin fetch.
+- Bearer-token / API-key authenticated endpoints — the inbound webhook endpoints (`POST /api/inbound/<stream_id>/data`, `DELETE /api/inbound/<stream_id>/preview`, `POST /api/inbound/<stream_id>/preview/remap`) and the two coordinate-conversion utility endpoints (`POST /api/convert-latlon-to-mgrs`, `POST /api/convert-mgrs-to-latlon`) are explicitly CSRF-exempt.
+
+**Action required if you have external scripts or integrations** that POST to a session-authenticated TrakBridge endpoint using only a saved session cookie: they will now receive `400 Bad Request`. Migrate to bearer/API-key authentication or include the CSRF token via `X-CSRFToken` header.
+
+### Session cookie attributes changed
+
+`SESSION_COOKIE_HTTPONLY=True` and `SESSION_COOKIE_SAMESITE="Lax"` are now set explicitly in every environment. `SESSION_COOKIE_SECURE=True` in production (env-var override available via `SESSION_COOKIE_SECURE=true|false`). Existing user sessions keep their pre-2.1 cookies until expiry or logout — no forced re-login. Downstream cookie inspectors will see the new attributes on new logins.
+
+### Health / monitoring endpoints now require authentication
+
+Eight previously `@optional_auth` endpoints now return `401` to unauthenticated callers:
+
+- `GET /api/health/detailed`
+- `GET /api/health/database`
+- `GET /api/health/configuration`
+- `GET /api/health/circuit-breakers`
+- `GET /api/health/recovery`
+- `GET /api/monitoring/dashboard`
+- `POST /api/convert-latlon-to-mgrs`
+- `POST /api/convert-mgrs-to-latlon`
+
+**`GET /api/status` remains unauthenticated** for container health-check probes. Any external monitoring probe hitting one of the moved endpoints will need to authenticate; if the probe was scraping stream/worker counts, expect a 401 until it presents a session cookie.
+
+### Master key rotation advisory
+
+If your deployment previously ran at `LOG_LEVEL=DEBUG` and generated its master key at runtime (as opposed to loading one from `TB_MASTER_KEY` or `secrets/tb_master_key`), the generated key value was written to the DEBUG log. Rotate the master key via the admin key-rotation UI (Admin → Key Rotation) or `services/key_rotation_service.py`.
+
+### Signed-plugin gate for premium tiers
+
+Plugins whose `plugin.yaml` declares `tier: pro` or `tier: enterprise` must now carry a valid Emfour Ed25519 signature. Unsigned premium plugins are refused at install time.
+
+**No impact on:**
+
+- Community plugins (unsigned or signed) — still install with existing behaviour.
+- Plugins already installed (this check runs on new installs; existing installed plugins keep their `is_verified` state).
+
+### Multi-arch container images
+
+GHCR and Docker Hub release publishing now preserves the multi-arch manifest end-to-end. If you were running on Apple Silicon or arm64 servers and seeing amd64 emulation warnings since 2.0.0, pulling the 2.1.0 image will resolve them.
+
+## v1.3.x to v2.0.x Upgrade Notes
+
+Two major additions in 2.0.0: the plugin SDK and the admin plugin manager. Both are backward compatible for existing installs.
+
+### Database migrations
+
+One new migration applies automatically on startup:
+
+- `add_plugin_management_tables` — adds `installed_plugins` (packaged plugin tracking) and `plugin_audit_log` (install/enable/disable/uninstall history) tables.
+
+Existing streams and configuration are unaffected.
+
+### External plugin whitelist gating
+
+Plugins in `external_plugins/` now require an explicit `external_plugins.<plugin_id>` entry in `plugins.yaml` to load. This is auto-populated on startup for pre-existing external plugins, so no manual whitelist edit is required for the upgrade.
+
+**Action required only if:** you deploy new external plugins by dropping files into `external_plugins/` without using the admin plugin manager UI. Add a corresponding `external_plugins.<plugin_id>` line to `plugins.yaml` for the new plugin, or use the plugin manager UI which handles the whitelist automatically.
+
+### Plugin tier gating
+
+`plugin.yaml` gains an optional `tier` field (`community`, `pro`, `enterprise`) enforced at install AND load time. A premium plugin cannot be loaded on a Community deployment even if manually copied into `external_plugins/`.
+
+### Plugin base classes moved to `trakbridge-plugin-sdk`
+
+`plugins/base_plugin.py` is now a re-export shim to `trakbridge-plugin-sdk` on PyPI. Existing in-tree plugins continue to work unchanged. To write a new custom plugin, `pip install trakbridge-plugin-sdk` and subclass a base class — see [Plugin Development Guide](PLUGIN_DEVELOPMENT.md).
+
+### Licence service
+
+A new offline Ed25519 licence service (`services/license_service.py`) maps deployments to Community, Pro, or Enterprise tiers. Community is the default with no licence required — existing deployments continue running as Community with no change. To activate Pro or Enterprise, install a signed licence file via Admin → About → Install Licence.
+
+### v2.0.1 hotfixes
+
+Straight upgrade from 2.0.0. Fixes silent data loss on multi-server streams (RX-side dispatch bug), removes Hypercorn worker recycling that was tearing down stream state every ~30 minutes, and drives full CoT service shutdown on SIGTERM so buffering plugins flush cleanly. No configuration change; `HYPERCORN_MAX_REQUESTS` environment variable is no longer honoured (safe to leave in existing compose files, silently ignored).
 
 ## v1.2.x to v1.3.0 Upgrade Notes
 
