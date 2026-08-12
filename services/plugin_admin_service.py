@@ -612,6 +612,30 @@ def sync_plugin_registry(
                 )
             )
             logger.info(f"Sync: recorded new external plugin '{plugin_id}'")
+        else:
+            row = known[plugin_id]
+            if row.metadata_json:
+                old_json = json.loads(row.metadata_json)
+            else:
+                old_json = {}
+
+            if (
+                old_json != manifest
+                or row.package_format != info["format"]
+                or row.is_verified != info["verified"]
+            ):
+                row.metadata_json = json.dumps(manifest)
+                row.display_name = manifest.get("name", plugin_id)
+                row.version = str(manifest.get("version", ""))
+                row.author = manifest.get("author")
+                row.description = manifest.get("description")
+                row.tier = str(manifest.get("tier", "community"))
+                row.package_format = info["format"]
+                row.is_verified = info["verified"]
+                _audit(plugin_id, "metadata-synced", "system-sync")
+                logger.info(
+                    f"Sync: updated metadata for external plugin '{plugin_id}'"
+                )
         row = known.get(plugin_id)
         if row is None or row.is_enabled:
             update_whitelist_file(
