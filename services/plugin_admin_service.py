@@ -743,13 +743,13 @@ def get_plugin_details(plugin_id: str) -> Dict[str, Any]:
 
 
 def _version_satisfied(min_version: str) -> bool:
-    from services.version import get_version
+    from services.version import get_version_tuple
 
     def as_tuple(value: str):
         clean = value.split("+")[0].split("-")[0]
         return tuple(int(p) for p in clean.split(".") if p.isdigit())
 
     try:
-        return as_tuple(get_version()) >= as_tuple(min_version)
-    except Exception:
+        return get_version_tuple() >= as_tuple(min_version)
+    except (ValueError, AttributeError, TypeError):
         return True  # unparseable local version: don't block installs
