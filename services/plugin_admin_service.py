@@ -315,8 +315,8 @@ def install_plugin(
         if signature_status == "unsigned" and tier != "community":
             raise PluginInstallError(
                 f"Unsigned '{tier}' tier plugin cannot be installed — plugins "
-                "declaring Pro or Enterprise tier must carry a valid Emfour "
-                "signature."
+                "declaring Pro or Enterprise tier must carry a valid Trakbridge " \
+                "Project signature."
             )
         verified = signature_status == "verified"
 
