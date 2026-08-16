@@ -705,17 +705,26 @@ def configure_flask_app(app, config_instance):
     )
 
     # Session cookie security flags — set explicitly rather than relying on Flask defaults.
-    # HttpOnly and SameSite are unconditional; Secure follows the environment with an
-    # optional env-var override so operators can force HTTPS outside production.
+    # HttpOnly and SameSite are unconditional; Secure defaults to on in production and
+    # off elsewhere, with a bidirectional env-var override so operators can force it
+    # either way (e.g. HTTPS in dev, or plain HTTP behind a non-TLS-terminating proxy).
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     _secure_override = os.environ.get("SESSION_COOKIE_SECURE", "").strip().lower()
     _is_production = config_instance.environment == "production"
-    app.config["SESSION_COOKIE_SECURE"] = _is_production or _secure_override in (
-        "1",
-        "true",
-        "yes",
-    )
+    if _secure_override in ("1", "true", "yes"):
+        session_cookie_secure = True
+    elif _secure_override in ("0", "false", "no"):
+        session_cookie_secure = False
+    else:
+        session_cookie_secure = _is_production
+    app.config["SESSION_COOKIE_SECURE"] = session_cookie_secure
+    if _is_production and not session_cookie_secure:
+        logger.warning(
+            "SESSION_COOKIE_SECURE explicitly disabled in production — "
+            "session cookies will be sent over plain HTTP. Terminate TLS at "
+            "a reverse proxy in front of TrakBridge for production deployments."
+        )
 
     # Rate limiting — disabled in testing to prevent cross-test pollution
     app.config["RATELIMIT_ENABLED"] = getattr(

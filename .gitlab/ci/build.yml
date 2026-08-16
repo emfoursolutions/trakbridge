@@ -46,8 +46,9 @@ build-dev:
     - echo "Commit SHA - $CI_COMMIT_SHORT_SHA"
     - echo "Image tags - dev-$CI_COMMIT_SHORT_SHA, dev-latest"
     - |
-      # Set version for setuptools_scm
-      export SETUPTOOLS_SCM_PRETEND_VERSION="0.1.0.dev0+g$CI_COMMIT_SHORT_SHA"
+      # Set version for setuptools_scm; next-release target lives in pyproject.toml
+      NEXT_VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['tool']['trakbridge']['release']['next'])")
+      export SETUPTOOLS_SCM_PRETEND_VERSION="${NEXT_VERSION}.dev0+g$CI_COMMIT_SHORT_SHA"
       echo "Using dev version: $SETUPTOOLS_SCM_PRETEND_VERSION"
     - |
       # Build development image
@@ -108,8 +109,9 @@ build-staging:
     - echo "Commit SHA - $CI_COMMIT_SHORT_SHA"
     - echo "Image tags - staging-$CI_COMMIT_SHORT_SHA, staging-latest"
     - |
-      # Set version for setuptools_scm
-      export SETUPTOOLS_SCM_PRETEND_VERSION="0.1.0.dev0+staging.$CI_COMMIT_SHORT_SHA"
+      # Set version for setuptools_scm; next-release target lives in pyproject.toml
+      NEXT_VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['tool']['trakbridge']['release']['next'])")
+      export SETUPTOOLS_SCM_PRETEND_VERSION="${NEXT_VERSION}.rc0+staging.$CI_COMMIT_SHORT_SHA"
       echo "Using staging version: $SETUPTOOLS_SCM_PRETEND_VERSION"
     - |
       # Build staging image
@@ -212,7 +214,8 @@ build-prod:
         echo "Commit SHA - $CI_COMMIT_SHORT_SHA"
         echo "Image tags - prod-$CI_COMMIT_SHORT_SHA, prod-latest"
 
-        export SETUPTOOLS_SCM_PRETEND_VERSION="0.1.0.dev0+prod.$CI_COMMIT_SHORT_SHA"
+        NEXT_VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['tool']['trakbridge']['release']['next'])")
+        export SETUPTOOLS_SCM_PRETEND_VERSION="${NEXT_VERSION}.dev0+prod.$CI_COMMIT_SHORT_SHA"
         echo "Using prod version: $SETUPTOOLS_SCM_PRETEND_VERSION"
 
         # Build production image

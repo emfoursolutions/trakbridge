@@ -230,6 +230,69 @@ class TestBootstrapServiceCore:
 
             assert bootstrap_service.force_password_change_required(admin_user) is True
 
+    def test_force_password_change_skipped_for_ldap_user(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
+        """LDAP users have no local password; force-change must not fire."""
+        with app.app_context():
+            ldap_user = User.create_external_user(
+                username="ldap_user",
+                provider=AuthProvider.LDAP,
+                provider_user_id="cn=ldap_user,dc=example,dc=com",
+                role=UserRole.USER,
+            )
+            ldap_user.password_changed_at = None
+            ldap_user.must_change_password = False
+            ldap_user.status = AccountStatus.ACTIVE
+            db_session.add(ldap_user)
+            db_session.commit()
+
+            assert (
+                bootstrap_service.force_password_change_required(ldap_user) is False
+            )
+
+    def test_force_password_change_skipped_for_oidc_user(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
+        """OIDC users have no local password; force-change must not fire."""
+        with app.app_context():
+            oidc_user = User.create_external_user(
+                username="oidc_user",
+                provider=AuthProvider.OIDC,
+                provider_user_id="oidc|abc123",
+                role=UserRole.USER,
+            )
+            oidc_user.password_changed_at = None
+            oidc_user.must_change_password = False
+            oidc_user.status = AccountStatus.ACTIVE
+            db_session.add(oidc_user)
+            db_session.commit()
+
+            assert (
+                bootstrap_service.force_password_change_required(oidc_user) is False
+            )
+
+    def test_force_password_change_local_must_change_flag(
+        self, app, clean_database, db_session, bootstrap_service
+    ):
+        """Local user with must_change_password=True still triggers the flow."""
+        with app.app_context():
+            local_user = User.create_local_user(
+                username="local_flagged",
+                password="TempPass123!",
+                email="local@test.com",
+                full_name="Local User",
+                role=UserRole.USER,
+            )
+            local_user.must_change_password = True
+            local_user.status = AccountStatus.ACTIVE
+            db_session.add(local_user)
+            db_session.commit()
+
+            assert (
+                bootstrap_service.force_password_change_required(local_user) is True
+            )
+
     def test_environment_variable_override(self, app, bootstrap_service):
         """Test environment variable override for bootstrap completion."""
         with app.app_context():

@@ -703,7 +703,7 @@
                 <div class="row align-items-center">
                     <div class="col-md-6">
                         <div class="version-info">
-                            <span>&copy; <span id="currentYear"></span> Emfour Solutions - TrakBridge</span>
+                            <span>&copy; 2025 The TrakBridge Project</span>
                             <span class="version-badge {% if app_version.is_development %}dev{% else %}release{% endif %}">
                                 {{ app_version.version }}
                             </span>
@@ -732,9 +732,6 @@
     <script src="{{ url_for('static', filename='js/jquery.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
     <script>
-        // Set current year
-        document.getElementById('currentYear').textContent = new Date().getFullYear();
-
         function toggleSettings() {
             const submenu = document.getElementById('settingsSubmenu');
             const chevron = document.querySelector('.settings-chevron');
