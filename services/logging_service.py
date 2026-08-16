@@ -13,9 +13,35 @@ Last Modified: 2025-07-27
 import datetime
 
 # Standard library imports
+import getpass
 import logging
 import os
 from typing import Optional
+
+
+def _current_user() -> str:
+    """Resolve the current user, including container environments where
+    USER/USERNAME env vars are typically unset."""
+    for var in ("USER", "USERNAME"):
+        value = os.environ.get(var)
+        if value:
+            return value
+    try:
+        return getpass.getuser()
+    except (KeyError, OSError):
+        # getpass raises KeyError when the uid is missing from the passwd
+        # database (common in stripped container images).
+        pass
+    try:
+        import pwd
+
+        return pwd.getpwuid(os.getuid()).pw_name
+    except (KeyError, ImportError, AttributeError):
+        pass
+    try:
+        return f"uid={os.getuid()}"
+    except AttributeError:
+        return "unknown"
 
 # Local application imports
 from services.version import (
@@ -113,6 +139,13 @@ def setup_logging(app):
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
 
+    # Flask attaches its own default handler to app.logger on first access.
+    # Leaving it in place causes every app.logger call to emit twice: once via
+    # Flask's handler and once via propagation to the root handlers below.
+    for handler in app.logger.handlers[:]:
+        app.logger.removeHandler(handler)
+    app.logger.propagate = True
+
     # Add new handlers
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
@@ -174,11 +207,11 @@ def log_startup_banner(app):
             f" Development: {'YES' if is_development_build() else 'NO'}",
             "",
             " System Information:",
-            f"   Python: {version_info.get('python_version', 'unknown')}",
-            f"   Platform: {version_info.get('platform', 'unknown')}",
+            f"   Python: {version_info.get('environment', {}).get('python_version', 'unknown')}",
+            f"   Platform: {version_info.get('environment', {}).get('platform', 'unknown')}",
             f"   Working Directory: {os.getcwd()}",
             f"   Process ID: {os.getpid()}",
-            f"   User: {os.getenv('USER', os.getenv('USERNAME', 'unknown'))}",
+            f"   User: {_current_user()}",
         ]
 
         # Add Git information if available
@@ -248,11 +281,11 @@ def log_primary_startup_banner(app, worker_count: Optional[int] = None):
             f" Development: {'YES' if is_development_build() else 'NO'}",
             "",
             " System Information:",
-            f"   Python: {version_info.get('python_version', 'unknown')}",
-            f"   Platform: {version_info.get('platform', 'unknown')}",
+            f"   Python: {version_info.get('environment', {}).get('python_version', 'unknown')}",
+            f"   Platform: {version_info.get('environment', {}).get('platform', 'unknown')}",
             f"   Working Directory: {os.getcwd()}",
             f"   Primary Process ID: {os.getpid()}",
-            f"   User: {os.getenv('USER', os.getenv('USERNAME', 'unknown'))}",
+            f"   User: {_current_user()}",
         ]
 
         # Add worker information
