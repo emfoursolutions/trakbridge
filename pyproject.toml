@@ -135,6 +135,13 @@ local_scheme = "node-and-date"
 # Don't normalize version (keep original format)
 normalize = false
 
+[tool.trakbridge.release]
+# The version being worked toward. CI stamps dev/staging/main builds
+# with this + a local segment so plugin `min_trakbridge_version` checks
+# resolve correctly on non-tag builds. Bump after tagging a release
+# (e.g. after tagging v2.2.0, set next = "2.3.0").
+next = "2.1.1"
+
 [tool.pytest.ini_options]
 # Test discovery and execution
 testpaths = ["tests"]

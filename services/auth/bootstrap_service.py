@@ -883,6 +883,13 @@ class BootstrapService:
             True if password change is required
         """
         try:
+            # Only local users have a TrakBridge-managed password. External
+            # providers (LDAP, OIDC) own credential state in their IdP, so
+            # forcing a password change here would trap them in a flow they
+            # cannot complete.
+            if user.auth_provider != AuthProvider.LOCAL:
+                return False
+
             # Force password change if admin explicitly flagged it
             if getattr(user, "must_change_password", False):
                 return True

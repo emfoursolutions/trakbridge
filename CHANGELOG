@@ -1,3 +1,25 @@
+## [v2.1.1] - 2026-08-16
+
+### Fixed
+- **LDAP/OIDC users locked out of force-password-change flow** — `force_password_change_required` returned True for any user whose `password_changed_at` was NULL, but external-provider users legitimately have that column NULL (they have no TrakBridge-managed password to timestamp). Every LDAP/OIDC user was redirected to `/auth/force_password_change` on first login and could not complete the flow. The check now short-circuits `False` for any non-`AuthProvider.LOCAL` user; local users are unaffected
+- **`SESSION_COOKIE_SECURE` env-var was a one-way switch** — the previous `_is_production or _secure_override in ("1","true","yes")` logic could only *force Secure on*; no value would turn it off in production. Operators running behind a non-TLS-terminating proxy (plain HTTP) had no supported escape hatch, and browsers silently drop cookies with the Secure flag on HTTP, breaking every session-authenticated request after login. The override is now bidirectional (`0`/`false`/`no` disables in production), and a WARNING is logged at startup when Secure is explicitly disabled in production
+- **Duplicate startup log lines** — Flask's default handler on `app.logger` was emitting each record twice (once via that handler, once via propagation to the root logger); the default handler is now removed on startup so records propagate exactly once
+- **Startup banner reported "unknown" for Python version, platform, and user** — the banner read `python_version`/`platform` off the top level of `get_version_info()`, but those fields live under the nested `environment` block; and `USER`/`USERNAME` env vars are typically unset in containers. Fields are now read from the correct nested block, and the current user is resolved via `getpass`/`pwd` fallbacks when the env vars are missing
+
+### Changed
+- **Plugin registry sync reconciles manifest drift** — `sync_plugin_registry` now detects when an on-disk `plugin.yaml` differs from the stored `InstalledPlugin` row and updates the row in place, writing a `PluginAuditLog` entry with action `metadata-synced`. Previously drift accumulated silently until reinstall. No-op when manifest, package_format, and is_verified all match, so audit churn stays proportional to real drift
+- **Plugin version-compare exceptions no longer swallowed as "unparseable"** — `_version_satisfied` narrowed its blind `except Exception` to `(ValueError, AttributeError, TypeError)`. Real bugs (`ImportError`, etc.) now surface with a real traceback instead of being logged as parse failures
+
+### Internal
+- **CI setuptools-scm pretend version sourced from `pyproject.toml`** — dev/staging/main build jobs in `.gitlab/ci/build.yml` no longer hardcode `0.1.0.dev0`; the version being worked toward now lives at `[tool.trakbridge.release].next` in `pyproject.toml` and is read by CI. Tag builds continue to use `$CI_COMMIT_TAG`. Bumping the next-release target is now a one-line pyproject change reviewed alongside the work that motivates it, keeping plugin `min_trakbridge_version` gates honest on non-tag builds
+
+### Upgrade notes
+- Straight upgrade from 2.1.0. No schema migration, no configuration change required
+- Operators running TrakBridge over plain HTTP in production (e.g. behind a non-TLS-terminating proxy) can now set `SESSION_COOKIE_SECURE=false` to make session cookies functional. This is not recommended — terminate TLS at a reverse proxy in front of TrakBridge for production deployments — and a WARNING is logged at startup when it's used
+- Existing LDAP/OIDC users who were previously trapped in the force-password-change redirect can now log in normally. If you manually set `password_changed_at` in the database as a workaround, no action is required; the column is now ignored for external-provider users
+
+---
+
 ## [v2.1.0] - 2026-08-09
 
 ### Security

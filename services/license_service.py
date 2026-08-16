@@ -16,9 +16,11 @@ TIERS = ("community", "pro", "enterprise")
 
 DEFAULT_LICENSE_PATH = Path("secrets/tb_license.json")
 
-# Emfour licence signing public key (base64-encoded raw Ed25519 public key).
+# The Trakbridge Project licence signing public key (base64-encoded raw Ed25519 
+# public key).
 # Generated offline via trakbridge-plugins-premium/tools/generate_license_keys.py.
-# The matching private key is held offline by Emfour and never enters any repo.
+# The matching private key is held offline by The TrakBridge Project and never 
+# enters any repo.
 EMBEDDED_LICENSE_PUBLIC_KEY: Optional[str] = (
     "S0z+d+8fNiXj+vKf943ayxsGD8/U1/YwyofvWZrZFDE="
 )
@@ -220,7 +222,7 @@ def install_license(
         public_key = Ed25519PublicKey.from_public_bytes(base64.b64decode(key_b64))
         public_key.verify(signature, canonical_license_bytes(license_data))
     except InvalidSignature:
-        raise ValueError("Invalid signature — this licence was not issued by Emfour")
+        raise ValueError("Invalid signature — this licence was not issued by Trakbridge")
     except (ValueError, TypeError) as e:
         raise ValueError(f"Malformed signature: {e}") from e
 
