@@ -1,6 +1,13 @@
 # ABOUTME: Marshmallow schemas for OpenAPI 3.1 request/response bodies.
 # ABOUTME: Exposes ALL_SCHEMAS consumed by services.openapi_service.
 from schemas.common import ErrorSchema, PaginationSchema, SuccessSchema
+from schemas.coordinate import (
+    CoordinateErrorSchema,
+    LatLonRequestSchema,
+    LatLonResponseSchema,
+    MgrsRequestSchema,
+    MgrsResponseSchema,
+)
 from schemas.health import (
     ComponentHealthSchema,
     DetailedHealthSchema,
@@ -9,6 +16,12 @@ from schemas.health import (
     ReadinessSchema,
     StatusSchema,
     VersionSchema,
+)
+from schemas.monitoring import DashboardSchema, QueueMetricsSchema
+from schemas.team_member import (
+    TeamMemberColorsResponseSchema,
+    TeamMemberOptionsResponseSchema,
+    TeamMemberRolesResponseSchema,
 )
 from schemas.inbound import (
     InboundAckSchema,
@@ -86,6 +99,19 @@ ALL_SCHEMAS = [
     RemapRequestSchema,
     RemapResultEntrySchema,
     RemapResponseSchema,
+    # coordinate
+    LatLonRequestSchema,
+    LatLonResponseSchema,
+    MgrsRequestSchema,
+    MgrsResponseSchema,
+    CoordinateErrorSchema,
+    # monitoring
+    QueueMetricsSchema,
+    DashboardSchema,
+    # team member
+    TeamMemberRolesResponseSchema,
+    TeamMemberColorsResponseSchema,
+    TeamMemberOptionsResponseSchema,
 ]
 
 __all__ = ["ALL_SCHEMAS"] + [s.__name__ for s in ALL_SCHEMAS]

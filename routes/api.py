@@ -768,7 +768,27 @@ def recovery_service_health():
 @bp.route("/monitoring/dashboard", methods=["GET"])
 @require_auth
 def monitoring_dashboard():
-    """Comprehensive monitoring dashboard data"""
+    """Aggregate monitoring snapshot for the dashboard UI.
+
+    Returns a single payload with per-TAK-server queue metrics,
+    per-stream health, aggregate performance counters, circuit
+    breaker state, and recovery service state. Every sub-section
+    is best-effort and may be empty or partial when the underlying
+    subsystem is degraded.
+    ---
+    tags: [Monitoring]
+    responses:
+      200:
+        description: Monitoring dashboard snapshot.
+        content:
+          application/json:
+            schema: DashboardSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         dashboard_data = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1799,7 +1819,35 @@ def get_callsign_mappings(stream_id):
 @bp.route("/team-member-options")
 @require_permission("streams", "read")
 def get_team_member_options():
-    """Get team member configuration options for UI dropdowns"""
+    """All team-member option lists in one payload.
+
+    Combined enumeration of CoT type, team role, and team color
+    option lists — used by the callsign-mapping UI to populate
+    every dropdown in one request rather than three round-trips.
+    ---
+    tags: [TeamMembers]
+    responses:
+      200:
+        description: Combined option lists.
+        content:
+          application/json:
+            schema: TeamMemberOptionsResponseSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load options.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         return jsonify(
             {
@@ -2000,7 +2048,35 @@ def get_plugin_available_fields(plugin_type):
 @bp.route("/team-member/role-options", methods=["GET"])
 @require_permission("api", "read")
 def get_team_member_role_options():
-    """Get available team member role options"""
+    """Available team-member role names.
+
+    Returns the ordered list of role names (Team Member, Team Lead,
+    HQ, Sniper, Medic, Forward Observer, RTO, K9). Backs the role
+    dropdown in the callsign-mapping UI.
+    ---
+    tags: [TeamMembers]
+    responses:
+      200:
+        description: Ordered list of role names.
+        content:
+          application/json:
+            schema: TeamMemberRolesResponseSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load role options.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         return jsonify({"roles": TEAM_MEMBER_ROLES})
 
@@ -2012,7 +2088,36 @@ def get_team_member_role_options():
 @bp.route("/team-member/color-options", methods=["GET"])
 @require_permission("api", "read")
 def get_team_member_color_options():
-    """Get available team member color options"""
+    """Available team-member color names.
+
+    Returns the ordered list of team color names (Teal, Green,
+    Dark Green, Brown, White, Yellow, Orange, Magenta, Red,
+    Maroon, Purple, Dark Blue, Blue, Cyan). Backs the color
+    dropdown in the callsign-mapping UI.
+    ---
+    tags: [TeamMembers]
+    responses:
+      200:
+        description: Ordered list of color names.
+        content:
+          application/json:
+            schema: TeamMemberColorsResponseSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load color options.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         return jsonify({"colors": TEAM_MEMBER_COLORS})
 
@@ -2422,20 +2527,39 @@ def get_uptime_seconds():
 @bp.route("/convert-latlon-to-mgrs", methods=["POST"])
 @require_auth
 def convert_latlon_to_mgrs():
-    """
-    Convert latitude/longitude coordinates to MGRS format.
+    """Convert decimal-degree lat/lon to an MGRS coordinate string.
 
-    Request body:
-        {
-            "lat": float,  # Latitude in decimal degrees
-            "lon": float   # Longitude in decimal degrees
-        }
-
-    Returns:
-        {
-            "success": bool,
-            "mgrs": str  # MGRS coordinate string
-        }
+    Request body carries ``lat`` (-90..90) and ``lon`` (-180..180).
+    Response envelope: ``{success, mgrs}`` on success or
+    ``{success: false, error}`` on invalid input.
+    ---
+    tags: [Coordinates]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: LatLonRequestSchema
+    responses:
+      200:
+        description: MGRS conversion result.
+        content:
+          application/json:
+            schema: LatLonResponseSchema
+      400:
+        description: Missing/invalid lat or lon, or out of range.
+        content:
+          application/json:
+            schema: CoordinateErrorSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Unexpected conversion failure.
+        content:
+          application/json:
+            schema: CoordinateErrorSchema
     """
     try:
         data = request.get_json()
@@ -2483,20 +2607,39 @@ def convert_latlon_to_mgrs():
 @bp.route("/convert-mgrs-to-latlon", methods=["POST"])
 @require_auth
 def convert_mgrs_to_latlon():
-    """
-    Convert MGRS coordinate to latitude/longitude.
+    """Convert an MGRS coordinate string to decimal-degree lat/lon.
 
-    Request body:
-        {
-            "mgrs": str  # MGRS coordinate string (e.g., "38SMB4484")
-        }
-
-    Returns:
-        {
-            "success": bool,
-            "lat": float,  # Latitude in decimal degrees
-            "lon": float   # Longitude in decimal degrees
-        }
+    Request body carries ``mgrs`` (e.g. ``38SMB4484``). Response
+    envelope: ``{success, lat, lon}`` on success or
+    ``{success: false, error}`` on invalid input.
+    ---
+    tags: [Coordinates]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: MgrsRequestSchema
+    responses:
+      200:
+        description: Lat/lon conversion result.
+        content:
+          application/json:
+            schema: MgrsResponseSchema
+      400:
+        description: Missing, empty, or malformed MGRS string.
+        content:
+          application/json:
+            schema: CoordinateErrorSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Unexpected conversion failure.
+        content:
+          application/json:
+            schema: CoordinateErrorSchema
     """
     try:
         data = request.get_json()

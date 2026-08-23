@@ -1,687 +1,300 @@
 # TrakBridge API Reference
 
+> **The authoritative endpoint reference is the OpenAPI 3.1 spec, not this document.**
+>
+> - Interactive UI: **`/api/docs`** (Swagger UI, browse and try requests)
+> - Machine-readable spec: **`/api/openapi.json`** (feed to Postman, Insomnia, or a code generator)
+>
+> This document explains *concepts*: how auth works, what conventions apply
+> across all endpoints, and how to integrate against TrakBridge end-to-end.
+> Per-endpoint request/response shapes, path parameters, and status codes
+> live in the spec so they never drift from the running code.
+
 ## Overview
 
-TrakBridge provides a comprehensive RESTful API for system monitoring, stream management, and plugin discovery. All API endpoints support JSON responses and follow standard HTTP status codes.
+TrakBridge exposes a JSON HTTP API for:
 
-## Authentication
+- **Ingestion** — external devices push tracker data via `/api/inbound/*`
+- **Introspection** — health, status, version, monitoring dashboard
+- **Configuration read** — streams, plugins, callsign mappings, coordinate utilities
 
-API endpoints require authentication through one of these methods:
-
-### Session-Based Authentication
-Log in through the web interface to establish a session:
-```bash
-# Login creates a session cookie
-curl -X POST http://localhost:8080/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "your-password"}' \
-  -c cookies.txt
-
-# Use session cookie for API calls  
-curl -H "Cookie: session=..." http://localhost:8080/api/health \
-  -b cookies.txt
-```
-
-### API Key Authentication
-Generate API keys through the web interface (Admin → API Keys):
-```bash
-# Use API key in header
-curl -H "X-API-Key: your-api-key" http://localhost:8080/api/health
-```
+Admin, auth, and HTML endpoints are intentionally **not** in the public
+OpenAPI spec. They exist and work, but they are internal to the browser
+UI and are not a supported integration surface.
 
 ## Base URL
 
 All API endpoints are prefixed with `/api`:
+
 - Development: `http://localhost:8080/api`
-- Production: `https://your-domain.com/api`
+- Production: `https://your-deployment/api`
 
-## System Health API
+## Authentication
 
-### Basic Health Check
-**GET** `/health`
+TrakBridge supports three authentication mechanisms. Which one applies to a
+given endpoint is declared in the OpenAPI spec's `security` block per
+operation — check `/api/docs` to see what's accepted where.
 
-Basic health status for load balancers and monitoring systems.
+### 1. Session cookie + CSRF token (browser UI)
 
-**Response:**
-```json
-{
-  "status": "healthy",
-  "timestamp": "2025-08-08T12:00:00Z",
-  "version": "1.2.0",
-  "service": "trakbridge"
-}
-```
+Log in via the web UI (or the `/auth/login` form) to establish a session
+cookie. For any state-changing request (`POST`, `PUT`, `PATCH`, `DELETE`),
+the CSRF token from the `<meta name="csrf-token">` tag on every rendered
+page must also be sent in the `X-CSRFToken` header.
 
-**Status Values:**
-- `healthy` - System operating normally
-- `starting` - Application starting up
-- `unhealthy` - System has critical issues
+This is the *internal* auth path — designed for the browser UI, not
+external integrators. If you're scripting against TrakBridge you almost
+certainly want one of the other two mechanisms.
 
-### Detailed Health Check
-**GET** `/health/detailed`
+### 2. Bearer token (inbound webhooks)
 
-Comprehensive health check with component-level status.
+Used exclusively by `POST /api/inbound/{stream_id}/data`. The token is
+per-stream, generated when the inbound stream is configured, and validated
+by the stream's plugin (`plugin.validate_inbound_request`).
 
-**Authentication Required:** Optional (shows more details when authenticated)
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "timestamp": "2025-08-08T12:00:00Z",
-  "response_time_ms": 45.2,
-  "version": "1.2.0",
-  "service": "trakbridge",
-  "checks": {
-    "database": {
-      "status": "healthy",
-      "connection_time_ms": 12.3,
-      "migrations_current": true
-    },
-    "encryption": {
-      "status": "healthy",
-      "service_initialized": true
-    },
-    "stream_manager": {
-      "status": "healthy",
-      "event_loop_running": true,
-      "worker_count": 3
-    },
-    "system": {
-      "status": "healthy",
-      "cpu_percent": 15.2,
-      "memory": {
-        "total_gb": 8.0,
-        "available_gb": 5.2,
-        "percent": 35.0
-      }
-    }
-  }
-}
-```
-
-### Kubernetes Probes
-**GET** `/health/ready` - Readiness probe (checks critical dependencies)
-**GET** `/health/live` - Liveness probe (basic application health)
-
-## Plugin Categories API
-
-The plugin categorization system provides organized access to data source plugins through category-based endpoints.
-
-### Get Available Categories
-**GET** `/plugins/categories`
-
-Returns all available plugin categories with metadata and plugin counts.
-
-**Authentication:** Requires `api:read` permission
-
-**Response:**
-```json
-{
-  "OSINT": {
-    "key": "OSINT",
-    "display_name": "OSINT",
-    "description": "Open Source Intelligence platforms and tools",
-    "icon": "fas fa-search",
-    "plugin_count": 1
-  },
-  "Tracker": {
-    "key": "Tracker", 
-    "display_name": "Tracker",
-    "description": "GPS and satellite tracking devices and platforms",
-    "icon": "fas fa-satellite-dish",
-    "plugin_count": 3
-  },
-  "EMS": {
-    "key": "EMS",
-    "display_name": "EMS", 
-    "description": "Emergency Management Systems and services",
-    "icon": "fas fa-ambulance",
-    "plugin_count": 0
-  }
-}
-```
-
-### Get Plugins by Category
-**GET** `/plugins/by-category/{category}`
-
-Returns all plugins in a specific category.
-
-**Authentication:** Requires `api:read` permission
-
-**Path Parameters:**
-- `category` (string) - Category key (OSINT, Tracker, EMS)
-
-**Example:** `/plugins/by-category/Tracker`
-
-**Response:**
-```json
-{
-  "category": "Tracker",
-  "plugins": [
-    {
-      "key": "garmin",
-      "display_name": "Garmin InReach",
-      "description": "Connect to Garmin InReach satellite communicators",
-      "icon": "fas fa-satellite-dish",
-      "category": "Tracker"
-    },
-    {
-      "key": "spot",
-      "display_name": "SPOT Tracker", 
-      "description": "Connect to SPOT GPS tracking devices",
-      "icon": "fas fa-map-marker-alt",
-      "category": "Tracker"
-    },
-    {
-      "key": "traccar",
-      "display_name": "Traccar Server",
-      "description": "Connect to Traccar GPS tracking server",
-      "icon": "fas fa-server",
-      "category": "Tracker"
-    }
-  ]
-}
-```
-
-### Get All Categorized Plugins
-**GET** `/plugins/categorized`
-
-Returns all plugins grouped by category.
-
-**Authentication:** Requires `api:read` permission
-
-**Response:**
-```json
-{
-  "OSINT": [
-    {
-      "key": "deepstate",
-      "display_name": "Deepstate OSINT Platform",
-      "description": "Connect to DeepstateMAP OSINT platform",
-      "icon": "fas fa-map-marked-alt",
-      "category": "OSINT"
-    }
-  ],
-  "Tracker": [
-    {
-      "key": "garmin",
-      "display_name": "Garmin InReach", 
-      "description": "Connect to Garmin InReach satellite communicators",
-      "icon": "fas fa-satellite-dish",
-      "category": "Tracker"
-    }
-  ],
-  "EMS": []
-}
-```
-
-### Get Category Statistics
-**GET** `/plugins/category-statistics`
-
-Returns statistical information about plugin categories.
-
-**Authentication:** Requires `api:read` permission
-
-**Response:**
-```json
-{
-  "total_categories": 3,
-  "total_plugins": 4,
-  "categories": {
-    "OSINT": {
-      "plugin_count": 1,
-      "display_name": "OSINT",
-      "description": "Open Source Intelligence platforms and tools"
-    },
-    "Tracker": {
-      "plugin_count": 3,
-      "display_name": "Tracker", 
-      "description": "GPS and satellite tracking devices and platforms"
-    },
-    "EMS": {
-      "plugin_count": 0,
-      "display_name": "EMS",
-      "description": "Emergency Management Systems and services"
-    }
-  },
-  "category_distribution": {
-    "OSINT": 25.0,
-    "Tracker": 75.0,
-    "EMS": 0.0
-  }
-}
-```
-
-## Plugin Management API
-
-### Get All Plugin Metadata
-**GET** `/plugins/metadata`
-
-Returns configuration metadata for all available plugins.
-
-**Authentication:** Requires `api:read` permission
-
-**Response:**
-```json
-{
-  "garmin": {
-    "display_name": "Garmin InReach",
-    "description": "Connect to Garmin InReach satellite communicators",
-    "icon": "fas fa-satellite-dish",
-    "category": "tracker",
-    "config_fields": [
-      {
-        "name": "username",
-        "label": "InReach Username",
-        "type": "text",
-        "required": true,
-        "help": "Your Garmin InReach username"
-      },
-      {
-        "name": "password", 
-        "label": "InReach Password",
-        "type": "password",
-        "required": true,
-        "sensitive": true,
-        "help": "Your Garmin InReach password"
-      }
-    ]
-  }
-}
-```
-
-### Get Single Plugin Configuration
-**GET** `/streams/plugins/{plugin_name}/config`
-
-Returns configuration metadata for a specific plugin.
-
-**Authentication:** Requires `api:read` permission
-
-**Path Parameters:**
-- `plugin_name` (string) - Plugin key (e.g., "garmin", "spot", "deepstate")
-
-**Response:** Same format as single plugin in metadata response above.
-
-## Stream Management API
-
-### Get Stream Statistics
-**GET** `/streams/stats`
-
-Returns aggregate statistics for all streams.
-
-**Authentication:** Requires API key or session authentication
-
-**Response:**
-```json
-{
-  "total_streams": 5,
-  "active_streams": 3,
-  "inactive_streams": 2,
-  "streams_by_plugin": {
-    "garmin": 2,
-    "spot": 1,
-    "deepstate": 2
-  },
-  "streams_by_category": {
-    "Tracker": 3,
-    "OSINT": 2
-  },
-  "total_events_sent": 15432,
-  "events_last_24h": 1205
-}
-```
-
-### Get Stream Status
-**GET** `/streams/status` 
-
-Returns detailed status for all streams.
-
-**Authentication:** Requires API key or session authentication
-
-**Response:**
-```json
-{
-  "streams": [
-    {
-      "id": 1,
-      "name": "Garmin Team Alpha",
-      "plugin_name": "garmin", 
-      "plugin_category": "Tracker",
-      "is_active": true,
-      "status": "running",
-      "last_update": "2025-08-08T11:58:30Z",
-      "events_sent": 245,
-      "last_error": null,
-      "tak_server": "TAK-Primary"
-    }
-  ]
-}
-```
-
-### Get Stream Configuration
-**GET** `/streams/{stream_id}/config`
-
-Returns stream configuration for editing (sensitive fields masked).
-
-**Authentication:** Requires `streams:read` permission
-
-**Path Parameters:**
-- `stream_id` (integer) - Stream ID
-
-**Response:**
-```json
-{
-  "username": "myuser",
-  "password": "********", 
-  "refresh_interval": 300,
-  "api_url": "https://explore.garmin.com/feed/share/myuser"
-}
-```
-
-### Export Stream Configuration
-**GET** `/streams/{stream_id}/export-config`
-
-Exports complete stream configuration for backup (sensitive fields masked).
-
-**Authentication:** Requires `streams:read` permission
-
-**Response:** Complete stream configuration with metadata.
-
-## System Status API
-
-### Application Status
-**GET** `/status`
-
-Returns basic application status and counts.
-
-**Authentication:** Optional (shows more details when authenticated)
-
-**Response:**
-```json
-{
-  "total_streams": 5,
-  "active_streams": 3,
-  "tak_servers": 2,
-  "running_workers": 3
-}
-```
-
-### Version Information  
-**GET** `/version`
-
-Returns application version information.
-
-**Authentication:** None required
-
-**Response:**
-```json
-{
-  "version": "1.2.0"
-}
-```
-
-### Security Status
-**GET** `/streams/security-status`
-
-Returns security status for all streams (admin only).
-
-**Authentication:** Requires `admin:read` permission
-
-**Response:**
-```json
-{
-  "encrypted_fields": 15,
-  "unencrypted_sensitive_fields": 0,
-  "streams_with_weak_passwords": 0,
-  "ssl_certificates_expiring": [],
-  "security_score": 95
-}
-```
-
-## Error Handling
-
-All API endpoints use standard HTTP status codes and return consistent error responses:
-
-### Success Responses
-- `200 OK` - Request successful
-- `201 Created` - Resource created successfully
-
-### Error Responses
-- `400 Bad Request` - Invalid request format or parameters
-- `401 Unauthorized` - Authentication required
-- `403 Forbidden` - Insufficient permissions
-- `404 Not Found` - Resource not found
-- `500 Internal Server Error` - Server error
-
-**Error Response Format:**
-```json
-{
-  "error": "Brief error description",
-  "message": "Detailed error message",
-  "timestamp": "2025-08-08T12:00:00Z"
-}
-```
-
-### Authentication Errors
-```json
-{
-  "error": "Authentication required",
-  "message": "This endpoint requires authentication. Please provide a valid API key or session.",
-  "timestamp": "2025-08-08T12:00:00Z"
-}
-```
-
-### Permission Errors  
-```json
-{
-  "error": "Insufficient permissions",
-  "message": "This operation requires 'admin:read' permission.",
-  "timestamp": "2025-08-08T12:00:00Z"
-}
-```
-
-## Rate Limiting
-
-API endpoints are rate limited to prevent abuse:
-- **Authenticated users**: 1000 requests per hour
-- **Unauthenticated endpoints**: 100 requests per hour
-
-Rate limit headers are included in responses:
-```
-X-RateLimit-Limit: 1000
-X-RateLimit-Remaining: 999
-X-RateLimit-Reset: 1691496000
-```
-
-## Usage Examples
-
-### Get System Health with curl
 ```bash
-# Basic health check
-curl http://localhost:8080/api/health
-
-# Detailed health check with authentication
-curl -H "X-API-Key: your-api-key" \
-  http://localhost:8080/api/health/detailed
-```
-
-### List Plugins by Category with Python
-```python
-import requests
-
-# Get all tracker plugins
-response = requests.get(
-    'http://localhost:8080/api/plugins/by-category/Tracker',
-    headers={'X-API-Key': 'your-api-key'}
-)
-
-trackers = response.json()
-for plugin in trackers['plugins']:
-    print(f"{plugin['display_name']}: {plugin['description']}")
-```
-
-### Monitor Stream Status with JavaScript
-```javascript
-async function getStreamStatus() {
-  const response = await fetch('/api/streams/status', {
-    headers: {
-      'X-API-Key': 'your-api-key'
-    }
-  });
-  
-  const data = await response.json();
-  return data.streams;
-}
-```
-
-## Inbound Streams API
-
-The inbound API allows external devices and systems to push location data to TrakBridge via HTTP POST. Data is converted to CoT XML and distributed to TAK servers.
-
-### Push Data
-**POST** `/api/inbound/<stream_id>/data`
-
-Push location data to an inbound stream.
-
-**Authentication:** Per-stream API key via `Authorization: Bearer <key>` header (when auth mode is `api_key`).
-
-**Headers:**
-
-| Header | Required | Description |
-| --- | --- | --- |
-| Content-Type | Yes | Must match plugin's accepted types (e.g., `application/json`) |
-| Authorization | Depends | `Bearer <api_key>` (required when auth mode is `api_key`) |
-
-**Example:**
-```bash
-curl -X POST http://localhost:8080/api/inbound/5/data \
+curl -X POST https://your-deployment/api/inbound/5/data \
+  -H "Authorization: Bearer YOUR_STREAM_API_KEY" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{"id": "drone-1", "name": "Alpha", "lat": 38.897, "lon": -77.036}'
 ```
 
-**Response (202 Accepted):**
+Failed auth returns the same `404 Not Found` response as a missing stream
+— this is intentional (anti-enumeration) so external callers cannot probe
+for valid stream ids.
+
+Generate a new inbound key via `POST /api/inbound/generate-api-key`
+(requires `streams:write` permission — accessed through the browser UI).
+
+### 3. API key (`X-API-Key`) — planned
+
+The `X-API-Key` header scheme is **declared** in the OpenAPI spec but
+**not yet implemented server-side**. The `@api_key_or_auth_required`
+decorator currently falls through to session auth when an `X-API-Key`
+header is present. Do not depend on this scheme yet; it will be finished
+in a follow-up release.
+
+## Base conventions
+
+### Response envelopes
+
+Most endpoints return the payload directly. Two exceptions are worth
+knowing about:
+
+- **Coordinate converters** (`/api/convert-*`) wrap every response in
+  `{"success": <bool>, ...}` with `"error"` on failure.
+- **Discovery and enumeration endpoints** (`/api/streams/discover-trackers`,
+  `/api/streams/{id}/callsign-mappings`, `/api/team-member-options`) also
+  wrap in `{"success": true, ...}`.
+
+Everything else returns the resource directly on success, and an error
+object on failure.
+
+### Error object
+
+```json
+{
+  "error": "Short error identifier",
+  "message": "Human-readable detail",
+  "status": 401
+}
+```
+
+Not every failing endpoint sets `message` or `status`. Rely on the HTTP
+status code first; treat the body as a hint.
+
+### HTTP status codes
+
+TrakBridge uses standard status codes:
+
+| Code | Meaning |
+| --- | --- |
+| `200` | Success |
+| `202` | Accepted for asynchronous processing (inbound data) |
+| `400` | Invalid request body or parameters |
+| `401` | Authentication required or invalid |
+| `403` | Authenticated but insufficient permissions |
+| `404` | Not found — or, for `/api/inbound/*/data`, an anti-enumeration response for wrong stream / bad auth / IP blocked |
+| `413` | Payload too large |
+| `415` | Content-Type not accepted by the stream's plugin |
+| `429` | Rate limit exceeded |
+| `500` | Internal error |
+| `503` | Service unavailable — startup incomplete or a critical health check failed |
+
+## Rate limiting
+
+Rate limits are enforced by Flask-Limiter with the following defaults:
+
+| Scope | Limit |
+| --- | --- |
+| Global default | 120 requests / minute |
+| `/api/*` (main API) | 30 requests / minute |
+| `/api/inbound/*` | 60 requests / minute |
+| `/auth/*` | 10 requests / minute |
+
+For `POST /api/inbound/{stream_id}/data` specifically, an additional
+per-stream rate limit is enforced inside the handler (default
+60/minute, configurable per stream). This layer applies *on top of* the
+blueprint-level limit above.
+
+Rate limits are enforced by IP address by default. When TrakBridge sits
+behind a reverse proxy you must set `PROXY_TRUSTED=true` and
+`TRUSTED_PROXY_COUNT` correctly, otherwise every request will look like
+it came from the proxy and share a single quota.
+
+## Endpoint groups
+
+The OpenAPI spec is tagged by group. Browse `/api/docs` and expand a tag
+for the full operation list.
+
+| Tag | Purpose | Examples |
+| --- | --- | --- |
+| `Health` | Container/orchestrator probes and component health | `/health`, `/health/ready`, `/health/database` |
+| `Status` | Aggregate system status counts | `/status` |
+| `Version` | Currently running TrakBridge version | `/version` |
+| `Streams` | Stream metadata, stats, config, callsign mappings, tracker discovery | `/streams/stats`, `/streams/{id}/config` |
+| `Plugins` | Plugin metadata, categories, available identifier fields | `/plugins/metadata`, `/plugins/categorized` |
+| `Inbound` | External push ingestion + preview mode inspection | `/inbound/{id}/data`, `/inbound/{id}/preview` |
+| `Coordinates` | Lat/lon ↔ MGRS conversion utilities | `/convert-latlon-to-mgrs` |
+| `Monitoring` | Combined dashboard snapshot | `/monitoring/dashboard` |
+| `TeamMembers` | Enumeration of role and color options for UI dropdowns | `/team-member-options` |
+
+## Integration examples
+
+### Push tracker data into an inbound stream
+
+The most common external integration — a device or middleware pushes
+locations, TrakBridge converts to CoT and dispatches to configured
+TAK servers.
+
+```bash
+curl -X POST https://your-deployment/api/inbound/5/data \
+  -H "Authorization: Bearer $INBOUND_STREAM_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "locations": [
+      {"id": "unit-1", "name": "Alpha", "lat": 38.897, "lon": -77.036},
+      {"id": "unit-2", "name": "Bravo", "lat": 38.898, "lon": -77.037}
+    ]
+  }'
+```
+
+Expected response (`202 Accepted`):
+
 ```json
 {
   "status": "accepted",
-  "locations_received": 1,
-  "events_created": 1,
-  "servers": {
-    "TAK1": {"success": true, "events_enqueued": 1}
-  }
+  "locations_received": 2,
+  "events_created": 2,
+  "servers": {"TAK1": {"success": true, "events_enqueued": 2}}
 }
 ```
 
-**Response (202 Preview Mode):**
-```json
-{
-  "status": "preview",
-  "locations_received": 1,
-  "mapped_result": {
-    "uid": "drone-1",
-    "lat": 38.897,
-    "lon": -77.036,
-    "callsign": "Alpha"
-  }
-}
+If the stream is in **preview mode**, the response is `202` with
+`"status": "preview"` and the parsed locations echoed back — nothing is
+dispatched to TAK. Use preview mode when validating a new integration
+before flipping the stream to live.
+
+### Discover available plugins to build a UI
+
+Both endpoints return category → plugin data suitable for populating
+a dropdown grouped by category.
+
+```python
+import requests
+
+resp = requests.get(
+    "https://your-deployment/api/plugins/categorized",
+    cookies={"session": SESSION_COOKIE},
+    headers={"X-CSRFToken": CSRF_TOKEN},
+)
+for category, plugins in resp.json().items():
+    print(f"[{category}]")
+    for p in plugins:
+        print(f"  {p['key']}: {p['display_name']}")
 ```
 
-**Error Responses:**
+### Health-check integration for Kubernetes / load balancers
 
-| Status | Condition |
-| --- | --- |
-| 400 | Invalid payload, bad coordinates, no locations extracted |
-| 404 | Stream not found, inactive, wrong mode, or auth failed (identical response for anti-enumeration) |
-| 413 | Payload exceeds 1 MB |
-| 429 | Rate limit exceeded |
-| 500 | Processing failure |
+```yaml
+# Kubernetes probes
+readinessProbe:
+  httpGet:
+    path: /api/health/ready
+    port: 8080
+  periodSeconds: 5
+livenessProbe:
+  httpGet:
+    path: /api/health/live
+    port: 8080
+  periodSeconds: 30
+```
 
-**Limits:**
+`/api/health/ready` returns `503` while the app is starting up or when a
+critical dependency (database, encryption) is unhealthy — remove from
+the LB pool. `/api/health/live` returns `200` as long as the process
+event loop is responsive.
 
-| Limit | Default |
+## Inbound streams — payload shape
+
+The inbound API is the surface most affected by plugin choice. The wire
+format for `POST /api/inbound/{stream_id}/data` depends on the stream's
+plugin:
+
+| Plugin | Content-Type | Payload |
+| --- | --- | --- |
+| `generic_inbound` (JSON) | `application/json` | `{"locations": [{"id", "name", "lat", "lon"}, ...]}` |
+| `generic_xml_inbound` | `application/xml` | Plugin-defined XML schema |
+| `inbound_http` | `application/x-www-form-urlencoded` or JSON | Fields configured per stream |
+
+Location field names (`id` vs `uid`, `name` vs `callsign`, etc.) are
+configurable per stream in the callsign-mapping UI. The safe bet: check
+`GET /api/streams/{id}/callsign-mappings` to see what identifier field
+the stream expects, then use that key in your payload.
+
+See the [Inbound Streams Guide](INBOUND_STREAMS_GUIDE.md) for
+architecture details, per-plugin payload examples, and guidance on
+building custom inbound plugins.
+
+### Inbound limits
+
+Enforced by the `POST /api/inbound/{stream_id}/data` handler regardless
+of plugin:
+
+| Limit | Value |
 | --- | --- |
 | Payload size | 1 MB |
 | Locations per request | 100 |
-| Rate limit | 60 requests/minute (per-stream, configurable) |
-| Latitude | ±90 degrees |
-| Longitude | ±180 degrees |
+| Latitude | ±90° |
+| Longitude | ±180° |
+| Per-stream rate limit (default) | 60 requests/minute, configurable |
 
-### Get Preview Data
-**GET** `/api/inbound/<stream_id>/preview`
+## Reverse proxy notes
 
-Return captured payloads and their mapped results for a stream in preview mode.
+TrakBridge respects `X-Forwarded-For` and `X-Forwarded-Proto` only when
+`PROXY_TRUSTED=true` is set in the environment, and only for the number
+of proxy hops declared in `TRUSTED_PROXY_COUNT`. Without those, the
+`request.remote_addr` used for rate limiting and IP allowlists will be
+the proxy's address, not the real client — every rate limit will share
+one quota and every allowlist will match or fail as one.
 
-**Authentication:** Requires `streams:read` permission.
+## What's not in the spec
 
-**Response:**
-```json
-{
-  "stream_id": 5,
-  "payloads": [
-    {
-      "received_at": "2026-04-12T10:00:00Z",
-      "content_type": "application/json",
-      "raw_body": "{\"id\": \"drone-1\", ...}",
-      "mapped_result": {"uid": "drone-1", "lat": 38.897, "lon": -77.036}
-    }
-  ]
-}
-```
+The OpenAPI spec covers the public JSON API — 31 operations across
+health, streams, plugins, inbound, coordinates, monitoring, and
+team-member groups. Deliberately excluded:
 
-### Remap Preview Data
-**POST** `/api/inbound/<stream_id>/preview/remap`
+- Admin endpoints under `/admin/*` — browser UI only
+- Plugin manager under `/admin/plugins/*` — browser UI only
+- Auth flows under `/auth/*` (`/login`, `/logout`, `/oidc/callback`)
+- Every HTML page (`/streams`, `/tak-servers`, etc.)
+- `/admin/api/cot_types/export-data`
 
-Re-run `transform_payload()` against captured payloads with alternate field config. Does not save config changes.
-
-**Authentication:** Requires `streams:write` permission.
-
-**Request Body:**
-```json
-{
-  "lat_field": "position.latitude",
-  "lon_field": "position.longitude",
-  "uid_field": "device.id"
-}
-```
-
-### Clear Preview Buffer
-**DELETE** `/api/inbound/<stream_id>/preview`
-
-Clear the capture buffer for an inbound stream.
-
-**Authentication:** Requires `streams:write` permission.
-
-### Generate API Key
-**POST** `/api/inbound/generate-api-key`
-
-Generate a cryptographically secure API key for use with inbound streams.
-
-**Authentication:** Requires `streams:write` permission.
-
-**Response:**
-```json
-{
-  "api_key": "tb_abc123...xyz"
-}
-```
-
-## Integration Notes
-
-### Monitoring Systems
-Use `/api/health` for load balancer health checks and basic monitoring. Use `/api/health/detailed` for comprehensive monitoring with authenticated access.
-
-### Category-Based UI
-The plugin category API enables dynamic UI generation where users first select a category (OSINT, Tracker, EMS) then choose from available plugins in that category.
-
-### External Plugin Support
-External plugins loaded via Docker volumes are automatically included in category responses when properly configured in `plugins.yaml`.
-
-### Inbound Streams
-The inbound API enables push-based data ingestion from external devices. See the [Inbound Streams Guide](INBOUND_STREAMS_GUIDE.md) for architecture details and plugin development.
+These endpoints exist and are used by the browser UI, but they are not
+designed for external integration and are not part of the supported API
+surface.
 
 ---
 
-**API Version:** 1.3.0  
-**Last Updated:** 2026-07-02  
-**Base URL:** `/api`
+**Reference:** `/api/docs` (Swagger UI) · `/api/openapi.json` (raw spec)
+**Prose docs:** this file, `docs/AUTHENTICATION.md`, `docs/INBOUND_STREAMS_GUIDE.md`

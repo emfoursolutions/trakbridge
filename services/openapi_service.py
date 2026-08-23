@@ -68,6 +68,15 @@ IN_SCOPE_PATHS: Set[Tuple[str, str]] = {
     ("GET", "/api/inbound/{stream_id}/preview"),
     ("DELETE", "/api/inbound/{stream_id}/preview"),
     ("POST", "/api/inbound/{stream_id}/preview/remap"),
+    # Phase D — coordinate conversion
+    ("POST", "/api/convert-latlon-to-mgrs"),
+    ("POST", "/api/convert-mgrs-to-latlon"),
+    # Phase D — monitoring dashboard
+    ("GET", "/api/monitoring/dashboard"),
+    # Phase D — team-member option enumerations
+    ("GET", "/api/team-member-options"),
+    ("GET", "/api/team-member/role-options"),
+    ("GET", "/api/team-member/color-options"),
 }
 
 
