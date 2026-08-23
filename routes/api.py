@@ -173,7 +173,21 @@ def get_cached_health_check(check_name, check_function, *args, **kwargs):
 @bp.route("/status")
 @optional_auth
 def api_status():
-    """API endpoint for system status"""
+    """System status summary.
+
+    Returns aggregate counts of streams, TAK servers, and running
+    workers. Public probe; optional auth surfaces the same payload
+    to authenticated callers.
+    ---
+    tags: [Status]
+    security: []
+    responses:
+      200:
+        description: Current system status counts.
+        content:
+          application/json:
+            schema: StatusSchema
+    """
     # Import models inside the route to avoid circular imports
     from models.stream import Stream
     from models.tak_server import TakServer
@@ -202,7 +216,26 @@ def api_status():
 
 @bp.route("/health")
 def health_check():
-    """Basic health check endpoint - always responds even during startup"""
+    """Basic health check.
+
+    Always responds — including during startup — so container
+    orchestrators can distinguish a booting process from a crashed
+    one. Returns 200 while starting; 503 only on hard startup error.
+    ---
+    tags: [Health]
+    security: []
+    responses:
+      200:
+        description: Service is healthy or still starting.
+        content:
+          application/json:
+            schema: HealthCheckSchema
+      503:
+        description: Startup failed or service is unhealthy.
+        content:
+          application/json:
+            schema: HealthCheckSchema
+    """
     try:
         from app import get_startup_status
 
@@ -255,7 +288,31 @@ def health_check():
 @bp.route("/health/detailed")
 @require_auth
 def detailed_health_check():
-    """Detailed health check with all components"""
+    """Full health check across all components.
+
+    Aggregates database, encryption, configuration, stream manager,
+    system resource, streams, and TAK server checks. Returns
+    ``degraded`` when non-critical components fail; ``unhealthy``
+    (503) only when database or encryption fails.
+    ---
+    tags: [Health]
+    responses:
+      200:
+        description: Aggregate health (healthy or degraded).
+        content:
+          application/json:
+            schema: DetailedHealthSchema
+      503:
+        description: One or more critical components are unhealthy.
+        content:
+          application/json:
+            schema: DetailedHealthSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     start_time = time.time()
 
     checks = {
@@ -312,7 +369,26 @@ def detailed_health_check():
 
 @bp.route("/health/ready")
 def readiness_check():
-    """Kubernetes readiness probe - checks if app is ready to serve traffic"""
+    """Kubernetes readiness probe.
+
+    Verifies the app is ready to serve traffic by checking database
+    connectivity and encryption service health. Returns 503 when the
+    app should be removed from the load-balancer pool.
+    ---
+    tags: [Health]
+    security: []
+    responses:
+      200:
+        description: Ready to serve traffic.
+        content:
+          application/json:
+            schema: ReadinessSchema
+      503:
+        description: Not ready — dependency check failed.
+        content:
+          application/json:
+            schema: ReadinessSchema
+    """
 
     checks = {
         "database": health_service.check_database_connectivity,
@@ -342,7 +418,22 @@ def readiness_check():
 
 @bp.route("/health/live")
 def liveness_check():
-    """Kubernetes liveness probe - basic check if app is alive"""
+    """Kubernetes liveness probe.
+
+    Minimal check that the process is alive and the event loop is
+    responsive. Never returns non-200 — a failed liveness probe
+    means the container should be restarted, which requires the
+    process to be genuinely wedged (unable to respond at all).
+    ---
+    tags: [Health]
+    security: []
+    responses:
+      200:
+        description: Process is alive.
+        content:
+          application/json:
+            schema: LivenessSchema
+    """
     return jsonify(
         {
             "status": "alive",
@@ -355,7 +446,29 @@ def liveness_check():
 @bp.route("/health/database")
 @require_auth
 def database_health():
-    """Database-specific health check"""
+    """Database-specific health check.
+
+    Runs the full database connectivity and pool health check suite.
+    Returns 503 when the database is unreachable or misconfigured.
+    ---
+    tags: [Health]
+    responses:
+      200:
+        description: Database is healthy.
+        content:
+          application/json:
+            schema: ComponentHealthSchema
+      503:
+        description: Database is unhealthy.
+        content:
+          application/json:
+            schema: ComponentHealthSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     result = get_cached_health_check("database", health_service.run_all_database_checks)
 
     # Return appropriate HTTP status code
@@ -445,7 +558,37 @@ def check_configuration_health():
 @bp.route("/health/plugins", methods=["GET"])
 @require_permission("api", "read")
 def plugin_health():
-    """Plugin health check with safe attribute access"""
+    """Health status of all loaded plugins.
+
+    Delegates to ``plugin_manager.check_all_plugins_health()`` on the
+    background stream-manager event loop. Requires the ``api:read``
+    permission.
+    ---
+    tags: [Health]
+    responses:
+      200:
+        description: Aggregate plugin health.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      500:
+        description: Plugin or stream manager unavailable.
+        content:
+          application/json:
+            schema: ErrorSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     plugin_manager = getattr(current_app, "plugin_manager", None)
     stream_manager = getattr(current_app, "stream_manager", None)
 
@@ -465,7 +608,31 @@ def plugin_health():
 @bp.route("/health/configuration", methods=["GET"])
 @require_auth
 def configuration_health():
-    """Configuration health check endpoint with detailed status"""
+    """Configuration file validation health.
+
+    Validates every configuration file managed by the config loader
+    and returns a per-file status breakdown. Overall status is
+    ``unhealthy`` (503) only when more than half of the config
+    files fail validation.
+    ---
+    tags: [Health]
+    responses:
+      200:
+        description: Configuration is healthy or degraded.
+        content:
+          application/json:
+            schema: ComponentHealthSchema
+      503:
+        description: Majority of configuration files invalid.
+        content:
+          application/json:
+            schema: ComponentHealthSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     result = check_configuration_health()
 
     # Return appropriate HTTP status code
@@ -1442,6 +1609,21 @@ def get_team_member_color_options():
 
 @bp.route("/version")
 def version():
+    """Current TrakBridge version.
+
+    Returns the version string used across the app (banner, health
+    payloads, plugin version-gate comparisons). Public — no auth
+    required.
+    ---
+    tags: [Version]
+    security: []
+    responses:
+      200:
+        description: Version information.
+        content:
+          application/json:
+            schema: VersionSchema
+    """
     return {"version": format_version()}
 
 

@@ -532,6 +532,7 @@ def create_app(config_name=None):
     from routes.streams import bp as streams_bp
     from routes.tak_servers import bp as tak_servers_bp
     from routes.inbound import bp as inbound_bp
+    from routes.openapi import bp as openapi_bp
     from routes.plugin_admin import bp as plugin_admin_bp
 
     # Apply rate limits to specific route groups
@@ -548,6 +549,7 @@ def create_app(config_name=None):
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(inbound_bp, url_prefix="/api/inbound")
+    app.register_blueprint(openapi_bp, url_prefix="/api")
 
     # Apply per-route CSRF exemptions for non-session-authenticated endpoints.
     # Every exemption names the auth mechanism that replaces CSRF protection.
@@ -562,6 +564,11 @@ def create_app(config_name=None):
     # (no session required; pure computation with no privileged state changes).
     app.csrf.exempt(app.view_functions["api.convert_latlon_to_mgrs"])    # CSRF exempt: optional-auth utility; no authenticated state change
     app.csrf.exempt(app.view_functions["api.convert_mgrs_to_latlon"])    # CSRF exempt: optional-auth utility; no authenticated state change
+    #
+    # routes/openapi.py — public documentation endpoints (read-only,
+    # no state change; served without authentication).
+    app.csrf.exempt(app.view_functions["openapi.spec_json"])   # CSRF exempt: read-only public documentation JSON
+    app.csrf.exempt(app.view_functions["openapi.swagger_ui"])  # CSRF exempt: read-only public documentation page
 
     # Add context processors and error handlers
     setup_template_helpers(app)
