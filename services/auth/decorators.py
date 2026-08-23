@@ -134,6 +134,7 @@ def require_auth(f: Callable) -> Callable:
         # User is authenticated, proceed with request
         return f(*args, **kwargs)
 
+    decorated_function._openapi_security = [{"sessionAuth": []}]
     return decorated_function
 
 
@@ -235,6 +236,7 @@ def require_role(
             # User has required role, proceed with request
             return f(*args, **kwargs)
 
+        decorated_function._openapi_security = [{"sessionAuth": []}]
         return decorated_function
 
     return decorator
@@ -302,6 +304,7 @@ def require_permission(resource: str, action: str = "read") -> Callable:
             # User has required permission, proceed with request
             return f(*args, **kwargs)
 
+        decorated_function._openapi_security = [{"sessionAuth": []}]
         return decorated_function
 
     return decorator
@@ -375,6 +378,7 @@ def api_key_or_auth_required(f: Callable) -> Callable:
         # User is authenticated, proceed with request
         return f(*args, **kwargs)
 
+    decorated_function._openapi_security = [{"apiKeyAuth": []}, {"sessionAuth": []}]
     return decorated_function
 
 
@@ -398,6 +402,7 @@ def optional_auth(f: Callable) -> Callable:
         # User is available in g.current_user regardless of authentication status
         return f(*args, **kwargs)
 
+    decorated_function._openapi_security = []
     return decorated_function
 
 
@@ -436,6 +441,7 @@ def login_required_json(f: Callable) -> Callable:
         # User is authenticated, proceed with request
         return f(*args, **kwargs)
 
+    decorated_function._openapi_security = [{"sessionAuth": []}]
     return decorated_function
 
 
