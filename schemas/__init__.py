@@ -10,6 +10,17 @@ from schemas.health import (
     StatusSchema,
     VersionSchema,
 )
+from schemas.inbound import (
+    InboundAckSchema,
+    InboundLocationSchema,
+    InboundPayloadSchema,
+    PreviewClearedSchema,
+    PreviewEntrySchema,
+    PreviewResponseSchema,
+    RemapRequestSchema,
+    RemapResponseSchema,
+    RemapResultEntrySchema,
+)
 from schemas.plugin import (
     PluginAvailableFieldsResponseSchema,
     PluginCategorySchema,
@@ -65,6 +76,16 @@ ALL_SCHEMAS = [
     PluginFieldSchema,
     PluginAvailableFieldsResponseSchema,
     PluginMetadataSchema,
+    # inbound
+    InboundLocationSchema,
+    InboundPayloadSchema,
+    InboundAckSchema,
+    PreviewEntrySchema,
+    PreviewResponseSchema,
+    PreviewClearedSchema,
+    RemapRequestSchema,
+    RemapResultEntrySchema,
+    RemapResponseSchema,
 ]
 
 __all__ = ["ALL_SCHEMAS"] + [s.__name__ for s in ALL_SCHEMAS]

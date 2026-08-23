@@ -45,3 +45,29 @@ def test_version_endpoint_is_public(app):
         spec = build_spec_dict(app)
     op = spec["paths"]["/api/version"]["get"]
     assert op.get("security") == []
+
+
+def test_inbound_data_endpoint_uses_bearer_auth(app):
+    with app.app_context():
+        spec = build_spec_dict(app)
+    op = spec["paths"]["/api/inbound/{stream_id}/data"]["post"]
+    # bearerAuth is declared in the docstring, so it wins over any
+    # derived value. Assert the declared value is present.
+    assert {"bearerAuth": []} in (op.get("security") or []), op.get(
+        "security"
+    )
+
+
+def test_inbound_preview_endpoints_are_stream_identity_gated(app):
+    with app.app_context():
+        spec = build_spec_dict(app)
+    # Preview endpoints are gated by stream-identity validation
+    # (not sessionAuth); docstrings declare security: [] so the
+    # spec reflects "no OpenAPI-modeled auth scheme applies".
+    for method, path in (
+        ("get", "/api/inbound/{stream_id}/preview"),
+        ("delete", "/api/inbound/{stream_id}/preview"),
+        ("post", "/api/inbound/{stream_id}/preview/remap"),
+    ):
+        op = spec["paths"][path][method]
+        assert op.get("security") == [], (method, path, op.get("security"))

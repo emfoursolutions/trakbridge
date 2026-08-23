@@ -63,6 +63,11 @@ IN_SCOPE_PATHS: Set[Tuple[str, str]] = {
     ("GET", "/api/plugins/categorized"),
     ("GET", "/api/plugins/category-statistics"),
     ("GET", "/api/plugins/{plugin_type}/available-fields"),
+    # Phase C — inbound
+    ("POST", "/api/inbound/{stream_id}/data"),
+    ("GET", "/api/inbound/{stream_id}/preview"),
+    ("DELETE", "/api/inbound/{stream_id}/preview"),
+    ("POST", "/api/inbound/{stream_id}/preview/remap"),
 }
 
 
