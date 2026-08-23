@@ -38,9 +38,15 @@ def make_plugin_circuit_breaker(plugin_name: str, health_check: Callable) -> Any
 
     cb_config = {}
     try:
-        from utils.config_manager import config_manager
+        from config.base import get_config_loader
 
-        perf_config = config_manager.load_config_safe("performance.yaml") or {}
+        # performance.yaml has no schema; skip schema validation.
+        perf_config = (
+            get_config_loader().load_config_safe(
+                "performance.yaml", validate=False
+            )
+            or {}
+        )
         cb_config = perf_config.get("circuit_breaker", {}) or {}
     except Exception as e:
         logger.debug(f"Could not load circuit breaker config: {e}, using defaults")

@@ -82,11 +82,12 @@ RUN pip install --no-cache-dir --force-reinstall .
 
 # Ensure proper permissions for runtime directories (after copy to avoid overwriting).
 # external_config is per-deployment state written by the admin plugin manager;
-# gitignored so may not exist in the build context.
-RUN mkdir -p /app/logs /app/data /app/tmp /app/external_plugins /app/external_config && \
+# gitignored so may not exist in the build context. /app/backups is written
+# lazily by ConfigLoader when a corrupted config file is quarantined.
+RUN mkdir -p /app/logs /app/data /app/tmp /app/external_plugins /app/external_config /app/backups && \
     chmod 755 /app && \
     chmod 777 /app/logs /app/data /app/tmp && \
-    chmod 755 /app/external_plugins /app/external_config
+    chmod 755 /app/external_plugins /app/external_config /app/backups
 
 # Make entrypoint executable
 RUN chmod +x /app/entrypoint.sh
@@ -96,7 +97,7 @@ RUN groupadd -g 1000 appuser && \
     useradd -r -u 1000 -g appuser -d /app -s /bin/bash appuser
 
 # Set ownership and permissions for directories that appuser needs access to
-RUN chown -R appuser:appuser /app/logs /app/data /app/tmp /app/external_config /app/entrypoint.sh
+RUN chown -R appuser:appuser /app/logs /app/data /app/tmp /app/external_config /app/backups /app/entrypoint.sh
 
 # Ensure all users can read application files and appuser group has access
 # Set group ownership and readable permissions for Python modules and static assets (exclude writable external_config)

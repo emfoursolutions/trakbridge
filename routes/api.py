@@ -383,10 +383,10 @@ def check_encryption_health():
 def check_configuration_health():
     """Check configuration management health with validation and status"""
     try:
-        from utils.config_manager import config_manager
+        from config.base import get_config_loader
 
         # Get detailed configuration validation results
-        results = config_manager.validate_all_configs()
+        results = get_config_loader().validate_all_configs()
 
         # Count status
         total_configs = len(results)

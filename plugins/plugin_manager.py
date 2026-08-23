@@ -70,11 +70,10 @@ class PluginManager:
         Uses safe configuration loading with validation and auto-repair.
         """
         try:
-            # Import config manager safely
-            from utils.config_manager import config_manager
+            from config.base import get_config_loader
 
             # Use safe configuration loading with validation and auto-repair
-            config = config_manager.load_config_safe(
+            config = get_config_loader().load_config_safe(
                 "plugins.yaml", required_fields=["allowed_plugin_modules"]
             )
 

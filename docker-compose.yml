@@ -42,6 +42,7 @@ x-environment: &common-environment
   TRAKBRIDGE_CONFIG_DIR: "/app/external_config"
   TRAKBRIDGE_CONFIG_AUTO_INSTALL: "true"
   TRAKBRIDGE_CONFIG_UPDATE_MODE: "preserve"
+  TRAKBRIDGE_BACKUP_DIR: "/app/backups"
   
   # Database Configuration - PostgreSQL (default)
   DB_TYPE: "postgresql" 
