@@ -49,6 +49,20 @@ IN_SCOPE_PATHS: Set[Tuple[str, str]] = {
     ("GET", "/api/health/plugins"),
     ("GET", "/api/health/configuration"),
     ("GET", "/api/version"),
+    # Phase B — streams
+    ("GET", "/api/streams/stats"),
+    ("GET", "/api/streams/status"),
+    ("GET", "/api/streams/{stream_id}/config"),
+    ("GET", "/api/streams/{stream_id}/export-config"),
+    ("GET", "/api/streams/{stream_id}/callsign-mappings"),
+    ("POST", "/api/streams/discover-trackers"),
+    # Phase B — plugins
+    ("GET", "/api/plugins/metadata"),
+    ("GET", "/api/plugins/categories"),
+    ("GET", "/api/plugins/by-category/{category}"),
+    ("GET", "/api/plugins/categorized"),
+    ("GET", "/api/plugins/category-statistics"),
+    ("GET", "/api/plugins/{plugin_type}/available-fields"),
 }
 
 

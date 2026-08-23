@@ -995,7 +995,30 @@ def monitoring_dashboard():
 @bp.route("/streams/stats")
 @api_key_or_auth_required
 def api_stats():
-    """Get statistics for all streams"""
+    """Aggregate stream statistics.
+
+    Returns counts of streams (total/active/inactive), streams
+    currently reporting errors, and cumulative CoT messages sent
+    across the deployment.
+    ---
+    tags: [Streams]
+    responses:
+      200:
+        description: Aggregate stream statistics.
+        content:
+          application/json:
+            schema: StreamStatsSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to compute statistics.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
 
     # Get the correct status_service at runtime
     services = get_stream_services()
@@ -1013,7 +1036,30 @@ def api_stats():
 @bp.route("/streams/status")
 @api_key_or_auth_required
 def streams_status():
-    """Get detailed status of all streams"""
+    """Runtime status of every stream.
+
+    Returns per-stream details including active flag, worker running
+    state, last poll timestamp, last error, message count, and
+    associated TAK server id. Envelope: ``{"streams": [...]}``.
+    ---
+    tags: [Streams]
+    responses:
+      200:
+        description: Per-stream runtime status list.
+        content:
+          application/json:
+            schema: StreamsStatusEnvelopeSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to gather status.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
 
     # Get the correct status_service at runtime
     services = get_stream_services()
@@ -1047,7 +1093,40 @@ def get_plugin_config(plugin_name):
 @bp.route("/plugins/metadata")
 @require_permission("api", "read")
 def get_all_plugin_metadata():
-    """Get metadata for all available plugins"""
+    """Metadata for every registered plugin.
+
+    Returns a dict keyed by plugin name where each value is the
+    plugin's full serialised metadata (display name, description,
+    config fields, capabilities, category). Used by the stream
+    create/edit UI to render plugin selector dropdowns and dynamic
+    config forms.
+    ---
+    tags: [Plugins]
+    responses:
+      200:
+        description: Plugin name -> metadata map.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                $ref: '#/components/schemas/PluginMetadata'
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load plugin metadata.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         metadata = get_config_service().get_all_plugin_metadata()
         # Serialize all plugin metadata for safe JSON transmission
@@ -1065,7 +1144,38 @@ def get_all_plugin_metadata():
 @bp.route("/plugins/categories")
 @require_permission("api", "read")
 def get_plugin_categories():
-    """Get all available plugin categories"""
+    """All plugin categories.
+
+    Returns a dict keyed by category key where each value describes
+    the category (display name, description, icon, and count of
+    plugins currently registered in it).
+    ---
+    tags: [Plugins]
+    responses:
+      200:
+        description: Category key -> category descriptor map.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                $ref: '#/components/schemas/PluginCategory'
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load categories.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         category_service = get_category_service(get_plugin_manager())
         categories = category_service.get_available_categories()
@@ -1092,7 +1202,41 @@ def get_plugin_categories():
 @bp.route("/plugins/by-category/<category>")
 @require_permission("api", "read")
 def get_plugins_by_category(category):
-    """Get all plugins in a specific category"""
+    """Plugins registered in a specific category.
+
+    Returns the list of plugin summaries for the given category.
+    Empty list is a valid response when the category exists but has
+    no plugins registered.
+    ---
+    tags: [Plugins]
+    parameters:
+      - in: path
+        name: category
+        required: true
+        schema: {type: string}
+        description: Category key (e.g. tracker, osint, ems).
+    responses:
+      200:
+        description: Plugins in the category.
+        content:
+          application/json:
+            schema: PluginsByCategoryEnvelopeSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load plugins for category.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         category_service = get_category_service(get_plugin_manager())
         plugins = category_service.get_plugins_by_category(category)
@@ -1122,7 +1266,41 @@ def get_plugins_by_category(category):
 @bp.route("/plugins/categorized")
 @require_permission("api", "read")
 def get_categorized_plugins():
-    """Get all plugins grouped by category"""
+    """All plugins grouped by category.
+
+    Returns a dict keyed by category where each value is the list
+    of plugin summaries in that category. Convenience endpoint —
+    equivalent to calling ``/api/plugins/by-category/{category}``
+    once per known category and merging the results.
+    ---
+    tags: [Plugins]
+    responses:
+      200:
+        description: Category -> list of plugin summaries.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PluginSummary'
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load categorized plugins.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         category_service = get_category_service(get_plugin_manager())
         categorized = category_service.get_categorized_plugins()
@@ -1151,7 +1329,37 @@ def get_categorized_plugins():
 @bp.route("/plugins/category-statistics")
 @require_permission("api", "read")
 def get_category_statistics():
-    """Get statistics about plugin categories"""
+    """Aggregate statistics across plugin categories.
+
+    Returns counts and other metrics per category — total plugins,
+    breakdown by tier, and similar summary data used by the plugin
+    manager dashboard.
+    ---
+    tags: [Plugins]
+    responses:
+      200:
+        description: Per-category statistics.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to compute statistics.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         category_service = get_category_service(get_plugin_manager())
         stats = category_service.get_category_statistics()
@@ -1165,7 +1373,43 @@ def get_category_statistics():
 @bp.route("/streams/<int:stream_id>/export-config")
 @require_permission("streams", "read")
 def export_stream_config(stream_id):
-    """Export stream configuration (sensitive fields masked)"""
+    """Export a stream's full configuration.
+
+    Returns the complete exportable configuration for a stream —
+    plugin config, callsign mappings, TAK server associations, and
+    CoT settings. Sensitive fields (passwords, API keys) are masked
+    or omitted. Suitable for backup or migration between deployments.
+    ---
+    tags: [Streams]
+    parameters:
+      - in: path
+        name: stream_id
+        required: true
+        schema: {type: integer}
+    responses:
+      200:
+        description: Exportable stream configuration.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to export configuration.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         export_data = get_config_service().export_stream_config(
             stream_id, include_sensitive=False
@@ -1180,7 +1424,47 @@ def export_stream_config(stream_id):
 @bp.route("/streams/<int:stream_id>/config")
 @require_permission("streams", "read")
 def get_stream_config(stream_id):
-    """Get stream configuration (sensitive fields masked) for editing"""
+    """Get a stream's plugin configuration.
+
+    Returns just the ``plugin_config`` block (not the full stream
+    envelope), with sensitive fields masked. Used by the edit UI to
+    pre-populate form fields.
+    ---
+    tags: [Streams]
+    parameters:
+      - in: path
+        name: stream_id
+        required: true
+        schema: {type: integer}
+    responses:
+      200:
+        description: Plugin config dict (keys are plugin-specific).
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      404:
+        description: Stream not found.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load stream configuration.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         from models.stream import Stream
 
@@ -1274,7 +1558,57 @@ def bootstrap_status():
 @bp.route("/streams/discover-trackers", methods=["POST"])
 @require_permission("streams", "read")
 def discover_trackers():
-    """Discover trackers for callsign mapping configuration"""
+    """Discover trackers reachable via a plugin's current config.
+
+    Connects to the plugin's data source with the provided config
+    and returns the list of trackers currently visible, along with
+    the plugin's available identifier fields and CoT/team-member
+    option lists. Used by the callsign-mapping UI to enumerate
+    trackers before mapping them to callsigns.
+
+    In edit mode (``stream_id`` present), the provided config is
+    merged with the stream's existing config (non-empty fields
+    override; empty fields fall back to stored values), and existing
+    per-tracker enabled/callsign/CoT overrides are preserved.
+    ---
+    tags: [Streams]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: DiscoverTrackersRequestSchema
+    responses:
+      200:
+        description: Discovered trackers plus UI option lists.
+        content:
+          application/json:
+            schema: DiscoverTrackersResponseSchema
+      400:
+        description: Missing plugin_type or discovery failed.
+        content:
+          application/json:
+            schema: ErrorSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      404:
+        description: Plugin type not registered.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Unexpected error during discovery.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         from models.stream import Stream
         from plugins.plugin_manager import get_plugin_manager
@@ -1398,7 +1732,46 @@ def discover_trackers():
 @bp.route("/streams/<int:stream_id>/callsign-mappings", methods=["GET"])
 @require_permission("streams", "read")
 def get_callsign_mappings(stream_id):
-    """Get callsign mappings for a stream"""
+    """Callsign mappings for a stream.
+
+    Returns the stream-level callsign-mapping configuration flags
+    plus the list of per-tracker mappings. Each mapping carries the
+    identifier value, custom callsign, optional CoT type override,
+    and enabled state.
+    ---
+    tags: [Streams]
+    parameters:
+      - in: path
+        name: stream_id
+        required: true
+        schema: {type: integer}
+    responses:
+      200:
+        description: Callsign mapping configuration and mappings.
+        content:
+          application/json:
+            schema: CallsignMappingsEnvelopeSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      404:
+        description: Stream not found.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load callsign mappings.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         from models.callsign_mapping import CallsignMapping
         from models.stream import Stream
@@ -1531,7 +1904,48 @@ def update_callsign_mappings(stream_id):
 @bp.route("/plugins/<plugin_type>/available-fields", methods=["GET"])
 @require_permission("streams", "read")
 def get_plugin_available_fields(plugin_type):
-    """Get available identifier fields for a plugin"""
+    """Available identifier fields for a plugin's callsign mapping.
+
+    Returns the list of fields the plugin exposes as possible
+    identifiers for callsign mapping (typically the fields it
+    extracts from each discovered tracker). ``supports_callsign_
+    mapping`` is false when the plugin doesn't implement
+    ``get_available_fields``.
+    ---
+    tags: [Plugins]
+    parameters:
+      - in: path
+        name: plugin_type
+        required: true
+        schema: {type: string}
+        description: Plugin key (e.g. garmin, spot, traccar).
+    responses:
+      200:
+        description: Available identifier fields for the plugin.
+        content:
+          application/json:
+            schema: PluginAvailableFieldsResponseSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      404:
+        description: Plugin type not registered.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to enumerate available fields.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         from plugins.plugin_manager import get_plugin_manager
 
