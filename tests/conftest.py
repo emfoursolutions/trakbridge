@@ -16,6 +16,19 @@ Version: 1.0.0
 """
 
 import os
+
+# CRITICAL: set TESTING before importing app so the module-level
+# create_app() at app.py:1355 short-circuits. Otherwise app.py boots
+# a real Flask app during test collection, tripping the production
+# API-key pepper guard when .env sets FLASK_ENV=production locally.
+os.environ.setdefault("TESTING", "1")
+# Also supply a deterministic pepper so per-test app creations don't
+# emit the ephemeral-pepper WARNING on every run.
+os.environ.setdefault(
+    "API_KEY_PEPPER",
+    "test-pepper-value-at-least-32-bytes-long-xxxxx",
+)
+
 import shutil
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -63,6 +76,10 @@ def app():
         "TRAKBRIDGE_ENCRYPTION_KEY": ci_encryption_key
         or "test-encryption-key-for-testing-12345",
         "SECRET_KEY": ci_secret_key or "test-secret-key-for-sessions",
+        # Deterministic pepper for API-key tests; avoids the WARNING
+        # log from the ephemeral fallback path in every test run.
+        "API_KEY_PEPPER": os.environ.get("API_KEY_PEPPER")
+        or "test-pepper-value-at-least-32-bytes-long-xxxxx",
     }
 
     # Save original values and set test values

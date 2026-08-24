@@ -295,6 +295,12 @@ def create_app(config_name=None):
     flask_env = config_name or os.environ.get("FLASK_ENV", "development")
     config_instance = get_config(flask_env)
 
+    # Load the API-key pepper before anything can generate or verify a
+    # key. Refuses to boot in production when API_KEY_PEPPER is unset;
+    # in dev/testing generates an ephemeral pepper with a WARNING.
+    from services.auth.pepper import load_pepper
+    load_pepper(is_production=(flask_env == "production"))
+
     # Configure reverse proxy support ONLY if explicitly trusted
     # This fixes redirect issues when behind reverse proxies while maintaining security
     proxy_trusted = getattr(config_instance, "PROXY_TRUSTED", False)
