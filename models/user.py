@@ -115,6 +115,9 @@ class User(db.Model, TimestampMixin):
     sessions = relationship(
         "UserSession", back_populates="user", cascade="all, delete-orphan"
     )
+    api_keys = relationship(
+        "UserApiKey", back_populates="user", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<User {self.username} ({self.auth_provider.value})>"
@@ -271,6 +274,11 @@ class User(db.Model, TimestampMixin):
                 "dashboard": ["read"],
                 "api": ["read"],
                 "profile": ["read", "write"],
+                # api_keys: self-service management of the user's own
+                # keys. Ownership is enforced at the route layer;
+                # this grant is scoped to acting on rows owned by
+                # request.user.
+                "api_keys": ["read", "write", "delete"],
             },
             UserRole.OPERATOR: {
                 "streams": ["read", "write", "delete"],
@@ -278,6 +286,7 @@ class User(db.Model, TimestampMixin):
                 "dashboard": ["read"],
                 "api": ["read", "write"],
                 "profile": ["read", "write"],
+                "api_keys": ["read", "write", "delete"],
             },
         }
 
@@ -582,6 +591,211 @@ class UserSession(db.Model, TimestampMixin):
             "provider": self.provider.value,
             "expires_at": self.expires_at.isoformat(),
             "last_activity": self.last_activity.isoformat(),
+            "is_active": self.is_active,
+            "is_valid": self.is_valid(),
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }
+
+
+# Constants used by both the model and services/auth/api_key_service.
+# Kept here so the model file is the single source of truth for the
+# on-the-wire token shape.
+API_KEY_TOKEN_PREFIX = "tb_pat_"
+API_KEY_PREVIEW_CHARS = 12
+# `tb_pat_` (7) + 12-char preview = 19 stored in token_prefix column.
+API_KEY_PREFIX_LEN = len(API_KEY_TOKEN_PREFIX) + API_KEY_PREVIEW_CHARS
+API_KEY_TOKEN_ENTROPY_BYTES = 32  # 256 bits — secrets.token_urlsafe(32)
+API_KEY_SALT_BYTES = 16
+
+
+class UserApiKey(db.Model, TimestampMixin):
+    """Per-user API key for programmatic access to the JSON API.
+
+    Storage model: the plaintext token (``tb_pat_<44 base64url>``) is
+    shown to the user once at creation and never stored. What we
+    persist is ``token_prefix`` (first 19 chars, for UI display and
+    fast lookup) and ``token_hash`` (HMAC-SHA256 of ``salt + token``
+    using a process-wide pepper from ``API_KEY_PEPPER``). A per-key
+    random salt prevents rainbow-table attacks against the pepper;
+    the pepper prevents a DB-only leak from being sufficient to
+    verify tokens offline.
+
+    Bcrypt is intentionally NOT used here. Bcrypt is designed for
+    low-entropy user passwords; API tokens are 256-bit random values
+    where HMAC-SHA256 (industry standard, e.g. GitHub, Stripe) is
+    both safe and much faster on the request path.
+    """
+
+    __tablename__ = "user_api_keys"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name = Column(String(100), nullable=False)
+    token_prefix = Column(String(19), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True)
+    token_salt = Column(String(32), nullable=False)
+    scopes = Column(Text, nullable=False, default="[]")
+    expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+
+    user = relationship("User", back_populates="api_keys")
+
+    def __repr__(self):
+        return f"<UserApiKey {self.token_prefix}... user_id={self.user_id}>"
+
+    # ------------------------------------------------------------------
+    # Crypto helpers (module-level statics kept on the model so the
+    # model file is a single source of truth for token shape/hashing).
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _pepper() -> bytes:
+        """Import lazily so the module can be imported before
+        services.auth.pepper.load_pepper() has run at app startup.
+        """
+        from services.auth.pepper import get_pepper
+
+        return get_pepper()
+
+    @staticmethod
+    def hash_token(salt: str, token: str) -> str:
+        """Deterministic HMAC-SHA256 of the token using per-key salt
+        and the process-wide pepper. Returns lowercase hex.
+        """
+        import hashlib
+        import hmac
+
+        return hmac.new(
+            UserApiKey._pepper(),
+            (salt + token).encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+    @staticmethod
+    def generate_plaintext() -> str:
+        """Generate a fresh plaintext token with the standard prefix."""
+        import secrets
+
+        return API_KEY_TOKEN_PREFIX + secrets.token_urlsafe(
+            API_KEY_TOKEN_ENTROPY_BYTES
+        )
+
+    @staticmethod
+    def new_salt() -> str:
+        """Generate a random per-key salt (32 hex chars = 16 bytes)."""
+        import secrets
+
+        return secrets.token_hex(API_KEY_SALT_BYTES)
+
+    # ------------------------------------------------------------------
+    # Factory + instance methods
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def generate(
+        cls,
+        user: "User",
+        name: str,
+        scopes: List[str],
+        expires_at: Optional[datetime] = None,
+    ) -> "tuple[UserApiKey, str]":
+        """Create and persist a new key. Returns (row, plaintext_token).
+
+        The plaintext token is returned to the caller so it can be
+        shown to the user exactly once; the DB never sees it.
+        """
+        import json
+
+        plaintext = cls.generate_plaintext()
+        salt = cls.new_salt()
+        instance = cls(
+            user=user,
+            name=name,
+            token_prefix=plaintext[:API_KEY_PREFIX_LEN],
+            token_hash=cls.hash_token(salt, plaintext),
+            token_salt=salt,
+            scopes=json.dumps(list(scopes)),
+            expires_at=expires_at,
+            is_active=True,
+        )
+        db.session.add(instance)
+        db.session.commit()
+        return instance, plaintext
+
+    def verify(self, plaintext: str) -> bool:
+        """Constant-time verification of a candidate plaintext token."""
+        import hmac
+
+        expected = self.hash_token(self.token_salt, plaintext)
+        return hmac.compare_digest(expected, self.token_hash)
+
+    def is_valid(self) -> bool:
+        """True when the key is usable right now.
+
+        Checks: not revoked, active flag, expiry not passed, owning
+        user is still ACTIVE. Any single failure returns False.
+        """
+        if self.revoked_at is not None:
+            return False
+        if not self.is_active:
+            return False
+        if self.expires_at is not None:
+            now = datetime.now(timezone.utc)
+            # Normalise naive DB values to UTC to survive SQLite's
+            # tz-stripping (mirrors UserSession.is_valid pattern).
+            expires = self.expires_at
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=timezone.utc)
+            if now >= expires:
+                return False
+        if self.user is None or not self.user.is_active():
+            return False
+        return True
+
+    def revoke(self) -> None:
+        """Mark this key as revoked. Idempotent."""
+        if self.revoked_at is None:
+            self.revoked_at = datetime.now(timezone.utc)
+        self.is_active = False
+
+    def scope_list(self) -> List[str]:
+        """Parse the stored JSON scopes into a list of strings."""
+        import json
+
+        try:
+            parsed = json.loads(self.scopes or "[]")
+        except (ValueError, TypeError):
+            return []
+        return [s for s in parsed if isinstance(s, str)]
+
+    def has_scope(self, resource: str, action: str) -> bool:
+        """True when the key's scope list includes ``resource:action``."""
+        return f"{resource}:{action}" in self.scope_list()
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialise for API responses. Never includes hash/salt."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "prefix": self.token_prefix,
+            "scopes": self.scope_list(),
+            "expires_at": (
+                self.expires_at.isoformat() if self.expires_at else None
+            ),
+            "last_used_at": (
+                self.last_used_at.isoformat() if self.last_used_at else None
+            ),
+            "revoked_at": (
+                self.revoked_at.isoformat() if self.revoked_at else None
+            ),
             "is_active": self.is_active,
             "is_valid": self.is_valid(),
             "created_at": self.created_at.isoformat(),
