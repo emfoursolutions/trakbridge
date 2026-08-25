@@ -13,11 +13,23 @@ from services.auth import pepper as pepper_module
 
 @pytest.fixture(autouse=True)
 def _reset_pepper_and_env(monkeypatch):
-    """Ensure every test starts with a clean pepper cache and no env."""
+    """Ensure every test starts with a clean pepper cache and no env.
+
+    On teardown, restore the pepper from the pre-test environment so
+    downstream test files (which rely on a loaded pepper for
+    UserApiKey hash/verify) still work when this suite runs earlier
+    in the same pytest session.
+    """
+    original = os.environ.get("API_KEY_PEPPER")
     monkeypatch.delenv("API_KEY_PEPPER", raising=False)
     pepper_module._reset_for_tests()
     yield
     pepper_module._reset_for_tests()
+    if original:
+        # Restore env immediately (before monkeypatch teardown) and
+        # reload the pepper so subsequent test collections find one.
+        os.environ["API_KEY_PEPPER"] = original
+        pepper_module.load_pepper(is_production=False)
 
 
 class TestLoadPepper:
