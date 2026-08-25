@@ -60,46 +60,74 @@ def write_key(operator_user):
     return key, plaintext
 
 
-@pytest.fixture
+@pytest.fixture(scope="session", autouse=True)
 def probe_routes(app):
     """Register throwaway endpoints on the app for decorator exercise.
 
-    Registered once per app; the routes accept a valid response so
-    tests can assert 200 vs 401/403 without a full request pipeline.
+    Uses ``add_url_rule`` directly (not ``register_blueprint``)
+    because Flask locks blueprint registration after the app has
+    handled its first request — and by the time this session-scoped
+    fixture runs, another test module may already have exercised the
+    app. ``add_url_rule`` has a similar guard but we can bypass it
+    by adjusting the app's ``_got_first_request`` flag around the
+    call. This is a test-only workaround; production code never
+    adds routes after boot.
     """
-    bp_name = "_apikey_probe_bp"
-    if bp_name in app.blueprints:
+    if "_probe_require_auth" in app.view_functions:
         return
 
-    bp = Blueprint(bp_name, __name__)
-
-    @bp.route("/_probe/require_auth")
     @require_auth
     def _probe_require_auth():
         user = get_current_user()
         return jsonify({"ok": True, "user": user.username})
 
-    @bp.route("/_probe/streams_read")
     @require_permission("streams", "read")
     def _probe_streams_read():
         return jsonify({"ok": True})
 
-    @bp.route("/_probe/streams_write", methods=["POST"])
     @require_permission("streams", "write")
     def _probe_streams_write():
         return jsonify({"ok": True})
 
-    @bp.route("/_probe/session_only")
     @session_only
     @require_auth
     def _probe_session_only():
         return jsonify({"ok": True})
 
-    app.register_blueprint(bp)
-    # Bearer + session-only endpoint must accept POST without CSRF
-    # because our test client won't have a CSRF token. That's a
-    # commit 6 concern; here we just need GET.
-    app.csrf.exempt(app.view_functions[f"{bp_name}._probe_streams_write"])
+    original = getattr(app, "_got_first_request", False)
+    if hasattr(app, "_got_first_request"):
+        app._got_first_request = False
+    try:
+        app.add_url_rule(
+            "/_probe/require_auth",
+            endpoint="_probe_require_auth",
+            view_func=_probe_require_auth,
+        )
+        app.add_url_rule(
+            "/_probe/streams_read",
+            endpoint="_probe_streams_read",
+            view_func=_probe_streams_read,
+        )
+        app.add_url_rule(
+            "/_probe/streams_write",
+            endpoint="_probe_streams_write",
+            view_func=_probe_streams_write,
+            methods=["POST"],
+        )
+        app.add_url_rule(
+            "/_probe/session_only",
+            endpoint="_probe_session_only",
+            view_func=_probe_session_only,
+        )
+    finally:
+        if hasattr(app, "_got_first_request"):
+            app._got_first_request = original
+
+    # POST endpoint needs CSRF exemption because our test client
+    # won't have a CSRF token. Bearer bypass (commit 6) covers the
+    # bearer-authenticated tests; this handles session-cookie-less
+    # POST for the scope-enforcement tests.
+    app.csrf.exempt(app.view_functions["_probe_streams_write"])
 
 
 # ---------------------------------------------------------------------------

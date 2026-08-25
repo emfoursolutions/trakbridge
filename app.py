@@ -27,7 +27,7 @@ from typing import Optional
 
 # Third-party imports
 from dotenv import load_dotenv
-from flask import Flask, has_app_context, jsonify, render_template
+from flask import Flask, has_app_context, jsonify, render_template, request
 from flask_migrate import Migrate
 from sqlalchemy import event
 from sqlalchemy.pool import Pool
@@ -351,7 +351,35 @@ def create_app(config_name=None):
         # Store CSRF instance
         app.csrf = csrf
 
-        logger.info("CSRF protection enabled globally; bearer-auth routes exempted below")
+        # ----- CSRF bearer-bypass hook -----
+        # Any request carrying an API-key bearer token skips CSRF
+        # validation. Bearer auth is itself unforgeable-across-origins
+        # (an attacker on evil.com cannot make the browser attach the
+        # header), so the CSRF requirement is redundant for that path.
+        # Session-authenticated requests to the same routes remain
+        # protected because the header check runs per-request; only
+        # requests that actually present a tb_pat_ bearer bypass.
+        #
+        # Rejected alternative: route-level `csrf.exempt(...)` would
+        # strip CSRF from BOTH session and bearer calls to the same
+        # endpoint, defeating the whole point for browser JS callers.
+        # This hook lets a single URL support both auth flows with the
+        # right protection profile applied to each.
+        from models.user import API_KEY_TOKEN_PREFIX
+        _orig_csrf_protect = csrf.protect
+
+        def _csrf_protect_with_bearer_bypass(apply_exemptions=False):
+            auth = request.headers.get("Authorization", "")
+            if auth.startswith(f"Bearer {API_KEY_TOKEN_PREFIX}"):
+                return
+            return _orig_csrf_protect(apply_exemptions=apply_exemptions)
+
+        csrf.protect = _csrf_protect_with_bearer_bypass
+
+        logger.info(
+            "CSRF protection enabled globally; bearer-auth routes "
+            "exempted below and tb_pat_ bearer requests bypass CSRF"
+        )
 
         # Add security headers (production only)
         if config_instance.environment == "production":
