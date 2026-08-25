@@ -188,3 +188,31 @@ def test_bearer_rejected_at_runtime(app, client, admin_bearer, method, url):
         f"full-scope admin key, got {resp.status_code}. Missing "
         f"@session_only decorator?"
     )
+
+
+@pytest.mark.parametrize("method,url", RUNTIME_PROBE_ENDPOINTS)
+def test_invalid_bearer_rejected_early_no_302(app, client, method, url):
+    """Even an INVALID tb_pat_ bearer is 401'd, not 302 to login.
+
+    Integrators scripting against session-only URLs need a consistent
+    "bearer not accepted here" signal regardless of whether the
+    specific token happens to be valid. Without the early-reject
+    path in session_only, an invalid bearer falls through to
+    @admin_required which 302s to the login page — nonsensical for
+    API clients.
+    """
+    resp = client.open(
+        url,
+        method=method,
+        headers={
+            "Authorization": "Bearer tb_pat_" + "x" * 43,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+    )
+    assert resp.status_code == 401, (
+        f"{method} {url} returned {resp.status_code} for an invalid "
+        f"tb_pat_ bearer; expected 401 from session_only's early "
+        f"reject. If you see 302, session_only is missing or the "
+        f"reject happens after @require_auth."
+    )

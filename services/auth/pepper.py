@@ -24,9 +24,10 @@ from __future__ import annotations
 
 import base64
 import logging
-import os
 import secrets
 from typing import Optional
+
+from config.secrets import get_secret
 
 _ENV_VAR = "API_KEY_PEPPER"
 _MIN_BYTES = 32  # HMAC-SHA256 recommends a key at least as long as the block size / 2
@@ -66,10 +67,15 @@ def load_pepper(is_production: bool) -> bytes:
 
     Called once during app startup. Result is cached module-globally
     so `get_pepper()` is cheap on the request path.
+
+    Resolution goes through ``config.secrets.get_secret``, which
+    tries the configured secret providers in order: environment
+    variable, Docker/K8s secret file, dotenv, and finally the
+    ``API_KEY_PEPPER_FILE`` convention for compose-mounted secrets.
     """
     global _pepper_bytes
 
-    raw = os.environ.get(_ENV_VAR, "").strip()
+    raw = (get_secret(_ENV_VAR) or "").strip()
     if raw:
         _pepper_bytes = _decode(raw)
         _logger.info(
@@ -80,7 +86,10 @@ def load_pepper(is_production: bool) -> bytes:
     if is_production:
         raise PepperMissingError(
             f"{_ENV_VAR} is required in production. Generate one with "
-            f"`openssl rand -base64 48` and set it in the environment."
+            f"`openssl rand -base64 48` and mount it as a Docker "
+            f"secret at /run/secrets/api_key_pepper "
+            f"(then set {_ENV_VAR}_FILE=/run/secrets/api_key_pepper), "
+            f"or set {_ENV_VAR} directly in the environment."
         )
 
     # Non-production: generate an ephemeral pepper so local dev works,

@@ -524,9 +524,14 @@ def session_only(f: Callable) -> Callable:
     takeover.
 
     Apply this decorator ABOVE @require_auth / @require_permission
-    so it runs first; if the request was authenticated via a bearer
-    token (g.api_key set by get_current_user), reject with 401
-    before the underlying handler is invoked.
+    so it runs first. Rejects EARLY based on the presence of a
+    tb_pat_ bearer header, before ever hitting the resolver. This is
+    a deliberate choice: an integrator hitting a session-only
+    endpoint should get a consistent 401 explaining "bearer is not
+    accepted here", whether or not the specific token happens to be
+    valid. Otherwise an invalid token would fall through to the
+    normal auth flow and yield a misleading 302 redirect to the
+    login page (which API clients don't handle).
 
     Args:
         f: Function to decorate
@@ -537,17 +542,21 @@ def session_only(f: Callable) -> Callable:
 
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Trigger get_current_user so g.api_key is populated for
-        # bearer-authenticated requests. We don't care about the
-        # user itself here — this decorator's only job is to detect
-        # and reject the API-key auth path.
-        get_current_user()
-        api_key = getattr(g, "api_key", None)
-        if api_key is not None:
+        auth = request.headers.get("Authorization", "")
+        # Reject on ANY tb_pat_ bearer, valid or not — see docstring.
+        # Use the same prefix constant the resolver uses so the two
+        # stay in lockstep if the format ever changes.
+        from models.user import API_KEY_TOKEN_PREFIX
+        if auth.startswith(f"Bearer {API_KEY_TOKEN_PREFIX}"):
+            # If get_current_user has already resolved the token,
+            # log the prefix for audit; otherwise log "unknown" to
+            # avoid a wasted DB lookup just for the log message.
+            api_key = getattr(g, "api_key", None)
+            prefix = api_key.token_prefix if api_key else "unknown"
             logger.warning(
                 "AUDIT: api_key session_only_denied prefix=%s "
                 "endpoint=%s",
-                api_key.token_prefix,
+                prefix,
                 request.endpoint,
             )
             return (

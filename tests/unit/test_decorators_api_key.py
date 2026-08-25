@@ -5,7 +5,6 @@
 import pytest
 from flask import Blueprint, jsonify
 
-from database import db
 from models.user import (
     AccountStatus,
     AuthProvider,
@@ -279,6 +278,25 @@ class TestSessionOnly:
         assert any(
             "session_only_denied" in rec.message for rec in caplog.records
         )
+
+    def test_invalid_bearer_also_denied_early(
+        self, app, client, probe_routes
+    ):
+        # A bearer token that isn't in the DB must ALSO get 401 from
+        # session_only, not fall through to @require_auth's 302
+        # redirect. Integrators need a consistent "bearer not
+        # accepted here" signal regardless of whether the specific
+        # token happens to be valid.
+        resp = client.get(
+            "/_probe/session_only",
+            headers={
+                "Authorization": "Bearer tb_pat_" + "x" * 43,
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+        )
+        assert resp.status_code == 401
+        assert resp.get_json()["error"] == "Session required"
 
 
 # ---------------------------------------------------------------------------
