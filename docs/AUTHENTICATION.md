@@ -421,11 +421,126 @@ fetch('/auth/login', {
 fetch('/api/streams/status');
 ```
 
-### Future: API Key Authentication
-API key authentication is planned for machine-to-machine access:
+### API Key Authentication (bearer tokens)
+
+Self-service API keys for scripted and machine-to-machine access.
+Users create and manage their own keys at `/auth/api-keys`; admins can
+audit and revoke any key across the deployment at `/admin/api-keys`.
+
+**Send as a bearer token** on every request:
+
 ```bash
-curl -H "X-API-Key: your-api-key" http://localhost:8080/api/streams/status
+curl -H "Authorization: Bearer tb_pat_XXXXXXXXXXXX..." \
+  http://localhost:8080/api/streams/stats
 ```
+
+Keys are identified on the wire by the `tb_pat_` prefix so leaked
+tokens are grep-able (matching the GitHub `ghp_` convention). The
+plaintext token is displayed exactly once at creation and never
+stored — only a salted HMAC-SHA256 hash goes to the database.
+
+#### Server-side pepper
+
+Every hash is computed with `HMAC(pepper, salt + token)` using a
+process-wide secret from the `API_KEY_PEPPER` environment variable.
+The pepper is loaded via `config.secrets.get_secret()` so it can be
+supplied via any of the standard providers — env var, Docker/K8s
+secret file, dotenv, or the `_FILE` convention.
+
+Generate a fresh pepper:
+
+```bash
+openssl rand -base64 48
+```
+
+Set as an env var:
+
+```bash
+export API_KEY_PEPPER="$(openssl rand -base64 48)"
+```
+
+Or as a Docker secret (recommended for production — matches how
+`SECRET_KEY` and `TB_MASTER_KEY` are handled):
+
+```bash
+openssl rand -base64 48 > ./secrets/api_key_pepper
+chmod 600 ./secrets/api_key_pepper
+```
+
+The compose file at `docker-compose.yml` (and the dev/local/staging
+variants) declares `api_key_pepper` as a Docker secret and passes
+its path as `API_KEY_PEPPER_FILE` — the pepper module reads through
+`SecretManager` which handles the `_FILE` indirection.
+
+**Rotation cost**: rotating the pepper invalidates every existing
+API key because the stored hash is bound to the pepper value at
+generation time. Rotate only in response to a suspected pepper
+compromise, and expect every user to need to regenerate their keys.
+
+**Startup guard**: in production the app refuses to boot if
+`API_KEY_PEPPER` is unset. In development or testing an ephemeral
+pepper is generated with a loud WARNING so a misconfigured staging
+deploy is obvious.
+
+#### Key properties
+
+- **Per-key scopes** (`resource:action`): a key can never exceed
+  the owning user's role permissions. The effective permission is
+  the intersection.
+- **Optional expiry** at creation time; auto-invalidates on read.
+- **Last-used tracking** (throttled to 60s writes) surfaces dormant
+  keys on the management page.
+- **Hard cap of 10 active keys per user**, revoked/expired excluded.
+- **Rate-limited creation**: 5/hour per user (Flask-Limiter keyed
+  by user id, not IP).
+- **CSRF-exempt**: bearer requests bypass CSRF token validation.
+  Session cookies to the same routes still require a token — the
+  bypass fires only on `Authorization: Bearer tb_pat_...`.
+- **Refused on admin and credential routes**: even a full-scope
+  admin key returns 401 on `/admin/*`, `/auth/change-password`,
+  `/auth/api-keys/*` itself, and other credential-mutating
+  endpoints. A leaked key must not be enough for account takeover.
+- **Redacted from logs**: a root-logger filter rewrites
+  `Bearer tb_pat_<12chars>...` in every log record so leaked
+  tokens don't propagate to log aggregators.
+
+#### Audit events
+
+The following events log with an `AUDIT: api_key` prefix — useful
+for building alerting rules:
+
+| Level | Event | Emitted at |
+|---|---|---|
+| INFO | `action=create` | Successful create |
+| INFO | `action=revoke actor=X owner=X` | Self-revoke |
+| WARNING | `action=revoke actor=X owner=Y action=admin_cross_user` | Admin revoke of another user's key |
+| INFO | `expiry_hit prefix=…` | First auth attempt after expiry |
+| INFO | `scope_denied prefix=… scope=…` | Auth succeeded but scope check failed |
+| WARNING | `session_only_denied prefix=… endpoint=…` | Bearer used against a session-only endpoint |
+| WARNING | `create_rejected reason=cap` | Active-key cap hit |
+| WARNING | `create_rejected reason=scope_exceeds_owner` | Requested scope exceeds owner permissions |
+
+#### Observability integration
+
+If you add a Sentry, Datadog, or similar APM later, configure the
+following as scrub keys before enabling in staging or production:
+
+- `Authorization` header
+- `X-CSRFToken` header
+- `password`, `password_hash`, `token_hash`, `token_salt` fields
+
+The bearer redactor in `services/logging_service.py` covers Python
+logs but does not touch APM breadcrumbs.
+
+#### Relationship to inbound plugin keys
+
+Inbound stream API keys (`Stream.inbound_api_key`, used by
+`POST /api/inbound/{id}/data`) are a **separate, non-overlapping**
+mechanism. They don't carry the `tb_pat_` prefix, they're scoped
+to a single stream, and they're validated by the stream's plugin
+rather than the user-key resolver. A user API key sent to an
+inbound endpoint will fail the plugin's per-stream key check and
+return the standard 404 anti-enumeration response.
 
 ## Best Practices
 

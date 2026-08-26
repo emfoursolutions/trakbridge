@@ -603,10 +603,9 @@ def create_app(config_name=None):
     app.csrf.exempt(app.view_functions["api.convert_latlon_to_mgrs"])    # CSRF exempt: optional-auth utility; no authenticated state change
     app.csrf.exempt(app.view_functions["api.convert_mgrs_to_latlon"])    # CSRF exempt: optional-auth utility; no authenticated state change
     #
-    # routes/openapi.py — public documentation endpoints (read-only,
-    # no state change; served without authentication).
-    app.csrf.exempt(app.view_functions["openapi.spec_json"])   # CSRF exempt: read-only public documentation JSON
-    app.csrf.exempt(app.view_functions["openapi.swagger_ui"])  # CSRF exempt: read-only public documentation page
+    # routes/openapi.py — auth-gated as of the docs-auth change;
+    # GET-only handlers so CSRF isn't invoked on them anyway. Any
+    # bearer request bypasses CSRF via the app-level hook above.
 
     # Add context processors and error handlers
     setup_template_helpers(app)

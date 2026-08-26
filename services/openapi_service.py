@@ -188,10 +188,15 @@ def _register_security_schemes(spec: APISpec) -> None:
             "name": "session",
             "description": (
                 "Server-side session cookie set on login via "
-                "/auth/login. State-changing requests must also send "
-                "the CSRF token in the X-CSRFToken header (see "
-                "csrfToken scheme). Session cookies use HttpOnly and "
-                "SameSite=Lax."
+                "/auth/login. Intended for the browser UI. "
+                "State-changing requests must also send the CSRF "
+                "token in the X-CSRFToken header (see csrfToken "
+                "scheme). Session cookies use HttpOnly and "
+                "SameSite=Lax.\n\n"
+                "For scripted access, prefer `bearerAuth` with a "
+                "`tb_pat_` token from /auth/api-keys — bearer "
+                "requests bypass CSRF and can be scoped narrower "
+                "than the owning user's full role."
             ),
         },
     )
@@ -204,7 +209,10 @@ def _register_security_schemes(spec: APISpec) -> None:
             "description": (
                 "CSRF token from the <meta name='csrf-token'> element "
                 "rendered on every HTML page. Required alongside "
-                "sessionAuth for POST/PUT/PATCH/DELETE requests."
+                "sessionAuth for POST/PUT/PATCH/DELETE requests. "
+                "Not required for bearerAuth requests — the CSRF "
+                "layer bypasses tokens whose Authorization header "
+                "starts with `Bearer tb_pat_`."
             ),
         },
     )
@@ -213,10 +221,22 @@ def _register_security_schemes(spec: APISpec) -> None:
         {
             "type": "http",
             "scheme": "bearer",
-            "bearerFormat": "opaque",
+            "bearerFormat": "tb_pat",
             "description": (
-                "Opaque bearer token validated by the target stream's "
-                "inbound plugin. Used exclusively by /api/inbound."
+                "Bearer token in the Authorization header. Two "
+                "flavours share this scheme:\n\n"
+                "1. **User API keys** — self-service tokens created "
+                "at /auth/api-keys with the `tb_pat_` prefix (e.g. "
+                "`tb_pat_XXXXXXXXXXXX...`). Scoped by per-key "
+                "permission list, capped at 10 active per user, and "
+                "usable against every endpoint the user's role plus "
+                "the key's scope list jointly permit. CSRF is "
+                "bypassed for tb_pat_ bearer requests.\n\n"
+                "2. **Inbound webhook tokens** — per-stream tokens "
+                "validated by the target stream's inbound plugin. "
+                "Used exclusively by POST /api/inbound/{id}/data "
+                "and the /preview endpoints. Configured on the "
+                "stream itself; not managed through /auth/api-keys."
             ),
         },
     )
@@ -227,9 +247,11 @@ def _register_security_schemes(spec: APISpec) -> None:
             "in": "header",
             "name": "X-API-Key",
             "description": (
-                "Long-lived API key (planned). Declared where the "
-                "api_key_or_auth_required decorator is used, but "
-                "server-side validation is not yet implemented."
+                "Legacy header scheme retained for backwards "
+                "compatibility on endpoints that historically used "
+                "the api_key_or_auth_required decorator. New "
+                "integrations should use `bearerAuth` with a "
+                "`tb_pat_` token from /auth/api-keys instead."
             ),
         },
     )
