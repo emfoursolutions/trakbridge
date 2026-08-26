@@ -165,6 +165,7 @@ def test_all_session_only_routes_are_decorated(app):
 RUNTIME_PROBE_ENDPOINTS = (
     ("GET", "/admin/system_info"),
     ("GET", "/admin/plugins/"),
+    ("GET", "/admin/api-keys/"),
     ("GET", "/auth/change-password"),
     ("GET", "/auth/profile/edit"),
     ("GET", "/auth/logout"),

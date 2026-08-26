@@ -55,8 +55,12 @@
                         <td>{{ key.name }}</td>
                         <td><code class="text-mono">{{ key.prefix }}...</code></td>
                         <td>
-                            {% for scope in key.scopes %}
-                            <span class="badge bg-secondary">{{ scope }}</span>
+                            {% for group in key.scope_groups %}
+                            <span class="badge bg-secondary"
+                                  title="{{ group.actions | join(', ') }}">
+                                {{ group.resource }}
+                                <span class="text-white-50">({{ group.short }})</span>
+                            </span>
                             {% endfor %}
                         </td>
                         <td>{{ key.created_at.split('T')[0] if key.created_at else '—' }}</td>

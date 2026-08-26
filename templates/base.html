@@ -637,6 +637,11 @@
                             <i class="fas fa-key"></i>
                             <span>Key Rotation</span>
                         </a>
+                        <a class="nav-link {% if request.blueprint == 'admin_api_keys' %}active{% endif %}"
+                           href="{{ url_for('admin_api_keys.list_all_keys') }}" onclick="closeSidebarOnMobile()">
+                            <i class="fas fa-id-card"></i>
+                            <span>API Keys</span>
+                        </a>
                         <a class="nav-link {% if request.blueprint == 'plugin_admin' %}active{% endif %}"
                            href="{{ url_for('plugin_admin.plugin_list') }}" onclick="closeSidebarOnMobile()">
                             <i class="fas fa-puzzle-piece"></i>

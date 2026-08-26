@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}API Keys (Admin){% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>API Keys (Admin)</h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('admin.admin_dashboard') }}">Admin</a></li>
+                <li class="breadcrumb-item active">API Keys</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <i class="fas fa-key"></i>
+            All API keys across users
+        </h5>
+        <span class="text-muted small">
+            {{ active_count }} active / {{ total_count }} total
+        </span>
+    </div>
+    <div class="card-body p-0">
+        {% if keys %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Owner</th>
+                        <th>Name</th>
+                        <th>Prefix</th>
+                        <th>Scopes</th>
+                        <th>Created</th>
+                        <th>Last used</th>
+                        <th>Expires</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for key in keys %}
+                    <tr>
+                        <td>
+                            <strong>{{ key.owner_username }}</strong>
+                            <div class="text-muted small">{{ key.owner_role }}</div>
+                        </td>
+                        <td>{{ key.name }}</td>
+                        <td><code class="text-mono">{{ key.prefix }}...</code></td>
+                        <td>
+                            {% for group in key.scope_groups %}
+                            <span class="badge bg-secondary"
+                                  title="{{ group.actions | join(', ') }}">
+                                {{ group.resource }}
+                                <span class="text-white-50">({{ group.short }})</span>
+                            </span>
+                            {% endfor %}
+                        </td>
+                        <td>{{ key.created_at.split('T')[0] if key.created_at else '—' }}</td>
+                        <td>{{ key.last_used_at.split('T')[0] if key.last_used_at else 'never' }}</td>
+                        <td>{{ key.expires_at.split('T')[0] if key.expires_at else 'never' }}</td>
+                        <td>
+                            {% if key.is_valid %}
+                                <span class="badge bg-success">Active</span>
+                            {% elif key.revoked_at %}
+                                <span class="badge bg-danger">Revoked</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">Expired</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if key.is_valid %}
+                            <form method="POST" action="{{ url_for('admin_api_keys.revoke_any_key', key_id=key.id) }}"
+                                  class="d-inline"
+                                  onsubmit="return confirm('Revoke {{ key.owner_username }}\'s key \'{{ key.name }}\'? This cannot be undone and the user will need to create a new key.');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-outline-danger btn-sm">
+                                    <i class="fas fa-times"></i> Revoke
+                                </button>
+                            </form>
+                            {% else %}
+                            <span class="text-muted small">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-4 text-center text-muted">
+            <i class="fas fa-key fa-2x mb-2"></i>
+            <p class="mb-0">No API keys have been created yet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<p class="text-muted small mt-3 mb-0">
+    Users manage their own keys at
+    <a href="{{ url_for('api_keys.list_keys') }}">/auth/api-keys</a>.
+    Admin revocation is logged with <code>AUDIT:</code> WARNING lines
+    for downstream monitoring.
+</p>
+
+{% endblock %}

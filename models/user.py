@@ -776,6 +776,51 @@ class UserApiKey(db.Model, TimestampMixin):
             return []
         return [s for s in parsed if isinstance(s, str)]
 
+    def scope_groups(self) -> List[Dict[str, Any]]:
+        """Return scopes grouped by resource for compact UI display.
+
+        Turns ``["streams:read", "streams:write", "api:read"]`` into
+        ``[{"resource": "streams", "actions": ["read", "write"],
+            "short": "r/w"},
+           {"resource": "api", "actions": ["read"], "short": "r"}]``.
+
+        The ``short`` field collapses common action names to single
+        letters (r=read, w=write, d=delete, a=admin) so a fully-
+        granted key renders as a handful of chips instead of a wall.
+        Resources appear in the order first encountered in scope_list.
+        """
+        action_abbrev = {
+            "read": "r",
+            "write": "w",
+            "delete": "d",
+            "admin": "a",
+        }
+        seen: List[str] = []
+        buckets: Dict[str, List[str]] = {}
+        for scope in self.scope_list():
+            if ":" not in scope:
+                continue
+            resource, action = scope.split(":", 1)
+            if resource not in buckets:
+                buckets[resource] = []
+                seen.append(resource)
+            if action not in buckets[resource]:
+                buckets[resource].append(action)
+        groups: List[Dict[str, Any]] = []
+        for resource in seen:
+            actions = buckets[resource]
+            short = "/".join(
+                action_abbrev.get(a, a[:1]) for a in actions
+            )
+            groups.append(
+                {
+                    "resource": resource,
+                    "actions": actions,
+                    "short": short,
+                }
+            )
+        return groups
+
     def has_scope(self, resource: str, action: str) -> bool:
         """True when the key's scope list includes ``resource:action``."""
         return f"{resource}:{action}" in self.scope_list()
@@ -787,6 +832,7 @@ class UserApiKey(db.Model, TimestampMixin):
             "name": self.name,
             "prefix": self.token_prefix,
             "scopes": self.scope_list(),
+            "scope_groups": self.scope_groups(),
             "expires_at": (
                 self.expires_at.isoformat() if self.expires_at else None
             ),

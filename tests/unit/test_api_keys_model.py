@@ -183,6 +183,73 @@ class TestScopes:
         assert key.scope_list() == []
 
 
+class TestScopeGroups:
+    def test_groups_by_resource(self, local_user):
+        key, _ = UserApiKey.generate(
+            local_user,
+            "grouped",
+            [
+                "streams:read",
+                "streams:write",
+                "streams:delete",
+                "api:read",
+            ],
+        )
+        groups = key.scope_groups()
+        assert groups == [
+            {
+                "resource": "streams",
+                "actions": ["read", "write", "delete"],
+                "short": "r/w/d",
+            },
+            {
+                "resource": "api",
+                "actions": ["read"],
+                "short": "r",
+            },
+        ]
+
+    def test_preserves_first_seen_order(self, local_user):
+        key, _ = UserApiKey.generate(
+            local_user,
+            "ordered",
+            ["api:read", "streams:read"],
+        )
+        assert [g["resource"] for g in key.scope_groups()] == [
+            "api",
+            "streams",
+        ]
+
+    def test_empty_when_no_scopes(self, local_user):
+        key, _ = UserApiKey.generate(local_user, "empty", [])
+        assert key.scope_groups() == []
+
+    def test_ignores_malformed_scopes(self, key_pair):
+        key, _plaintext = key_pair
+        import json
+
+        key.scopes = json.dumps(
+            ["streams:read", "no-colon-scope", "api:read"]
+        )
+        groups = key.scope_groups()
+        assert [g["resource"] for g in groups] == ["streams", "api"]
+
+    def test_unknown_action_uses_first_letter(self, local_user):
+        key, _ = UserApiKey.generate(
+            local_user, "weird", ["streams:custom"]
+        )
+        assert key.scope_groups()[0]["short"] == "c"
+
+    def test_included_in_to_dict(self, local_user):
+        key, _ = UserApiKey.generate(
+            local_user, "dict test", ["streams:read", "streams:write"]
+        )
+        data = key.to_dict()
+        assert "scope_groups" in data
+        assert data["scope_groups"][0]["resource"] == "streams"
+        assert data["scope_groups"][0]["short"] == "r/w"
+
+
 class TestToDict:
     def test_never_leaks_hash_or_salt(self, key_pair):
         key, _plaintext = key_pair
