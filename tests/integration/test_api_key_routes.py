@@ -368,7 +368,14 @@ class TestRevokeKey:
         )
         key.revoke()
         db_session.commit()
-        first_revoked_at = key.revoked_at.replace(tzinfo=None)
+        # Refresh so first_revoked_at reflects what the DB actually
+        # stored (MySQL DATETIME without (6) truncates microseconds,
+        # SQLite strips tzinfo). Comparing against the in-memory
+        # value directly would fail on precision differences.
+        db_session.refresh(key)
+        first_revoked_at = key.revoked_at
+        if first_revoked_at.tzinfo is not None:
+            first_revoked_at = first_revoked_at.replace(tzinfo=None)
 
         resp = client.post(
             f"/auth/api-keys/{key.id}/revoke",
@@ -377,7 +384,8 @@ class TestRevokeKey:
         assert resp.status_code == 200
         db_session.refresh(key)
         # Second revoke does not update the timestamp (compare
-        # tz-naively — SQLite strips tzinfo on read).
+        # tz-naively; both values now come from the DB so precision
+        # is consistent regardless of backend).
         second = key.revoked_at
         if second.tzinfo is not None:
             second = second.replace(tzinfo=None)

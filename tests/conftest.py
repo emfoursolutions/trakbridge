@@ -17,13 +17,22 @@ Version: 1.0.0
 
 import os
 
-# CRITICAL: set TESTING before importing app so the module-level
-# create_app() at app.py:1355 short-circuits. Otherwise app.py boots
-# a real Flask app during test collection, tripping the production
-# API-key pepper guard when .env sets FLASK_ENV=production locally.
-os.environ.setdefault("TESTING", "1")
-# Also supply a deterministic pepper so per-test app creations don't
-# emit the ephemeral-pepper WARNING on every run.
+# Environment setup BEFORE importing app. Two constraints:
+#
+# 1. The module-level create_app() at app.py:1355 must produce a
+#    valid `app` — tests like test_rx_worker rely on
+#    `import app as flask_app` giving them a working app-context
+#    provider. Setting TESTING=1 would short-circuit that and
+#    break those tests.
+#
+# 2. But create_app() runs the API-key pepper guard, which refuses
+#    to boot in production without API_KEY_PEPPER. Locally, .env
+#    may set FLASK_ENV=production. Two mitigations:
+#      - Force FLASK_ENV=testing so the pepper guard falls to
+#        the "ephemeral" branch anyway.
+#      - Also set API_KEY_PEPPER so the ephemeral WARNING
+#        doesn't fire on every test import.
+os.environ["FLASK_ENV"] = "testing"
 os.environ.setdefault(
     "API_KEY_PEPPER",
     "test-pepper-value-at-least-32-bytes-long-xxxxx",
