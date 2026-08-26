@@ -139,6 +139,10 @@ x-secrets: &common-secrets
   TB_MASTER_KEY_FILE: "./secrets/tb_master_key"
   LDAP_BIND_PASSWORD_FILE: "./secrets/ldap_bind_password"
   OIDC_CLIENT_SECRET_FILE: "./secrets/oidc_client_secret"
+  # Pepper mixed into every UserApiKey HMAC hash. Rotating this
+  # invalidates every existing API key — treat as sensitive as
+  # TB_MASTER_KEY. Generate with: openssl rand -base64 48
+  API_KEY_PEPPER_FILE: "./secrets/api_key_pepper"
 
 services:
   # =============================================================================
@@ -162,6 +166,7 @@ services:
       - tb_master_key
       - ldap_bind_password
       - oidc_client_secret
+      - api_key_pepper
 
 
     ports:
@@ -359,3 +364,5 @@ secrets:
     file: ./secrets/ldap_bind_password
   oidc_client_secret:
     file: ./secrets/oidc_client_secret
+  api_key_pepper:
+    file: ./secrets/api_key_pepper

@@ -8,7 +8,7 @@ Created: 2026-07-16
 
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
 
-from services.auth import admin_required
+from services.auth import admin_required, session_only
 from services.auth.decorators import get_current_user
 from services.logging_service import get_module_logger
 
@@ -28,6 +28,7 @@ def _username() -> str:
 
 
 @bp.route("/")
+@session_only
 @admin_required
 def plugin_list():
     from services.license_service import get_license_service
@@ -41,6 +42,7 @@ def plugin_list():
 
 
 @bp.route("/<plugin_id>")
+@session_only
 @admin_required
 def plugin_detail(plugin_id):
     from services.license_service import get_license_service
@@ -58,6 +60,7 @@ def plugin_detail(plugin_id):
 
 
 @bp.route("/upload", methods=["POST"])
+@session_only
 @admin_required
 def upload_plugin():
     from services.plugin_admin_service import PluginInstallError, install_plugin
@@ -138,18 +141,21 @@ def _lifecycle_endpoint(plugin_id, action):
 
 
 @bp.route("/<plugin_id>/enable", methods=["POST"])
+@session_only
 @admin_required
 def enable_plugin_route(plugin_id):
     return _lifecycle_endpoint(plugin_id, "enable")
 
 
 @bp.route("/<plugin_id>/disable", methods=["POST"])
+@session_only
 @admin_required
 def disable_plugin_route(plugin_id):
     return _lifecycle_endpoint(plugin_id, "disable")
 
 
 @bp.route("/<plugin_id>/uninstall", methods=["POST"])
+@session_only
 @admin_required
 def uninstall_plugin_route(plugin_id):
     return _lifecycle_endpoint(plugin_id, "uninstall")

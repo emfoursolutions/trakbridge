@@ -5,6 +5,10 @@
 > - Interactive UI: **`/api/docs`** (Swagger UI, browse and try requests)
 > - Machine-readable spec: **`/api/openapi.json`** (feed to Postman, Insomnia, or a code generator)
 >
+> **Both require authentication** — log in via the browser UI, or send
+> a `tb_pat_` bearer token (see [Authentication](#authentication) below).
+> Anonymous requests receive a redirect to the login page.
+>
 > This document explains *concepts*: how auth works, what conventions apply
 > across all endpoints, and how to integrate against TrakBridge end-to-end.
 > Per-endpoint request/response shapes, path parameters, and status codes
@@ -31,26 +35,64 @@ All API endpoints are prefixed with `/api`:
 
 ## Authentication
 
-TrakBridge supports three authentication mechanisms. Which one applies to a
+TrakBridge supports several authentication mechanisms. Which one applies to a
 given endpoint is declared in the OpenAPI spec's `security` block per
 operation — check `/api/docs` to see what's accepted where.
 
-### 1. Session cookie + CSRF token (browser UI)
+**For scripted integrations, use user API keys (option 1).**
+
+### 1. User API key (bearer token) — recommended for integrations
+
+Self-service tokens with the `tb_pat_` prefix, created and managed at
+`/auth/api-keys` in the browser UI. Sent as
+`Authorization: Bearer tb_pat_<token>` on every request.
+
+```bash
+curl -H "Authorization: Bearer tb_pat_XXXXXXXXXXXX..." \
+  https://your-deployment/api/streams/stats
+```
+
+Key properties:
+
+- **Per-key scopes**: each key declares a subset of `resource:action`
+  permissions (e.g. `streams:read`, `api:read`). The effective permission
+  is the intersection of the owning user's role AND the key's scope list —
+  a key can never exceed its owner.
+- **Optional expiry**: set an expiry date at creation; the key auto-invalidates.
+- **Revocable at any time**: from the user's `/auth/api-keys` page (self-revoke)
+  or by an admin from `/admin/api-keys` (cross-user).
+- **Shown once, hashed at rest**: the plaintext token is displayed on the
+  reveal page immediately after creation and never stored. If you lose it,
+  revoke and create a new one.
+- **Cap of 10 active keys per user**: prevents a leaked session from
+  minting persistent backdoors. Revoked and expired keys don't count.
+- **Rate-limited creation**: 5 new keys per user per hour.
+- **CSRF-exempt**: bearer requests bypass the CSRF token requirement —
+  the token itself is unforgeable across origins.
+- **Refused on admin/credential routes**: `/admin/*`, `/auth/change-password`,
+  `/auth/api-keys/*` themselves, and other credential-mutating endpoints
+  return 401 for bearer requests regardless of scope. A leaked key must not
+  be enough for account takeover.
+
+The `Authorization` header is redacted from all log output at the root
+logger — leaked tokens don't propagate to log aggregators.
+
+### 2. Session cookie + CSRF token (browser UI)
 
 Log in via the web UI (or the `/auth/login` form) to establish a session
 cookie. For any state-changing request (`POST`, `PUT`, `PATCH`, `DELETE`),
 the CSRF token from the `<meta name="csrf-token">` tag on every rendered
 page must also be sent in the `X-CSRFToken` header.
 
-This is the *internal* auth path — designed for the browser UI, not
-external integrators. If you're scripting against TrakBridge you almost
-certainly want one of the other two mechanisms.
+This is the *internal* browser-UI path. If you're scripting against
+TrakBridge, use a user API key instead (option 1).
 
-### 2. Bearer token (inbound webhooks)
+### 3. Bearer token (inbound webhooks)
 
-Used exclusively by `POST /api/inbound/{stream_id}/data`. The token is
-per-stream, generated when the inbound stream is configured, and validated
-by the stream's plugin (`plugin.validate_inbound_request`).
+Used exclusively by `POST /api/inbound/{stream_id}/data` and the
+`/preview` endpoints. The token is **per-stream**, generated when the
+inbound stream is configured, and validated by the stream's plugin
+(`plugin.validate_inbound_request`).
 
 ```bash
 curl -X POST https://your-deployment/api/inbound/5/data \
@@ -63,16 +105,21 @@ Failed auth returns the same `404 Not Found` response as a missing stream
 — this is intentional (anti-enumeration) so external callers cannot probe
 for valid stream ids.
 
+**Inbound plugin keys are separate from user API keys.** They do not carry
+the `tb_pat_` prefix, they're scoped to a single stream, and they can't
+grant blanket API access. A user API key sent to an inbound endpoint will
+fail the plugin's per-stream key check.
+
 Generate a new inbound key via `POST /api/inbound/generate-api-key`
 (requires `streams:write` permission — accessed through the browser UI).
 
-### 3. API key (`X-API-Key`) — planned
+### 4. Legacy `X-API-Key` header
 
-The `X-API-Key` header scheme is **declared** in the OpenAPI spec but
-**not yet implemented server-side**. The `@api_key_or_auth_required`
-decorator currently falls through to session auth when an `X-API-Key`
-header is present. Do not depend on this scheme yet; it will be finished
-in a follow-up release.
+Retained for backwards compatibility with a handful of routes that
+historically used the `@api_key_or_auth_required` decorator. Behaviour
+is now functionally equivalent to session auth. **New integrations
+should use option 1** — the bearer/`tb_pat_` scheme has proper scoping,
+expiry, and revocation.
 
 ## Base conventions
 

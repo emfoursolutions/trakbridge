@@ -54,6 +54,7 @@ from services.auth import (
     get_current_user,
     logout_user,
     require_auth,
+    session_only,
 )
 from services.auth.base_provider import AuthenticationResult
 
@@ -378,6 +379,7 @@ def oidc_callback():
 
 
 @bp.route("/logout")
+@session_only
 def logout():
     """
     Log out current user
@@ -404,6 +406,7 @@ def profile():
 
 
 @bp.route("/profile/edit", methods=["GET", "POST"])
+@session_only
 @require_auth
 def edit_profile():
     """
@@ -444,6 +447,7 @@ def edit_profile():
 
 
 @bp.route("/change-password", methods=["GET", "POST"])
+@session_only
 @require_auth
 def change_password():
     """
@@ -508,6 +512,7 @@ def change_password():
 
 
 @bp.route("/admin/users")
+@session_only
 @admin_required
 def admin_users():
     """
@@ -523,6 +528,7 @@ def admin_users():
 
 
 @bp.route("/admin/users/<int:user_id>")
+@session_only
 @admin_required
 def admin_user_detail(user_id):
     """
@@ -539,6 +545,7 @@ def admin_user_detail(user_id):
 
 
 @bp.route("/admin/users/<int:user_id>/disable", methods=["POST"])
+@session_only
 @admin_required
 def admin_disable_user(user_id):
     """
@@ -580,6 +587,7 @@ def admin_disable_user(user_id):
 
 
 @bp.route("/admin/users/<int:user_id>/enable", methods=["POST"])
+@session_only
 @admin_required
 def admin_enable_user(user_id):
     """
@@ -612,6 +620,7 @@ def admin_enable_user(user_id):
 
 
 @bp.route("/admin/users/create", methods=["GET", "POST"])
+@session_only
 @admin_required
 def admin_create_user():
     """
@@ -695,6 +704,7 @@ def admin_create_user():
 
 
 @bp.route("/admin/users/<int:user_id>/edit", methods=["GET", "POST"])
+@session_only
 @admin_required
 def admin_edit_user(user_id):
     """
@@ -775,6 +785,7 @@ def admin_edit_user(user_id):
 
 
 @bp.route("/admin/users/<int:user_id>/reset-password", methods=["POST"])
+@session_only
 @admin_required
 def admin_reset_password(user_id):
     """
@@ -829,6 +840,7 @@ def admin_reset_password(user_id):
 
 
 @bp.route("/force-password-change", methods=["GET", "POST"])
+@session_only
 def force_password_change():
     """
     Force password change for users who need to update their password
@@ -945,6 +957,7 @@ def check_session():
 
 
 @bp.route("/api/logout", methods=["POST"])
+@session_only
 def api_logout():
     """
     API endpoint for logout

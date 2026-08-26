@@ -42,6 +42,7 @@ from .decorators import (
     require_auth,
     require_permission,
     require_role,
+    session_only,
 )
 from .ldap_provider import LDAPAuthProvider
 
@@ -69,6 +70,7 @@ __all__ = [
     "api_key_or_auth_required",
     "optional_auth",
     "login_required_json",
+    "session_only",
     "get_current_user",
     "is_authenticated",
     "logout_user",

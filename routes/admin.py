@@ -42,7 +42,7 @@ from flask import (
 )
 
 # Authentication imports
-from services.auth import admin_required
+from services.auth import admin_required, session_only
 
 # Local application imports
 from services.key_rotation_service import get_key_rotation_service
@@ -60,6 +60,7 @@ start_time = time.time()
 
 
 @bp.route("/system_info")
+@session_only
 @admin_required
 def admin_dashboard():
     from database import db
@@ -93,6 +94,7 @@ def admin_dashboard():
 
 
 @bp.route("/about")
+@session_only
 @admin_required
 def admin_about():
     from services.license_service import get_license_service
@@ -108,6 +110,7 @@ MAX_LICENSE_UPLOAD_BYTES = 16 * 1024
 
 
 @bp.route("/license/install", methods=["POST"])
+@session_only
 @admin_required
 def install_license_route():
     """Install a signed licence file supplied by paste or upload."""
@@ -155,6 +158,7 @@ def install_license_route():
 
 
 @bp.route("/key-rotation")
+@session_only
 @admin_required
 def key_rotation_page():
     """Key rotation management page"""
@@ -178,6 +182,7 @@ def key_rotation_page():
 
 
 @bp.route("/key-rotation/start", methods=["POST"])
+@session_only
 @admin_required
 def start_key_rotation():
     """Start key rotation process"""
@@ -201,6 +206,7 @@ def start_key_rotation():
 
 
 @bp.route("/key-rotation/status")
+@session_only
 @admin_required
 def get_rotation_status():
     """Get current rotation status"""
@@ -214,6 +220,7 @@ def get_rotation_status():
 
 
 @bp.route("/key-rotation/restart-info")
+@session_only
 @admin_required
 def get_restart_info():
     """Get application restart information"""
