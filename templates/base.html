@@ -670,7 +670,15 @@
                         <span>Profile</span>
                     </a>
                 </div>
-                
+
+                <div class="nav-section">
+                    <a class="nav-link {% if request.blueprint == 'api_keys' %}active{% endif %}"
+                       href="{{ url_for('api_keys.list_keys') }}" onclick="closeSidebarOnMobile()">
+                        <i class="fas fa-key"></i>
+                        <span>API Keys</span>
+                    </a>
+                </div>
+
                 <div class="nav-section">
                     <a class="nav-link" href="{{ url_for('auth.logout') }}" onclick="closeSidebarOnMobile()">
                         <i class="fas fa-sign-out-alt"></i>

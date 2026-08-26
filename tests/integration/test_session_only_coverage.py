@@ -85,6 +85,7 @@ def admin_bearer(admin_user):
 SESSION_ONLY_PREFIXES = (
     "/admin/",           # routes/admin.py, plugin_admin.py, cot_types.py
     "/auth/admin/",      # user management under auth blueprint
+    "/auth/api-keys",    # self-service API key management
     "/auth/change-password",
     "/auth/force-password-change",
     "/auth/profile/edit",
@@ -168,6 +169,7 @@ RUNTIME_PROBE_ENDPOINTS = (
     ("GET", "/auth/profile/edit"),
     ("GET", "/auth/logout"),
     ("GET", "/auth/admin/users"),
+    ("GET", "/auth/api-keys/"),
 )
 
 

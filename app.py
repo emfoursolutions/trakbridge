@@ -560,6 +560,7 @@ def create_app(config_name=None):
     # Register blueprints
     from routes.admin import bp as admin_bp
     from routes.api import bp as api_bp
+    from routes.api_keys import bp as api_keys_bp
     from routes.auth import bp as auth_bp
     from routes.cot_types import bp as cot_types_bp
     from routes.main import bp as main_bp
@@ -582,6 +583,7 @@ def create_app(config_name=None):
     app.register_blueprint(cot_types_bp, url_prefix="/admin")
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(auth_bp, url_prefix="/auth")
+    app.register_blueprint(api_keys_bp, url_prefix="/auth/api-keys")
     app.register_blueprint(inbound_bp, url_prefix="/api/inbound")
     app.register_blueprint(openapi_bp, url_prefix="/api")
 

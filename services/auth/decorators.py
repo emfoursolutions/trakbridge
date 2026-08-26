@@ -647,7 +647,14 @@ def get_user_permissions(user: User = None) -> Dict[str, List[str]]:
         return {}
 
     permissions = {}
-    resources = ["streams", "tak_servers", "admin", "api", "profile"]
+    resources = [
+        "streams",
+        "tak_servers",
+        "admin",
+        "api",
+        "profile",
+        "api_keys",
+    ]
     actions = ["read", "write", "delete", "admin"]
 
     for resource in resources:

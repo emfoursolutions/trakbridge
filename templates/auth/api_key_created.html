@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}API Key Created{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>API Key Created</h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('auth.profile') }}">Profile</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('api_keys.list_keys') }}">API Keys</a></li>
+                <li class="breadcrumb-item active">Created</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="alert alert-warning">
+    <h5 class="alert-heading">
+        <i class="fas fa-exclamation-triangle"></i>
+        Save this token now
+    </h5>
+    <p class="mb-0">
+        <strong>{{ key.warning }}</strong>
+        Once you leave this page the plaintext token is gone — TrakBridge
+        stores only a one-way hash. If you lose it, revoke this key and
+        create a new one.
+    </p>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-key"></i> {{ key.name }}</h5>
+    </div>
+    <div class="card-body">
+        <div class="mb-3">
+            <label class="form-label"><strong>Token</strong></label>
+            <div class="input-group">
+                <input type="text" class="form-control text-mono"
+                       id="apiKeyToken" value="{{ key.token }}"
+                       readonly onclick="this.select();">
+                <button class="btn btn-outline-primary" type="button"
+                        id="copyTokenBtn"
+                        onclick="copyToken()">
+                    <i class="fas fa-copy"></i> Copy
+                </button>
+            </div>
+            <div class="form-text">
+                Use as <code>Authorization: Bearer &lt;token&gt;</code>
+                in your HTTP requests.
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-sm-3"><strong>Prefix:</strong></div>
+            <div class="col-sm-9"><code class="text-mono">{{ key.prefix }}...</code>
+                <small class="text-muted">(shown in the key list to identify this key)</small>
+            </div>
+        </div>
+
+        <div class="row mt-2">
+            <div class="col-sm-3"><strong>Scopes:</strong></div>
+            <div class="col-sm-9">
+                {% for scope in key.scopes %}
+                <span class="badge bg-secondary">{{ scope }}</span>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="row mt-2">
+            <div class="col-sm-3"><strong>Expires:</strong></div>
+            <div class="col-sm-9">
+                {% if key.expires_at %}
+                    {{ key.expires_at }}
+                {% else %}
+                    <span class="text-muted">never</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-code"></i> Quick example</h5>
+    </div>
+    <div class="card-body">
+        <pre class="text-mono mb-0"><code>curl -H "Authorization: Bearer &lt;token&gt;" \
+  {{ request.host_url.rstrip('/') }}/api/streams/stats</code></pre>
+    </div>
+</div>
+
+<div class="d-flex justify-content-end">
+    <a href="{{ url_for('api_keys.list_keys') }}" class="btn btn-primary">
+        <i class="fas fa-check"></i> Done, I've saved it
+    </a>
+</div>
+
+<script>
+function copyToken() {
+    const input = document.getElementById('apiKeyToken');
+    const btn = document.getElementById('copyTokenBtn');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(input.value).then(function () {
+            btn.innerHTML = '<i class="fas fa-check"></i> Copied';
+            setTimeout(function () {
+                btn.innerHTML = '<i class="fas fa-copy"></i> Copy';
+            }, 2000);
+        });
+    } else {
+        // Fallback for older browsers
+        input.select();
+        document.execCommand('copy');
+        btn.innerHTML = '<i class="fas fa-check"></i> Copied';
+        setTimeout(function () {
+            btn.innerHTML = '<i class="fas fa-copy"></i> Copy';
+        }, 2000);
+    }
+}
+</script>
+
+{% endblock %}
