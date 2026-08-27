@@ -119,3 +119,27 @@ class TestMakePluginCircuitBreaker:
 
         with pytest.raises(ValueError, match="boom"):
             await breaker.call(_healthy)
+
+
+class TestConsecutiveFailureSemantics:
+    @pytest.mark.asyncio
+    async def test_plugin_breaker_trips_on_consecutive_failures_only(self):
+        """Intermittently-flaky plugin APIs (fail, succeed, fail, ...) must
+        not accumulate lifetime failures into a trip; only consecutive
+        failures count. Mirrors the core S1 fix through the SDK wrapper."""
+        breaker = make_plugin_circuit_breaker("test_consecutive_plugin", _healthy)
+
+        async def flaky_fail():
+            raise RuntimeError("api hiccup")
+
+        async def ok():
+            return "ok"
+
+        # threshold defaults to 3; interleave so failures never run 3 deep
+        for _ in range(4):
+            with pytest.raises(RuntimeError):
+                await breaker.call(flaky_fail)
+            assert await breaker.call(ok) == "ok"
+
+        # A healthy call must still be admitted (breaker never opened)
+        assert await breaker.call(ok) == "ok"

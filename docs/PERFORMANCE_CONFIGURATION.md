@@ -222,6 +222,31 @@ Environment variables take precedence over file-based configuration.
 - **Impact**: Affects how quickly system attempts to recover from failures
 - **Tuning**: Match to typical recovery times for infrastructure
 
+#### `timeout` (float, default: 30.0)
+- **Purpose**: Per-call timeout for operations protected by the breaker (seconds)
+
+#### `half_open_max_calls` (integer, default: 3 for TAK breakers)
+- **Purpose**: Maximum concurrent probes while the breaker is testing recovery
+- **Note**: `success_threshold` must not exceed this value
+
+#### `success_threshold` (integer, default: 2 for TAK breakers)
+- **Purpose**: Successes required to close the circuit from HALF_OPEN
+- **Behavior**: Healthy health-check probes while HALF_OPEN also count
+
+#### `health_check_interval` (float, default: 30.0)
+- **Purpose**: Seconds between health-check probes while a breaker is OPEN or HALF_OPEN
+- **Impact**: Each TAK-server probe opens one real test connection per interval
+
+#### Breaker scope
+- TAK-server breakers gate **connection establishment only**. Write failures on
+  an established socket cause the worker to abandon the connection and
+  reconnect (with backoff); recovery is proven by a fresh connection.
+- `failure_threshold` counts **consecutive** failures; intermittent failures
+  spread across successful calls do not accumulate into a trip.
+- Streams no longer auto-deactivate after consecutive poll errors; they retry
+  with capped backoff (5 minutes max) and surface the outage via the stream's
+  `last_error` field.
+
 ### Monitoring Configuration
 
 #### `track_fallback_statistics` (boolean, default: true)

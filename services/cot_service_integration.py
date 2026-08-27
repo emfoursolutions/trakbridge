@@ -32,6 +32,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from lxml import etree
+from services.circuit_breaker import CircuitOpenError
 from services.logging_service import get_module_logger
 from services.queue_manager import get_queue_manager, reset_queue_manager
 from services.queue_monitoring import get_queue_monitoring_service
@@ -1323,16 +1324,12 @@ class QueuedCOTService:
                     f"Worker thread started: server_id={tak_server_id}, server_name={tak_server.name}, timestamp={datetime.now()}"
                 )
 
-                # Reset circuit breaker before connection attempt so stale
-                # OPEN state from a previous failure doesn't block reconnection
-                try:
-                    circuit_breaker = self._get_tak_circuit_breaker(tak_server_id)
-                    if circuit_breaker:
-                        await circuit_breaker.manual_reset()
-                except Exception:
-                    pass
-
-                # Create PyTAK connection (reusing existing logic)
+                # Create PyTAK connection (reusing existing logic). The
+                # circuit breaker gates this attempt; while it is OPEN the
+                # call fast-fails to None and the backoff sleep below paces
+                # retries until the breaker's recovery window admits one.
+                # Operator-action resets live in stop_worker and
+                # start_worker's dead-worker cleanup, NOT here.
                 connection = await self._create_pytak_connection(tak_server)
                 if not connection:
                     logger.warning(
@@ -2228,6 +2225,14 @@ class QueuedCOTService:
             error_msg = f"Timeout connecting to TAK server {tak_server.name}"
             logger.error(error_msg)
             return None
+        except CircuitOpenError as e:
+            # Expected fast-fail while the breaker gates reconnection attempts;
+            # the worker's backoff loop will retry after the recovery window.
+            logger.warning(
+                f"Circuit breaker open for TAK server {tak_server.name}, "
+                f"skipping connection attempt: {e}"
+            )
+            return None
         except Exception as e:
             error_msg = f"Failed to connect to TAK server {tak_server.name}: {e}"
             logger.error(error_msg)
@@ -2289,7 +2294,11 @@ class QueuedCOTService:
 
     async def _transmit_batch(self, batch: List[bytes], connection, tak_server) -> bool:
         """
-        Transmit a batch of events to the TAK server with circuit breaker protection.
+        Transmit a batch of events to the TAK server.
+
+        The circuit breaker does NOT wrap this path: it gates connection
+        establishment only. Socket health is signalled by exceptions so the
+        TX loop can break and the worker can reconnect.
 
         Args:
             batch: List of COT event bytes
@@ -2297,13 +2306,15 @@ class QueuedCOTService:
             tak_server: TAK server configuration
 
         Returns:
-            True if transmission successful
+            True if transmission logically succeeded, False on non-socket
+            failures (e.g. unusable connection object).
+
+        Raises:
+            ConnectionError, OSError, ssl.SSLError: the socket is dead; the
+            caller must abandon this connection and reconnect.
         """
         if not batch:
             return True
-
-        # Get circuit breaker for this TAK server
-        circuit_breaker = self._get_tak_circuit_breaker(tak_server.id)
 
         async def _do_transmission():
             # Handle the case where connection might be a tuple (reader, writer)
@@ -2379,28 +2390,10 @@ class QueuedCOTService:
 
             return batch_success
 
-        try:
-            if circuit_breaker:
-                # Use circuit breaker to protect transmission
-                return await circuit_breaker.call(_do_transmission)
-            else:
-                # Fallback to direct transmission if circuit breaker not available
-                logger.debug(
-                    f"Circuit breaker not available for TAK server {tak_server.id}, using direct transmission"
-                )
-                return await _do_transmission()
-
-        except Exception as e:
-            from services.circuit_breaker import CircuitOpenError
-
-            if isinstance(e, CircuitOpenError):
-                logger.warning(
-                    f"Circuit breaker is OPEN for TAK server {tak_server.name}: {e}"
-                )
-                return False
-            else:
-                logger.error(f"Failed to transmit batch to {tak_server.name}: {e}")
-                return False
+        # Socket errors propagate to the TX loop, which breaks so the worker
+        # abandons the dead connection and reconnects. Per-event non-socket
+        # errors are absorbed into the bool result by _do_transmission itself.
+        return await _do_transmission()
 
     async def _cleanup_connection(self, connection):
         """Cleanup PyTAK connection"""

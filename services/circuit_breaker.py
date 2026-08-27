@@ -25,6 +25,7 @@ Created: 2025-09-27
 """
 
 import asyncio
+import inspect
 import logging
 import random
 import time
@@ -65,6 +66,14 @@ class CircuitBreakerConfig:
     # Metrics configuration
     metrics_window_size: int = 100  # Number of recent calls to track
     metrics_reset_interval: float = 3600.0  # Reset metrics every hour
+
+    def __post_init__(self):
+        if self.success_threshold > self.half_open_max_calls:
+            raise ValueError(
+                f"success_threshold ({self.success_threshold}) must not exceed "
+                f"half_open_max_calls ({self.half_open_max_calls}); the circuit "
+                f"could never accumulate enough successes to close"
+            )
 
 
 @dataclass
@@ -170,21 +179,26 @@ class CircuitBreaker:
             **kwargs: Keyword arguments for the function
 
         Returns:
-            Function result if successful
+            Function result if successful. Return values are not
+            interpreted — a returned False still counts as a successful
+            call. Protected functions must RAISE to signal failure.
 
         Raises:
             CircuitOpenError: If circuit is open and blocking calls
             Any exception raised by the protected function
         """
+        admitted_half_open = False
         async with self.lock:
             # Check if we should allow this call
             if not await self._should_allow_call():
                 next_attempt = self._calculate_next_attempt_time()
                 raise CircuitOpenError(self.service_name, next_attempt)
 
-            # Track half-open state calls
+            # Track half-open state calls (in-flight probes; slot is
+            # refunded in the finally below when the call completes)
             if self.state == CircuitBreakerState.HALF_OPEN:
                 self.half_open_calls += 1
+                admitted_half_open = True
 
         # Execute the function with timeout and metrics
         start_time = time.time()
@@ -214,6 +228,10 @@ class CircuitBreaker:
             raise
 
         finally:
+            if admitted_half_open:
+                async with self.lock:
+                    self.half_open_calls = max(0, self.half_open_calls - 1)
+
             # Record call metrics
             call_record = CallRecord(
                 timestamp=datetime.now(timezone.utc),
@@ -274,7 +292,9 @@ class CircuitBreaker:
             )
 
             if self.state == CircuitBreakerState.CLOSED:
-                if self.failure_count >= self.config.failure_threshold:
+                # Trip on consecutive failures only; failure_count is a
+                # lifetime metric surfaced via get_status() for dashboards.
+                if self.consecutive_failures >= self.config.failure_threshold:
                     await self._transition_to_open()
             elif self.state == CircuitBreakerState.HALF_OPEN:
                 # Any failure in half-open state transitions back to open
@@ -389,33 +409,49 @@ class CircuitBreaker:
         if self.health_check_task is None or self.health_check_task.done():
             self.health_check_task = asyncio.create_task(self._health_check_loop())
 
+    async def _run_health_check(self) -> bool:
+        """Invoke the health check function, supporting async callables,
+        sync callables returning a bool, and sync callables returning an
+        awaitable (e.g. a lambda wrapping a coroutine function)."""
+        result = self.health_check_function()
+        if inspect.isawaitable(result):
+            result = await asyncio.wait_for(
+                result, timeout=self.config.health_check_timeout
+            )
+        return bool(result)
+
     async def _health_check_loop(self):
-        """Periodic health check loop"""
+        """Periodic health check loop; probes while OPEN or HALF_OPEN"""
         while True:
             try:
                 await asyncio.sleep(self.config.health_check_interval)
 
-                if (
-                    self.health_check_function
-                    and self.state == CircuitBreakerState.OPEN
+                if self.health_check_function and self.state in (
+                    CircuitBreakerState.OPEN,
+                    CircuitBreakerState.HALF_OPEN,
                 ):
                     try:
-                        is_healthy = await asyncio.wait_for(
-                            self.health_check_function(),
-                            timeout=self.config.health_check_timeout,
-                        )
+                        is_healthy = await self._run_health_check()
 
                         if is_healthy:
-                            async with self.lock:
-                                if self.state == CircuitBreakerState.OPEN:
-                                    await self._transition_to_half_open()
-                                    logger.info(
-                                        f"Health check passed for {self.service_name}, "
-                                        f"transitioning to HALF_OPEN"
-                                    )
+                            if self.state == CircuitBreakerState.HALF_OPEN:
+                                # A healthy probe is evidence of recovery;
+                                # count it toward success_threshold so the
+                                # breaker can close even when real traffic
+                                # (e.g. one reconnect) supplies fewer
+                                # successes than the threshold requires.
+                                await self._record_success(0.0)
+                            else:
+                                async with self.lock:
+                                    if self.state == CircuitBreakerState.OPEN:
+                                        await self._transition_to_half_open()
+                                        logger.info(
+                                            f"Health check passed for {self.service_name}, "
+                                            f"transitioning to HALF_OPEN"
+                                        )
 
                     except Exception as e:
-                        logger.debug(
+                        logger.error(
                             f"Health check failed for {self.service_name}: {e}"
                         )
 

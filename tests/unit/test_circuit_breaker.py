@@ -684,3 +684,300 @@ class TestCircuitBreakerErrors:
         err = CircuitOpenError("svc", datetime.now(timezone.utc))
         assert isinstance(err, CircuitBreakerError)
         assert isinstance(err, Exception)
+
+
+class TestConsecutiveFailureTripping:
+    """
+    Tripping must require CONSECUTIVE failures, not a lifetime cumulative
+    count. Three failures spread across days of otherwise-healthy operation
+    must not open the circuit.
+    """
+
+    @pytest.mark.asyncio
+    async def test_intermittent_failures_do_not_trip(self):
+        cb = CircuitBreaker("test-svc", TEST_CONFIG)
+        for _ in range(5):
+            with pytest.raises(RuntimeError):
+                await cb.call(async_failure)
+            await cb.call(async_success)
+        assert cb.state == CircuitBreakerState.CLOSED
+
+    @pytest.mark.asyncio
+    async def test_consecutive_failures_trip(self):
+        cb = CircuitBreaker("test-svc", TEST_CONFIG)
+        for _ in range(3):
+            with pytest.raises(RuntimeError):
+                await cb.call(async_failure)
+        assert cb.state == CircuitBreakerState.OPEN
+
+    @pytest.mark.asyncio
+    async def test_success_resets_trip_counter(self):
+        cb = CircuitBreaker("test-svc", TEST_CONFIG)
+        for _ in range(2):
+            with pytest.raises(RuntimeError):
+                await cb.call(async_failure)
+        await cb.call(async_success)
+        for _ in range(2):
+            with pytest.raises(RuntimeError):
+                await cb.call(async_failure)
+        assert cb.state == CircuitBreakerState.CLOSED
+        with pytest.raises(RuntimeError):
+            await cb.call(async_failure)
+        assert cb.state == CircuitBreakerState.OPEN
+
+    @pytest.mark.asyncio
+    async def test_get_status_still_reports_failure_count(self):
+        cb = CircuitBreaker("test-svc", TEST_CONFIG)
+        with pytest.raises(RuntimeError):
+            await cb.call(async_failure)
+        await cb.call(async_success)
+        status = cb.get_status()
+        assert status["failure_count"] == 1
+        assert status["consecutive_failures"] == 0
+
+
+class TestHalfOpenCallAccounting:
+    """
+    half_open_calls must count in-flight probes, refunded on completion —
+    otherwise sequential healthy probes are starved by CircuitOpenError
+    before success_threshold can ever be reached.
+    """
+
+    @pytest.mark.asyncio
+    async def test_half_open_slots_refunded_after_completion(self):
+        config = CircuitBreakerConfig(
+            failure_threshold=3,
+            recovery_timeout=0.05,
+            half_open_max_calls=2,
+            success_threshold=2,
+            jitter_enabled=False,
+        )
+        cb = CircuitBreaker("test-svc", config)
+        for _ in range(3):
+            with pytest.raises(RuntimeError):
+                await cb.call(async_failure)
+        assert cb.state == CircuitBreakerState.OPEN
+        await asyncio.sleep(0.06)
+
+        await cb.call(async_success)
+        assert cb.half_open_calls == 0, (
+            "completed probe still holds a half-open slot"
+        )
+
+    @pytest.mark.asyncio
+    async def test_completed_probe_does_not_starve_concurrent_caller(self):
+        # half_open_calls must mean "in flight". A COMPLETED probe must not
+        # keep holding a slot, or healthy concurrent callers get
+        # CircuitOpenError during recovery (several streams share one
+        # TAK-server breaker in production).
+        config = CircuitBreakerConfig(
+            failure_threshold=3,
+            recovery_timeout=0.05,
+            half_open_max_calls=2,
+            success_threshold=2,
+            jitter_enabled=False,
+        )
+        cb = CircuitBreaker("test-svc", config)
+        for _ in range(3):
+            with pytest.raises(RuntimeError):
+                await cb.call(async_failure)
+        await asyncio.sleep(0.06)
+
+        gate = asyncio.Event()
+
+        async def slow_probe():
+            await gate.wait()
+            return "slow_ok"
+
+        # Probe A: in flight, legitimately holds one of the two slots.
+        task_a = asyncio.create_task(cb.call(slow_probe))
+        await asyncio.sleep(0.01)
+        # Probe B: completes immediately — its slot must be refunded.
+        assert await cb.call(async_success) == "ok"
+        # Probe C: one slot is genuinely held (A); B's must be free again.
+        result_c = await cb.call(async_success)
+        assert result_c == "ok"
+        assert cb.state == CircuitBreakerState.CLOSED
+
+        gate.set()
+        await task_a
+
+    def test_config_validation_success_threshold_exceeds_half_open_max(self):
+        with pytest.raises(ValueError):
+            CircuitBreakerConfig(half_open_max_calls=2, success_threshold=3)
+
+
+class TestHealthCheckLoop:
+    """
+    The health check loop must probe in OPEN *and* HALF_OPEN, tolerate sync
+    callables, and surface crashes at ERROR (not silently at DEBUG).
+    """
+
+    def _config(self):
+        return CircuitBreakerConfig(
+            failure_threshold=3,
+            recovery_timeout=3600.0,
+            health_check_interval=0.05,
+            health_check_timeout=1.0,
+            jitter_enabled=False,
+        )
+
+    @pytest.mark.asyncio
+    async def test_health_check_probes_in_half_open(self):
+        cb = CircuitBreaker("test-svc", self._config())
+        calls = []
+
+        async def healthy():
+            calls.append(1)
+            return True
+
+        try:
+            cb.state = CircuitBreakerState.HALF_OPEN
+            cb.set_health_check(healthy)
+            await asyncio.sleep(0.15)
+            assert calls, "health check never probed while HALF_OPEN"
+        finally:
+            await cb.cleanup()
+
+    @pytest.mark.asyncio
+    async def test_health_check_supports_sync_callable(self):
+        cb = CircuitBreaker("test-svc", self._config())
+        try:
+            await cb.force_open()
+            cb.set_health_check(lambda: True)
+            await asyncio.sleep(0.15)
+            assert cb.state == CircuitBreakerState.HALF_OPEN, (
+                "sync health check crashed instead of transitioning OPEN->HALF_OPEN"
+            )
+        finally:
+            await cb.cleanup()
+
+    @pytest.mark.asyncio
+    async def test_health_check_crash_logged_at_error(self, caplog):
+        import logging as _logging
+
+        cb = CircuitBreaker("test-svc", self._config())
+
+        async def broken():
+            raise RuntimeError("probe exploded")
+
+        try:
+            await cb.force_open()
+            cb.set_health_check(broken)
+            caplog.clear()  # discard force_open's own OPENED log
+            with caplog.at_level(_logging.ERROR):
+                await asyncio.sleep(0.15)
+            error_msgs = [
+                r.message
+                for r in caplog.records
+                if r.levelno >= _logging.ERROR and "test-svc" in r.message
+            ]
+            assert error_msgs, "health check crash was not logged at ERROR"
+            assert cb.state == CircuitBreakerState.OPEN
+        finally:
+            await cb.cleanup()
+
+    @pytest.mark.asyncio
+    async def test_health_check_noop_when_closed(self):
+        cb = CircuitBreaker("test-svc", self._config())
+        calls = []
+
+        async def healthy():
+            calls.append(1)
+            return True
+
+        try:
+            cb.set_health_check(healthy)
+            await asyncio.sleep(0.15)
+            assert not calls, "health check probed while CLOSED"
+        finally:
+            await cb.cleanup()
+
+
+class TestHalfOpenHealthCheckSuccess:
+    """
+    With the breaker gating connections only, a single reconnect records one
+    success — below success_threshold. Healthy health-check ticks in
+    HALF_OPEN must also record successes, or the breaker idles in HALF_OPEN
+    forever despite a proven-healthy service.
+    """
+
+    def _config(self):
+        return CircuitBreakerConfig(
+            failure_threshold=3,
+            recovery_timeout=0.05,
+            half_open_max_calls=3,
+            success_threshold=2,
+            health_check_interval=0.05,
+            health_check_timeout=1.0,
+            jitter_enabled=False,
+        )
+
+    @pytest.mark.asyncio
+    async def test_half_open_health_success_records_success(self):
+        cb = CircuitBreaker("test-svc", self._config())
+
+        async def healthy():
+            return True
+
+        try:
+            cb.state = CircuitBreakerState.HALF_OPEN
+            cb.success_count = 1  # one real success already recorded
+            cb.set_health_check(healthy)
+            for _ in range(40):
+                await asyncio.sleep(0.02)
+                if cb.state == CircuitBreakerState.CLOSED:
+                    break
+            assert cb.state == CircuitBreakerState.CLOSED, (
+                "healthy health-check ticks did not close a HALF_OPEN circuit"
+            )
+        finally:
+            await cb.cleanup()
+
+    @pytest.mark.asyncio
+    async def test_single_reconnect_plus_health_check_closes(self):
+        """The production recovery sequence, end to end:
+        OPEN -> recovery timeout -> HALF_OPEN via one successful call (the
+        reconnect) -> health tick supplies the second success -> CLOSED."""
+        cb = CircuitBreaker("test-svc", self._config())
+
+        async def healthy():
+            return True
+
+        try:
+            cb.set_health_check(healthy)
+            for _ in range(3):
+                with pytest.raises(RuntimeError):
+                    await cb.call(async_failure)
+            assert cb.state == CircuitBreakerState.OPEN
+
+            await asyncio.sleep(0.06)  # recovery window passes
+            await cb.call(async_success)  # the reconnect: one success
+
+            for _ in range(40):
+                await asyncio.sleep(0.02)
+                if cb.state == CircuitBreakerState.CLOSED:
+                    break
+            assert cb.state == CircuitBreakerState.CLOSED, (
+                "breaker never closed after successful reconnect + healthy checks"
+            )
+        finally:
+            await cb.cleanup()
+
+
+class TestReturnValueSemantics:
+    """call() must not interpret return values; failure is signalled by
+    raising. Pinned deliberately: consumers whose operations report failure
+    via return codes must raise instead of returning falsey values."""
+
+    @pytest.mark.asyncio
+    async def test_falsey_return_is_success(self):
+        cb = CircuitBreaker("test-svc", TEST_CONFIG)
+
+        async def returns_false():
+            return False
+
+        for _ in range(TEST_CONFIG.failure_threshold + 1):
+            assert await cb.call(returns_false) is False
+        assert cb.state == CircuitBreakerState.CLOSED
+        assert cb.consecutive_failures == 0

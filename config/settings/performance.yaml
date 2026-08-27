@@ -22,16 +22,30 @@ parallel_processing:
   # Enable detailed performance logging
   enable_performance_logging: true
 
-# Circuit breaker configuration for fault tolerance
+# Circuit breaker configuration for fault tolerance.
+# The breaker gates TAK connection establishment (not individual writes);
+# recovery is proven by a fresh connection plus health-check probes.
 circuit_breaker:
   # Number of consecutive failures before opening circuit
   failure_threshold: 3
-  
+
   # Time to wait before attempting to close circuit (seconds)
   recovery_timeout: 60.0
-  
+
   # Enable circuit breaker pattern
   enabled: true
+
+  # Additional supported overrides (defaults shown; uncomment to change):
+  # Per-call timeout in seconds
+  # timeout: 30.0
+  # Max concurrent probes while testing recovery (HALF_OPEN)
+  # half_open_max_calls: 3
+  # Successes needed to close the circuit; must not exceed
+  # half_open_max_calls
+  # success_threshold: 2
+  # Seconds between health-check probes. While a TAK breaker is OPEN or
+  # HALF_OPEN this opens one real test connection per interval per server.
+  # health_check_interval: 30.0
 
 # Performance monitoring and statistics
 monitoring:
