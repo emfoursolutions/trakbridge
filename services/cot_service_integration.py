@@ -1318,7 +1318,7 @@ class QueuedCOTService:
             tasks: List[asyncio.Task] = []
             try:
                 logger.info(
-                    f"Enhanced transmission worker started for TAK server {tak_server.name}"
+                    f"Transmission worker started for TAK server {tak_server.name}"
                 )
                 logger.debug(
                     f"Worker thread started: server_id={tak_server_id}, server_name={tak_server.name}, timestamp={datetime.now()}"
@@ -1405,7 +1405,7 @@ class QueuedCOTService:
 
             except Exception as e:
                 logger.error(
-                    f"Enhanced transmission worker error for TAK server {tak_server_id}: {e}"
+                    f"Transmission worker error for TAK server {tak_server_id}: {e}"
                 )
                 # Same reasoning as the CancelledError handler: don't leave
                 # orphaned child tasks running after this iteration exits.
@@ -4139,3 +4139,10 @@ def reset_queued_cot_service():
             f"Resetting singleton instance {id(QueuedCOTService._instance)} at {datetime.now()}"
         )
         QueuedCOTService._instance = None
+    # Worker/connection tracking is class-level state shared across
+    # instances; stale entries from a previous service would trigger the
+    # dead-worker cleanup path (including a breaker reset) on the next
+    # service's start_worker.
+    QueuedCOTService._workers.clear()
+    QueuedCOTService._connections.clear()
+    QueuedCOTService._identity_uid_suffixes.clear()

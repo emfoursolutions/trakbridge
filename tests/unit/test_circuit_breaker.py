@@ -981,3 +981,104 @@ class TestReturnValueSemantics:
             assert await cb.call(returns_false) is False
         assert cb.state == CircuitBreakerState.CLOSED
         assert cb.consecutive_failures == 0
+
+
+class TestHealthCheckGatedRecovery:
+    """When a real health check is registered, OPEN -> HALF_OPEN must be
+    driven by health-check success only. The timer path would admit doomed
+    real-traffic probes (e.g. 30s TAK connect timeouts) and flap
+    OPEN/HALF_OPEN for the whole outage."""
+
+    def _config(self):
+        return CircuitBreakerConfig(
+            failure_threshold=3,
+            recovery_timeout=0.05,
+            health_check_interval=0.05,
+            health_check_timeout=1.0,
+            jitter_enabled=False,
+        )
+
+    @pytest.mark.asyncio
+    async def test_timer_does_not_half_open_when_health_check_registered(self):
+        cb = CircuitBreaker("test-svc", self._config())
+
+        async def unhealthy():
+            return False
+
+        try:
+            cb.set_health_check(unhealthy)
+            for _ in range(3):
+                with pytest.raises(RuntimeError):
+                    await cb.call(async_failure)
+            assert cb.state == CircuitBreakerState.OPEN
+
+            # Wait well past recovery_timeout: the timer alone must NOT
+            # admit a probe while the health check keeps failing.
+            await asyncio.sleep(0.15)
+            with pytest.raises(CircuitOpenError):
+                await cb.call(async_success)
+            assert cb.state == CircuitBreakerState.OPEN
+        finally:
+            await cb.cleanup()
+
+    @pytest.mark.asyncio
+    async def test_timer_still_half_opens_without_health_check(self):
+        cb = CircuitBreaker("test-svc", self._config())
+        for _ in range(3):
+            with pytest.raises(RuntimeError):
+                await cb.call(async_failure)
+        await asyncio.sleep(0.06)
+        # No health check registered: classic timer-based recovery applies.
+        result = await cb.call(async_success)
+        assert result == "ok"
+        assert cb.state == CircuitBreakerState.HALF_OPEN
+
+    @pytest.mark.asyncio
+    async def test_health_success_reopens_traffic_and_closes(self):
+        cb = CircuitBreaker("test-svc", self._config())
+        healthy = {"value": False}
+
+        async def probe():
+            return healthy["value"]
+
+        try:
+            cb.set_health_check(probe)
+            for _ in range(3):
+                with pytest.raises(RuntimeError):
+                    await cb.call(async_failure)
+            assert cb.state == CircuitBreakerState.OPEN
+
+            healthy["value"] = True  # service comes back
+            for _ in range(60):
+                await asyncio.sleep(0.02)
+                if cb.state == CircuitBreakerState.CLOSED:
+                    break
+            assert cb.state == CircuitBreakerState.CLOSED
+            assert await cb.call(async_success) == "ok"
+        finally:
+            await cb.cleanup()
+
+
+class TestFailureLogDiagnosability:
+    @pytest.mark.asyncio
+    async def test_failure_log_names_exception_type_when_str_empty(self, caplog):
+        import logging as _logging
+
+        cb = CircuitBreaker("test-svc", TEST_CONFIG)
+
+        async def fails_blank():
+            raise TimeoutError()  # str() is "" — log must still identify it
+
+        with caplog.at_level(_logging.WARNING):
+            with pytest.raises(TimeoutError):
+                await cb.call(fails_blank)
+
+        failure_logs = [
+            r.message
+            for r in caplog.records
+            if "Circuit breaker failure" in r.message
+        ]
+        assert failure_logs
+        assert any("TimeoutError" in m for m in failure_logs), (
+            f"empty-str exceptions must be identified by type: {failure_logs}"
+        )

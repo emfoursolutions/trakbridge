@@ -223,7 +223,9 @@ class CircuitBreaker:
             return result
 
         except Exception as e:
-            error = str(e)
+            # str() of some exceptions (e.g. TimeoutError()) is empty —
+            # always include the type so failure logs stay diagnosable.
+            error = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
             await self._record_failure(time.time() - start_time, error)
             raise
 
@@ -247,7 +249,13 @@ class CircuitBreaker:
             return True
 
         if self.state == CircuitBreakerState.OPEN:
-            # Check if recovery timeout has passed
+            # With a health check registered, recovery is driven solely by
+            # health-check success (see _health_check_loop): the timer path
+            # would admit doomed real-traffic probes and flap
+            # OPEN/HALF_OPEN for the entire outage.
+            if self.health_check_function is not None:
+                return False
+            # No health check: classic timer-based recovery.
             if self.last_failure_time:
                 time_since_failure = datetime.now(timezone.utc) - self.last_failure_time
                 if time_since_failure.total_seconds() >= self.config.recovery_timeout:

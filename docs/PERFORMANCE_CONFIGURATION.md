@@ -221,6 +221,10 @@ Environment variables take precedence over file-based configuration.
 - **Purpose**: Time to wait before attempting to close circuit (seconds)
 - **Impact**: Affects how quickly system attempts to recover from failures
 - **Tuning**: Match to typical recovery times for infrastructure
+- **Note**: Applies only to breakers without a health check. When a health
+  check is registered (TAK-server breakers), recovery is driven solely by
+  health-check success — real traffic is not admitted as a probe, avoiding
+  OPEN/HALF_OPEN flapping during an outage
 
 #### `timeout` (float, default: 30.0)
 - **Purpose**: Per-call timeout for operations protected by the breaker (seconds)

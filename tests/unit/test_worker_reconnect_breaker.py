@@ -157,3 +157,28 @@ class TestOperatorResetsPreserved:
 
         assert result is True
         breaker.manual_reset.assert_awaited_once()
+
+
+class TestResetClearsClassLevelState:
+    """QueuedCOTService tracks workers/connections in CLASS-level dicts.
+    reset_cot_service() must clear them, or a dead worker left by one test
+    leaks into the next test's fresh service instance and triggers the
+    dead-worker cleanup path (observed: spurious breaker manual_reset)."""
+
+    async def test_reset_clears_workers_and_connections(self):
+        async def _noop():
+            return None
+
+        stale_task = asyncio.create_task(_noop())
+        await stale_task
+        QueuedCOTService._workers[99] = stale_task
+        QueuedCOTService._connections[99] = (Mock(), Mock())
+
+        reset_cot_service()
+
+        assert QueuedCOTService._workers == {}, (
+            "reset left stale workers in the class-level dict"
+        )
+        assert QueuedCOTService._connections == {}, (
+            "reset left stale connections in the class-level dict"
+        )
