@@ -175,3 +175,91 @@ class TestStreamWorkerRetryPersistence:
             if c.kwargs.get("last_error")
         ]
         assert len(error_updates) >= 6
+
+
+class TestSentinelErrorDetection:
+    """Plugins signal feed failure with [{"_error": ...}] sentinels (built
+    for the connection-test UI). The poll loop must treat sentinel-only
+    results as failed polls, not successful data retrieval — otherwise a
+    total feed outage shows a healthy stream with no retry machinery."""
+
+    async def test_sentinel_only_fetch_counts_as_error(self):
+        worker = _make_worker()
+        fetch_calls = {"n": 0}
+        sentinel = [
+            {"_error": "connection_failed", "_error_message": "Network is unreachable"}
+        ]
+
+        async def fetch(session):
+            fetch_calls["n"] += 1
+            if fetch_calls["n"] >= 4:
+                worker.running = False
+                return []
+            return sentinel
+
+        worker.plugin.fetch_locations_with_protection = fetch
+        _, fake_wait_for = _instant_timeout()
+
+        with patch("services.stream_worker.asyncio.wait_for", fake_wait_for):
+            await _guarded(worker._run_loop())
+
+        assert fetch_calls["n"] >= 4, "loop stopped instead of retrying"
+        error_updates = [
+            c
+            for c in worker._update_stream_status_async.await_args_list
+            if c.kwargs.get("last_error")
+            and "Network is unreachable" in c.kwargs["last_error"]
+        ]
+        assert error_updates, (
+            "sentinel-only fetch was not recorded as a poll failure with "
+            "the sentinel's message in last_error"
+        )
+        deactivations = [
+            c
+            for c in worker._update_stream_status_async.await_args_list
+            if c.kwargs.get("is_active") is False
+        ]
+        assert not deactivations
+
+    async def test_mixed_sentinel_and_real_locations_is_success(self):
+        worker = _make_worker()
+
+        async def fetch(session):
+            worker.running = False
+            return [
+                {"_error": "connection_failed", "_error_message": "partial"},
+                {"lat": 1.0, "lon": 2.0, "name": "t1", "uid": "t-1"},
+            ]
+
+        worker.plugin.fetch_locations_with_protection = fetch
+        _, fake_wait_for = _instant_timeout()
+
+        with patch("services.stream_worker.asyncio.wait_for", fake_wait_for):
+            await _guarded(worker._run_loop())
+
+        assert worker._consecutive_errors == 0, (
+            "partial data (mixed sentinel + real) must count as success"
+        )
+
+    async def test_empty_list_is_not_an_error(self):
+        worker = _make_worker()
+
+        async def fetch(session):
+            worker.running = False
+            return []
+
+        worker.plugin.fetch_locations_with_protection = fetch
+        _, fake_wait_for = _instant_timeout()
+
+        with patch("services.stream_worker.asyncio.wait_for", fake_wait_for):
+            await _guarded(worker._run_loop())
+
+        assert worker._consecutive_errors == 0
+        error_updates = [
+            c
+            for c in worker._update_stream_status_async.await_args_list
+            if c.kwargs.get("last_error")
+        ]
+        assert not error_updates, (
+            "an empty feed is a legitimate state, not a failure"
+        )

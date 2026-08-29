@@ -426,16 +426,16 @@ class TraccarPlugin(BaseGPSPlugin, CallsignMappable):
 
         except asyncio.TimeoutError:
             logger.error("Request timed out while fetching positions")
-            return []
+            return [{"_error": "timeout", "_error_message": "Request timed out"}]
         except aiohttp.ClientError as e:
             logger.error(f"HTTP client error: {e}")
-            return []
+            return [{"_error": "connection_failed", "_error_message": str(e)}]
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON response: {e}")
-            return []
+            return [{"_error": "json_error", "_error_message": "Invalid JSON response"}]
         except Exception as e:
             logger.error(f"Unexpected error fetching positions: {e}")
-            return []
+            return [{"_error": "unknown", "_error_message": str(e)}]
 
     @staticmethod
     async def _fetch_devices_from_api(

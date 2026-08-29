@@ -516,6 +516,22 @@ class StreamWorker:
                     self.logger.error(f"Error fetching locations from plugin: {e}")
                     raise
 
+                # Plugins report feed failures as [{"_error": ...}] sentinel
+                # dicts (a convention consumed by the connection-test UI).
+                # A sentinel-only result is a failed poll, not data — raise so
+                # the consecutive-error/backoff machinery engages and the
+                # outage is visible via last_error. Mixed results (partial
+                # data) still count as success; sentinels are dropped
+                # downstream by the COT service.
+                if locations and all(
+                    isinstance(loc, dict) and "_error" in loc for loc in locations
+                ):
+                    first = locations[0]
+                    raise Exception(
+                        f"Feed error from {self.stream.plugin_type} plugin: "
+                        f"{first.get('_error_message', first.get('_error'))}"
+                    )
+
                 if locations:
                     self.logger.info(
                         f"Retrieved {len(locations)} locations "
