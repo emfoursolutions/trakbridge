@@ -257,3 +257,47 @@ class TestTakHealthCheckTuning:
         assert all(
             k in slow_logs[0] for k in ("db=", "config=", "connect=", "cleanup=")
         ), f"phase breakdown missing: {slow_logs[0]}"
+
+
+class TestProbeCleanupNotHealthSignal:
+    async def test_probe_healthy_even_when_cleanup_hangs(self, service):
+        """TAK server delays the TLS close handshake until its subscription
+        reaper runs (~30s), so wait_closed() can hang long past the probe
+        timeout. Observed in the field: every probe connected instantly
+        (server logged Added Subscription) then timed out in cleanup. The
+        health signal ends at the successful connect — cleanup is
+        best-effort and must never fail or stall the probe."""
+        tak_server = Mock()
+        tak_server.id = 1
+        tak_server.name = "Test"
+        writer = Mock()
+
+        async def hanging_cleanup(connection):
+            await asyncio.sleep(3600)
+
+        with (
+            patch(
+                "services.cot_service_integration.QueuedCOTService._fetch_tak_server_dto",
+                new=AsyncMock(return_value=tak_server),
+            ),
+            patch.object(
+                service, "_create_pytak_config", new=AsyncMock(return_value={})
+            ),
+            patch(
+                "services.cot_service_integration.pytak.protocol_factory",
+                new=AsyncMock(return_value=(Mock(), writer)),
+            ),
+            patch.object(
+                service, "_cleanup_connection", side_effect=hanging_cleanup
+            ),
+        ):
+            result = await asyncio.wait_for(
+                service._tak_health_check(1), timeout=5.0
+            )
+
+        assert result is True, (
+            "a successful connect is a healthy probe; a stalled close "
+            "handshake must not fail it"
+        )
+        # The stalled writer must be forcibly aborted, not leaked.
+        writer.transport.abort.assert_called_once()

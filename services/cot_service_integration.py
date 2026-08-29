@@ -2187,10 +2187,30 @@ class QueuedCOTService:
             )
             timings["connect"] = time.monotonic() - phase
 
-            # Clean up test connection
+            # Clean up test connection — best effort only. The health
+            # signal ends at the successful connect: TAK Server delays the
+            # TLS close handshake until its subscription reaper runs
+            # (~30s), so wait_closed() can stall far past the probe
+            # timeout. A stalled goodbye must not fail the probe.
             if test_connection:
                 phase = time.monotonic()
-                await self._cleanup_connection(test_connection)
+                try:
+                    await asyncio.wait_for(
+                        self._cleanup_connection(test_connection), timeout=2.0
+                    )
+                except Exception:
+                    # Force-close so the socket doesn't leak; the server
+                    # reaps its side of the subscription on its own.
+                    try:
+                        if (
+                            isinstance(test_connection, tuple)
+                            and len(test_connection) == 2
+                        ):
+                            test_connection[1].transport.abort()
+                        else:
+                            test_connection.transport.abort()
+                    except Exception:
+                        pass
                 timings["cleanup"] = time.monotonic() - phase
                 return True
 
