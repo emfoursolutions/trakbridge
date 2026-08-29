@@ -263,3 +263,68 @@ class TestSentinelErrorDetection:
         assert not error_updates, (
             "an empty feed is a legitimate state, not a failure"
         )
+
+
+class TestFeedErrorLogNoise:
+    """A classified feed outage is an operational state, not a crash —
+    log it as a one-liner. Unexpected exceptions keep their tracebacks."""
+
+    async def test_feed_error_logged_without_traceback(self, caplog):
+        worker = _make_worker()
+        fired = {"n": 0}
+
+        async def fetch(session):
+            fired["n"] += 1
+            if fired["n"] >= 2:
+                worker.running = False
+                return []
+            return [{"_error": "connection_failed", "_error_message": "down"}]
+
+        worker.plugin.fetch_locations_with_protection = fetch
+        _, fake_wait_for = _instant_timeout()
+
+        with (
+            patch("services.stream_worker.asyncio.wait_for", fake_wait_for),
+            caplog.at_level(logging.ERROR),
+        ):
+            await _guarded(worker._run_loop())
+
+        feed_records = [
+            r for r in caplog.records if "Feed error" in r.message
+        ]
+        assert feed_records, "feed error was not logged"
+        # exc_info may be None or literal False depending on how the logger
+        # forwards it; either way no traceback is formatted.
+        assert all(not r.exc_info for r in feed_records), (
+            "feed outages must not log tracebacks — they read like crashes"
+        )
+
+    async def test_unexpected_error_keeps_traceback(self, caplog):
+        worker = _make_worker()
+        fired = {"n": 0}
+
+        async def fetch(session):
+            fired["n"] += 1
+            if fired["n"] >= 2:
+                worker.running = False
+                return []
+            raise RuntimeError("actual bug")
+
+        worker.plugin.fetch_locations_with_protection = fetch
+        _, fake_wait_for = _instant_timeout()
+
+        with (
+            patch("services.stream_worker.asyncio.wait_for", fake_wait_for),
+            caplog.at_level(logging.ERROR),
+        ):
+            await _guarded(worker._run_loop())
+
+        loop_records = [
+            r
+            for r in caplog.records
+            if "Error in stream loop" in r.message and "actual bug" in r.message
+        ]
+        assert loop_records
+        assert any(r.exc_info for r in loop_records), (
+            "unexpected exceptions must keep their tracebacks"
+        )

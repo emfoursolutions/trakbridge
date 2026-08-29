@@ -33,6 +33,13 @@ from plugins.plugin_manager import get_plugin_manager
 from services.cot_service import get_cot_service
 
 
+class FeedUnavailableError(Exception):
+    """A feed source reported a classified failure (sentinel result).
+
+    An expected operational state during outages — logged without a
+    traceback so it does not read like an application crash."""
+
+
 class StreamWorker:
     """Individual stream worker that handles a single feed"""
 
@@ -527,7 +534,7 @@ class StreamWorker:
                     isinstance(loc, dict) and "_error" in loc for loc in locations
                 ):
                     first = locations[0]
-                    raise Exception(
+                    raise FeedUnavailableError(
                         f"Feed error from {self.stream.plugin_type} plugin: "
                         f"{first.get('_error_message', first.get('_error'))}"
                     )
@@ -658,7 +665,12 @@ class StreamWorker:
                 error_msg = (
                     f"Error in stream loop (attempt {self._consecutive_errors}): {e}"
                 )
-                self.logger.error(error_msg, exc_info=True)
+                # Classified feed outages are an expected operational state;
+                # a traceback makes them read like crashes. Keep tracebacks
+                # for genuinely unexpected exceptions.
+                self.logger.error(
+                    error_msg, exc_info=not isinstance(e, FeedUnavailableError)
+                )
 
                 # Update error in database
                 await self._update_stream_status_async(last_error=str(e))
