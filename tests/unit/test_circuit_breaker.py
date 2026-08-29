@@ -1082,3 +1082,39 @@ class TestFailureLogDiagnosability:
         assert any("TimeoutError" in m for m in failure_logs), (
             f"empty-str exceptions must be identified by type: {failure_logs}"
         )
+
+
+class TestHealthCheckFailureLogNamesType:
+    @pytest.mark.asyncio
+    async def test_health_check_timeout_log_names_exception_type(self, caplog):
+        import logging as _logging
+
+        config = CircuitBreakerConfig(
+            failure_threshold=3,
+            recovery_timeout=3600.0,
+            health_check_interval=0.05,
+            health_check_timeout=1.0,
+            jitter_enabled=False,
+        )
+        cb = CircuitBreaker("test-svc", config)
+
+        async def raises_blank():
+            raise TimeoutError()  # str() is ""
+
+        try:
+            await cb.force_open()
+            cb.set_health_check(raises_blank)
+            caplog.clear()
+            with caplog.at_level(_logging.ERROR):
+                await asyncio.sleep(0.15)
+            failure_logs = [
+                r.message
+                for r in caplog.records
+                if "Health check failed" in r.message
+            ]
+            assert failure_logs
+            assert any("TimeoutError" in m for m in failure_logs), (
+                f"empty-str exceptions must be identified by type: {failure_logs}"
+            )
+        finally:
+            await cb.cleanup()

@@ -182,3 +182,78 @@ class TestResetClearsClassLevelState:
         assert QueuedCOTService._connections == {}, (
             "reset left stale connections in the class-level dict"
         )
+
+
+class TestTakBreakerSuccessThreshold:
+    async def test_tak_breaker_closes_on_single_reconnect_success(self, service):
+        """A real established connection is the strongest recovery proof.
+        success_threshold must be 1: requiring a second success from health
+        probes leaves the breaker stuck HALF_OPEN when probes are unreliable
+        (observed: TAK server stalls duplicate connections from the same
+        client cert while the worker's connection is up)."""
+        with patch(
+            "services.circuit_breaker.get_circuit_breaker_manager"
+        ) as mock_mgr:
+            service._get_tak_circuit_breaker(1)
+
+        config = mock_mgr.return_value.get_circuit_breaker.call_args[0][1]
+        assert config.success_threshold == 1
+
+
+class TestTakHealthCheckTuning:
+    async def test_tak_breaker_health_check_timeout_is_generous(self, service):
+        """Probes do DB + config + TLS work; the 10s default timed out in
+        the field while a real connect succeeded in 83ms. 20s gives the
+        probe headroom; the interval still paces attempts."""
+        with patch(
+            "services.circuit_breaker.get_circuit_breaker_manager"
+        ) as mock_mgr:
+            service._get_tak_circuit_breaker(1)
+
+        config = mock_mgr.return_value.get_circuit_breaker.call_args[0][1]
+        assert config.health_check_timeout == 20.0
+
+    async def test_slow_probe_logs_phase_timings(self, service, caplog):
+        """When a probe is slow, a WARNING must break down where the time
+        went (db/config/connect/cleanup) so field diagnosis doesn't need
+        guesswork."""
+        import logging as _logging
+
+        from unittest.mock import AsyncMock
+
+        tak_server = Mock()
+        tak_server.id = 1
+        tak_server.name = "Test"
+
+        with (
+            patch(
+                "services.cot_service_integration.QueuedCOTService._fetch_tak_server_dto",
+                new=AsyncMock(return_value=tak_server),
+            ),
+            patch.object(
+                service, "_create_pytak_config", new=AsyncMock(return_value={})
+            ),
+            patch(
+                "services.cot_service_integration.pytak.protocol_factory",
+                new=AsyncMock(return_value=(Mock(), Mock())),
+            ),
+            patch.object(
+                service, "_cleanup_connection", new_callable=AsyncMock
+            ),
+            patch(
+                "services.cot_service_integration.SLOW_PROBE_WARN_SECONDS", 0.0
+            ),
+            caplog.at_level(_logging.WARNING),
+        ):
+            result = await service._tak_health_check(1)
+
+        assert result is True
+        slow_logs = [
+            r.message
+            for r in caplog.records
+            if "health check slow" in r.message.lower()
+        ]
+        assert slow_logs, "slow probe did not log phase timings"
+        assert all(
+            k in slow_logs[0] for k in ("db=", "config=", "connect=", "cleanup=")
+        ), f"phase breakdown missing: {slow_logs[0]}"

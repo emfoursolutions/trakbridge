@@ -27,6 +27,7 @@ import logging
 import os
 import ssl
 import tempfile
+import time
 import yaml
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
@@ -209,6 +210,10 @@ except ImportError:
     # Note: logger not yet initialized at module level
 
 logger = get_module_logger(__name__)
+
+# Health probes that exceed this many seconds log a WARNING with a
+# per-phase breakdown (db/config/connect/cleanup) for field diagnosis.
+SLOW_PROBE_WARN_SECONDS = 5.0
 
 
 class QueuedCOTService:
@@ -2095,8 +2100,16 @@ class QueuedCOTService:
                 recovery_timeout=cb_config.get("recovery_timeout", 60.0),
                 timeout=cb_config.get("timeout", 30.0),
                 half_open_max_calls=cb_config.get("half_open_max_calls", 3),
-                success_threshold=cb_config.get("success_threshold", 2),
+                # One real established connection is the strongest recovery
+                # proof; requiring more leaves the breaker stuck HALF_OPEN
+                # when health probes are unreliable alongside a live
+                # worker connection.
+                success_threshold=cb_config.get("success_threshold", 1),
                 health_check_interval=cb_config.get("health_check_interval", 30.0),
+                # Probes do DB + config + TLS handshake work; the 10s
+                # default timed out in the field while a real connect
+                # succeeded in 83ms.
+                health_check_timeout=cb_config.get("health_check_timeout", 20.0),
             )
 
             # Get circuit breaker for this TAK server
@@ -2132,33 +2145,53 @@ class QueuedCOTService:
             )
             return None
 
-    async def _tak_health_check(self, tak_server_id: int) -> bool:
-        """Health check for TAK server connectivity"""
-        try:
-            # Simple connectivity test - try to create a connection
-            from models.tak_server import TakServer
-            from models.dto import TakServerDTO
-            import app as flask_app
+    @staticmethod
+    async def _fetch_tak_server_dto(tak_server_id: int):
+        """Load the TakServer row as a DTO without blocking the event loop.
 
-            # Access database within app context and convert to DTO
+        Synchronous ORM access is subject to DB locks (stream status
+        writes) — run it in an executor like the other DB paths do."""
+        from models.tak_server import TakServer
+        from models.dto import TakServerDTO
+        import app as flask_app
+
+        def _query():
             with flask_app.app.app_context():
                 tak_server_orm = TakServer.query.get(tak_server_id)
                 if not tak_server_orm:
-                    return False
+                    return None
+                return TakServerDTO.from_orm(tak_server_orm)
 
-                # Convert to DTO for use outside app context
-                tak_server = TakServerDTO.from_orm(tak_server_orm)
+        return await asyncio.get_event_loop().run_in_executor(None, _query)
 
-            # Try to create a test connection with short timeout
+    async def _tak_health_check(self, tak_server_id: int) -> bool:
+        """Health check for TAK server connectivity"""
+        timings = {"db": 0.0, "config": 0.0, "connect": 0.0, "cleanup": 0.0}
+        start = time.monotonic()
+        try:
+            tak_server = await QueuedCOTService._fetch_tak_server_dto(
+                tak_server_id
+            )
+            timings["db"] = time.monotonic() - start
+            if not tak_server:
+                return False
+
+            phase = time.monotonic()
             test_config = await self._create_pytak_config(tak_server)
+            timings["config"] = time.monotonic() - phase
+
+            phase = time.monotonic()
             test_connection = await asyncio.wait_for(
                 pytak.protocol_factory(test_config),
                 timeout=5.0,  # Short timeout for health check
             )
+            timings["connect"] = time.monotonic() - phase
 
             # Clean up test connection
             if test_connection:
+                phase = time.monotonic()
                 await self._cleanup_connection(test_connection)
+                timings["cleanup"] = time.monotonic() - phase
                 return True
 
             return False
@@ -2166,6 +2199,16 @@ class QueuedCOTService:
         except Exception as e:
             logger.debug(f"TAK server {tak_server_id} health check failed: {e}")
             return False
+        finally:
+            total = time.monotonic() - start
+            if total > SLOW_PROBE_WARN_SECONDS:
+                logger.warning(
+                    f"TAK server {tak_server_id} health check slow "
+                    f"({total:.1f}s): db={timings['db']:.1f}s "
+                    f"config={timings['config']:.1f}s "
+                    f"connect={timings['connect']:.1f}s "
+                    f"cleanup={timings['cleanup']:.1f}s"
+                )
 
     async def _create_pytak_connection(self, tak_server):
         """

@@ -459,8 +459,10 @@ class CircuitBreaker:
                                         )
 
                     except Exception as e:
+                        # Include the type: str() of e.g. TimeoutError is ""
+                        detail = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
                         logger.error(
-                            f"Health check failed for {self.service_name}: {e}"
+                            f"Health check failed for {self.service_name}: {detail}"
                         )
 
             except asyncio.CancelledError:

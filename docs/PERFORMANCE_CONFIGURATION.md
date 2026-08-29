@@ -233,13 +233,20 @@ Environment variables take precedence over file-based configuration.
 - **Purpose**: Maximum concurrent probes while the breaker is testing recovery
 - **Note**: `success_threshold` must not exceed this value
 
-#### `success_threshold` (integer, default: 2 for TAK breakers)
+#### `success_threshold` (integer, default: 1 for TAK breakers)
 - **Purpose**: Successes required to close the circuit from HALF_OPEN
-- **Behavior**: Healthy health-check probes while HALF_OPEN also count
+- **Behavior**: Healthy health-check probes while HALF_OPEN also count. The
+  TAK default is 1 because a real established connection is the strongest
+  recovery proof — requiring more can leave the breaker in HALF_OPEN when
+  health probes are unreliable alongside a live worker connection
 
 #### `health_check_interval` (float, default: 30.0)
 - **Purpose**: Seconds between health-check probes while a breaker is OPEN or HALF_OPEN
 - **Impact**: Each TAK-server probe opens one real test connection per interval
+
+#### `health_check_timeout` (float, default: 20.0 for TAK breakers)
+- **Purpose**: Overall timeout for one health probe (DB lookup + config + connect + cleanup)
+- **Diagnostics**: Probes slower than 5s log a WARNING with a per-phase timing breakdown
 
 #### Breaker scope
 - TAK-server breakers gate **connection establishment only**. Write failures on
