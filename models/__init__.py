@@ -17,7 +17,14 @@ from .stream import Stream
 
 # Local application imports
 from .tak_server import TakServer
-from .user import AccountStatus, AuthProvider, User, UserRole, UserSession
+from .user import (
+    AccountStatus,
+    AuthProvider,
+    User,
+    UserApiKey,
+    UserRole,
+    UserSession,
+)
 
 __all__ = [
     "db",
@@ -29,6 +36,7 @@ __all__ = [
     "TakServer",
     "Stream",
     "User",
+    "UserApiKey",
     "UserSession",
     "AuthProvider",
     "UserRole",

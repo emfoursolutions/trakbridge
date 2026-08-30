@@ -7,6 +7,8 @@ aiohappyeyeballs
 aiohttp
 aiosignal
 alembic
+apispec[marshmallow]
+apispec-webframeworks
 arrow
 attrs
 blinker
@@ -29,6 +31,7 @@ itsdangerous
 Jinja2
 lxml
 Mako
+marshmallow
 mgrs
 MarkupSafe
 multidict

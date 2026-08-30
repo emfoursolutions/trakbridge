@@ -1,5 +1,100 @@
 # TrakBridge Release Notes
 
+## Version 2.2.0 - API Keys & Self-Healing Connections
+
+**Release Date:** August 30, 2026
+**Focus: Scripted API access via personal access tokens, a documented API surface, and automatic recovery from TAK server and feed-source outages**
+
+TrakBridge 2.2.0 pairs the platform's first first-class machine authentication — scoped API keys — with a ground-up rework of outage recovery. A TAK server or GPS feed going down and coming back is now a non-event: TrakBridge backs off, keeps watch, and resumes on its own. Previously it could require an operator to edit and re-save every affected stream.
+
+This release includes a schema migration and one new production-required secret (`API_KEY_PEPPER`) — see Upgrade Notes.
+
+---
+
+### API KEY AUTHENTICATION
+
+#### Personal access tokens for scripts and integrations
+**`Authorization: Bearer tb_pat_...` now works alongside session auth**
+
+Users can create scoped API keys at `/auth/api-keys` — each key carries an explicit set of permissions (`streams:read`, `api:read`, `tak_servers:read`, and so on), an optional expiry, and last-used tracking. The token is revealed once at creation and stored only as an HMAC-SHA256 hash mixed with a server-side pepper: a database-only compromise cannot verify or forge tokens.
+
+Bearer resolution is wired into the shared auth decorators, so every endpoint that accepts a session also accepts a valid key with the right scope. Tokens with foreign prefixes (`ghp_...`) or malformed bodies are rejected before the resolver does any work, and `tb_pat_` values are redacted from log output.
+
+Administrators get a cross-user view of all keys at `/admin/api-keys` with grouped scope chips for at-a-glance auditing.
+
+#### Privileged surfaces refuse bearer auth
+**A leaked API key cannot escalate**
+
+Admin routes, credential mutation (password change, profile edit), logout, and the key-management pages themselves are guarded by `@session_only` — they return 401 to any bearer request regardless of the token's validity or scopes. Managing keys requires a browser session, so a stolen key can read what it's scoped for and nothing more.
+
+CSRF protection is unchanged for session traffic; bearer-authenticated requests bypass it (they carry no ambient credentials for a cross-site attacker to ride).
+
+---
+
+### DOCUMENTED API SURFACE
+
+#### OpenAPI 3.1 spec and Swagger UI
+**`/api/openapi.json` and `/api/docs`, auth-gated**
+
+The full API — streams, plugins, inbound endpoints, health and monitoring — is now described by a machine-readable OpenAPI 3.1 spec with an interactive Swagger UI. `API_REFERENCE` has been rewritten from the spec. Both endpoints require authentication (session or bearer): every legitimate consumer is already authenticated for some other reason, and gating keeps the API description out of anonymous-scanner reconnaissance. The spec is generated once per app instance and cached.
+
+---
+
+### SELF-HEALING CONNECTIONS
+
+#### TAK server outages recover without intervention
+**The circuit breaker now actually does its job**
+
+The long-standing failure mode: TAK server drops, the per-server circuit breaker opens, and nothing ever recovers — streams stayed dead until an operator edited and re-saved them. The root cause was structural. The transmit path swallowed socket errors into a boolean, so the loop that should have abandoned the dead connection never got the signal; the breaker's recovery probe then wrote to that same dead socket forever, a test that could not pass.
+
+The rework:
+
+- The breaker gates **connection establishment** — the one operation that can genuinely prove recovery. Socket errors propagate, the send loop breaks, the worker reconnects with exponential backoff (5s→120s)
+- While the server is down, the breaker sits cleanly OPEN and connection attempts fast-fail — no wasted 30-second timeouts, no OPEN/HALF_OPEN flapping. A lightweight health probe tests the server every 30 seconds
+- The moment a probe passes, traffic is re-admitted, and **one successful reconnection closes the breaker**
+- Health probes were also being failed by TAK Server itself: probes connected instantly but then waited for a TLS close handshake that TAK Server defers until its subscription reaper runs (~30s). Probe cleanup is now best-effort with a hard cap — the health verdict rests on the connect, not the goodbye
+
+End to end, verified live against a real TAK Server with cross-checked subscription logs: pull the network, watch the breaker open; restore it, and transmission resumes within a couple of minutes with zero human involvement.
+
+#### Streams never permanently deactivate
+**Five bad polls no longer switch a stream off**
+
+Consecutive poll errors previously flipped `is_active = False` permanently. Streams now retry forever with backoff capped at five minutes, log at ERROR at the threshold (and every 10th failure after, to keep sustained outages visible without spamming), and surface the condition through the stream's **Last Error** field — which clears itself on recovery.
+
+#### Feed outages are visible
+**A dead GPS source no longer looks like a healthy stream**
+
+Plugins report connection failures using an internal sentinel format that the poll loop didn't understand — it counted them as retrieved locations, so a total feed outage showed a green stream delivering nothing. Sentinel results now register as failed polls and drive the same retry/backoff/Last Error machinery; partial results still count as success. Traccar's error paths were additionally normalised so its outages are distinguishable from a legitimately quiet feed. Feed outages log as a single classified line rather than a crash-style traceback.
+
+#### Circuit breaker core hardening
+**Fixes to the state machine itself**
+
+- Trips on *consecutive* failures — previously a lifetime cumulative count meant three failures spread across days could open a breaker
+- HALF_OPEN probe slots are refunded when calls complete — concurrent healthy callers were being rejected during recovery
+- Health checks run in HALF_OPEN as well as OPEN, tolerate sync callables, and log crashes at ERROR with the exception type (previously swallowed at DEBUG — the advertised auto-recovery mechanism could fail silently)
+- New tuning knobs documented in `performance.yaml`: `timeout`, `half_open_max_calls`, `success_threshold`, `health_check_interval`, `health_check_timeout`; slow health probes log a per-phase timing breakdown for field diagnosis
+
+---
+
+### HOUSEKEEPING
+
+- Parallel configuration systems collapsed into `ConfigLoader`; `utils/config_manager.py` removed
+- Duplicate `monitoring:` block in `performance.yaml` merged — the fallback-statistics settings were being silently discarded at load
+- Backups directory created automatically on first run
+- ~90 new tests (unit, integration, end-to-end), including a real-socket outage/recovery acceptance test that fails on the pre-fix code
+
+---
+
+### UPGRADE NOTES
+
+1. **Schema migration** (`add_user_api_keys`) — Docker deployments migrate automatically via the entrypoint; source deployments run `flask db upgrade`
+2. **`API_KEY_PEPPER` is required in production** — the app refuses to boot without it. Generate with `openssl rand -base64 48` and provide as a Docker secret at `./secrets/api_key_pepper` (compose files already reference it) or via `API_KEY_PEPPER`/`API_KEY_PEPPER_FILE`. Non-production environments generate an *ephemeral* pepper per process — keys created there die on restart, with a loud startup WARNING. Rotating the pepper invalidates every existing key by design
+3. **Operational model change**: streams no longer stop after repeated errors. Retire any runbook that says "edit and re-save the stream to recover it" — watch the stream's Last Error field and `/api/health/circuit_breaker` instead
+4. Existing `performance.yaml` files work unchanged; the new circuit-breaker keys are optional. `failure_threshold` now genuinely counts consecutive failures, matching its long-standing comment
+5. Scripted consumers using saved session cookies should migrate to API keys created at `/auth/api-keys`; note that admin and credential routes intentionally refuse bearer auth
+
+---
+
 ## Version 2.1.1 - LDAP Login & HTTP Session Fixes
 
 **Release Date:** August 16, 2026

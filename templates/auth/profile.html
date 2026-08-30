@@ -297,6 +297,22 @@
                     <div class="col-md-6 mb-3">
                         <div class="d-flex align-items-center">
                             <div class="flex-grow-1">
+                                <h6 class="mb-1">API Keys</h6>
+                                <p class="text-muted mb-0 small">
+                                    Manage bearer tokens for programmatic access
+                                </p>
+                            </div>
+                            <div class="ms-3">
+                                <a href="{{ url_for('api_keys.list_keys') }}" class="btn btn-outline-primary btn-sm">
+                                    <i class="fas fa-key"></i> Manage
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
                                 <h6 class="mb-1">Sign Out</h6>
                                 <p class="text-muted mb-0 small">
                                     Sign out of all sessions and devices

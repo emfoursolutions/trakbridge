@@ -1,3 +1,42 @@
+## [v2.2.0] - 2026-08-30
+
+### Added
+- **User API keys for scripted access** — personal access tokens (`tb_pat_...`) usable as `Authorization: Bearer` alongside session auth. New `UserApiKey` model with per-key scoped permissions (e.g. `streams:read`, `api:read`), HMAC-SHA256 token hashing mixed with a server-side pepper, last-used tracking, and expiry. Self-service management UI at `/auth/api-keys` (create, reveal-once, revoke); admin cross-user view at `/admin/api-keys` with grouped scope chips. Bearer resolution is wired into the shared auth decorators, so every session-or-key endpoint accepts either; foreign-prefix and malformed tokens are rejected without touching the resolver
+- **`@session_only` guard** — admin, credential-mutation, logout, and key-management routes explicitly refuse bearer auth with a consistent 401, independent of token validity. A leaked API key cannot manage keys, change passwords, or reach the admin surface
+- **OpenAPI 3.1 spec and Swagger UI** — machine-readable spec at `/api/openapi.json`, interactive docs at `/api/docs`. Streams, plugins, and inbound endpoints documented; `API_REFERENCE` rewritten from the spec. Both endpoints are auth-gated (session or bearer) to keep the API surface out of anonymous-scanner reconnaissance; the spec is generated once per app instance and cached
+- **Bearer-token log redaction** — `tb_pat_` values are scrubbed from log output
+- **Circuit breaker tuning knobs documented** — `performance.yaml` `circuit_breaker` block now documents `timeout`, `half_open_max_calls`, `success_threshold`, `health_check_interval`, and `health_check_timeout` (all optional, sane defaults)
+
+### Fixed
+- **Circuit breaker recovery after TAK server outages** — the headline fix. Previously a lost TAK connection opened the per-server breaker and it never recovered; streams stayed dead until an operator edited and re-saved them. Root cause was structural: `_transmit_batch` swallowed socket errors into a `False` return, so the TX loop never broke, the reconnect loop never ran, and the breaker's recovery probe wrote to the same dead socket forever. The breaker now gates **connection establishment only**; socket errors propagate so the worker abandons the dead socket and reconnects; the per-iteration `manual_reset()` that neutered the breaker is gone (operator resets in `stop_worker`/`start_worker` preserved)
+- **Streams no longer permanently deactivate** — 5 consecutive poll errors used to set `is_active=False` with no auto-reactivation. Streams now retry forever with capped exponential backoff (5 minutes max), log at ERROR at the threshold and every 10th failure after, and surface the outage via the stream's `last_error` field. Recovery on feed/server restore is automatic
+- **Feed-source outages no longer masquerade as healthy polls** — plugins report connection failures as `[{"_error": ...}]` sentinel dicts (a convention consumed by the connection-test UI); the poll loop counted them as retrieved locations, so a total feed outage showed a healthy stream with `last_error` clear. Sentinel-only results now raise and engage the retry/backoff/last_error machinery; mixed results (partial data) still count as success. Traccar's connection-error branches now return sentinels like its HTTP-status branches instead of an empty list indistinguishable from a quiet feed. Classified feed outages log as a single line, not a traceback
+- **No more OPEN/HALF_OPEN flapping during outages** — the recovery timer used to admit real 30-second connection attempts as probes while the server was down. When a health check is registered (all TAK breakers), OPEN→HALF_OPEN is now driven solely by health-check success; breakers without health checks keep classic timer recovery. During an outage the breaker sits cleanly OPEN with fast-fail logs
+- **Breaker no longer sticks in HALF_OPEN after recovery** — TAK breaker `success_threshold` default is now 1: one real established connection closes the breaker. Requiring a second success from health probes left it in HALF_OPEN indefinitely, because probes are unreliable alongside a live worker connection
+- **Health probes no longer failed by TAK Server's close handshake** — probes connected instantly but hung in `wait_closed()`: TAK Server delays the TLS close for silent clients until its subscription reaper runs (~30s), past the probe timeout. Probe cleanup is now best-effort with a 2s cap and transport abort; the health verdict rests on the connect. Probe DB lookup moved off the event loop; probes slower than 5s log a per-phase timing breakdown (`db/config/connect/cleanup`); TAK probe timeout raised to 20s
+- **Circuit breaker core hardening** — trips on *consecutive* failures (previously a lifetime cumulative count, so 3 failures spread over days tripped it); `half_open_calls` counts in-flight probes and is refunded on completion (concurrent healthy callers were starved during recovery); health checks probe in HALF_OPEN as well as OPEN, support sync callables, and log crashes at ERROR with the exception type (previously swallowed at DEBUG); healthy HALF_OPEN checks count toward `success_threshold`; config rejects `success_threshold > half_open_max_calls`
+- **Parallel config systems collapsed into `ConfigLoader`** — `utils/config_manager.py` deleted (−366 lines); single loading path for all configuration
+- **Backups directory created on first run** — setup no longer assumes it exists
+- **Duplicate `monitoring:` key in `performance.yaml`** — the second block silently shadowed the first, discarding the fallback-statistics settings at load; merged into one block
+- **Swagger UI external validator badge disabled** — no spec URL leakage to a third-party validator
+
+### Changed
+- **Operator model for degraded streams** — streams stay active through outages; watch **Last Error** on the stream (and `/api/health/circuit_breaker` for breaker state) rather than expecting streams to switch off. Events queued during a TAK outage drain on reconnect with newest-per-UID replacement; events in a batch that hits a dead socket are dropped by design (positions refresh next poll)
+- **Worker log messages** drop the "Enhanced" prefix ("Transmission worker started"); breaker failure logs include the exception type when `str()` is empty (e.g. bare `TimeoutError`)
+
+### Internal
+- ~90 new tests across unit/integration/e2e, all written red-green, including a real-socket fake-TAK-server outage/recovery acceptance test (fails on pre-fix code) and a stream-resilience test asserting `is_active` survives 7 consecutive poll failures in the DB
+- `reset_cot_service()` now clears `QueuedCOTService`'s class-level worker/connection dicts — stale entries from one test leaked into the next test's fresh service and triggered spurious dead-worker cleanup
+
+### Upgrade notes
+- **Schema migration required** (`add_user_api_keys`) — Docker deployments run it automatically via the entrypoint; source deployments require `flask db upgrade`
+- **`API_KEY_PEPPER` secret required in production** — the app refuses to boot in production without it. Generate with `openssl rand -base64 48` and provide via Docker secret at `./secrets/api_key_pepper` (compose files already reference it) or the `API_KEY_PEPPER`/`API_KEY_PEPPER_FILE` environment variables. Non-production environments generate an *ephemeral* pepper per process with a startup WARNING — API keys created there are invalidated on every restart. Rotating the pepper invalidates every existing API key by design
+- Streams no longer stop after repeated errors — remove any operational runbooks that instruct re-saving a stream to recover it; watch Last Error instead
+- New `performance.yaml` `circuit_breaker` keys are optional; existing configs work unchanged. Note `failure_threshold` now genuinely counts *consecutive* failures, matching its long-standing comment
+- Scripted API consumers can migrate from session-cookie auth to `Authorization: Bearer tb_pat_...` tokens created at `/auth/api-keys`; admin/credential routes intentionally refuse bearer auth
+
+---
+
 ## [v2.1.1] - 2026-08-16
 
 ### Fixed

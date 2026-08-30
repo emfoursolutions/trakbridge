@@ -16,7 +16,54 @@ import datetime
 import getpass
 import logging
 import os
+import re
 from typing import Optional
+
+
+# Pattern matches bearer tokens carrying our tb_pat_ API-key prefix. The
+# non-greedy [A-Za-z0-9_\-]+ captures the base64url body until the next
+# non-token character. Anchored to word boundary so we don't rewrite
+# incidental occurrences of the literal string.
+_BEARER_TOKEN_PATTERN = re.compile(
+    r"(Bearer\s+tb_pat_[A-Za-z0-9_\-]{0,12})[A-Za-z0-9_\-]*",
+    re.IGNORECASE,
+)
+
+
+def _redact_bearer(text: str) -> str:
+    """Rewrite Bearer tb_pat_<12chars><rest> -> Bearer tb_pat_<12chars>...REDACTED."""
+    return _BEARER_TOKEN_PATTERN.sub(r"\1...REDACTED", text)
+
+
+class BearerTokenFilter(logging.Filter):
+    """Strip API-key bearer secrets from every log record.
+
+    Attached to the root logger during setup_logging so it covers
+    Werkzeug access logs, application AUDIT lines, and any exception
+    traceback that surfaces raw request headers. Retains the 12-char
+    prefix so operators can still identify which key an incident
+    relates to via `token_prefix` on UserApiKey.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        try:
+            if isinstance(record.msg, str) and "tb_pat_" in record.msg:
+                record.msg = _redact_bearer(record.msg)
+            if record.args:
+                if isinstance(record.args, dict):
+                    record.args = {
+                        k: (_redact_bearer(v) if isinstance(v, str) else v)
+                        for k, v in record.args.items()
+                    }
+                elif isinstance(record.args, tuple):
+                    record.args = tuple(
+                        _redact_bearer(a) if isinstance(a, str) else a
+                        for a in record.args
+                    )
+        except Exception:
+            # Never let a redactor bug drop a log record.
+            pass
+        return True
 
 
 def _current_user() -> str:
@@ -149,6 +196,14 @@ def setup_logging(app):
     # Add new handlers
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
+
+    # Attach the bearer-token redactor to every root handler. Filters on
+    # a handler apply to any record passing through, regardless of
+    # originating logger — this catches Werkzeug access logs, AUDIT
+    # lines, and exception tracebacks that quote request headers.
+    bearer_filter = BearerTokenFilter()
+    file_handler.addFilter(bearer_filter)
+    console_handler.addFilter(bearer_filter)
 
     # Set specific logger levels
     logging.getLogger("sqlalchemy.engine").setLevel(

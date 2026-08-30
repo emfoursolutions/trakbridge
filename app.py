@@ -27,7 +27,7 @@ from typing import Optional
 
 # Third-party imports
 from dotenv import load_dotenv
-from flask import Flask, has_app_context, jsonify, render_template
+from flask import Flask, has_app_context, jsonify, render_template, request
 from flask_migrate import Migrate
 from sqlalchemy import event
 from sqlalchemy.pool import Pool
@@ -295,6 +295,12 @@ def create_app(config_name=None):
     flask_env = config_name or os.environ.get("FLASK_ENV", "development")
     config_instance = get_config(flask_env)
 
+    # Load the API-key pepper before anything can generate or verify a
+    # key. Refuses to boot in production when API_KEY_PEPPER is unset;
+    # in dev/testing generates an ephemeral pepper with a WARNING.
+    from services.auth.pepper import load_pepper
+    load_pepper(is_production=(flask_env == "production"))
+
     # Configure reverse proxy support ONLY if explicitly trusted
     # This fixes redirect issues when behind reverse proxies while maintaining security
     proxy_trusted = getattr(config_instance, "PROXY_TRUSTED", False)
@@ -345,7 +351,35 @@ def create_app(config_name=None):
         # Store CSRF instance
         app.csrf = csrf
 
-        logger.info("CSRF protection enabled globally; bearer-auth routes exempted below")
+        # ----- CSRF bearer-bypass hook -----
+        # Any request carrying an API-key bearer token skips CSRF
+        # validation. Bearer auth is itself unforgeable-across-origins
+        # (an attacker on evil.com cannot make the browser attach the
+        # header), so the CSRF requirement is redundant for that path.
+        # Session-authenticated requests to the same routes remain
+        # protected because the header check runs per-request; only
+        # requests that actually present a tb_pat_ bearer bypass.
+        #
+        # Rejected alternative: route-level `csrf.exempt(...)` would
+        # strip CSRF from BOTH session and bearer calls to the same
+        # endpoint, defeating the whole point for browser JS callers.
+        # This hook lets a single URL support both auth flows with the
+        # right protection profile applied to each.
+        from models.user import API_KEY_TOKEN_PREFIX
+        _orig_csrf_protect = csrf.protect
+
+        def _csrf_protect_with_bearer_bypass(apply_exemptions=False):
+            auth = request.headers.get("Authorization", "")
+            if auth.startswith(f"Bearer {API_KEY_TOKEN_PREFIX}"):
+                return
+            return _orig_csrf_protect(apply_exemptions=apply_exemptions)
+
+        csrf.protect = _csrf_protect_with_bearer_bypass
+
+        logger.info(
+            "CSRF protection enabled globally; bearer-auth routes "
+            "exempted below and tb_pat_ bearer requests bypass CSRF"
+        )
 
         # Add security headers (production only)
         if config_instance.environment == "production":
@@ -525,13 +559,16 @@ def create_app(config_name=None):
 
     # Register blueprints
     from routes.admin import bp as admin_bp
+    from routes.admin_api_keys import bp as admin_api_keys_bp
     from routes.api import bp as api_bp
+    from routes.api_keys import bp as api_keys_bp
     from routes.auth import bp as auth_bp
     from routes.cot_types import bp as cot_types_bp
     from routes.main import bp as main_bp
     from routes.streams import bp as streams_bp
     from routes.tak_servers import bp as tak_servers_bp
     from routes.inbound import bp as inbound_bp
+    from routes.openapi import bp as openapi_bp
     from routes.plugin_admin import bp as plugin_admin_bp
 
     # Apply rate limits to specific route groups
@@ -547,7 +584,10 @@ def create_app(config_name=None):
     app.register_blueprint(cot_types_bp, url_prefix="/admin")
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(auth_bp, url_prefix="/auth")
+    app.register_blueprint(api_keys_bp, url_prefix="/auth/api-keys")
+    app.register_blueprint(admin_api_keys_bp, url_prefix="/admin/api-keys")
     app.register_blueprint(inbound_bp, url_prefix="/api/inbound")
+    app.register_blueprint(openapi_bp, url_prefix="/api")
 
     # Apply per-route CSRF exemptions for non-session-authenticated endpoints.
     # Every exemption names the auth mechanism that replaces CSRF protection.
@@ -562,6 +602,10 @@ def create_app(config_name=None):
     # (no session required; pure computation with no privileged state changes).
     app.csrf.exempt(app.view_functions["api.convert_latlon_to_mgrs"])    # CSRF exempt: optional-auth utility; no authenticated state change
     app.csrf.exempt(app.view_functions["api.convert_mgrs_to_latlon"])    # CSRF exempt: optional-auth utility; no authenticated state change
+    #
+    # routes/openapi.py — auth-gated as of the docs-auth change;
+    # GET-only handlers so CSRF isn't invoked on them anyway. Any
+    # bearer request bypasses CSRF via the app-level hook above.
 
     # Add context processors and error handlers
     setup_template_helpers(app)

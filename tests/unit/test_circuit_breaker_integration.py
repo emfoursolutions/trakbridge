@@ -96,10 +96,8 @@ class TestCircuitBreakerIntegration:
                 raise Exception("Plugin failure")
 
         # Mock the config loading
-        with patch(
-            "utils.config_manager.config_manager.load_config_safe"
-        ) as mock_load_config:
-            mock_load_config.return_value = {
+        with patch("config.base.get_config_loader") as mock_get_loader:
+            mock_get_loader.return_value.load_config_safe.return_value = {
                 "performance": {
                     "circuit_breaker": {
                         "failure_threshold": 2,

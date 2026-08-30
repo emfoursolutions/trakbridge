@@ -79,3 +79,4 @@ secrets/
 # admin UI writes to these at runtime; each deployment's contents differ
 external_config/
 
+docker-compose-local.yml

@@ -56,6 +56,13 @@ def get_current_user() -> Optional[User]:
     """
     Get the currently authenticated user
 
+    Resolves in order:
+    1. Request-context cache (``g.current_user``)
+    2. API-key bearer token from the Authorization header
+       (``Bearer tb_pat_...``) — populates ``g.api_key`` on success
+       so downstream decorators can enforce per-key scope limits.
+    3. Session cookie (browser UI path)
+
     Returns:
         User instance if authenticated, None otherwise
     """
@@ -63,7 +70,21 @@ def get_current_user() -> Optional[User]:
     if hasattr(g, "current_user"):
         return g.current_user
 
-    # Check session for authentication
+    # ----- API-key bearer path -----
+    # extract_bearer() is a fast-reject: no DB touch unless the header
+    # actually carries our tb_pat_ prefix. Sessions still work either
+    # way; a wrong-prefix or missing Authorization header falls through
+    # to session cookie auth below.
+    from services.auth.api_key_service import resolve_api_key, touch_last_used
+
+    api_key = resolve_api_key(request.headers.get("Authorization"))
+    if api_key is not None:
+        g.current_user = api_key.user
+        g.api_key = api_key
+        touch_last_used(api_key)
+        return api_key.user
+
+    # ----- Session cookie path -----
     session_id = session.get("session_id")
     if not session_id:
         g.current_user = None
@@ -134,6 +155,13 @@ def require_auth(f: Callable) -> Callable:
         # User is authenticated, proceed with request
         return f(*args, **kwargs)
 
+    # Both session cookies and bearer tokens are accepted. Endpoints
+    # that must refuse bearer auth (admin, credential mutation, key
+    # management itself) apply @session_only in addition.
+    decorated_function._openapi_security = [
+        {"sessionAuth": []},
+        {"bearerAuth": []},
+    ]
     return decorated_function
 
 
@@ -235,6 +263,10 @@ def require_role(
             # User has required role, proceed with request
             return f(*args, **kwargs)
 
+        decorated_function._openapi_security = [
+            {"sessionAuth": []},
+            {"bearerAuth": []},
+        ]
         return decorated_function
 
     return decorator
@@ -299,9 +331,43 @@ def require_permission(resource: str, action: str = "read") -> Callable:
                 else:
                     return "Permission denied", 403
 
+            # API-key scope enforcement.
+            # When the request is authenticated via an API key
+            # (g.api_key set by get_current_user), the key must also
+            # declare the scope the endpoint requires. Session cookies
+            # skip this check — a full-session user has all their
+            # role's permissions. Effective permission is always the
+            # intersection of (user role) AND (key scopes), so a key
+            # can never exceed its owner even if its stored scopes are
+            # broader.
+            api_key = getattr(g, "api_key", None)
+            if api_key is not None and not api_key.has_scope(resource, action):
+                logger.info(
+                    "AUDIT: api_key scope_denied prefix=%s scope=%s:%s",
+                    api_key.token_prefix,
+                    resource,
+                    action,
+                )
+                return (
+                    jsonify(
+                        {
+                            "error": "Permission denied",
+                            "message": (
+                                f"API key lacks the {resource}:{action} scope"
+                            ),
+                            "status": 403,
+                        }
+                    ),
+                    403,
+                )
+
             # User has required permission, proceed with request
             return f(*args, **kwargs)
 
+        decorated_function._openapi_security = [
+            {"sessionAuth": []},
+            {"bearerAuth": []},
+        ]
         return decorated_function
 
     return decorator
@@ -335,7 +401,16 @@ def operator_required(f: Callable) -> Callable:
 
 def api_key_or_auth_required(f: Callable) -> Callable:
     """
-    Decorator to allow either API key or session authentication
+    Legacy alias — allow either session cookie or bearer API key.
+
+    Retained for backwards compatibility with a handful of routes
+    that declared it before the API-key work landed. As of this MR,
+    both session cookies and ``Authorization: Bearer tb_pat_`` are
+    accepted natively by ``get_current_user()``, so this decorator
+    is functionally equivalent to ``require_auth``.
+
+    New endpoints should use ``@require_auth`` (or
+    ``@require_permission`` for RBAC).
 
     Args:
         f: Function to decorate
@@ -346,14 +421,7 @@ def api_key_or_auth_required(f: Callable) -> Callable:
 
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Check for API key first (future implementation)
-        api_key = request.headers.get("X-API-Key")
-        if api_key:
-            # TODO: Implement API key validation
-            # For now, fall back to session auth
-            pass
-
-        # Check session authentication
+        # get_current_user() handles both bearer and session paths.
         user = get_current_user()
 
         if not user:
@@ -375,6 +443,10 @@ def api_key_or_auth_required(f: Callable) -> Callable:
         # User is authenticated, proceed with request
         return f(*args, **kwargs)
 
+    decorated_function._openapi_security = [
+        {"sessionAuth": []},
+        {"bearerAuth": []},
+    ]
     return decorated_function
 
 
@@ -398,6 +470,7 @@ def optional_auth(f: Callable) -> Callable:
         # User is available in g.current_user regardless of authentication status
         return f(*args, **kwargs)
 
+    decorated_function._openapi_security = []
     return decorated_function
 
 
@@ -436,6 +509,74 @@ def login_required_json(f: Callable) -> Callable:
         # User is authenticated, proceed with request
         return f(*args, **kwargs)
 
+    decorated_function._openapi_security = [{"sessionAuth": []}]
+    return decorated_function
+
+
+def session_only(f: Callable) -> Callable:
+    """
+    Refuse API-key auth, even for keys with sufficient scope.
+
+    Endpoints that mutate credentials, manage API keys themselves,
+    or perform admin actions must require an interactive session
+    (with CSRF) — an API key that could rotate its owner's password
+    or mint more keys would turn a leaked key into total account
+    takeover.
+
+    Apply this decorator ABOVE @require_auth / @require_permission
+    so it runs first. Rejects EARLY based on the presence of a
+    tb_pat_ bearer header, before ever hitting the resolver. This is
+    a deliberate choice: an integrator hitting a session-only
+    endpoint should get a consistent 401 explaining "bearer is not
+    accepted here", whether or not the specific token happens to be
+    valid. Otherwise an invalid token would fall through to the
+    normal auth flow and yield a misleading 302 redirect to the
+    login page (which API clients don't handle).
+
+    Args:
+        f: Function to decorate
+
+    Returns:
+        Decorated function
+    """
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        auth = request.headers.get("Authorization", "")
+        # Reject on ANY tb_pat_ bearer, valid or not — see docstring.
+        # Use the same prefix constant the resolver uses so the two
+        # stay in lockstep if the format ever changes.
+        from models.user import API_KEY_TOKEN_PREFIX
+        if auth.startswith(f"Bearer {API_KEY_TOKEN_PREFIX}"):
+            # If get_current_user has already resolved the token,
+            # log the prefix for audit; otherwise log "unknown" to
+            # avoid a wasted DB lookup just for the log message.
+            api_key = getattr(g, "api_key", None)
+            prefix = api_key.token_prefix if api_key else "unknown"
+            logger.warning(
+                "AUDIT: api_key session_only_denied prefix=%s "
+                "endpoint=%s",
+                prefix,
+                request.endpoint,
+            )
+            return (
+                jsonify(
+                    {
+                        "error": "Session required",
+                        "message": (
+                            "This endpoint requires an interactive "
+                            "browser session; API-key authentication "
+                            "is not accepted here."
+                        ),
+                        "status": 401,
+                    }
+                ),
+                401,
+            )
+        return f(*args, **kwargs)
+
+    # Declare sessionAuth ONLY on the spec — bearerAuth is refused.
+    decorated_function._openapi_security = [{"sessionAuth": []}]
     return decorated_function
 
 
@@ -506,7 +647,14 @@ def get_user_permissions(user: User = None) -> Dict[str, List[str]]:
         return {}
 
     permissions = {}
-    resources = ["streams", "tak_servers", "admin", "api", "profile"]
+    resources = [
+        "streams",
+        "tak_servers",
+        "admin",
+        "api",
+        "profile",
+        "api_keys",
+    ]
     actions = ["read", "write", "delete", "admin"]
 
     for resource in resources:
