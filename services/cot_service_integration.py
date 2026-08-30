@@ -27,11 +27,13 @@ import logging
 import os
 import ssl
 import tempfile
+import time
 import yaml
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from lxml import etree
+from services.circuit_breaker import CircuitOpenError
 from services.logging_service import get_module_logger
 from services.queue_manager import get_queue_manager, reset_queue_manager
 from services.queue_monitoring import get_queue_monitoring_service
@@ -208,6 +210,10 @@ except ImportError:
     # Note: logger not yet initialized at module level
 
 logger = get_module_logger(__name__)
+
+# Health probes that exceed this many seconds log a WARNING with a
+# per-phase breakdown (db/config/connect/cleanup) for field diagnosis.
+SLOW_PROBE_WARN_SECONDS = 5.0
 
 
 class QueuedCOTService:
@@ -1317,22 +1323,18 @@ class QueuedCOTService:
             tasks: List[asyncio.Task] = []
             try:
                 logger.info(
-                    f"Enhanced transmission worker started for TAK server {tak_server.name}"
+                    f"Transmission worker started for TAK server {tak_server.name}"
                 )
                 logger.debug(
                     f"Worker thread started: server_id={tak_server_id}, server_name={tak_server.name}, timestamp={datetime.now()}"
                 )
 
-                # Reset circuit breaker before connection attempt so stale
-                # OPEN state from a previous failure doesn't block reconnection
-                try:
-                    circuit_breaker = self._get_tak_circuit_breaker(tak_server_id)
-                    if circuit_breaker:
-                        await circuit_breaker.manual_reset()
-                except Exception:
-                    pass
-
-                # Create PyTAK connection (reusing existing logic)
+                # Create PyTAK connection (reusing existing logic). The
+                # circuit breaker gates this attempt; while it is OPEN the
+                # call fast-fails to None and the backoff sleep below paces
+                # retries until the breaker's recovery window admits one.
+                # Operator-action resets live in stop_worker and
+                # start_worker's dead-worker cleanup, NOT here.
                 connection = await self._create_pytak_connection(tak_server)
                 if not connection:
                     logger.warning(
@@ -1408,7 +1410,7 @@ class QueuedCOTService:
 
             except Exception as e:
                 logger.error(
-                    f"Enhanced transmission worker error for TAK server {tak_server_id}: {e}"
+                    f"Transmission worker error for TAK server {tak_server_id}: {e}"
                 )
                 # Same reasoning as the CancelledError handler: don't leave
                 # orphaned child tasks running after this iteration exits.
@@ -2098,8 +2100,16 @@ class QueuedCOTService:
                 recovery_timeout=cb_config.get("recovery_timeout", 60.0),
                 timeout=cb_config.get("timeout", 30.0),
                 half_open_max_calls=cb_config.get("half_open_max_calls", 3),
-                success_threshold=cb_config.get("success_threshold", 2),
+                # One real established connection is the strongest recovery
+                # proof; requiring more leaves the breaker stuck HALF_OPEN
+                # when health probes are unreliable alongside a live
+                # worker connection.
+                success_threshold=cb_config.get("success_threshold", 1),
                 health_check_interval=cb_config.get("health_check_interval", 30.0),
+                # Probes do DB + config + TLS handshake work; the 10s
+                # default timed out in the field while a real connect
+                # succeeded in 83ms.
+                health_check_timeout=cb_config.get("health_check_timeout", 20.0),
             )
 
             # Get circuit breaker for this TAK server
@@ -2135,33 +2145,73 @@ class QueuedCOTService:
             )
             return None
 
-    async def _tak_health_check(self, tak_server_id: int) -> bool:
-        """Health check for TAK server connectivity"""
-        try:
-            # Simple connectivity test - try to create a connection
-            from models.tak_server import TakServer
-            from models.dto import TakServerDTO
-            import app as flask_app
+    @staticmethod
+    async def _fetch_tak_server_dto(tak_server_id: int):
+        """Load the TakServer row as a DTO without blocking the event loop.
 
-            # Access database within app context and convert to DTO
+        Synchronous ORM access is subject to DB locks (stream status
+        writes) — run it in an executor like the other DB paths do."""
+        from models.tak_server import TakServer
+        from models.dto import TakServerDTO
+        import app as flask_app
+
+        def _query():
             with flask_app.app.app_context():
                 tak_server_orm = TakServer.query.get(tak_server_id)
                 if not tak_server_orm:
-                    return False
+                    return None
+                return TakServerDTO.from_orm(tak_server_orm)
 
-                # Convert to DTO for use outside app context
-                tak_server = TakServerDTO.from_orm(tak_server_orm)
+        return await asyncio.get_event_loop().run_in_executor(None, _query)
 
-            # Try to create a test connection with short timeout
+    async def _tak_health_check(self, tak_server_id: int) -> bool:
+        """Health check for TAK server connectivity"""
+        timings = {"db": 0.0, "config": 0.0, "connect": 0.0, "cleanup": 0.0}
+        start = time.monotonic()
+        try:
+            tak_server = await QueuedCOTService._fetch_tak_server_dto(
+                tak_server_id
+            )
+            timings["db"] = time.monotonic() - start
+            if not tak_server:
+                return False
+
+            phase = time.monotonic()
             test_config = await self._create_pytak_config(tak_server)
+            timings["config"] = time.monotonic() - phase
+
+            phase = time.monotonic()
             test_connection = await asyncio.wait_for(
                 pytak.protocol_factory(test_config),
                 timeout=5.0,  # Short timeout for health check
             )
+            timings["connect"] = time.monotonic() - phase
 
-            # Clean up test connection
+            # Clean up test connection — best effort only. The health
+            # signal ends at the successful connect: TAK Server delays the
+            # TLS close handshake until its subscription reaper runs
+            # (~30s), so wait_closed() can stall far past the probe
+            # timeout. A stalled goodbye must not fail the probe.
             if test_connection:
-                await self._cleanup_connection(test_connection)
+                phase = time.monotonic()
+                try:
+                    await asyncio.wait_for(
+                        self._cleanup_connection(test_connection), timeout=2.0
+                    )
+                except Exception:
+                    # Force-close so the socket doesn't leak; the server
+                    # reaps its side of the subscription on its own.
+                    try:
+                        if (
+                            isinstance(test_connection, tuple)
+                            and len(test_connection) == 2
+                        ):
+                            test_connection[1].transport.abort()
+                        else:
+                            test_connection.transport.abort()
+                    except Exception:
+                        pass
+                timings["cleanup"] = time.monotonic() - phase
                 return True
 
             return False
@@ -2169,6 +2219,16 @@ class QueuedCOTService:
         except Exception as e:
             logger.debug(f"TAK server {tak_server_id} health check failed: {e}")
             return False
+        finally:
+            total = time.monotonic() - start
+            if total > SLOW_PROBE_WARN_SECONDS:
+                logger.warning(
+                    f"TAK server {tak_server_id} health check slow "
+                    f"({total:.1f}s): db={timings['db']:.1f}s "
+                    f"config={timings['config']:.1f}s "
+                    f"connect={timings['connect']:.1f}s "
+                    f"cleanup={timings['cleanup']:.1f}s"
+                )
 
     async def _create_pytak_connection(self, tak_server):
         """
@@ -2227,6 +2287,14 @@ class QueuedCOTService:
         except asyncio.TimeoutError:
             error_msg = f"Timeout connecting to TAK server {tak_server.name}"
             logger.error(error_msg)
+            return None
+        except CircuitOpenError as e:
+            # Expected fast-fail while the breaker gates reconnection attempts;
+            # the worker's backoff loop will retry after the recovery window.
+            logger.warning(
+                f"Circuit breaker open for TAK server {tak_server.name}, "
+                f"skipping connection attempt: {e}"
+            )
             return None
         except Exception as e:
             error_msg = f"Failed to connect to TAK server {tak_server.name}: {e}"
@@ -2289,7 +2357,11 @@ class QueuedCOTService:
 
     async def _transmit_batch(self, batch: List[bytes], connection, tak_server) -> bool:
         """
-        Transmit a batch of events to the TAK server with circuit breaker protection.
+        Transmit a batch of events to the TAK server.
+
+        The circuit breaker does NOT wrap this path: it gates connection
+        establishment only. Socket health is signalled by exceptions so the
+        TX loop can break and the worker can reconnect.
 
         Args:
             batch: List of COT event bytes
@@ -2297,13 +2369,15 @@ class QueuedCOTService:
             tak_server: TAK server configuration
 
         Returns:
-            True if transmission successful
+            True if transmission logically succeeded, False on non-socket
+            failures (e.g. unusable connection object).
+
+        Raises:
+            ConnectionError, OSError, ssl.SSLError: the socket is dead; the
+            caller must abandon this connection and reconnect.
         """
         if not batch:
             return True
-
-        # Get circuit breaker for this TAK server
-        circuit_breaker = self._get_tak_circuit_breaker(tak_server.id)
 
         async def _do_transmission():
             # Handle the case where connection might be a tuple (reader, writer)
@@ -2379,28 +2453,10 @@ class QueuedCOTService:
 
             return batch_success
 
-        try:
-            if circuit_breaker:
-                # Use circuit breaker to protect transmission
-                return await circuit_breaker.call(_do_transmission)
-            else:
-                # Fallback to direct transmission if circuit breaker not available
-                logger.debug(
-                    f"Circuit breaker not available for TAK server {tak_server.id}, using direct transmission"
-                )
-                return await _do_transmission()
-
-        except Exception as e:
-            from services.circuit_breaker import CircuitOpenError
-
-            if isinstance(e, CircuitOpenError):
-                logger.warning(
-                    f"Circuit breaker is OPEN for TAK server {tak_server.name}: {e}"
-                )
-                return False
-            else:
-                logger.error(f"Failed to transmit batch to {tak_server.name}: {e}")
-                return False
+        # Socket errors propagate to the TX loop, which breaks so the worker
+        # abandons the dead connection and reconnects. Per-event non-socket
+        # errors are absorbed into the bool result by _do_transmission itself.
+        return await _do_transmission()
 
     async def _cleanup_connection(self, connection):
         """Cleanup PyTAK connection"""
@@ -4146,3 +4202,10 @@ def reset_queued_cot_service():
             f"Resetting singleton instance {id(QueuedCOTService._instance)} at {datetime.now()}"
         )
         QueuedCOTService._instance = None
+    # Worker/connection tracking is class-level state shared across
+    # instances; stale entries from a previous service would trigger the
+    # dead-worker cleanup path (including a breaker reset) on the next
+    # service's start_worker.
+    QueuedCOTService._workers.clear()
+    QueuedCOTService._connections.clear()
+    QueuedCOTService._identity_uid_suffixes.clear()

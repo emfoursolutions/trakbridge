@@ -221,6 +221,42 @@ Environment variables take precedence over file-based configuration.
 - **Purpose**: Time to wait before attempting to close circuit (seconds)
 - **Impact**: Affects how quickly system attempts to recover from failures
 - **Tuning**: Match to typical recovery times for infrastructure
+- **Note**: Applies only to breakers without a health check. When a health
+  check is registered (TAK-server breakers), recovery is driven solely by
+  health-check success — real traffic is not admitted as a probe, avoiding
+  OPEN/HALF_OPEN flapping during an outage
+
+#### `timeout` (float, default: 30.0)
+- **Purpose**: Per-call timeout for operations protected by the breaker (seconds)
+
+#### `half_open_max_calls` (integer, default: 3 for TAK breakers)
+- **Purpose**: Maximum concurrent probes while the breaker is testing recovery
+- **Note**: `success_threshold` must not exceed this value
+
+#### `success_threshold` (integer, default: 1 for TAK breakers)
+- **Purpose**: Successes required to close the circuit from HALF_OPEN
+- **Behavior**: Healthy health-check probes while HALF_OPEN also count. The
+  TAK default is 1 because a real established connection is the strongest
+  recovery proof — requiring more can leave the breaker in HALF_OPEN when
+  health probes are unreliable alongside a live worker connection
+
+#### `health_check_interval` (float, default: 30.0)
+- **Purpose**: Seconds between health-check probes while a breaker is OPEN or HALF_OPEN
+- **Impact**: Each TAK-server probe opens one real test connection per interval
+
+#### `health_check_timeout` (float, default: 20.0 for TAK breakers)
+- **Purpose**: Overall timeout for one health probe (DB lookup + config + connect + cleanup)
+- **Diagnostics**: Probes slower than 5s log a WARNING with a per-phase timing breakdown
+
+#### Breaker scope
+- TAK-server breakers gate **connection establishment only**. Write failures on
+  an established socket cause the worker to abandon the connection and
+  reconnect (with backoff); recovery is proven by a fresh connection.
+- `failure_threshold` counts **consecutive** failures; intermittent failures
+  spread across successful calls do not accumulate into a trip.
+- Streams no longer auto-deactivate after consecutive poll errors; they retry
+  with capped backoff (5 minutes max) and surface the outage via the stream's
+  `last_error` field.
 
 ### Monitoring Configuration
 

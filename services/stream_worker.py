@@ -33,6 +33,13 @@ from plugins.plugin_manager import get_plugin_manager
 from services.cot_service import get_cot_service
 
 
+class FeedUnavailableError(Exception):
+    """A feed source reported a classified failure (sentinel result).
+
+    An expected operational state during outages — logged without a
+    traceback so it does not read like an application crash."""
+
+
 class StreamWorker:
     """Individual stream worker that handles a single feed"""
 
@@ -516,6 +523,22 @@ class StreamWorker:
                     self.logger.error(f"Error fetching locations from plugin: {e}")
                     raise
 
+                # Plugins report feed failures as [{"_error": ...}] sentinel
+                # dicts (a convention consumed by the connection-test UI).
+                # A sentinel-only result is a failed poll, not data — raise so
+                # the consecutive-error/backoff machinery engages and the
+                # outage is visible via last_error. Mixed results (partial
+                # data) still count as success; sentinels are dropped
+                # downstream by the COT service.
+                if locations and all(
+                    isinstance(loc, dict) and "_error" in loc for loc in locations
+                ):
+                    first = locations[0]
+                    raise FeedUnavailableError(
+                        f"Feed error from {self.stream.plugin_type} plugin: "
+                        f"{first.get('_error_message', first.get('_error'))}"
+                    )
+
                 if locations:
                     self.logger.info(
                         f"Retrieved {len(locations)} locations "
@@ -642,24 +665,32 @@ class StreamWorker:
                 error_msg = (
                     f"Error in stream loop (attempt {self._consecutive_errors}): {e}"
                 )
-                self.logger.error(error_msg, exc_info=True)
+                # Classified feed outages are an expected operational state;
+                # a traceback makes them read like crashes. Keep tracebacks
+                # for genuinely unexpected exceptions.
+                self.logger.error(
+                    error_msg, exc_info=not isinstance(e, FeedUnavailableError)
+                )
 
                 # Update error in database
                 await self._update_stream_status_async(last_error=str(e))
 
-                # If too many consecutive errors, stop the stream
-                if self._consecutive_errors >= max_consecutive_errors:
+                # Sustained failures do NOT deactivate the stream: a TAK
+                # server or GPS API outage must self-heal when the service
+                # returns. Backoff below caps the retry cost; last_error in
+                # the DB (updated every failure above) is the operator's
+                # degraded-state signal. Log at the threshold and every 10th
+                # failure after so sustained outages stay visible without
+                # spamming.
+                if self._consecutive_errors == max_consecutive_errors or (
+                    self._consecutive_errors > max_consecutive_errors
+                    and (self._consecutive_errors - max_consecutive_errors) % 10 == 0
+                ):
                     self.logger.error(
-                        f"Too many consecutive errors ({self._consecutive_errors}), stopping stream"
+                        f"Stream '{self.stream.name}' has failed "
+                        f"{self._consecutive_errors} consecutive polls; "
+                        f"continuing to retry with capped backoff"
                     )
-                    # Only mark inactive if not container shutdown
-                    if not self._is_container_shutdown():
-                        await self._update_stream_status_async(
-                            is_active=False,
-                            last_error=f"Stopped due to {self._consecutive_errors} consecutive errors",
-                        )
-                    self.running = False
-                    break
 
                 # Progressive backoff for retries
                 retry_delay = min(
