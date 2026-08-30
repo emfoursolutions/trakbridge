@@ -144,7 +144,7 @@ normalize = false
 # with this + a local segment so plugin `min_trakbridge_version` checks
 # resolve correctly on non-tag builds. Bump after tagging a release
 # (e.g. after tagging v2.2.0, set next = "2.3.0").
-next = "2.1.1"
+next = "2.2.0"
 
 [tool.pytest.ini_options]
 # Test discovery and execution
