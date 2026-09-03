@@ -368,11 +368,13 @@ def create_app(config_name=None):
         from models.user import API_KEY_TOKEN_PREFIX
         _orig_csrf_protect = csrf.protect
 
-        def _csrf_protect_with_bearer_bypass(apply_exemptions=False):
+        def _csrf_protect_with_bearer_bypass():
+            # Flask-WTF 1.2 removed the ``apply_exemptions`` kwarg from
+            # ``CSRFProtect.protect``. Match the current signature.
             auth = request.headers.get("Authorization", "")
             if auth.startswith(f"Bearer {API_KEY_TOKEN_PREFIX}"):
                 return
-            return _orig_csrf_protect(apply_exemptions=apply_exemptions)
+            return _orig_csrf_protect()
 
         csrf.protect = _csrf_protect_with_bearer_bypass
 
@@ -595,8 +597,6 @@ def create_app(config_name=None):
     # routes/inbound.py — webhook endpoints use bearer-token auth
     # (plugin.validate_inbound_request checks Authorization: Bearer header).
     app.csrf.exempt(app.view_functions["inbound.receive_inbound_data"])  # CSRF exempt: bearer-token authenticated via plugin.validate_inbound_request
-    app.csrf.exempt(app.view_functions["inbound.clear_preview"])          # CSRF exempt: stream identity validated by _validate_inbound_stream (no session)
-    app.csrf.exempt(app.view_functions["inbound.remap_preview"])          # CSRF exempt: stream identity validated by _validate_inbound_stream (no session)
     #
     # routes/api.py — coordinate conversion utilities use @optional_auth
     # (no session required; pure computation with no privileged state changes).

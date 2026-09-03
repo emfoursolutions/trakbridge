@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tests.conftest import get_csrf_token  # noqa: F401 (used in write-verb tests)
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -368,13 +370,68 @@ class TestPreviewModeDataEndpoint:
 # ---------------------------------------------------------------------------
 
 
+class TestPreviewAuthEnforcement:
+    """T1.1 — preview endpoints must reject unauthenticated callers.
+
+    The threat model flagged /api/inbound/<id>/preview as an
+    unauthenticated read of live tracked positions. All three verbs
+    (GET, DELETE, POST /remap) must require a session cookie or a
+    tb_pat_ bearer token via @api_key_or_auth_required.
+    """
+
+    def test_get_preview_rejects_unauthenticated(self, client):
+        """Anonymous GET /api/inbound/<id>/preview returns 401.
+
+        GET is not CSRF-protected, so auth is the sole gate.
+        """
+        response = client.get("/api/inbound/42/preview")
+        assert response.status_code == 401
+
+    def test_delete_preview_rejects_unauthenticated(self, client):
+        """Anonymous DELETE is rejected (CSRF or auth, either way not 200).
+
+        CSRF runs before the auth decorator, so anonymous callers see 400
+        rather than 401; the endpoint is refused in both cases.
+        """
+        response = client.delete("/api/inbound/42/preview")
+        assert response.status_code in (400, 401)
+
+    def test_remap_preview_rejects_unauthenticated(self, client):
+        """Anonymous POST is rejected (CSRF or auth)."""
+        response = client.post(
+            "/api/inbound/42/preview/remap",
+            data=json.dumps({"plugin_config": {}}),
+            content_type="application/json",
+        )
+        assert response.status_code in (400, 401)
+
+    def test_get_preview_accepts_authenticated_session(
+        self, authenticated_client, mock_stream
+    ):
+        """Authenticated session can GET preview (no longer 401)."""
+        auth_client = authenticated_client("admin")
+        with patch("routes.inbound.db") as mock_db, \
+             patch("routes.inbound._get_worker_for_stream", return_value=None):
+            mock_db.session.get.return_value = mock_stream
+
+            response = auth_client.get("/api/inbound/42/preview")
+
+            assert response.status_code == 200
+
+    # Bearer-token acceptance is proven at the decorator level by
+    # tests/unit/test_decorators_api_key.py — no need to re-cover it
+    # here, and constructing a real UserApiKey from the test-scoped
+    # session conflicts with the db_session fixture's isolation.
+
+
 class TestGetPreview:
     """Test GET /api/inbound/<stream_id>/preview."""
 
     def test_get_preview_returns_captured_payloads(
-        self, client, mock_stream, mock_plugin_manager
+        self, authenticated_client, mock_stream, mock_plugin_manager
     ):
         """GET preview returns the capture buffer contents."""
+        client = authenticated_client("admin")
         mock_worker = MagicMock()
         mock_worker.get_captured_payloads.return_value = [
             {
@@ -398,16 +455,20 @@ class TestGetPreview:
             assert "payloads" in data
             assert len(data["payloads"]) == 1
 
-    def test_get_preview_nonexistent_stream_returns_404(self, client):
+    def test_get_preview_nonexistent_stream_returns_404(self, authenticated_client):
         """GET preview for nonexistent stream returns 404."""
+        client = authenticated_client("admin")
         with patch("routes.inbound.db") as mock_db:
             mock_db.session.get.return_value = None
 
             response = client.get("/api/inbound/9999/preview")
             assert response.status_code == 404
 
-    def test_get_preview_non_inbound_returns_404(self, client, mock_stream):
+    def test_get_preview_non_inbound_returns_404(
+        self, authenticated_client, mock_stream
+    ):
         """GET preview for poll-mode stream returns 404."""
+        client = authenticated_client("admin")
         mock_stream.stream_mode = "poll"
 
         with patch("routes.inbound.db") as mock_db:
@@ -416,8 +477,11 @@ class TestGetPreview:
             response = client.get("/api/inbound/42/preview")
             assert response.status_code == 404
 
-    def test_get_preview_no_worker_returns_empty(self, client, mock_stream):
+    def test_get_preview_no_worker_returns_empty(
+        self, authenticated_client, mock_stream
+    ):
         """GET preview when no worker is active returns empty list."""
+        client = authenticated_client("admin")
         with patch("routes.inbound.db") as mock_db, \
              patch("routes.inbound._get_worker_for_stream", return_value=None):
             mock_db.session.get.return_value = mock_stream
@@ -432,25 +496,37 @@ class TestGetPreview:
 class TestDeletePreview:
     """Test DELETE /api/inbound/<stream_id>/preview."""
 
-    def test_delete_clears_buffer(self, client, mock_stream):
+    def test_delete_clears_buffer(self, authenticated_client, app, mock_stream):
         """DELETE preview clears the capture buffer."""
+        client = authenticated_client("admin")
+        token = get_csrf_token(client, app)
         mock_worker = MagicMock()
 
         with patch("routes.inbound.db") as mock_db, \
              patch("routes.inbound._get_worker_for_stream", return_value=mock_worker):
             mock_db.session.get.return_value = mock_stream
 
-            response = client.delete("/api/inbound/42/preview")
+            response = client.delete(
+                "/api/inbound/42/preview",
+                headers={"X-CSRFToken": token},
+            )
 
             assert response.status_code == 200
             mock_worker.clear_captured_payloads.assert_called_once()
 
-    def test_delete_nonexistent_stream_returns_404(self, client):
+    def test_delete_nonexistent_stream_returns_404(
+        self, authenticated_client, app
+    ):
         """DELETE preview for nonexistent stream returns 404."""
+        client = authenticated_client("admin")
+        token = get_csrf_token(client, app)
         with patch("routes.inbound.db") as mock_db:
             mock_db.session.get.return_value = None
 
-            response = client.delete("/api/inbound/9999/preview")
+            response = client.delete(
+                "/api/inbound/9999/preview",
+                headers={"X-CSRFToken": token},
+            )
             assert response.status_code == 404
 
 
@@ -458,9 +534,11 @@ class TestRemapPreview:
     """Test POST /api/inbound/<stream_id>/preview/remap."""
 
     def test_remap_reprocesses_with_alternate_config(
-        self, client, mock_stream, mock_plugin, mock_plugin_manager
+        self, authenticated_client, app, mock_stream, mock_plugin, mock_plugin_manager
     ):
         """Remap re-runs transform_payload against captured payloads with new config."""
+        client = authenticated_client("admin")
+        csrf = get_csrf_token(client, app)
         captured = [
             {
                 "raw_body": b'{"latitude": 38.9, "longitude": -77.0, "device_id": "d1"}',
@@ -495,6 +573,7 @@ class TestRemapPreview:
                     "plugin_config": {"lat_field": "latitude", "lon_field": "longitude"},
                 }),
                 content_type="application/json",
+                headers={"X-CSRFToken": csrf},
             )
 
             assert response.status_code == 200
@@ -503,9 +582,11 @@ class TestRemapPreview:
             assert len(data["results"]) == 1
 
     def test_remap_does_not_save_config(
-        self, client, mock_stream, mock_plugin, mock_plugin_manager
+        self, authenticated_client, app, mock_stream, mock_plugin, mock_plugin_manager
     ):
         """Remap does NOT persist config changes to the stream."""
+        client = authenticated_client("admin")
+        csrf = get_csrf_token(client, app)
         mock_worker = MagicMock()
         mock_worker.get_captured_payloads.return_value = [
             {
@@ -533,6 +614,7 @@ class TestRemapPreview:
                 "/api/inbound/42/preview/remap",
                 data=json.dumps({"plugin_config": {"lat_field": "new_path"}}),
                 content_type="application/json",
+                headers={"X-CSRFToken": csrf},
             )
 
             # stream.set_plugin_config or db.session.commit should NOT have been called
@@ -540,9 +622,11 @@ class TestRemapPreview:
             mock_db.session.commit.assert_not_called()
 
     def test_remap_empty_buffer_returns_empty(
-        self, client, mock_stream, mock_plugin_manager
+        self, authenticated_client, app, mock_stream, mock_plugin_manager
     ):
         """Remap with empty buffer returns empty results."""
+        client = authenticated_client("admin")
+        csrf = get_csrf_token(client, app)
         mock_worker = MagicMock()
         mock_worker.get_captured_payloads.return_value = []
 
@@ -555,13 +639,18 @@ class TestRemapPreview:
                 "/api/inbound/42/preview/remap",
                 data=json.dumps({"plugin_config": {}}),
                 content_type="application/json",
+                headers={"X-CSRFToken": csrf},
             )
 
             assert response.status_code == 200
             assert response.get_json()["results"] == []
 
-    def test_remap_nonexistent_stream_returns_404(self, client):
+    def test_remap_nonexistent_stream_returns_404(
+        self, authenticated_client, app
+    ):
         """Remap for nonexistent stream returns 404."""
+        client = authenticated_client("admin")
+        csrf = get_csrf_token(client, app)
         with patch("routes.inbound.db") as mock_db:
             mock_db.session.get.return_value = None
 
@@ -569,5 +658,6 @@ class TestRemapPreview:
                 "/api/inbound/9999/preview/remap",
                 data=json.dumps({"plugin_config": {}}),
                 content_type="application/json",
+                headers={"X-CSRFToken": csrf},
             )
             assert response.status_code == 404

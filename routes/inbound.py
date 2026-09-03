@@ -17,6 +17,7 @@ from database import db
 from models.stream import Stream
 from plugins.plugin_manager import get_plugin_manager
 from services.auth import require_permission
+from services.auth.decorators import api_key_or_auth_required
 from services.inbound_stream_worker import get_active_inbound_streams
 
 logger = logging.getLogger(__name__)
@@ -433,6 +434,7 @@ def _serialize_payload(entry: Dict) -> Dict:
 
 
 @bp.route("/<int:stream_id>/preview", methods=["GET"])
+@api_key_or_auth_required
 def get_preview(stream_id: int):
     """Return captured payloads for an inbound stream.
 
@@ -487,6 +489,7 @@ def get_preview(stream_id: int):
 
 
 @bp.route("/<int:stream_id>/preview", methods=["DELETE"])
+@api_key_or_auth_required
 def clear_preview(stream_id: int):
     """Clear the capture buffer for an inbound stream.
 
@@ -524,6 +527,7 @@ def clear_preview(stream_id: int):
 
 
 @bp.route("/<int:stream_id>/preview/remap", methods=["POST"])
+@api_key_or_auth_required
 def remap_preview(stream_id: int):
     """Re-run payload transform with alternate plugin config.
 
