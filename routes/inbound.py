@@ -445,11 +445,10 @@ def get_preview(stream_id: int):
     verify the plugin's payload transform before switching to live
     mode.
 
-    Access is gated by stream-identity validation: the caller must
-    know the stream id and the stream must be an inbound stream.
+    Requires a valid session or ``tb_pat_`` bearer token, and the
+    stream must be an inbound stream.
     ---
     tags: [Inbound]
-    security: []
     parameters:
       - in: path
         name: stream_id
@@ -495,9 +494,9 @@ def clear_preview(stream_id: int):
 
     Discards every payload previously captured by preview mode.
     Idempotent — succeeds even when no payloads are buffered.
+    Requires a valid session or ``tb_pat_`` bearer token.
     ---
     tags: [Inbound]
-    security: []
     parameters:
       - in: path
         name: stream_id
@@ -539,10 +538,10 @@ def remap_preview(stream_id: int):
 
     Returns one entry per captured payload with the received-at
     timestamp and either the mapped location list or an error
-    object if the transform threw.
+    object if the transform threw. Requires a valid session or
+    ``tb_pat_`` bearer token.
     ---
     tags: [Inbound]
-    security: []
     parameters:
       - in: path
         name: stream_id

@@ -171,16 +171,14 @@ def get_cached_health_check(check_name, check_function, *args, **kwargs):
 
 
 @bp.route("/status")
-@optional_auth
+@api_key_or_auth_required
 def api_status():
     """System status summary.
 
     Returns aggregate counts of streams, TAK servers, and running
-    workers. Public probe; optional auth surfaces the same payload
-    to authenticated callers.
+    workers. Requires a valid session or ``tb_pat_`` bearer token.
     ---
     tags: [Status]
-    security: []
     responses:
       200:
         description: Current system status counts.
@@ -368,15 +366,18 @@ def detailed_health_check():
 
 
 @bp.route("/health/ready")
+@api_key_or_auth_required
 def readiness_check():
     """Kubernetes readiness probe.
 
     Verifies the app is ready to serve traffic by checking database
     connectivity and encryption service health. Returns 503 when the
-    app should be removed from the load-balancer pool.
+    app should be removed from the load-balancer pool. Requires a
+    valid session or ``tb_pat_`` bearer token; orchestrators/monitors
+    already carry a service token. Use ``/api/health`` for the bare
+    unauth probe.
     ---
     tags: [Health]
-    security: []
     responses:
       200:
         description: Ready to serve traffic.
@@ -417,6 +418,7 @@ def readiness_check():
 
 
 @bp.route("/health/live")
+@api_key_or_auth_required
 def liveness_check():
     """Kubernetes liveness probe.
 
@@ -424,9 +426,10 @@ def liveness_check():
     responsive. Never returns non-200 — a failed liveness probe
     means the container should be restarted, which requires the
     process to be genuinely wedged (unable to respond at all).
+    Requires a valid session or ``tb_pat_`` bearer token; use
+    ``/api/health`` for the bare unauth probe.
     ---
     tags: [Health]
-    security: []
     responses:
       200:
         description: Process is alive.
@@ -2127,15 +2130,16 @@ def get_team_member_color_options():
 
 
 @bp.route("/version")
+@api_key_or_auth_required
 def version():
     """Current TrakBridge version.
 
     Returns the version string used across the app (banner, health
-    payloads, plugin version-gate comparisons). Public — no auth
-    required.
+    payloads, plugin version-gate comparisons). Requires a valid
+    session or ``tb_pat_`` bearer token so the version is not a
+    ready-made fingerprint for drive-by scans.
     ---
     tags: [Version]
-    security: []
     responses:
       200:
         description: Version information.

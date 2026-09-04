@@ -19,10 +19,16 @@ class TestEndpointAuthRequirements:
         ("/api/monitoring/dashboard", "GET"),
         ("/api/convert-latlon-to-mgrs", "POST"),
         ("/api/convert-mgrs-to-latlon", "POST"),
+        # T1.5 — reconnaissance endpoints tightened for 2.2.0
+        ("/api/status", "GET"),
+        ("/api/version", "GET"),
+        ("/api/health/ready", "GET"),
+        ("/api/health/live", "GET"),
     ]
 
-    # Endpoint that should remain accessible without auth (minimal probe)
-    PUBLIC_ENDPOINT = "/api/status"
+    # /api/health remains the single canonical unauth probe for
+    # container/load-balancer checks (T1.5 explicitly keeps it public).
+    PUBLIC_ENDPOINT = "/api/health"
 
     @pytest.mark.parametrize("endpoint,method", PROTECTED_ENDPOINTS)
     def test_protected_endpoints_reject_unauthenticated(
@@ -46,12 +52,13 @@ class TestEndpointAuthRequirements:
             f"request, got {response.status_code}"
         )
 
-    def test_status_endpoint_allows_unauthenticated(self, client, db_session):
-        """Test that /api/status remains accessible without authentication.
+    def test_health_endpoint_allows_unauthenticated(self, client, db_session):
+        """/api/health remains accessible without authentication (T1.5).
 
-        Requires db_session because the handler queries the streams table;
-        without it, an earlier test's teardown leaves no tables and this
-        test 500s in full-suite runs.
+        This is the single canonical unauth probe for container/load-
+        balancer checks. All other status/version/health-probe endpoints
+        are gated. Requires db_session because the app factory expects
+        a live schema during request setup.
         """
         response = client.get(self.PUBLIC_ENDPOINT)
         assert response.status_code == 200, (
