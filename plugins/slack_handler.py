@@ -491,17 +491,14 @@ class SlackHandler(BaseOutputPlugin):
                     if resp.status != 200:
                         logger.error(f"Slack webhook failed: {resp.status}")
         except ssl.SSLError as ssl_err:
-            logger.warning(f"SSL Error sending to Slack: {ssl_err}")
-            # Retry without SSL verification
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(webhook_url, json=payload, ssl=False) as resp:
-                        if resp.status == 200:
-                            logger.warning("Sent to Slack using insecure SSL connection due to certificate issues")
-                        else:
-                            logger.error(f"Slack webhook failed even with SSL disabled: {resp.status}")
-            except Exception as fallback_err:
-                logger.error(f"Failed to send to Slack (fallback attempt): {fallback_err}")
+            # T4.3 — never retry a webhook post with certificate
+            # validation disabled. The webhook URL is itself the
+            # bearer credential; re-sending it over an unverified
+            # channel exposes it to any MITM presenting a bad cert.
+            logger.error(
+                f"SSL verification failed sending to Slack; "
+                f"refusing to retry without verification: {ssl_err}"
+            )
         except Exception as e:
             logger.error(f"Failed to send to Slack: {e}")
 
@@ -551,29 +548,22 @@ class SlackHandler(BaseOutputPlugin):
                                 "message": f"Slack webhook returned error: {resp_text}",
                             }
             except ssl.SSLError as ssl_err:
-                logger.warning(f"SSL Error testing Slack connection: {ssl_err}")
-                # Retry without SSL verification
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        async with session.post(webhook_url, json=test_payload, timeout=aiohttp.ClientTimeout(total=10), ssl=False) as resp:
-                            if resp.status == 200:
-                                return {
-                                    "success": True,
-                                    "message": "Successfully sent test message to Slack (insecure SSL connection used due to certificate issues)",
-                                }
-                            else:
-                                resp_text = await resp.text()
-                                return {
-                                    "success": False,
-                                    "error": f"HTTP {resp.status}",
-                                    "message": f"Slack webhook returned error: {resp_text}",
-                                }
-                except Exception as fallback_err:
-                    return {
-                        "success": False,
-                        "error": "Connection failed",
-                        "message": f"Failed to connect to Slack even with SSL disabled: {str(fallback_err)}",
-                    }
+                # T4.3 — do not retry the test with certificate
+                # validation disabled. Report the SSL failure as the
+                # test result so the operator sees the real issue.
+                logger.error(
+                    f"SSL verification failed testing Slack "
+                    f"connection; refusing to retry without "
+                    f"verification: {ssl_err}"
+                )
+                return {
+                    "success": False,
+                    "error": "SSL verification failed",
+                    "message": (
+                        f"Certificate validation failed reaching "
+                        f"Slack: {ssl_err}"
+                    ),
+                }
 
         except aiohttp.ClientError as e:
             return {
