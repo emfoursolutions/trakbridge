@@ -1,0 +1,7 @@
+# Cert material lives here at runtime — never commit it.
+# Drop trakbridge.crt / trakbridge.key into this directory on the
+# host and they will be mounted read-only into the nginx container
+# via docker-compose.yml.
+*
+!.gitignore
+!README.md

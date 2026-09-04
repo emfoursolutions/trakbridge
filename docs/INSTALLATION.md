@@ -45,25 +45,51 @@ wget https://raw.githubusercontent.com/emfoursolutions/trakbridge/refs/heads/mai
 chmod +x setup.sh
 ```
 
-3. **Basic deployment**:
+3. **Provide TLS material**: nginx is the shipped reverse proxy and
+   terminates TLS on 443. Drop your certificate and private key into
+   `./init/nginx/ssl/`:
+
+```bash
+mkdir -p init/nginx/ssl
+# For production, place your CA-issued cert + key here:
+cp /path/to/fullchain.pem  init/nginx/ssl/trakbridge.crt
+cp /path/to/privkey.pem    init/nginx/ssl/trakbridge.key
+chmod 600 init/nginx/ssl/trakbridge.key
+
+# Local/self-signed for testing:
+openssl req -x509 -nodes -newkey rsa:2048 \
+  -keyout init/nginx/ssl/trakbridge.key \
+  -out    init/nginx/ssl/trakbridge.crt \
+  -days 365 -subj "/CN=localhost"
+```
+
+See `init/nginx/ssl/README.md` for details.
+
+4. **Basic deployment**:
 ```bash
 # Start with SQLite (development/testing)
 ./setup.sh
 docker compose up -d
 
-# Access at http://yourdomain.com:5000
+# Access at https://yourdomain.com  (nginx terminates TLS on 443,
+# redirects HTTP:80 → HTTPS:443)
 ```
 
-4. **Production deployment** with PostgreSQL and Nginx:
+5. **Production deployment** with PostgreSQL:
 ```bash
-# Setup with SSL certificate
-./setup.sh --enable-nginx --nginx-ssl yourdomain.com
+./setup.sh
 
 # Start production stack
-docker compose --profile postgres --profile nginx up -d
+docker compose --profile postgres up -d
 
 # Access at https://yourdomain.com
 ```
+
+> **Note on reverse proxies**: `docker-compose.yml` ships with nginx
+> as the ingress on 80/443. If you already run an upstream proxy
+> (Traefik, cloud LB, etc.) that terminates TLS for you, either
+> remove the nginx service from the compose file or leave it in
+> place and treat nginx as an internal hop.
 
 ### Docker Configuration
 
