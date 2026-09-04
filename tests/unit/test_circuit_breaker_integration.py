@@ -186,48 +186,10 @@ class TestCircuitBreakerIntegration:
                 connection = await cot_service._create_pytak_connection(mock_tak_server)
                 assert connection is None
 
-    @pytest.mark.asyncio
-    async def test_recovery_service_integration(self):
-        """Test recovery service integration with circuit breakers"""
-        from services.recovery_service import (
-            get_recovery_service,
-            ComponentType,
-            RecoveryConfig,
-        )
-        from services.recovery_implementations import register_all_recovery_methods
-
-        # Configure recovery service
-        config = RecoveryConfig(
-            max_retry_attempts=2, initial_retry_delay=0.1, health_check_interval=0.1
-        )
-
-        recovery_service = get_recovery_service(config)
-        register_all_recovery_methods()
-
-        # Mock health check that fails initially then succeeds
-        health_check_calls = 0
-
-        async def mock_health_check():
-            nonlocal health_check_calls
-            health_check_calls += 1
-            return health_check_calls > 3
-
-        # Register a component
-        recovery_service.register_component(
-            "test_component", ComponentType.STREAM, mock_health_check
-        )
-
-        # Force recovery
-        success = await recovery_service.initiate_recovery("test_component")
-        assert success
-
-        # Wait for recovery to complete
-        await asyncio.sleep(0.5)
-
-        # Check recovery status
-        status = recovery_service.get_recovery_status("test_component")
-        assert status is not None
-        assert status["status"] in ["succeeded", "failed", "in_progress"]
+    # T7.4 — the standalone recovery_service subsystem was orphaned
+    # and has been deleted; its integration test with it is gone.
+    # The circuit breaker's own recovery behaviour is exercised by
+    # test_recovery_after_failures and test_worker_reconnect_breaker.
 
     @pytest.mark.asyncio
     async def test_exponential_backoff(self):
