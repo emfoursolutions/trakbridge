@@ -26,7 +26,6 @@ except ImportError:  # pragma: no cover - test dep, should be installed
 
 
 RELEASE_COMPOSE = Path("docker-compose.yml")
-LOCAL_COMPOSE = Path("docker-compose-local.yml")
 NGINX_CONF = Path("init/nginx/nginx.conf")
 
 # Both the release and local compose files must ship nginx as the
