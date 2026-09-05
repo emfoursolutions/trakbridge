@@ -368,13 +368,16 @@ def create_app(config_name=None):
         from models.user import API_KEY_TOKEN_PREFIX
         _orig_csrf_protect = csrf.protect
 
-        def _csrf_protect_with_bearer_bypass():
-            # Flask-WTF 1.2 removed the ``apply_exemptions`` kwarg from
-            # ``CSRFProtect.protect``. Match the current signature.
+        def _csrf_protect_with_bearer_bypass(*args, **kwargs):
+            # Flask-WTF 1.1 called this hook as
+            # ``protect(apply_exemptions=True)``; 1.2 dropped the
+            # kwarg. Accept and forward whatever the caller passes
+            # so the shim works against both versions — otherwise
+            # the mismatch surfaces as a 500 on every request.
             auth = request.headers.get("Authorization", "")
             if auth.startswith(f"Bearer {API_KEY_TOKEN_PREFIX}"):
                 return
-            return _orig_csrf_protect()
+            return _orig_csrf_protect(*args, **kwargs)
 
         csrf.protect = _csrf_protect_with_bearer_bypass
 

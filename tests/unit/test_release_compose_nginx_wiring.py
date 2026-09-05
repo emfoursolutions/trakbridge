@@ -26,14 +26,24 @@ except ImportError:  # pragma: no cover - test dep, should be installed
 
 
 RELEASE_COMPOSE = Path("docker-compose.yml")
+LOCAL_COMPOSE = Path("docker-compose-local.yml")
 NGINX_CONF = Path("init/nginx/nginx.conf")
 
+# Both the release and local compose files must ship nginx as the
+# ingress. Dev and staging compose files sit behind external Traefik
+# and are intentionally not covered here.
+NGINX_ENABLED_COMPOSE_FILES = [RELEASE_COMPOSE, LOCAL_COMPOSE]
 
-@pytest.fixture(scope="module")
-def release_compose():
+
+@pytest.fixture(
+    scope="module",
+    params=NGINX_ENABLED_COMPOSE_FILES,
+    ids=lambda p: p.name,
+)
+def release_compose(request):
     if yaml is None:
         pytest.skip("pyyaml not available")
-    return yaml.safe_load(RELEASE_COMPOSE.read_text())
+    return yaml.safe_load(request.param.read_text())
 
 
 class TestReleaseComposeHasNginxService:
