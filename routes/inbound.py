@@ -17,6 +17,7 @@ from database import db
 from models.stream import Stream
 from plugins.plugin_manager import get_plugin_manager
 from services.auth import require_permission
+from services.auth.decorators import api_key_or_auth_required
 from services.inbound_stream_worker import get_active_inbound_streams
 
 logger = logging.getLogger(__name__)
@@ -433,6 +434,7 @@ def _serialize_payload(entry: Dict) -> Dict:
 
 
 @bp.route("/<int:stream_id>/preview", methods=["GET"])
+@api_key_or_auth_required
 def get_preview(stream_id: int):
     """Return captured payloads for an inbound stream.
 
@@ -443,11 +445,10 @@ def get_preview(stream_id: int):
     verify the plugin's payload transform before switching to live
     mode.
 
-    Access is gated by stream-identity validation: the caller must
-    know the stream id and the stream must be an inbound stream.
+    Requires a valid session or ``tb_pat_`` bearer token, and the
+    stream must be an inbound stream.
     ---
     tags: [Inbound]
-    security: []
     parameters:
       - in: path
         name: stream_id
@@ -487,14 +488,15 @@ def get_preview(stream_id: int):
 
 
 @bp.route("/<int:stream_id>/preview", methods=["DELETE"])
+@api_key_or_auth_required
 def clear_preview(stream_id: int):
     """Clear the capture buffer for an inbound stream.
 
     Discards every payload previously captured by preview mode.
     Idempotent — succeeds even when no payloads are buffered.
+    Requires a valid session or ``tb_pat_`` bearer token.
     ---
     tags: [Inbound]
-    security: []
     parameters:
       - in: path
         name: stream_id
@@ -524,6 +526,7 @@ def clear_preview(stream_id: int):
 
 
 @bp.route("/<int:stream_id>/preview/remap", methods=["POST"])
+@api_key_or_auth_required
 def remap_preview(stream_id: int):
     """Re-run payload transform with alternate plugin config.
 
@@ -535,10 +538,10 @@ def remap_preview(stream_id: int):
 
     Returns one entry per captured payload with the received-at
     timestamp and either the mapped location list or an error
-    object if the transform threw.
+    object if the transform threw. Requires a valid session or
+    ``tb_pat_`` bearer token.
     ---
     tags: [Inbound]
-    security: []
     parameters:
       - in: path
         name: stream_id

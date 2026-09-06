@@ -519,7 +519,11 @@ def delete_tak_server(server_id):
 
         server = TakServer.query.get_or_404(server_id)
 
-        if server.streams:
+        # Check both the legacy tak_server_id FK relationship
+        # AND the newer stream_tak_servers M2M table. The M2M FK has
+        # ondelete=CASCADE, so a delete would silently orphan any
+        # stream that only linked via M2M.
+        if server.streams or server.streams_many.count() > 0:
             return (
                 jsonify(
                     {

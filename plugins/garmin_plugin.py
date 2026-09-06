@@ -290,21 +290,16 @@ class GarminPlugin(BaseGPSPlugin, CallsignMappable):
                         return await self._handle_http_error(response)
 
             except ssl.SSLError as ssl_err:
-                logger.warning(f"SSL Error on attempt {attempt + 1}: {ssl_err}")
-                # Try without SSL verification
-                try:
-                    async with session.get(
-                        config["url"], auth=auth, ssl=False
-                    ) as response:
-                        if response.status == 200:
-                            content = await response.text(encoding="utf-8")
-                            if content and "<kml" in content:
-                                logger.warning(
-                                    "Using insecure SSL connection due to certificate issues"
-                                )
-                                return content
-                except Exception as fallback_err:
-                    logger.error(f"Fallback attempt failed: {fallback_err}")
+                # T4.3 — never retry a credential-bearing request with
+                # certificate validation disabled. A cert error talking
+                # to Garmin is not a condition to work around; the retry
+                # loop will try again with the secure context, and if it
+                # keeps failing we return None to the caller.
+                logger.error(
+                    f"SSL verification failed for Garmin feed on "
+                    f"attempt {attempt + 1}; refusing to retry without "
+                    f"verification: {ssl_err}"
+                )
 
             except Exception as e:
                 logger.warning(f"Attempt {attempt + 1} failed: {e}")
