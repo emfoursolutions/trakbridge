@@ -44,6 +44,7 @@ from services.auth import (
     require_auth,
     require_permission,
 )
+from services.circuit_breaker import get_circuit_breaker_manager
 from services.connection_test_service import ConnectionTestService
 from services.health_service import health_service
 
@@ -171,9 +172,21 @@ def get_cached_health_check(check_name, check_function, *args, **kwargs):
 
 
 @bp.route("/status")
-@optional_auth
+@api_key_or_auth_required
 def api_status():
-    """API endpoint for system status"""
+    """System status summary.
+
+    Returns aggregate counts of streams, TAK servers, and running
+    workers. Requires a valid session or ``tb_pat_`` bearer token.
+    ---
+    tags: [Status]
+    responses:
+      200:
+        description: Current system status counts.
+        content:
+          application/json:
+            schema: StatusSchema
+    """
     # Import models inside the route to avoid circular imports
     from models.stream import Stream
     from models.tak_server import TakServer
@@ -202,7 +215,26 @@ def api_status():
 
 @bp.route("/health")
 def health_check():
-    """Basic health check endpoint - always responds even during startup"""
+    """Basic health check.
+
+    Always responds — including during startup — so container
+    orchestrators can distinguish a booting process from a crashed
+    one. Returns 200 while starting; 503 only on hard startup error.
+    ---
+    tags: [Health]
+    security: []
+    responses:
+      200:
+        description: Service is healthy or still starting.
+        content:
+          application/json:
+            schema: HealthCheckSchema
+      503:
+        description: Startup failed or service is unhealthy.
+        content:
+          application/json:
+            schema: HealthCheckSchema
+    """
     try:
         from app import get_startup_status
 
@@ -255,7 +287,31 @@ def health_check():
 @bp.route("/health/detailed")
 @require_auth
 def detailed_health_check():
-    """Detailed health check with all components"""
+    """Full health check across all components.
+
+    Aggregates database, encryption, configuration, stream manager,
+    system resource, streams, and TAK server checks. Returns
+    ``degraded`` when non-critical components fail; ``unhealthy``
+    (503) only when database or encryption fails.
+    ---
+    tags: [Health]
+    responses:
+      200:
+        description: Aggregate health (healthy or degraded).
+        content:
+          application/json:
+            schema: DetailedHealthSchema
+      503:
+        description: One or more critical components are unhealthy.
+        content:
+          application/json:
+            schema: DetailedHealthSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     start_time = time.time()
 
     checks = {
@@ -311,8 +367,30 @@ def detailed_health_check():
 
 
 @bp.route("/health/ready")
+@api_key_or_auth_required
 def readiness_check():
-    """Kubernetes readiness probe - checks if app is ready to serve traffic"""
+    """Kubernetes readiness probe.
+
+    Verifies the app is ready to serve traffic by checking database
+    connectivity and encryption service health. Returns 503 when the
+    app should be removed from the load-balancer pool. Requires a
+    valid session or ``tb_pat_`` bearer token; orchestrators/monitors
+    already carry a service token. Use ``/api/health`` for the bare
+    unauth probe.
+    ---
+    tags: [Health]
+    responses:
+      200:
+        description: Ready to serve traffic.
+        content:
+          application/json:
+            schema: ReadinessSchema
+      503:
+        description: Not ready — dependency check failed.
+        content:
+          application/json:
+            schema: ReadinessSchema
+    """
 
     checks = {
         "database": health_service.check_database_connectivity,
@@ -341,8 +419,25 @@ def readiness_check():
 
 
 @bp.route("/health/live")
+@api_key_or_auth_required
 def liveness_check():
-    """Kubernetes liveness probe - basic check if app is alive"""
+    """Kubernetes liveness probe.
+
+    Minimal check that the process is alive and the event loop is
+    responsive. Never returns non-200 — a failed liveness probe
+    means the container should be restarted, which requires the
+    process to be genuinely wedged (unable to respond at all).
+    Requires a valid session or ``tb_pat_`` bearer token; use
+    ``/api/health`` for the bare unauth probe.
+    ---
+    tags: [Health]
+    responses:
+      200:
+        description: Process is alive.
+        content:
+          application/json:
+            schema: LivenessSchema
+    """
     return jsonify(
         {
             "status": "alive",
@@ -355,7 +450,29 @@ def liveness_check():
 @bp.route("/health/database")
 @require_auth
 def database_health():
-    """Database-specific health check"""
+    """Database-specific health check.
+
+    Runs the full database connectivity and pool health check suite.
+    Returns 503 when the database is unreachable or misconfigured.
+    ---
+    tags: [Health]
+    responses:
+      200:
+        description: Database is healthy.
+        content:
+          application/json:
+            schema: ComponentHealthSchema
+      503:
+        description: Database is unhealthy.
+        content:
+          application/json:
+            schema: ComponentHealthSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     result = get_cached_health_check("database", health_service.run_all_database_checks)
 
     # Return appropriate HTTP status code
@@ -383,10 +500,10 @@ def check_encryption_health():
 def check_configuration_health():
     """Check configuration management health with validation and status"""
     try:
-        from utils.config_manager import config_manager
+        from config.base import get_config_loader
 
         # Get detailed configuration validation results
-        results = config_manager.validate_all_configs()
+        results = get_config_loader().validate_all_configs()
 
         # Count status
         total_configs = len(results)
@@ -445,7 +562,37 @@ def check_configuration_health():
 @bp.route("/health/plugins", methods=["GET"])
 @require_permission("api", "read")
 def plugin_health():
-    """Plugin health check with safe attribute access"""
+    """Health status of all loaded plugins.
+
+    Delegates to ``plugin_manager.check_all_plugins_health()`` on the
+    background stream-manager event loop. Requires the ``api:read``
+    permission.
+    ---
+    tags: [Health]
+    responses:
+      200:
+        description: Aggregate plugin health.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      500:
+        description: Plugin or stream manager unavailable.
+        content:
+          application/json:
+            schema: ErrorSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     plugin_manager = getattr(current_app, "plugin_manager", None)
     stream_manager = getattr(current_app, "stream_manager", None)
 
@@ -465,7 +612,31 @@ def plugin_health():
 @bp.route("/health/configuration", methods=["GET"])
 @require_auth
 def configuration_health():
-    """Configuration health check endpoint with detailed status"""
+    """Configuration file validation health.
+
+    Validates every configuration file managed by the config loader
+    and returns a per-file status breakdown. Overall status is
+    ``unhealthy`` (503) only when more than half of the config
+    files fail validation.
+    ---
+    tags: [Health]
+    responses:
+      200:
+        description: Configuration is healthy or degraded.
+        content:
+          application/json:
+            schema: ComponentHealthSchema
+      503:
+        description: Majority of configuration files invalid.
+        content:
+          application/json:
+            schema: ComponentHealthSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     result = check_configuration_health()
 
     # Return appropriate HTTP status code
@@ -530,62 +701,55 @@ def circuit_breaker_health():
 @bp.route("/health/recovery", methods=["GET"])
 @require_auth
 def recovery_service_health():
-    """Recovery service health and status monitoring"""
+    """Recovery health derived from per-service circuit breakers.
+
+    T7.4 — the standalone recovery subsystem was orphaned; the
+    circuit breaker took over the recovery role in practice. This
+    endpoint surfaces the CB manager's live per-service state so
+    operators see real recovery/outage information instead of a
+    fabricated success rate from an idle singleton.
+
+    Status mapping:
+    - any breaker OPEN      → ``unhealthy`` (HTTP 503)
+    - any breaker HALF_OPEN → ``degraded``  (HTTP 200)
+    - all CLOSED / empty    → ``healthy``   (HTTP 200)
+    """
     try:
-        from services.recovery_service import get_recovery_service
+        manager = get_circuit_breaker_manager()
+        all_status = manager.get_all_status()
 
-        recovery_service = get_recovery_service()
-        service_status = recovery_service.get_service_status()
+        any_open = False
+        any_half_open = False
+        for status in all_status.values():
+            state = (status.get("state") or "").lower()
+            if state == "open":
+                any_open = True
+            elif state == "half_open":
+                any_half_open = True
 
-        # Get recent recovery attempts
-        recent_recoveries = []
-        for attempt in recovery_service.recovery_history[-10:]:  # Last 10 attempts
-            recent_recoveries.append(
-                {
-                    "component_id": attempt.component_id,
-                    "component_type": attempt.component_type.value,
-                    "status": attempt.status.value,
-                    "started_at": attempt.started_at.isoformat(),
-                    "completed_at": (
-                        attempt.completed_at.isoformat()
-                        if attempt.completed_at
-                        else None
-                    ),
-                    "duration_seconds": attempt.duration_seconds,
-                    "recovery_method": attempt.recovery_method,
-                    "error_message": attempt.error_message,
-                }
-            )
-
-        # Calculate health based on recent recovery success rate
-        stats = service_status["statistics"]
-        total_attempts = stats.get("total_attempts", 0)
-        successful_recoveries = stats.get("successful_recoveries", 0)
-
-        if total_attempts == 0:
-            success_rate = 1.0
-        else:
-            success_rate = successful_recoveries / total_attempts
-
-        overall_status = "healthy"
-        if success_rate < 0.5:
+        if any_open:
             overall_status = "unhealthy"
-        elif success_rate < 0.8:
-            overall_status = "warning"
+            status_code = 503
+        elif any_half_open:
+            overall_status = "degraded"
+            status_code = 200
+        else:
+            overall_status = "healthy"
+            status_code = 200
 
-        result = {
-            "status": overall_status,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "service_status": service_status,
-            "success_rate": success_rate,
-            "recent_recoveries": recent_recoveries,
-        }
-
-        status_code = 503 if overall_status == "unhealthy" else 200
-        return jsonify(result), status_code
+        return (
+            jsonify(
+                {
+                    "status": overall_status,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "circuit_breakers": all_status,
+                }
+            ),
+            status_code,
+        )
 
     except Exception as e:
-        logger.error(f"Error checking recovery service health: {e}")
+        logger.error(f"Error checking recovery health: {e}")
         return (
             jsonify(
                 {
@@ -601,7 +765,27 @@ def recovery_service_health():
 @bp.route("/monitoring/dashboard", methods=["GET"])
 @require_auth
 def monitoring_dashboard():
-    """Comprehensive monitoring dashboard data"""
+    """Aggregate monitoring snapshot for the dashboard UI.
+
+    Returns a single payload with per-TAK-server queue metrics,
+    per-stream health, aggregate performance counters, circuit
+    breaker state, and recovery service state. Every sub-section
+    is best-effort and may be empty or partial when the underlying
+    subsystem is degraded.
+    ---
+    tags: [Monitoring]
+    responses:
+      200:
+        description: Monitoring dashboard snapshot.
+        content:
+          application/json:
+            schema: DashboardSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         dashboard_data = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -609,7 +793,6 @@ def monitoring_dashboard():
             "streams": {},
             "performance": {},
             "circuit_breakers": {},
-            "recovery": {},
         }
 
         # Get queue monitoring data
@@ -771,10 +954,10 @@ def monitoring_dashboard():
         except Exception as e:
             logger.debug(f"Performance metrics not available: {e}")
 
-        # Get circuit breaker data
+        # Get circuit breaker data. T7.4 — this block is now the
+        # authoritative recovery signal; the standalone recovery
+        # subsystem it used to sit alongside has been deleted.
         try:
-            from services.circuit_breaker import get_circuit_breaker_manager
-
             manager = get_circuit_breaker_manager()
             all_status = manager.get_all_status()
 
@@ -786,24 +969,6 @@ def monitoring_dashboard():
                 }
         except Exception as e:
             logger.debug(f"Circuit breaker data not available: {e}")
-
-        # Get recovery service data
-        try:
-            from services.recovery_service import get_recovery_service
-
-            recovery_service = get_recovery_service()
-            service_status = recovery_service.get_service_status()
-
-            dashboard_data["recovery"] = {
-                "active_recoveries": service_status.get("active_recoveries", 0),
-                "success_rate": (
-                    service_status["statistics"]["successful_recoveries"]
-                    / max(service_status["statistics"]["total_attempts"], 1)
-                ),
-                "running": service_status.get("running", False),
-            }
-        except Exception as e:
-            logger.debug(f"Recovery service data not available: {e}")
 
         return jsonify(dashboard_data)
 
@@ -828,7 +993,30 @@ def monitoring_dashboard():
 @bp.route("/streams/stats")
 @api_key_or_auth_required
 def api_stats():
-    """Get statistics for all streams"""
+    """Aggregate stream statistics.
+
+    Returns counts of streams (total/active/inactive), streams
+    currently reporting errors, and cumulative CoT messages sent
+    across the deployment.
+    ---
+    tags: [Streams]
+    responses:
+      200:
+        description: Aggregate stream statistics.
+        content:
+          application/json:
+            schema: StreamStatsSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to compute statistics.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
 
     # Get the correct status_service at runtime
     services = get_stream_services()
@@ -846,7 +1034,30 @@ def api_stats():
 @bp.route("/streams/status")
 @api_key_or_auth_required
 def streams_status():
-    """Get detailed status of all streams"""
+    """Runtime status of every stream.
+
+    Returns per-stream details including active flag, worker running
+    state, last poll timestamp, last error, message count, and
+    associated TAK server id. Envelope: ``{"streams": [...]}``.
+    ---
+    tags: [Streams]
+    responses:
+      200:
+        description: Per-stream runtime status list.
+        content:
+          application/json:
+            schema: StreamsStatusEnvelopeSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to gather status.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
 
     # Get the correct status_service at runtime
     services = get_stream_services()
@@ -880,7 +1091,40 @@ def get_plugin_config(plugin_name):
 @bp.route("/plugins/metadata")
 @require_permission("api", "read")
 def get_all_plugin_metadata():
-    """Get metadata for all available plugins"""
+    """Metadata for every registered plugin.
+
+    Returns a dict keyed by plugin name where each value is the
+    plugin's full serialised metadata (display name, description,
+    config fields, capabilities, category). Used by the stream
+    create/edit UI to render plugin selector dropdowns and dynamic
+    config forms.
+    ---
+    tags: [Plugins]
+    responses:
+      200:
+        description: Plugin name -> metadata map.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                $ref: '#/components/schemas/PluginMetadata'
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load plugin metadata.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         metadata = get_config_service().get_all_plugin_metadata()
         # Serialize all plugin metadata for safe JSON transmission
@@ -898,7 +1142,38 @@ def get_all_plugin_metadata():
 @bp.route("/plugins/categories")
 @require_permission("api", "read")
 def get_plugin_categories():
-    """Get all available plugin categories"""
+    """All plugin categories.
+
+    Returns a dict keyed by category key where each value describes
+    the category (display name, description, icon, and count of
+    plugins currently registered in it).
+    ---
+    tags: [Plugins]
+    responses:
+      200:
+        description: Category key -> category descriptor map.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                $ref: '#/components/schemas/PluginCategory'
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load categories.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         category_service = get_category_service(get_plugin_manager())
         categories = category_service.get_available_categories()
@@ -925,7 +1200,41 @@ def get_plugin_categories():
 @bp.route("/plugins/by-category/<category>")
 @require_permission("api", "read")
 def get_plugins_by_category(category):
-    """Get all plugins in a specific category"""
+    """Plugins registered in a specific category.
+
+    Returns the list of plugin summaries for the given category.
+    Empty list is a valid response when the category exists but has
+    no plugins registered.
+    ---
+    tags: [Plugins]
+    parameters:
+      - in: path
+        name: category
+        required: true
+        schema: {type: string}
+        description: Category key (e.g. tracker, osint, ems).
+    responses:
+      200:
+        description: Plugins in the category.
+        content:
+          application/json:
+            schema: PluginsByCategoryEnvelopeSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load plugins for category.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         category_service = get_category_service(get_plugin_manager())
         plugins = category_service.get_plugins_by_category(category)
@@ -955,7 +1264,41 @@ def get_plugins_by_category(category):
 @bp.route("/plugins/categorized")
 @require_permission("api", "read")
 def get_categorized_plugins():
-    """Get all plugins grouped by category"""
+    """All plugins grouped by category.
+
+    Returns a dict keyed by category where each value is the list
+    of plugin summaries in that category. Convenience endpoint —
+    equivalent to calling ``/api/plugins/by-category/{category}``
+    once per known category and merging the results.
+    ---
+    tags: [Plugins]
+    responses:
+      200:
+        description: Category -> list of plugin summaries.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PluginSummary'
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load categorized plugins.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         category_service = get_category_service(get_plugin_manager())
         categorized = category_service.get_categorized_plugins()
@@ -984,7 +1327,37 @@ def get_categorized_plugins():
 @bp.route("/plugins/category-statistics")
 @require_permission("api", "read")
 def get_category_statistics():
-    """Get statistics about plugin categories"""
+    """Aggregate statistics across plugin categories.
+
+    Returns counts and other metrics per category — total plugins,
+    breakdown by tier, and similar summary data used by the plugin
+    manager dashboard.
+    ---
+    tags: [Plugins]
+    responses:
+      200:
+        description: Per-category statistics.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to compute statistics.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         category_service = get_category_service(get_plugin_manager())
         stats = category_service.get_category_statistics()
@@ -998,7 +1371,43 @@ def get_category_statistics():
 @bp.route("/streams/<int:stream_id>/export-config")
 @require_permission("streams", "read")
 def export_stream_config(stream_id):
-    """Export stream configuration (sensitive fields masked)"""
+    """Export a stream's full configuration.
+
+    Returns the complete exportable configuration for a stream —
+    plugin config, callsign mappings, TAK server associations, and
+    CoT settings. Sensitive fields (passwords, API keys) are masked
+    or omitted. Suitable for backup or migration between deployments.
+    ---
+    tags: [Streams]
+    parameters:
+      - in: path
+        name: stream_id
+        required: true
+        schema: {type: integer}
+    responses:
+      200:
+        description: Exportable stream configuration.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to export configuration.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         export_data = get_config_service().export_stream_config(
             stream_id, include_sensitive=False
@@ -1013,7 +1422,47 @@ def export_stream_config(stream_id):
 @bp.route("/streams/<int:stream_id>/config")
 @require_permission("streams", "read")
 def get_stream_config(stream_id):
-    """Get stream configuration (sensitive fields masked) for editing"""
+    """Get a stream's plugin configuration.
+
+    Returns just the ``plugin_config`` block (not the full stream
+    envelope), with sensitive fields masked. Used by the edit UI to
+    pre-populate form fields.
+    ---
+    tags: [Streams]
+    parameters:
+      - in: path
+        name: stream_id
+        required: true
+        schema: {type: integer}
+    responses:
+      200:
+        description: Plugin config dict (keys are plugin-specific).
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      404:
+        description: Stream not found.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load stream configuration.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         from models.stream import Stream
 
@@ -1107,7 +1556,57 @@ def bootstrap_status():
 @bp.route("/streams/discover-trackers", methods=["POST"])
 @require_permission("streams", "read")
 def discover_trackers():
-    """Discover trackers for callsign mapping configuration"""
+    """Discover trackers reachable via a plugin's current config.
+
+    Connects to the plugin's data source with the provided config
+    and returns the list of trackers currently visible, along with
+    the plugin's available identifier fields and CoT/team-member
+    option lists. Used by the callsign-mapping UI to enumerate
+    trackers before mapping them to callsigns.
+
+    In edit mode (``stream_id`` present), the provided config is
+    merged with the stream's existing config (non-empty fields
+    override; empty fields fall back to stored values), and existing
+    per-tracker enabled/callsign/CoT overrides are preserved.
+    ---
+    tags: [Streams]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: DiscoverTrackersRequestSchema
+    responses:
+      200:
+        description: Discovered trackers plus UI option lists.
+        content:
+          application/json:
+            schema: DiscoverTrackersResponseSchema
+      400:
+        description: Missing plugin_type or discovery failed.
+        content:
+          application/json:
+            schema: ErrorSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      404:
+        description: Plugin type not registered.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Unexpected error during discovery.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         from models.stream import Stream
         from plugins.plugin_manager import get_plugin_manager
@@ -1231,7 +1730,46 @@ def discover_trackers():
 @bp.route("/streams/<int:stream_id>/callsign-mappings", methods=["GET"])
 @require_permission("streams", "read")
 def get_callsign_mappings(stream_id):
-    """Get callsign mappings for a stream"""
+    """Callsign mappings for a stream.
+
+    Returns the stream-level callsign-mapping configuration flags
+    plus the list of per-tracker mappings. Each mapping carries the
+    identifier value, custom callsign, optional CoT type override,
+    and enabled state.
+    ---
+    tags: [Streams]
+    parameters:
+      - in: path
+        name: stream_id
+        required: true
+        schema: {type: integer}
+    responses:
+      200:
+        description: Callsign mapping configuration and mappings.
+        content:
+          application/json:
+            schema: CallsignMappingsEnvelopeSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      404:
+        description: Stream not found.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load callsign mappings.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         from models.callsign_mapping import CallsignMapping
         from models.stream import Stream
@@ -1259,7 +1797,35 @@ def get_callsign_mappings(stream_id):
 @bp.route("/team-member-options")
 @require_permission("streams", "read")
 def get_team_member_options():
-    """Get team member configuration options for UI dropdowns"""
+    """All team-member option lists in one payload.
+
+    Combined enumeration of CoT type, team role, and team color
+    option lists — used by the callsign-mapping UI to populate
+    every dropdown in one request rather than three round-trips.
+    ---
+    tags: [TeamMembers]
+    responses:
+      200:
+        description: Combined option lists.
+        content:
+          application/json:
+            schema: TeamMemberOptionsResponseSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load options.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         return jsonify(
             {
@@ -1364,7 +1930,48 @@ def update_callsign_mappings(stream_id):
 @bp.route("/plugins/<plugin_type>/available-fields", methods=["GET"])
 @require_permission("streams", "read")
 def get_plugin_available_fields(plugin_type):
-    """Get available identifier fields for a plugin"""
+    """Available identifier fields for a plugin's callsign mapping.
+
+    Returns the list of fields the plugin exposes as possible
+    identifiers for callsign mapping (typically the fields it
+    extracts from each discovered tracker). ``supports_callsign_
+    mapping`` is false when the plugin doesn't implement
+    ``get_available_fields``.
+    ---
+    tags: [Plugins]
+    parameters:
+      - in: path
+        name: plugin_type
+        required: true
+        schema: {type: string}
+        description: Plugin key (e.g. garmin, spot, traccar).
+    responses:
+      200:
+        description: Available identifier fields for the plugin.
+        content:
+          application/json:
+            schema: PluginAvailableFieldsResponseSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      404:
+        description: Plugin type not registered.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to enumerate available fields.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         from plugins.plugin_manager import get_plugin_manager
 
@@ -1419,7 +2026,35 @@ def get_plugin_available_fields(plugin_type):
 @bp.route("/team-member/role-options", methods=["GET"])
 @require_permission("api", "read")
 def get_team_member_role_options():
-    """Get available team member role options"""
+    """Available team-member role names.
+
+    Returns the ordered list of role names (Team Member, Team Lead,
+    HQ, Sniper, Medic, Forward Observer, RTO, K9). Backs the role
+    dropdown in the callsign-mapping UI.
+    ---
+    tags: [TeamMembers]
+    responses:
+      200:
+        description: Ordered list of role names.
+        content:
+          application/json:
+            schema: TeamMemberRolesResponseSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load role options.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         return jsonify({"roles": TEAM_MEMBER_ROLES})
 
@@ -1431,7 +2066,36 @@ def get_team_member_role_options():
 @bp.route("/team-member/color-options", methods=["GET"])
 @require_permission("api", "read")
 def get_team_member_color_options():
-    """Get available team member color options"""
+    """Available team-member color names.
+
+    Returns the ordered list of team color names (Teal, Green,
+    Dark Green, Brown, White, Yellow, Orange, Magenta, Red,
+    Maroon, Purple, Dark Blue, Blue, Cyan). Backs the color
+    dropdown in the callsign-mapping UI.
+    ---
+    tags: [TeamMembers]
+    responses:
+      200:
+        description: Ordered list of color names.
+        content:
+          application/json:
+            schema: TeamMemberColorsResponseSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      403:
+        description: Insufficient permissions.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Failed to load color options.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     try:
         return jsonify({"colors": TEAM_MEMBER_COLORS})
 
@@ -1441,7 +2105,23 @@ def get_team_member_color_options():
 
 
 @bp.route("/version")
+@api_key_or_auth_required
 def version():
+    """Current TrakBridge version.
+
+    Returns the version string used across the app (banner, health
+    payloads, plugin version-gate comparisons). Requires a valid
+    session or ``tb_pat_`` bearer token so the version is not a
+    ready-made fingerprint for drive-by scans.
+    ---
+    tags: [Version]
+    responses:
+      200:
+        description: Version information.
+        content:
+          application/json:
+            schema: VersionSchema
+    """
     return {"version": format_version()}
 
 
@@ -1826,20 +2506,39 @@ def get_uptime_seconds():
 @bp.route("/convert-latlon-to-mgrs", methods=["POST"])
 @require_auth
 def convert_latlon_to_mgrs():
-    """
-    Convert latitude/longitude coordinates to MGRS format.
+    """Convert decimal-degree lat/lon to an MGRS coordinate string.
 
-    Request body:
-        {
-            "lat": float,  # Latitude in decimal degrees
-            "lon": float   # Longitude in decimal degrees
-        }
-
-    Returns:
-        {
-            "success": bool,
-            "mgrs": str  # MGRS coordinate string
-        }
+    Request body carries ``lat`` (-90..90) and ``lon`` (-180..180).
+    Response envelope: ``{success, mgrs}`` on success or
+    ``{success: false, error}`` on invalid input.
+    ---
+    tags: [Coordinates]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: LatLonRequestSchema
+    responses:
+      200:
+        description: MGRS conversion result.
+        content:
+          application/json:
+            schema: LatLonResponseSchema
+      400:
+        description: Missing/invalid lat or lon, or out of range.
+        content:
+          application/json:
+            schema: CoordinateErrorSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Unexpected conversion failure.
+        content:
+          application/json:
+            schema: CoordinateErrorSchema
     """
     try:
         data = request.get_json()
@@ -1887,20 +2586,39 @@ def convert_latlon_to_mgrs():
 @bp.route("/convert-mgrs-to-latlon", methods=["POST"])
 @require_auth
 def convert_mgrs_to_latlon():
-    """
-    Convert MGRS coordinate to latitude/longitude.
+    """Convert an MGRS coordinate string to decimal-degree lat/lon.
 
-    Request body:
-        {
-            "mgrs": str  # MGRS coordinate string (e.g., "38SMB4484")
-        }
-
-    Returns:
-        {
-            "success": bool,
-            "lat": float,  # Latitude in decimal degrees
-            "lon": float   # Longitude in decimal degrees
-        }
+    Request body carries ``mgrs`` (e.g. ``38SMB4484``). Response
+    envelope: ``{success, lat, lon}`` on success or
+    ``{success: false, error}`` on invalid input.
+    ---
+    tags: [Coordinates]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: MgrsRequestSchema
+    responses:
+      200:
+        description: Lat/lon conversion result.
+        content:
+          application/json:
+            schema: MgrsResponseSchema
+      400:
+        description: Missing, empty, or malformed MGRS string.
+        content:
+          application/json:
+            schema: CoordinateErrorSchema
+      401:
+        description: Authentication required.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Unexpected conversion failure.
+        content:
+          application/json:
+            schema: CoordinateErrorSchema
     """
     try:
         data = request.get_json()

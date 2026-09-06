@@ -204,10 +204,8 @@ class TestPluginConfigurationHandling:
             temp_config_path = f.name
 
         try:
-            with patch(
-                "utils.config_manager.config_manager.load_config_safe"
-            ) as mock_load:
-                mock_load.return_value = config_data
+            with patch("config.base.get_config_loader") as mock_get_loader:
+                mock_get_loader.return_value.load_config_safe.return_value = config_data
 
                 manager = PluginManager()
                 # This should not raise an exception and should log appropriately
@@ -225,8 +223,8 @@ class TestPluginConfigurationHandling:
         """Test that empty list values for allowed_plugin_modules are handled gracefully."""
         config_data = {"allowed_plugin_modules": []}
 
-        with patch("utils.config_manager.config_manager.load_config_safe") as mock_load:
-            mock_load.return_value = config_data
+        with patch("config.base.get_config_loader") as mock_get_loader:
+            mock_get_loader.return_value.load_config_safe.return_value = config_data
 
             manager = PluginManager()
             # This should not raise an exception
@@ -246,8 +244,8 @@ class TestPluginConfigurationHandling:
             ]
         }
 
-        with patch("utils.config_manager.config_manager.load_config_safe") as mock_load:
-            mock_load.return_value = config_data
+        with patch("config.base.get_config_loader") as mock_get_loader:
+            mock_get_loader.return_value.load_config_safe.return_value = config_data
 
             manager = PluginManager()
             manager._load_allowed_plugins_config()
@@ -262,8 +260,8 @@ class TestPluginConfigurationHandling:
         """Test that invalid types for allowed_plugin_modules are handled gracefully."""
         config_data = {"allowed_plugin_modules": "not_a_list"}
 
-        with patch("utils.config_manager.config_manager.load_config_safe") as mock_load:
-            mock_load.return_value = config_data
+        with patch("config.base.get_config_loader") as mock_get_loader:
+            mock_get_loader.return_value.load_config_safe.return_value = config_data
 
             manager = PluginManager()
             # Should not raise an exception, should log warning
@@ -275,8 +273,10 @@ class TestPluginConfigurationHandling:
 
     def test_config_loading_failure_graceful_fallback(self):
         """Test that configuration loading failures fall back gracefully."""
-        with patch("utils.config_manager.config_manager.load_config_safe") as mock_load:
-            mock_load.side_effect = Exception("Config loading failed")
+        with patch("config.base.get_config_loader") as mock_get_loader:
+            mock_get_loader.return_value.load_config_safe.side_effect = Exception(
+                "Config loading failed"
+            )
 
             manager = PluginManager()
             # Should not raise an exception
@@ -298,8 +298,8 @@ class TestPluginConfigurationHandling:
             ]
         }
 
-        with patch("utils.config_manager.config_manager.load_config_safe") as mock_load:
-            mock_load.return_value = config_data
+        with patch("config.base.get_config_loader") as mock_get_loader:
+            mock_get_loader.return_value.load_config_safe.return_value = config_data
 
             manager = PluginManager()
             manager._load_allowed_plugins_config()
@@ -315,8 +315,8 @@ class TestPluginConfigurationHandling:
         """Test handling when allowed_plugin_modules key is missing."""
         config_data = {"other_config": "value"}  # Missing allowed_plugin_modules
 
-        with patch("utils.config_manager.config_manager.load_config_safe") as mock_load:
-            mock_load.return_value = config_data
+        with patch("config.base.get_config_loader") as mock_get_loader:
+            mock_get_loader.return_value.load_config_safe.return_value = config_data
 
             manager = PluginManager()
             # Should not raise an exception
@@ -326,22 +326,20 @@ class TestPluginConfigurationHandling:
             allowed_modules = manager.get_allowed_plugin_modules()
             assert isinstance(allowed_modules, list)
 
-    def test_config_manager_schema_validation(self):
-        """Test that config manager schema structure prevents recursion issues."""
-        from utils.config_manager import ConfigManager
+    def test_config_validator_schema(self):
+        """Config validator schema structure prevents recursion issues."""
+        from config.validator import ConfigValidator
 
-        manager = ConfigManager()
-        schema = manager.schemas.get("plugins.yaml")
+        validator = ConfigValidator()
+        schema = validator.schemas.get("plugins.yaml")
 
         assert schema is not None
         assert "allowed_plugin_modules" in schema["properties"]
 
-        # Schema should be simple array type (oneOf causes recursion in simplified validator)
+        # Simple array type — oneOf caused recursion in the earlier validator
         field_schema = schema["properties"]["allowed_plugin_modules"]
         assert field_schema["type"] == "array"
         assert field_schema["items"]["type"] == "string"
-
-        # Should NOT use oneOf to prevent maximum recursion depth issues
         assert "oneOf" not in field_schema
 
 

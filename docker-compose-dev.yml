@@ -135,10 +135,14 @@ services:
 
       # Worker Configuration      # Secret file paths (if secrets are in /app/secrets instead of /run/secrets)
       DB_PASSWORD_FILE: "/app/secrets/db_password"
-      SECRET_KEY_FILE: "/app/secrets/secret_key" 
+      SECRET_KEY_FILE: "/app/secrets/secret_key"
       TB_MASTER_KEY_FILE: "/app/secrets/tb_master_key"
       LDAP_BIND_PASSWORD_FILE: "/app/secrets/ldap_bind_password"
       OIDC_CLIENT_SECRET_FILE: "/app/secrets/oidc_client_secret"
+      # Pepper mixed into every UserApiKey HMAC hash. Rotating this
+      # invalidates every existing API key. Generate with:
+      # openssl rand -base64 48
+      API_KEY_PEPPER_FILE: "/app/secrets/api_key_pepper"
 
     # Secrets - use Docker Compose secrets for consistency with production
     secrets:
@@ -147,6 +151,7 @@ services:
       - tb_master_key
       - ldap_bind_password
       - oidc_client_secret
+      - api_key_pepper
 
     # Traefik labels for reverse proxy integration
     labels:
@@ -373,3 +378,5 @@ secrets:
     file: ./secrets/ldap_bind_password
   oidc_client_secret:
     file: ./secrets/oidc_client_secret
+  api_key_pepper:
+    file: ./secrets/api_key_pepper

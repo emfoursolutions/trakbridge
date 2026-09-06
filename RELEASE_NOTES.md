@@ -1,5 +1,153 @@
 # TrakBridge Release Notes
 
+## Version 2.2.0 - API Keys, Self-Healing Connections & Security Hardening
+
+**Release Date:** September 6, 2026
+**Focus: Scripted API access via personal access tokens, a documented API surface, automatic recovery from TAK server and feed-source outages, and threat-model-driven security hardening**
+
+TrakBridge 2.2.0 pairs the platform's first first-class machine authentication — scoped API keys — with a ground-up rework of outage recovery. A TAK server or GPS feed going down and coming back is now a non-event: TrakBridge backs off, keeps watch, and resumes on its own. Previously it could require an operator to edit and re-save every affected stream.
+
+The release also closes seven items from a full external threat model of v2.1.1: unauthenticated recon and preview endpoints, an outbound-plugin SSL fallback that leaked credentials over MITM, a credential leak from the stream detail page visible to any read-only user, an orphan health subsystem publishing false "healthy" state, and a delete guard blind to the newer many-to-many stream/TAK-server association.
+
+This release includes a schema migration and one new production-required secret (`API_KEY_PEPPER`) — see Upgrade Notes.
+
+---
+
+### API KEY AUTHENTICATION
+
+#### Personal access tokens for scripts and integrations
+**`Authorization: Bearer tb_pat_...` now works alongside session auth**
+
+Users can create scoped API keys at `/auth/api-keys` — each key carries an explicit set of permissions (`streams:read`, `api:read`, `tak_servers:read`, and so on), an optional expiry, and last-used tracking. The token is revealed once at creation and stored only as an HMAC-SHA256 hash mixed with a server-side pepper: a database-only compromise cannot verify or forge tokens.
+
+Bearer resolution is wired into the shared auth decorators, so every endpoint that accepts a session also accepts a valid key with the right scope. Tokens with foreign prefixes (`ghp_...`) or malformed bodies are rejected before the resolver does any work, and `tb_pat_` values are redacted from log output.
+
+Administrators get a cross-user view of all keys at `/admin/api-keys` with grouped scope chips for at-a-glance auditing.
+
+#### Privileged surfaces refuse bearer auth
+**A leaked API key cannot escalate**
+
+Admin routes, credential mutation (password change, profile edit), logout, and the key-management pages themselves are guarded by `@session_only` — they return 401 to any bearer request regardless of the token's validity or scopes. Managing keys requires a browser session, so a stolen key can read what it's scoped for and nothing more.
+
+CSRF protection is unchanged for session traffic; bearer-authenticated requests bypass it (they carry no ambient credentials for a cross-site attacker to ride).
+
+---
+
+### DOCUMENTED API SURFACE
+
+#### OpenAPI 3.1 spec and Swagger UI
+**`/api/openapi.json` and `/api/docs`, auth-gated**
+
+The full API — streams, plugins, inbound endpoints, health and monitoring — is now described by a machine-readable OpenAPI 3.1 spec with an interactive Swagger UI. `API_REFERENCE` has been rewritten from the spec. Both endpoints require authentication (session or bearer): every legitimate consumer is already authenticated for some other reason, and gating keeps the API description out of anonymous-scanner reconnaissance. The spec is generated once per app instance and cached.
+
+---
+
+### SELF-HEALING CONNECTIONS
+
+#### TAK server outages recover without intervention
+**The circuit breaker now actually does its job**
+
+The long-standing failure mode: TAK server drops, the per-server circuit breaker opens, and nothing ever recovers — streams stayed dead until an operator edited and re-saved them. The root cause was structural. The transmit path swallowed socket errors into a boolean, so the loop that should have abandoned the dead connection never got the signal; the breaker's recovery probe then wrote to that same dead socket forever, a test that could not pass.
+
+The rework:
+
+- The breaker gates **connection establishment** — the one operation that can genuinely prove recovery. Socket errors propagate, the send loop breaks, the worker reconnects with exponential backoff (5s→120s)
+- While the server is down, the breaker sits cleanly OPEN and connection attempts fast-fail — no wasted 30-second timeouts, no OPEN/HALF_OPEN flapping. A lightweight health probe tests the server every 30 seconds
+- The moment a probe passes, traffic is re-admitted, and **one successful reconnection closes the breaker**
+- Health probes were also being failed by TAK Server itself: probes connected instantly but then waited for a TLS close handshake that TAK Server defers until its subscription reaper runs (~30s). Probe cleanup is now best-effort with a hard cap — the health verdict rests on the connect, not the goodbye
+
+End to end, verified live against a real TAK Server with cross-checked subscription logs: pull the network, watch the breaker open; restore it, and transmission resumes within a couple of minutes with zero human involvement.
+
+#### Streams never permanently deactivate
+**Five bad polls no longer switch a stream off**
+
+Consecutive poll errors previously flipped `is_active = False` permanently. Streams now retry forever with backoff capped at five minutes, log at ERROR at the threshold (and every 10th failure after, to keep sustained outages visible without spamming), and surface the condition through the stream's **Last Error** field — which clears itself on recovery.
+
+#### Feed outages are visible
+**A dead GPS source no longer looks like a healthy stream**
+
+Plugins report connection failures using an internal sentinel format that the poll loop didn't understand — it counted them as retrieved locations, so a total feed outage showed a green stream delivering nothing. Sentinel results now register as failed polls and drive the same retry/backoff/Last Error machinery; partial results still count as success. Traccar's error paths were additionally normalised so its outages are distinguishable from a legitimately quiet feed. Feed outages log as a single classified line rather than a crash-style traceback.
+
+#### Circuit breaker core hardening
+**Fixes to the state machine itself**
+
+- Trips on *consecutive* failures — previously a lifetime cumulative count meant three failures spread across days could open a breaker
+- HALF_OPEN probe slots are refunded when calls complete — concurrent healthy callers were being rejected during recovery
+- Health checks run in HALF_OPEN as well as OPEN, tolerate sync callables, and log crashes at ERROR with the exception type (previously swallowed at DEBUG — the advertised auto-recovery mechanism could fail silently)
+- New tuning knobs documented in `performance.yaml`: `timeout`, `half_open_max_calls`, `success_threshold`, `health_check_interval`, `health_check_timeout`; slow health probes log a per-phase timing breakdown for field diagnosis
+
+---
+
+### SECURITY HARDENING
+
+An external threat model of v2.1.1 identified 48 attack paths across seven tiers. Seven items were triaged for this release; the rest are scheduled for 2.2.1 and 2.3.0. Every fix here landed with focused per-item unit tests (37 new tests) written against the exact failure mode from the threat model, so any regression is caught before it reaches production.
+
+#### Preview endpoints now require authentication
+**Anyone with network reach could read captured payloads and re-run parsers**
+
+`GET`/`DELETE /api/inbound/<id>/preview` and `POST /api/inbound/<id>/preview/remap` accepted anonymous calls. The threat model observation was blunt: publishing an inbound stream necessarily publishes the preview path on the same port, and the "gate" was only stream-id validation — trivially enumerable given how few streams a typical deployment runs. Beyond reading captured payloads (which include headers and source IPs of every reporting device), an anonymous caller could wipe the capture buffer or re-run the parser with an attacker-supplied `plugin_config` merged over the stream's decrypted config.
+
+All three endpoints now require a session cookie or `tb_pat_` bearer via `@api_key_or_auth_required`. The CSRF exemptions that were compensating for the missing auth gate are gone; UI writes flow through standard CSRF, bearer requests bypass CSRF via the existing hook.
+
+#### Reconnaissance endpoints tightened
+**`/api/status`, `/api/version`, `/api/health/ready`, `/api/health/live` now require auth**
+
+Individually minor, together an attacker's targeting layer: the version pin identifies which known-issues apply, the status endpoint enumerates streams and their state, and the health probes confirm subsystem availability. All four are now gated behind `@api_key_or_auth_required`. `/api/health` remains the sole public probe — the single canonical health check for container and load-balancer use. Orchestrators and monitors that were polling the detailed endpoints already carry a service credential; the change is invisible to them and shuts the drive-by scanner path.
+
+#### Outbound plugin SSL fallback removed
+**A MITM only needed to present an invalid cert to harvest credentials**
+
+The Garmin, Discord and Slack plugins caught `ssl.SSLError` and retried the same request with `ssl=False`, re-sending the Garmin account password or the webhook URL over an unverified TLS channel. The retry was in both the message-send path and the test-connection path (the latter previously returned a misleading `success: true, message: "using insecure connection due to certificate issues"` — an operator-facing lie).
+
+All fallback blocks are deleted. SSL errors now propagate as ERROR log entries; test-connection reports `success: false, error: "SSL verification failed"` so the operator sees the real failure and can investigate the certificate rather than accepting a downgrade they didn't know happened.
+
+#### Stream detail page no longer leaks decrypted plugin config
+**A VIEWER could Ctrl-U and read every stored credential**
+
+The Test Connection button at `/streams/<id>` iterated `stream.get_plugin_config()` — the *decrypting* accessor — and embedded each value into an inline `<script>` literal as `plugin_<key>: '<value>'`. Any user who could load the page (VIEWER included) could view the page source and read Garmin passwords, API keys, MQTT broker passwords, and Discord/Slack webhook URLs in plaintext.
+
+The button now calls the existing server-side `/streams/<id>/test` endpoint with only `{stream_id}`. The server loads the decrypted config in-process and runs the plugin's `test_connection()` there; no decrypted value crosses the wire back through the browser. The two remaining uses of `get_plugin_config()` in the template render only `global_geofence_bounds` (safe map metadata).
+
+#### Recovery subsystem replaced with real circuit-breaker state
+**The health endpoint was reporting "healthy" from a subsystem that had never run**
+
+`services/recovery_service.py` and `services/recovery_implementations.py` (1,181 lines) shipped with the circuit breaker in v1.0.0 as its automated recovery half. In practice the circuit breaker took over the recovery role and the standalone subsystem was orphaned: `initialize_recovery_system()` had no callers, no recovery methods were registered, and `/api/health/recovery` was publishing a fabricated success rate from an idle singleton. Operators watching that endpoint had no way to know it was lying.
+
+Both modules are deleted (−1,181 lines). `/api/health/recovery` now derives status from `CircuitBreakerManager.get_all_status()` — the authoritative source, already actively driving TAK reconnection in production. Status mapping: any breaker OPEN → `unhealthy` (HTTP 503), any HALF_OPEN → `degraded` (HTTP 200), otherwise `healthy`. The endpoint URL is unchanged, so any monitoring pointed at it now gets truthful data.
+
+#### TAK server delete guard covers many-to-many links
+**A stream linked via the newer M2M table could be silently orphaned**
+
+The delete guard at `routes/tak_servers.py` checked only `server.streams` — the legacy single-server foreign key. The newer `stream_tak_servers` association table uses `ondelete=CASCADE` on its tak_server FK, so a stream connected only via that table had its association row cascaded away when the server was deleted. The stream kept reporting success while quietly delivering to one fewer destination — exactly the class of failure the threat model file's title-line is about ("the COP that quietly lies").
+
+Guard now checks both: `if server.streams or server.streams_many.count() > 0:`. Delete is refused if either relationship still references the server.
+
+#### Flask-WTF version-compatibility fix
+**Bearer-bypass CSRF shim now works against both 1.1 and 1.2**
+
+Discovered while landing T1.1: the shim wrapping `CSRFProtect.protect` had a fixed no-arg signature, but Flask-WTF 1.1 calls the hook as `protect(apply_exemptions=True)` (1.2 dropped the kwarg). Container images on 1.1 500'd on every request before reaching auth. Was masked previously because the preview endpoints were CSRF-exempt; removing that exemption exposed it. Shim now accepts `*args, **kwargs` and forwards through — safe against future Flask-WTF signature changes in either direction.
+
+---
+
+### HOUSEKEEPING
+
+- Parallel configuration systems collapsed into `ConfigLoader`; `utils/config_manager.py` removed
+- Duplicate `monitoring:` block in `performance.yaml` merged — the fallback-statistics settings were being silently discarded at load
+- Backups directory created automatically on first run
+- ~90 new tests (unit, integration, end-to-end), including a real-socket outage/recovery acceptance test that fails on the pre-fix code
+
+---
+
+### UPGRADE NOTES
+
+1. **Schema migration** (`add_user_api_keys`) — Docker deployments migrate automatically via the entrypoint; source deployments run `flask db upgrade`
+2. **`API_KEY_PEPPER` is required in production** — the app refuses to boot without it. Generate with `openssl rand -base64 48` and provide as a Docker secret at `./secrets/api_key_pepper` (compose files already reference it) or via `API_KEY_PEPPER`/`API_KEY_PEPPER_FILE`. Non-production environments generate an *ephemeral* pepper per process — keys created there die on restart, with a loud startup WARNING. Rotating the pepper invalidates every existing key by design
+3. **Operational model change**: streams no longer stop after repeated errors. Retire any runbook that says "edit and re-save the stream to recover it" — watch the stream's Last Error field and `/api/health/circuit_breaker` instead
+4. Existing `performance.yaml` files work unchanged; the new circuit-breaker keys are optional. `failure_threshold` now genuinely counts consecutive failures, matching its long-standing comment
+5. Scripted consumers using saved session cookies should migrate to API keys created at `/auth/api-keys`; note that admin and credential routes intentionally refuse bearer auth
+
+---
+
 ## Version 2.1.1 - LDAP Login & HTTP Session Fixes
 
 **Release Date:** August 16, 2026

@@ -24,8 +24,10 @@ class TestMakePluginCircuitBreaker:
         assert callable(breaker.call)
 
     def test_reads_top_level_circuit_breaker_config(self):
-        with patch("utils.config_manager.config_manager.load_config_safe") as mock_load:
-            mock_load.return_value = {"circuit_breaker": {"failure_threshold": 7}}
+        with patch("config.base.get_config_loader") as mock_get_loader:
+            mock_get_loader.return_value.load_config_safe.return_value = {
+                "circuit_breaker": {"failure_threshold": 7}
+            }
             with patch(
                 "services.circuit_breaker.get_circuit_breaker_manager"
             ) as mock_manager:
@@ -34,10 +36,10 @@ class TestMakePluginCircuitBreaker:
                 assert config.failure_threshold == 7
 
     def test_config_load_failure_falls_back_to_defaults(self):
-        with patch(
-            "utils.config_manager.config_manager.load_config_safe",
-            side_effect=RuntimeError("no config"),
-        ):
+        with patch("config.base.get_config_loader") as mock_get_loader:
+            mock_get_loader.return_value.load_config_safe.side_effect = RuntimeError(
+                "no config"
+            )
             with patch(
                 "services.circuit_breaker.get_circuit_breaker_manager"
             ) as mock_manager:
@@ -117,3 +119,27 @@ class TestMakePluginCircuitBreaker:
 
         with pytest.raises(ValueError, match="boom"):
             await breaker.call(_healthy)
+
+
+class TestConsecutiveFailureSemantics:
+    @pytest.mark.asyncio
+    async def test_plugin_breaker_trips_on_consecutive_failures_only(self):
+        """Intermittently-flaky plugin APIs (fail, succeed, fail, ...) must
+        not accumulate lifetime failures into a trip; only consecutive
+        failures count. Mirrors the core S1 fix through the SDK wrapper."""
+        breaker = make_plugin_circuit_breaker("test_consecutive_plugin", _healthy)
+
+        async def flaky_fail():
+            raise RuntimeError("api hiccup")
+
+        async def ok():
+            return "ok"
+
+        # threshold defaults to 3; interleave so failures never run 3 deep
+        for _ in range(4):
+            with pytest.raises(RuntimeError):
+                await breaker.call(flaky_fail)
+            assert await breaker.call(ok) == "ok"
+
+        # A healthy call must still be admitted (breaker never opened)
+        assert await breaker.call(ok) == "ok"

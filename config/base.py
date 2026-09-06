@@ -11,8 +11,10 @@ Created: 2025-07-05
 # Standard library imports
 import logging
 import os
+import shutil
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import quote_plus
 
 # Third-party imports
@@ -21,6 +23,7 @@ import yaml
 # Local application imports
 from .authentication_loader import load_authentication_config
 from .secrets import get_secret_manager
+from .validator import ConfigValidationError, ConfigValidator
 
 logger = logging.getLogger(__name__)
 
@@ -37,10 +40,18 @@ class ConfigLoader:
         )
         self.bundled_config_dir = Path(__file__).parent / "settings"
 
+        # Backup dir for corrupted config files (created lazily on first
+        # backup — not at init, to avoid failing when running under a user
+        # that cannot mkdir the target).
+        self.backup_dir = Path(
+            os.environ.get("TRAKBRIDGE_BACKUP_DIR", "/app/backups")
+        )
+
         # Legacy compatibility
         self.config_dir = self.bundled_config_dir
 
         self.secret_manager = get_secret_manager(environment)
+        self.validator = ConfigValidator()
         self._config_cache: Dict[str, Any] = {}
 
         # Log configuration source information
@@ -173,6 +184,188 @@ class ConfigLoader:
                 self._deep_merge(base[key], value)
             else:
                 base[key] = value
+
+    # ------------------------------------------------------------------ #
+    # Safe-load path: validation, backup, auto-repair, minimal fallback.
+    # External-first, SINGLE-SOURCE (no deep merge) — used for files where
+    # accidental list-merging would be a security risk (plugins.yaml
+    # whitelist, performance.yaml circuit breaker config).
+    # ------------------------------------------------------------------ #
+    def load_config_safe(
+        self,
+        config_name: str,
+        required_fields: Optional[List[str]] = None,
+        validate: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Load a config file with validation, auto-backup + auto-repair on
+        corruption, and a minimal-default fallback of last resort.
+
+        External file wins over bundled — no merge. On external validation
+        failure the corrupted file is backed up (best-effort; a failing
+        backup does NOT block the load) and replaced with the bundled
+        default. If both external and bundled are missing/invalid, the
+        validator's minimal default is returned.
+        """
+        external_path = self.external_config_dir / config_name
+        bundled_path = self.bundled_config_dir / config_name
+
+        if external_path.exists():
+            try:
+                data = self._load_and_validate(
+                    external_path, config_name, required_fields, validate
+                )
+                logger.info(f"Loaded external config from {external_path}")
+                return data
+            except Exception as e:
+                logger.error(
+                    f"External config failed validation: {external_path} - {e}"
+                )
+                self._backup_corrupted_file(external_path, str(e))
+                repaired = self._auto_repair_from_bundled(
+                    external_path, bundled_path, config_name, required_fields, validate
+                )
+                if repaired is not None:
+                    return repaired
+
+        if bundled_path.exists():
+            try:
+                data = self._load_and_validate(
+                    bundled_path, config_name, required_fields, validate
+                )
+                logger.info(f"Using bundled config: {bundled_path}")
+                return data
+            except Exception as e:
+                logger.error(f"Bundled config failed validation: {bundled_path} - {e}")
+
+        logger.warning(f"Using minimal default configuration for {config_name}")
+        return self.validator.minimal_default(config_name)
+
+    def _load_and_validate(
+        self,
+        file_path: Path,
+        config_name: str,
+        required_fields: Optional[List[str]],
+        validate: bool,
+    ) -> Dict[str, Any]:
+        """Delegate to ConfigValidator unless caller opted out of schema check."""
+        if validate:
+            return self.validator.load_and_validate(
+                file_path, config_name, required_fields
+            )
+        # No-schema path: still parse + require dict + honor required_fields
+        content = file_path.read_text(encoding="utf-8")
+        if not content.strip():
+            raise ConfigValidationError(
+                "Configuration file is empty", str(file_path)
+            )
+        try:
+            data = yaml.safe_load(content)
+        except yaml.YAMLError as e:
+            raise ConfigValidationError(
+                f"Invalid YAML syntax: {e}", str(file_path)
+            )
+        if not isinstance(data, dict):
+            raise ConfigValidationError(
+                f"Configuration must be a dictionary, got {type(data).__name__}",
+                str(file_path),
+            )
+        if required_fields:
+            for field in required_fields:
+                if field not in data:
+                    raise ConfigValidationError(
+                        f"Required field '{field}' is missing",
+                        str(file_path),
+                        field,
+                    )
+        return data
+
+    def _backup_corrupted_file(self, file_path: Path, error_message: str) -> None:
+        """
+        Copy a corrupted config file to backup_dir with a timestamped name +
+        .error sidecar. Best-effort: any failure (permission denied,
+        unwritable dir) is logged but does NOT propagate — the load path
+        must remain resilient.
+        """
+        if not file_path.exists():
+            return
+        try:
+            self.backup_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            logger.warning(
+                f"Cannot create backup dir {self.backup_dir}: {e} — skipping backup"
+            )
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = self.backup_dir / f"{file_path.name}.corrupted.{timestamp}"
+        try:
+            shutil.copy2(file_path, backup_path)
+            error_file = backup_path.with_suffix(backup_path.suffix + ".error")
+            with open(error_file, "w") as f:
+                f.write(f"Backup created: {datetime.now().isoformat()}\n")
+                f.write(f"Original file: {file_path}\n")
+                f.write(f"Error: {error_message}\n")
+            logger.info(f"Backed up corrupted config to: {backup_path}")
+        except OSError as e:
+            logger.warning(f"Failed to backup corrupted config: {e}")
+
+    def _auto_repair_from_bundled(
+        self,
+        external_path: Path,
+        bundled_path: Path,
+        config_name: str,
+        required_fields: Optional[List[str]],
+        validate: bool,
+    ) -> Optional[Dict[str, Any]]:
+        """Copy bundled default over the corrupted external file and reload."""
+        if not bundled_path.exists():
+            return None
+        logger.info(
+            f"Auto-repairing: replacing corrupted {external_path} with bundled default"
+        )
+        try:
+            shutil.copy2(bundled_path, external_path)
+            data = self._load_and_validate(
+                external_path, config_name, required_fields, validate
+            )
+            logger.info(f"Auto-repair successful for {config_name}")
+            return data
+        except (OSError, ConfigValidationError) as e:
+            logger.error(f"Auto-repair failed: {e}")
+            return None
+
+    def validate_all_configs(self) -> Dict[str, Union[bool, str]]:
+        """
+        Validate every YAML config found in the bundled dir. Returns a dict
+        mapping filename to True (valid) or an error-message string.
+        """
+        results: Dict[str, Union[bool, str]] = {}
+        if not self.bundled_config_dir.exists():
+            return results
+        for path in self.bundled_config_dir.glob("*.yaml"):
+            config_name = path.name
+            try:
+                self.load_config_safe(config_name)
+                results[config_name] = True
+            except Exception as e:
+                results[config_name] = str(e)
+        return results
+
+
+# Module-level lazy singleton — parallels get_secret_manager. Reuse via
+# get_config_loader() so callers share one instance and avoid duplicate
+# startup logging on every plugin reload.
+_config_loader_instance: Optional["ConfigLoader"] = None
+
+
+def get_config_loader() -> "ConfigLoader":
+    """Return the shared ConfigLoader singleton, creating it on first call."""
+    global _config_loader_instance
+    if _config_loader_instance is None:
+        environment = os.environ.get("FLASK_ENV", "development")
+        _config_loader_instance = ConfigLoader(environment)
+    return _config_loader_instance
 
 
 class BaseConfig:

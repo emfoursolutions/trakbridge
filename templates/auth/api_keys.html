@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}API Keys{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1>API Keys</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('auth.profile') }}">Profile</a></li>
+                    <li class="breadcrumb-item active">API Keys</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="btn-toolbar">
+            {% if active_count < max_active %}
+            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createKeyModal">
+                <i class="fas fa-plus"></i> Create new key
+            </button>
+            {% else %}
+            <button type="button" class="btn btn-secondary btn-sm" disabled title="Active-key cap reached — revoke one first">
+                <i class="fas fa-plus"></i> Create new key
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-key"></i> Your keys</h5>
+    </div>
+    <div class="card-body p-0">
+        {% if keys %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Prefix</th>
+                        <th>Scopes</th>
+                        <th>Created</th>
+                        <th>Last used</th>
+                        <th>Expires</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for key in keys %}
+                    <tr>
+                        <td>{{ key.name }}</td>
+                        <td><code class="text-mono">{{ key.prefix }}...</code></td>
+                        <td>
+                            {% for group in key.scope_groups %}
+                            <span class="badge bg-secondary"
+                                  title="{{ group.actions | join(', ') }}">
+                                {{ group.resource }}
+                                <span class="text-white-50">({{ group.short }})</span>
+                            </span>
+                            {% endfor %}
+                        </td>
+                        <td>{{ key.created_at.split('T')[0] if key.created_at else '—' }}</td>
+                        <td>{{ key.last_used_at.split('T')[0] if key.last_used_at else 'never' }}</td>
+                        <td>{{ key.expires_at.split('T')[0] if key.expires_at else 'never' }}</td>
+                        <td>
+                            {% if key.is_valid %}
+                                <span class="badge bg-success">Active</span>
+                            {% elif key.revoked_at %}
+                                <span class="badge bg-danger">Revoked</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">Expired</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if key.is_valid %}
+                            <form method="POST" action="{{ url_for('api_keys.revoke_key', key_id=key.id) }}"
+                                  class="d-inline"
+                                  onsubmit="return confirm('Revoke key \'{{ key.name }}\'? This cannot be undone.');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-outline-danger btn-sm">
+                                    <i class="fas fa-times"></i> Revoke
+                                </button>
+                            </form>
+                            {% else %}
+                            <span class="text-muted small">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-4 text-center text-muted">
+            <i class="fas fa-key fa-2x mb-2"></i>
+            <p class="mb-0">No API keys yet. Create one to authenticate programmatic access.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<p class="text-muted small mt-3 mb-0">
+    Use API keys for programmatic access. Send as
+    <code>Authorization: Bearer &lt;token&gt;</code>. Keys inherit
+    your role's permissions and are further limited by their declared
+    scopes. See <a href="{{ url_for('openapi.swagger_ui') }}">/api/docs</a>
+    for the endpoint reference.
+</p>
+
+<!-- Create Key Modal -->
+<div class="modal fade" id="createKeyModal" tabindex="-1" aria-labelledby="createKeyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('api_keys.create_key') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="createKeyModalLabel">
+                        <i class="fas fa-plus-circle"></i> Create new API key
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="keyName" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="keyName" name="name"
+                               required maxlength="100"
+                               placeholder="e.g. CI pipeline, monitoring bot">
+                        <div class="form-text">A label to help you identify this key later.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Scopes</label>
+                        <div class="form-text mb-2">
+                            Select the permissions this key should have. A key can
+                            never exceed your own role's permissions.
+                        </div>
+                        {% if offerable_scopes %}
+                            {% for entry in offerable_scopes %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                       name="scopes" value="{{ entry.scope }}"
+                                       id="scope-{{ loop.index }}">
+                                <label class="form-check-label" for="scope-{{ loop.index }}">
+                                    <code>{{ entry.scope }}</code> — {{ entry.description }}
+                                </label>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="alert alert-warning mb-0">
+                                Your role does not permit any offerable API scopes.
+                                Contact an administrator.
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="keyExpires" class="form-label">Expiry (optional)</label>
+                        <input type="date" class="form-control" id="keyExpires" name="expires_at">
+                        <div class="form-text">
+                            Leave blank for a key that never expires. Recommended:
+                            set an expiry appropriate to the integration's lifespan.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"
+                            {% if not offerable_scopes %}disabled{% endif %}>
+                        <i class="fas fa-key"></i> Create key
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

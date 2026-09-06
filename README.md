@@ -2,34 +2,22 @@
 
 A web application for bridging tracking devices and services to TAK (Team Awareness Kit) servers. Provides real-time data streaming from various GPS sources to TAK servers for situational awareness.
 
+**🌐 [trakbridge.io](https://trakbridge.io)** — documentation, downloads, and support
+
 ## Features
 
-- **Plugin SDK on PyPI** (v2.0.0): `pip install trakbridge-plugin-sdk` — build custom plugins in ~30-40 lines without forking core
-- **Admin Plugin Manager** (v2.0.0): Install, enable, disable, and uninstall packaged plugins from `/admin/plugins` with signature verification, tier gating, code safety scanning, and audit logging
-- **Offline Licence Service** (v2.0.0): Ed25519-signed licences map deployments to Community, Pro, or Enterprise tiers — no network calls, fail-secure defaults, live expiry re-check
-- **Security-Hardened by Default** (v2.1.0): CSRF on by default, explicit HttpOnly/SameSite/Secure session cookies, authenticated health/monitoring endpoints, sanitised uploads, signed premium plugins, hardened plugin allow-list
-- **Team Member COT Support**: Display GPS trackers as ATAK team members with role and color customisation
-- **Custom CoT Attributes**: Plugin-extensible system for adding military symbols, custom icons, and arbitrary XML to CoT messages
-- **Enhanced Tracker Data**: Speed/course extraction from Garmin InReach and Traccar, dynamic battery state mapping for SPOT trackers
-- **Multi-Source Integration**: Support for GPS trackers, OSINT platforms, and emergency management systems
-- **Inbound Streams**: Receive CoT into TrakBridge via HTTP push (JSON/XML) or active-connect transports (MQTT, WebSocket, UDP multicast)
-- **UDP Multicast → TAK Bridge**: Forward LAN multicast Mesh SA (CoT XML and TAK Protocol v1 protobuf, auto-detected) to TAK servers across VPN/WAN where multicast does not route
-- **CoT Forwarding Plugins**: Forward CoT from connected TAK servers to external systems via HTTP, MQTT, WebSocket, or UDP multicast
-- **Notification Plugins**: Post CoT alerts to messaging platforms — Discord, Slack, IRC
-- **Plugin Categorisation**: Organised plugin system with OSINT, Tracker, EMS, CoT Forwarding, Notifications, Inbound, and Bidirectional categories
-- **Callsign Mapping**: Custom callsign assignment with per-tracker COT type overrides and team member configuration
-- **Authentication System**: Multi-provider authentication (Local, LDAP, OIDC) with role-based access control
-- **TAK Server Management**: Configure multiple TAK server connections with certificate support
-- **Real-Time Streaming**: Continuous data forwarding with health monitoring and circuit breaker protection
-- **Web Interface**: Secure dashboard for stream management and monitoring with categorised plugin selection
-- **Role-Based Access**: Viewer, User, Operator, and Admin roles with appropriate UI controls
-- **Enterprise Ready**: Multi-database support, SSL/TLS, backup & recovery, audit logging, field-level encryption
-- **Performance Optimised**: uvloop integration, connection pooling, intelligent caching
-- **Single Worker Architecture**: Long-lived Hypercorn worker with graceful shutdown and full CoT service teardown on SIGTERM
-- **Real-Time Monitoring**: Integrated dashboard with queue metrics, stream health, and performance graphs
-- **Circuit Breaker Protection**: Automatic failure recovery with intelligent retry mechanisms
-- **Hot Configuration Reload**: Zero-downtime configuration changes with validation caching
-- **Multi-Arch Container Images** (restored in v2.1.0): amd64 and arm64 published to GHCR and Docker Hub
+- **Multi-Source Integration**: Bring GPS trackers (Garmin InReach, SPOT, Traccar), OSINT platforms (Deepstate, LiveUAMap), and emergency management feeds onto your TAK map
+- **Multiple TAK Servers**: Distribute streams to any number of TAK servers with full certificate (P12/TLS) support
+- **Self-Healing Connections**: TAK server or feed outages recover automatically — streams back off, keep watch, and resume on their own with the degraded state visible in the UI
+- **Inbound Streams**: Receive CoT into TrakBridge via HTTP push (JSON/XML) or active-connect transports (MQTT, WebSocket, UDP multicast) — including bridging LAN Mesh SA multicast to TAK servers across VPN/WAN
+- **CoT Forwarding & Notifications**: Forward CoT from connected TAK servers to external systems (HTTP, MQTT, WebSocket, UDP multicast) or post alerts to Discord, Slack, and IRC
+- **Scoped API Keys**: Personal access tokens for scripts and integrations, with per-key permissions and a fully documented REST API (OpenAPI 3.1 + Swagger UI)
+- **Plugin SDK & Manager**: `pip install trakbridge-plugin-sdk` to build custom plugins in ~30-40 lines; install and manage packaged plugins from the admin UI with signature verification and code safety scanning
+- **Team Member CoT & Callsign Mapping**: Display trackers as ATAK team members with roles and colours; per-tracker callsigns and CoT type overrides
+- **Multi-Provider Authentication**: Local, LDAP/Active Directory, and OIDC/SSO with role-based access control
+- **Security-Hardened by Default**: CSRF protection, strict session cookies, authenticated telemetry endpoints, signed premium plugins, field-level encryption
+- **Monitoring Built In**: Real-time dashboard with queue metrics, stream health, connection state, and performance graphs
+- **Enterprise Ready**: PostgreSQL/MySQL/SQLite, audit logging, offline licence tiers, multi-arch containers (amd64/arm64)
 
 <img width="1900" height="690" alt="image" src="https://github.com/user-attachments/assets/d09d3e17-de62-4524-a0d6-d1990c827ac7" />
 
@@ -164,6 +152,8 @@ hypercorn app.py  # Single worker deployment for optimal performance
 
 ## Documentation
 
+Full documentation lives at **[trakbridge.io](https://trakbridge.io)**. In-repo references:
+
 - [Documentation Hub](docs/index.md) - Complete documentation index
 - [Installation Guide](docs/INSTALLATION.md) - First-time setup and deployment
 - [User Guide](docs/USER_GUIDE.md) - End-user procedures and workflows
@@ -231,11 +221,12 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ## Support
 
+- [Website & Documentation](https://trakbridge.io)
 - [Report Issues](../../issues)
 - [Discussions](../../discussions)
-- [Documentation](../../wiki)
+- [Wiki](../../wiki)
 - [Troubleshooting Guide](../../wiki/Troubleshooting)
 
 ---
 
-**TrakBridge v2.1.0** - Production-ready GPS tracking data bridge for TAK servers with a public plugin SDK, admin plugin manager with signature verification and tier gating, security-hardened defaults (CSRF, session cookies, authenticated telemetry), inbound streams, CoT forwarding, notifications, UDP multicast bridging, enterprise performance, monitoring, and reliability features.
+**TrakBridge v2.2.0** - Production-ready GPS tracking data bridge for TAK servers with scoped API keys, a documented REST API, self-healing connections, a public plugin SDK, inbound streams, CoT forwarding, notifications, and enterprise security, monitoring, and reliability features. Learn more at [trakbridge.io](https://trakbridge.io).

@@ -16,6 +16,28 @@ Version: 1.0.0
 """
 
 import os
+
+# Environment setup BEFORE importing app. Two constraints:
+#
+# 1. The module-level create_app() at app.py:1355 must produce a
+#    valid `app` — tests like test_rx_worker rely on
+#    `import app as flask_app` giving them a working app-context
+#    provider. Setting TESTING=1 would short-circuit that and
+#    break those tests.
+#
+# 2. But create_app() runs the API-key pepper guard, which refuses
+#    to boot in production without API_KEY_PEPPER. Locally, .env
+#    may set FLASK_ENV=production. Two mitigations:
+#      - Force FLASK_ENV=testing so the pepper guard falls to
+#        the "ephemeral" branch anyway.
+#      - Also set API_KEY_PEPPER so the ephemeral WARNING
+#        doesn't fire on every test import.
+os.environ["FLASK_ENV"] = "testing"
+os.environ.setdefault(
+    "API_KEY_PEPPER",
+    "test-pepper-value-at-least-32-bytes-long-xxxxx",
+)
+
 import shutil
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -63,6 +85,10 @@ def app():
         "TRAKBRIDGE_ENCRYPTION_KEY": ci_encryption_key
         or "test-encryption-key-for-testing-12345",
         "SECRET_KEY": ci_secret_key or "test-secret-key-for-sessions",
+        # Deterministic pepper for API-key tests; avoids the WARNING
+        # log from the ephemeral fallback path in every test run.
+        "API_KEY_PEPPER": os.environ.get("API_KEY_PEPPER")
+        or "test-pepper-value-at-least-32-bytes-long-xxxxx",
     }
 
     # Save original values and set test values

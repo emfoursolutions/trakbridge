@@ -17,6 +17,7 @@ from database import db
 from models.stream import Stream
 from plugins.plugin_manager import get_plugin_manager
 from services.auth import require_permission
+from services.auth.decorators import api_key_or_auth_required
 from services.inbound_stream_worker import get_active_inbound_streams
 
 logger = logging.getLogger(__name__)
@@ -139,18 +140,90 @@ def _process_inbound_async(locations, stream) -> Dict:
 
 @bp.route("/<int:stream_id>/data", methods=["POST"])
 def receive_inbound_data(stream_id: int):
-    """
-    Receive push data from an external device or system.
+    """Accept inbound tracker data pushed by an external source.
 
-    Flow:
-        1. Validate stream exists, is active, and is inbound mode
-        2. Instantiate plugin, resolve config (plugin config + column fallback)
-        3. Check IP allowlist
-        4. Validate auth via plugin.validate_inbound_request()
-        5. Validate Content-Type against plugin's accepted types
-        6. Parse payload via plugin.transform_payload()
-        7. Validate coordinates and location count
-        8. Preview mode: buffer and return; live mode: distribute to TAK
+    Authenticates via a bearer token validated by the target
+    stream's plugin (``plugin.validate_inbound_request``). Body
+    format is plugin-specific (JSON, XML, form). Coordinates are
+    validated before being enqueued for CoT dispatch.
+
+    When the stream is in preview mode the request is buffered
+    instead of dispatched, and a 202 with ``status: preview`` is
+    returned so operators can inspect the mapped result before
+    switching the stream to live mode.
+
+    Anti-enumeration: any auth failure, missing stream, wrong
+    stream mode, or blocked source IP returns the same 404
+    response so external callers cannot probe for valid stream ids.
+    ---
+    tags: [Inbound]
+    security:
+      - bearerAuth: []
+    parameters:
+      - in: path
+        name: stream_id
+        required: true
+        schema: {type: integer}
+    requestBody:
+      required: true
+      description: >-
+        Plugin-specific payload. JSON receiver plugins accept
+        ``{"locations": [...]}``; XML/form receivers accept the
+        wire format directly.
+      content:
+        application/json:
+          schema: InboundPayloadSchema
+        application/xml:
+          schema:
+            type: string
+        application/x-www-form-urlencoded:
+          schema:
+            type: object
+    responses:
+      202:
+        description: >-
+          Payload accepted. ``status`` is ``accepted`` in live
+          mode and ``preview`` when the stream is in preview mode.
+        content:
+          application/json:
+            schema: InboundAckSchema
+      400:
+        description: >-
+          Invalid payload, unparseable body, no locations
+          extracted, coordinate validation failed, or the
+          request exceeded the per-request location limit.
+        content:
+          application/json:
+            schema: ErrorSchema
+      404:
+        description: >-
+          Stream not found, inactive, wrong mode, source IP not
+          in allowlist, or bearer token invalid.
+          Anti-enumeration; do not treat as authoritative.
+        content:
+          application/json:
+            schema: ErrorSchema
+      413:
+        description: Payload exceeded the maximum permitted size.
+        content:
+          application/json:
+            schema: ErrorSchema
+      415:
+        description: >-
+          Content-Type not accepted by the stream's plugin.
+        content:
+          application/json:
+            schema: ErrorSchema
+      429:
+        description: Per-stream rate limit exceeded.
+        content:
+          application/json:
+            schema: ErrorSchema
+      500:
+        description: Internal processing error during CoT dispatch.
+        content:
+          application/json:
+            schema: ErrorSchema
     """
     # --- Payload size check (before any DB lookup) ---
     content_length = request.content_length or 0
@@ -361,10 +434,37 @@ def _serialize_payload(entry: Dict) -> Dict:
 
 
 @bp.route("/<int:stream_id>/preview", methods=["GET"])
+@api_key_or_auth_required
 def get_preview(stream_id: int):
-    """
-    Return captured payloads and their mapped results for an
-    inbound stream.
+    """Return captured payloads for an inbound stream.
+
+    When the stream is in preview mode, incoming requests are
+    buffered instead of being dispatched to TAK. This endpoint
+    returns those captured payloads (raw body, headers, source IP,
+    and the mapped locations the plugin produced) so operators can
+    verify the plugin's payload transform before switching to live
+    mode.
+
+    Requires a valid session or ``tb_pat_`` bearer token, and the
+    stream must be an inbound stream.
+    ---
+    tags: [Inbound]
+    parameters:
+      - in: path
+        name: stream_id
+        required: true
+        schema: {type: integer}
+    responses:
+      200:
+        description: Captured payloads and current preview flag.
+        content:
+          application/json:
+            schema: PreviewResponseSchema
+      404:
+        description: Stream not found or not an inbound stream.
+        content:
+          application/json:
+            schema: ErrorSchema
     """
     stream, error = _validate_inbound_stream(stream_id)
     if error:
@@ -388,8 +488,32 @@ def get_preview(stream_id: int):
 
 
 @bp.route("/<int:stream_id>/preview", methods=["DELETE"])
+@api_key_or_auth_required
 def clear_preview(stream_id: int):
-    """Clear the capture buffer for an inbound stream."""
+    """Clear the capture buffer for an inbound stream.
+
+    Discards every payload previously captured by preview mode.
+    Idempotent — succeeds even when no payloads are buffered.
+    Requires a valid session or ``tb_pat_`` bearer token.
+    ---
+    tags: [Inbound]
+    parameters:
+      - in: path
+        name: stream_id
+        required: true
+        schema: {type: integer}
+    responses:
+      200:
+        description: Buffer cleared.
+        content:
+          application/json:
+            schema: PreviewClearedSchema
+      404:
+        description: Stream not found or not an inbound stream.
+        content:
+          application/json:
+            schema: ErrorSchema
+    """
     stream, error = _validate_inbound_stream(stream_id)
     if error:
         return error
@@ -402,10 +526,45 @@ def clear_preview(stream_id: int):
 
 
 @bp.route("/<int:stream_id>/preview/remap", methods=["POST"])
+@api_key_or_auth_required
 def remap_preview(stream_id: int):
-    """
-    Re-run transform_payload against captured payloads using an
-    alternate plugin config. Does NOT persist config changes.
+    """Re-run payload transform with alternate plugin config.
+
+    Applies an alternate plugin config over the stream's stored
+    config and re-runs ``transform_payload`` on every currently-
+    captured payload. Nothing is persisted — this is a "what would
+    my mapping look like if I changed X" preview used by the
+    stream edit UI.
+
+    Returns one entry per captured payload with the received-at
+    timestamp and either the mapped location list or an error
+    object if the transform threw. Requires a valid session or
+    ``tb_pat_`` bearer token.
+    ---
+    tags: [Inbound]
+    parameters:
+      - in: path
+        name: stream_id
+        required: true
+        schema: {type: integer}
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema: RemapRequestSchema
+    responses:
+      200:
+        description: Remap results (one per captured payload).
+        content:
+          application/json:
+            schema: RemapResponseSchema
+      404:
+        description: >-
+          Stream not found, not an inbound stream, or plugin type
+          no longer registered.
+        content:
+          application/json:
+            schema: ErrorSchema
     """
     stream, error = _validate_inbound_stream(stream_id)
     if error:
