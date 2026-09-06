@@ -368,11 +368,16 @@ def create_app(config_name=None):
         from models.user import API_KEY_TOKEN_PREFIX
         _orig_csrf_protect = csrf.protect
 
-        def _csrf_protect_with_bearer_bypass(apply_exemptions=False):
+        def _csrf_protect_with_bearer_bypass(*args, **kwargs):
+            # Flask-WTF 1.1 called this hook as
+            # ``protect(apply_exemptions=True)``; 1.2 dropped the
+            # kwarg. Accept and forward whatever the caller passes
+            # so the shim works against both versions — otherwise
+            # the mismatch surfaces as a 500 on every request.
             auth = request.headers.get("Authorization", "")
             if auth.startswith(f"Bearer {API_KEY_TOKEN_PREFIX}"):
                 return
-            return _orig_csrf_protect(apply_exemptions=apply_exemptions)
+            return _orig_csrf_protect(*args, **kwargs)
 
         csrf.protect = _csrf_protect_with_bearer_bypass
 
@@ -595,8 +600,6 @@ def create_app(config_name=None):
     # routes/inbound.py — webhook endpoints use bearer-token auth
     # (plugin.validate_inbound_request checks Authorization: Bearer header).
     app.csrf.exempt(app.view_functions["inbound.receive_inbound_data"])  # CSRF exempt: bearer-token authenticated via plugin.validate_inbound_request
-    app.csrf.exempt(app.view_functions["inbound.clear_preview"])          # CSRF exempt: stream identity validated by _validate_inbound_stream (no session)
-    app.csrf.exempt(app.view_functions["inbound.remap_preview"])          # CSRF exempt: stream identity validated by _validate_inbound_stream (no session)
     #
     # routes/api.py — coordinate conversion utilities use @optional_auth
     # (no session required; pure computation with no privileged state changes).

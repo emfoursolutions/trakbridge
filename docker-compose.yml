@@ -169,8 +169,9 @@ services:
       - api_key_pepper
 
 
-    ports:
-      - "5000:5000"  # Change first port if you need external access on different port
+    # No `ports:` — the app is not published to the host. The nginx
+    # service below is the only ingress and reaches it over the
+    # internal `trakbridge` network.
 
     volumes:
       - ./logs:/app/logs
@@ -196,8 +197,7 @@ services:
         required: false
 
     networks:
-      - trakbridge  # Internal for DB communication
-      - frontend    # External for Traefik
+      - trakbridge  # Internal — DB and nginx both reach it here
 
   # =============================================================================
   # PostgreSQL Database (Optional)
@@ -330,7 +330,34 @@ services:
         reservations:
           memory: 512M
 
-  # Nginx reverse proxy removed - Traefik handles reverse proxy
+  # =============================================================================
+  # Nginx Reverse Proxy — TLS termination, HTTP→HTTPS redirect, rate limiting
+  # =============================================================================
+  # This is the only ingress to the stack. It listens on 80/443 and
+  # proxies to trakbridge:5000 via the internal `trakbridge` network.
+  # Drop TLS material (trakbridge.crt / trakbridge.key) into
+  # ./init/nginx/ssl/ — see docs/INSTALLATION.md.
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: trakbridge-nginx
+    restart: unless-stopped
+    depends_on:
+      trakbridge:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./init/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./init/nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    networks:
+      - trakbridge
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 # =============================================================================
 # Networks & Volumes
@@ -340,14 +367,12 @@ networks:
     driver: bridge
     internal: true  # DB network needs no internet egress
 
-  frontend:
-    external: true
-    name: frontend
-
 volumes:
   postgres_data:
     driver: local
   mysql_data:
+    driver: local
+  nginx_logs:
     driver: local
 
 # =============================================================================

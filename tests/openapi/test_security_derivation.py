@@ -5,14 +5,29 @@
 from services.openapi_service import build_spec_dict
 
 
-def test_health_endpoints_are_public(app):
+def test_bare_health_endpoint_is_public(app):
+    """/api/health is the single canonical unauth container probe (T1.5)."""
     with app.app_context():
         spec = build_spec_dict(app)
-    # /health, /health/ready, /health/live are documented as public
-    # via ``security: []`` in their docstrings.
-    for path in ("/api/health", "/api/health/ready", "/api/health/live"):
+    op = spec["paths"]["/api/health"]["get"]
+    assert op.get("security") == [], op.get("security")
+
+
+def test_readiness_and_liveness_endpoints_require_auth(app):
+    """T1.5 — /health/ready and /health/live now require a token.
+
+    Orchestrators/monitors already carry a service credential; the bare
+    unauth probe is /api/health. Both should advertise sessionAuth OR
+    bearerAuth in the OpenAPI spec, derived from
+    @api_key_or_auth_required.
+    """
+    with app.app_context():
+        spec = build_spec_dict(app)
+    for path in ("/api/health/ready", "/api/health/live"):
         op = spec["paths"][path]["get"]
-        assert op.get("security") == [], (path, op.get("security"))
+        security = op.get("security") or []
+        assert {"sessionAuth": []} in security, (path, security)
+        assert {"bearerAuth": []} in security, (path, security)
 
 
 def test_authenticated_health_endpoints_use_session_auth(app):
@@ -33,18 +48,25 @@ def test_authenticated_health_endpoints_use_session_auth(app):
         )
 
 
-def test_status_endpoint_is_public(app):
+def test_status_endpoint_requires_auth(app):
+    """T1.5 — /api/status now requires a token (was @optional_auth)."""
     with app.app_context():
         spec = build_spec_dict(app)
     op = spec["paths"]["/api/status"]["get"]
-    assert op.get("security") == []
+    security = op.get("security") or []
+    assert {"sessionAuth": []} in security, security
+    assert {"bearerAuth": []} in security, security
 
 
-def test_version_endpoint_is_public(app):
+def test_version_endpoint_requires_auth(app):
+    """T1.5 — /api/version now requires a token so the version is not a
+    ready-made fingerprint for drive-by scans."""
     with app.app_context():
         spec = build_spec_dict(app)
     op = spec["paths"]["/api/version"]["get"]
-    assert op.get("security") == []
+    security = op.get("security") or []
+    assert {"sessionAuth": []} in security, security
+    assert {"bearerAuth": []} in security, security
 
 
 def test_inbound_data_endpoint_uses_bearer_auth(app):
@@ -58,16 +80,20 @@ def test_inbound_data_endpoint_uses_bearer_auth(app):
     )
 
 
-def test_inbound_preview_endpoints_are_stream_identity_gated(app):
+def test_inbound_preview_endpoints_require_auth(app):
+    """T1.1 — preview endpoints are now @api_key_or_auth_required.
+
+    They accept session cookie or tb_pat_ bearer; the earlier
+    stream-identity-only gate was insufficient.
+    """
     with app.app_context():
         spec = build_spec_dict(app)
-    # Preview endpoints are gated by stream-identity validation
-    # (not sessionAuth); docstrings declare security: [] so the
-    # spec reflects "no OpenAPI-modeled auth scheme applies".
     for method, path in (
         ("get", "/api/inbound/{stream_id}/preview"),
         ("delete", "/api/inbound/{stream_id}/preview"),
         ("post", "/api/inbound/{stream_id}/preview/remap"),
     ):
         op = spec["paths"][path][method]
-        assert op.get("security") == [], (method, path, op.get("security"))
+        security = op.get("security") or []
+        assert {"sessionAuth": []} in security, (method, path, security)
+        assert {"bearerAuth": []} in security, (method, path, security)

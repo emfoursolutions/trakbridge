@@ -80,3 +80,4 @@ secrets/
 external_config/
 
 docker-compose-local.yml
+nginx-local.conf

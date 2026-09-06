@@ -724,23 +724,13 @@ function testConnection() {
     testBtn.disabled = true;
     testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
 
-    // Get stream configuration
-    const streamData = {
-        plugin_type: '{{ stream.plugin_type }}',
-        {% set config = stream.get_plugin_config() %}
-        {% if config %}
-            {% for key, value in config.items() %}
-                plugin_{{ key }}: '{{ value }}',
-            {% endfor %}
-        {% endif %}
-    };
-
-    fetch('/streams/test-connection', {
+    // The server-side endpoint loads the stream's decrypted config itself, 
+    // so no credential ever crosses the wire back through the browser.
+    fetch(`/streams/{{ stream.id }}/test`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify(streamData)
     })
     .then(response => response.json())
     .then(data => {

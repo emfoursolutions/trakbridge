@@ -44,6 +44,7 @@ from services.auth import (
     require_auth,
     require_permission,
 )
+from services.circuit_breaker import get_circuit_breaker_manager
 from services.connection_test_service import ConnectionTestService
 from services.health_service import health_service
 
@@ -171,16 +172,14 @@ def get_cached_health_check(check_name, check_function, *args, **kwargs):
 
 
 @bp.route("/status")
-@optional_auth
+@api_key_or_auth_required
 def api_status():
     """System status summary.
 
     Returns aggregate counts of streams, TAK servers, and running
-    workers. Public probe; optional auth surfaces the same payload
-    to authenticated callers.
+    workers. Requires a valid session or ``tb_pat_`` bearer token.
     ---
     tags: [Status]
-    security: []
     responses:
       200:
         description: Current system status counts.
@@ -368,15 +367,18 @@ def detailed_health_check():
 
 
 @bp.route("/health/ready")
+@api_key_or_auth_required
 def readiness_check():
     """Kubernetes readiness probe.
 
     Verifies the app is ready to serve traffic by checking database
     connectivity and encryption service health. Returns 503 when the
-    app should be removed from the load-balancer pool.
+    app should be removed from the load-balancer pool. Requires a
+    valid session or ``tb_pat_`` bearer token; orchestrators/monitors
+    already carry a service token. Use ``/api/health`` for the bare
+    unauth probe.
     ---
     tags: [Health]
-    security: []
     responses:
       200:
         description: Ready to serve traffic.
@@ -417,6 +419,7 @@ def readiness_check():
 
 
 @bp.route("/health/live")
+@api_key_or_auth_required
 def liveness_check():
     """Kubernetes liveness probe.
 
@@ -424,9 +427,10 @@ def liveness_check():
     responsive. Never returns non-200 — a failed liveness probe
     means the container should be restarted, which requires the
     process to be genuinely wedged (unable to respond at all).
+    Requires a valid session or ``tb_pat_`` bearer token; use
+    ``/api/health`` for the bare unauth probe.
     ---
     tags: [Health]
-    security: []
     responses:
       200:
         description: Process is alive.
@@ -697,62 +701,55 @@ def circuit_breaker_health():
 @bp.route("/health/recovery", methods=["GET"])
 @require_auth
 def recovery_service_health():
-    """Recovery service health and status monitoring"""
+    """Recovery health derived from per-service circuit breakers.
+
+    T7.4 — the standalone recovery subsystem was orphaned; the
+    circuit breaker took over the recovery role in practice. This
+    endpoint surfaces the CB manager's live per-service state so
+    operators see real recovery/outage information instead of a
+    fabricated success rate from an idle singleton.
+
+    Status mapping:
+    - any breaker OPEN      → ``unhealthy`` (HTTP 503)
+    - any breaker HALF_OPEN → ``degraded``  (HTTP 200)
+    - all CLOSED / empty    → ``healthy``   (HTTP 200)
+    """
     try:
-        from services.recovery_service import get_recovery_service
+        manager = get_circuit_breaker_manager()
+        all_status = manager.get_all_status()
 
-        recovery_service = get_recovery_service()
-        service_status = recovery_service.get_service_status()
+        any_open = False
+        any_half_open = False
+        for status in all_status.values():
+            state = (status.get("state") or "").lower()
+            if state == "open":
+                any_open = True
+            elif state == "half_open":
+                any_half_open = True
 
-        # Get recent recovery attempts
-        recent_recoveries = []
-        for attempt in recovery_service.recovery_history[-10:]:  # Last 10 attempts
-            recent_recoveries.append(
-                {
-                    "component_id": attempt.component_id,
-                    "component_type": attempt.component_type.value,
-                    "status": attempt.status.value,
-                    "started_at": attempt.started_at.isoformat(),
-                    "completed_at": (
-                        attempt.completed_at.isoformat()
-                        if attempt.completed_at
-                        else None
-                    ),
-                    "duration_seconds": attempt.duration_seconds,
-                    "recovery_method": attempt.recovery_method,
-                    "error_message": attempt.error_message,
-                }
-            )
-
-        # Calculate health based on recent recovery success rate
-        stats = service_status["statistics"]
-        total_attempts = stats.get("total_attempts", 0)
-        successful_recoveries = stats.get("successful_recoveries", 0)
-
-        if total_attempts == 0:
-            success_rate = 1.0
-        else:
-            success_rate = successful_recoveries / total_attempts
-
-        overall_status = "healthy"
-        if success_rate < 0.5:
+        if any_open:
             overall_status = "unhealthy"
-        elif success_rate < 0.8:
-            overall_status = "warning"
+            status_code = 503
+        elif any_half_open:
+            overall_status = "degraded"
+            status_code = 200
+        else:
+            overall_status = "healthy"
+            status_code = 200
 
-        result = {
-            "status": overall_status,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "service_status": service_status,
-            "success_rate": success_rate,
-            "recent_recoveries": recent_recoveries,
-        }
-
-        status_code = 503 if overall_status == "unhealthy" else 200
-        return jsonify(result), status_code
+        return (
+            jsonify(
+                {
+                    "status": overall_status,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "circuit_breakers": all_status,
+                }
+            ),
+            status_code,
+        )
 
     except Exception as e:
-        logger.error(f"Error checking recovery service health: {e}")
+        logger.error(f"Error checking recovery health: {e}")
         return (
             jsonify(
                 {
@@ -796,7 +793,6 @@ def monitoring_dashboard():
             "streams": {},
             "performance": {},
             "circuit_breakers": {},
-            "recovery": {},
         }
 
         # Get queue monitoring data
@@ -958,10 +954,10 @@ def monitoring_dashboard():
         except Exception as e:
             logger.debug(f"Performance metrics not available: {e}")
 
-        # Get circuit breaker data
+        # Get circuit breaker data. T7.4 — this block is now the
+        # authoritative recovery signal; the standalone recovery
+        # subsystem it used to sit alongside has been deleted.
         try:
-            from services.circuit_breaker import get_circuit_breaker_manager
-
             manager = get_circuit_breaker_manager()
             all_status = manager.get_all_status()
 
@@ -973,24 +969,6 @@ def monitoring_dashboard():
                 }
         except Exception as e:
             logger.debug(f"Circuit breaker data not available: {e}")
-
-        # Get recovery service data
-        try:
-            from services.recovery_service import get_recovery_service
-
-            recovery_service = get_recovery_service()
-            service_status = recovery_service.get_service_status()
-
-            dashboard_data["recovery"] = {
-                "active_recoveries": service_status.get("active_recoveries", 0),
-                "success_rate": (
-                    service_status["statistics"]["successful_recoveries"]
-                    / max(service_status["statistics"]["total_attempts"], 1)
-                ),
-                "running": service_status.get("running", False),
-            }
-        except Exception as e:
-            logger.debug(f"Recovery service data not available: {e}")
 
         return jsonify(dashboard_data)
 
@@ -2127,15 +2105,16 @@ def get_team_member_color_options():
 
 
 @bp.route("/version")
+@api_key_or_auth_required
 def version():
     """Current TrakBridge version.
 
     Returns the version string used across the app (banner, health
-    payloads, plugin version-gate comparisons). Public — no auth
-    required.
+    payloads, plugin version-gate comparisons). Requires a valid
+    session or ``tb_pat_`` bearer token so the version is not a
+    ready-made fingerprint for drive-by scans.
     ---
     tags: [Version]
-    security: []
     responses:
       200:
         description: Version information.
