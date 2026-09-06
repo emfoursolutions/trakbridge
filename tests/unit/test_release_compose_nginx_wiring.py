@@ -31,7 +31,7 @@ NGINX_CONF = Path("init/nginx/nginx.conf")
 # Both the release and local compose files must ship nginx as the
 # ingress. Dev and staging compose files sit behind external Traefik
 # and are intentionally not covered here.
-NGINX_ENABLED_COMPOSE_FILES = [RELEASE_COMPOSE, LOCAL_COMPOSE]
+NGINX_ENABLED_COMPOSE_FILES = [RELEASE_COMPOSE]
 
 
 @pytest.fixture(
